@@ -47,12 +47,12 @@ namespace RareBooksService.WebApi.Services
                 try
                 {
                     // Fetch new data
-                    //await lotFetchingService.FetchAllNewData();
+                    await lotFetchingService.FetchAllNewData();
 
                     // Update completed auctions
-                    //await auctionService.UpdateCompletedAuctionsAsync();
+                    await auctionService.UpdateCompletedAuctionsAsync();
 
-                    //await lotFetchingService.FetchSoldFixedPriceLotsAsync();
+                    await lotFetchingService.FetchSoldFixedPriceLotsAsync();
                 }
                 catch (Exception ex)
                 {
