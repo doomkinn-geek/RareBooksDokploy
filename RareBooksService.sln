@@ -13,8 +13,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".vscode", ".vscode", "{7557
 EndProject
 Project("{54A90642-561A-4BB1-A94E-469ADEE60C69}") = "rarebooksservice.frontend.v3", "rarebooksservice.frontend.v3\rarebooksservice.frontend.v3.esproj", "{47A00674-B422-4446-BFE7-9E2BD2F660BC}"
 EndProject
-Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "docker-compose", "docker-compose.dcproj", "{6DBF7E70-C461-421E-ACE6-D963C3B737ED}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Элементы решения", "Элементы решения", "{B04A8C08-3F7F-42BD-AB53-C8BB991CCAFD}"
 	ProjectSection(SolutionItems) = preProject
 		.gitignore = .gitignore
