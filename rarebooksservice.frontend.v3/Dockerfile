@@ -1,26 +1,22 @@
-# Этап 1: Сборка React-приложения
+# 1) Этап сборки React-приложения
 FROM node:18-alpine AS build
 WORKDIR /app
 
-# Копируем package.json и package-lock.json и устанавливаем зависимости
+# Копируем package.json, package-lock.json или yarn.lock
 COPY package*.json ./
 RUN npm install
 
-# Копируем весь код в рабочую директорию контейнера
+# Копируем всё остальное (исходники)
 COPY . .
-
-# Сборка приложения
+# Собираем проект (если используете VITE_API_URL — оно учитывается при build)
 RUN npm run build
 
-# Этап 2: Настройка Nginx для обслуживания статических файлов
+# 2) Этап запуска: nginx + статика
 FROM nginx:stable-alpine
-
-# Копируем собранные файлы React-приложения из этапа сборки в Nginx
+# Копируем результаты билда в папку nginx
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY ./nginx.conf /etc/nginx/conf.d/default.conf
+# Копируем кастомный nginx.conf (см. ниже) для проксирования /api
+# COPY ./nginx.conf /etc/nginx/conf.d/default.conf
 
-# Открываем порт 80 для доступа к приложению
-EXPOSE 3000
-
-# Запускаем Nginx
+EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
