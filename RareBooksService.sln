@@ -9,6 +9,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RareBooksService.Data", "Ra
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RareBooksService.WebApi", "RareBooksService.WebApi\RareBooksService.WebApi.csproj", "{74D44810-1A3D-437B-9C6B-57676360037F}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RareBooksService.MeshokParser", "MeshokParser\RareBooksService.MeshokParser.csproj", "{D1729B9A-7B76-49B9-9077-89C3A16CBCDA}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".vscode", ".vscode", "{7557814A-2CB6-4BD9-A0C5-7DC7272743B5}"
 EndProject
 Project("{54A90642-561A-4BB1-A94E-469ADEE60C69}") = "rarebooksservice.frontend.v3", "rarebooksservice.frontend.v3\rarebooksservice.frontend.v3.esproj", "{47A00674-B422-4446-BFE7-9E2BD2F660BC}"
@@ -18,10 +20,10 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Элементы решения", "Элементы решения", "{B04A8C08-3F7F-42BD-AB53-C8BB991CCAFD}"
 	ProjectSection(SolutionItems) = preProject
 		.gitignore = .gitignore
-		nginx.conf = nginx.conf
+		nginx\nginx.conf = nginx\nginx.conf
 	EndProjectSection
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RareBooksService.Parser", "RareBooksService.Parser\RareBooksService.Parser.csproj", "{B1105356-B894-4A54-986D-D87A1F1F458E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RareBooksService.Parser", "RareBooksService.Parser\RareBooksService.Parser.csproj", "{2CFFE60A-795D-4F94-81AA-2B78908007D2}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -41,6 +43,10 @@ Global
 		{74D44810-1A3D-437B-9C6B-57676360037F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{74D44810-1A3D-437B-9C6B-57676360037F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{74D44810-1A3D-437B-9C6B-57676360037F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D1729B9A-7B76-49B9-9077-89C3A16CBCDA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D1729B9A-7B76-49B9-9077-89C3A16CBCDA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D1729B9A-7B76-49B9-9077-89C3A16CBCDA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D1729B9A-7B76-49B9-9077-89C3A16CBCDA}.Release|Any CPU.Build.0 = Release|Any CPU
 		{47A00674-B422-4446-BFE7-9E2BD2F660BC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{47A00674-B422-4446-BFE7-9E2BD2F660BC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{47A00674-B422-4446-BFE7-9E2BD2F660BC}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
@@ -51,10 +57,10 @@ Global
 		{6DBF7E70-C461-421E-ACE6-D963C3B737ED}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6DBF7E70-C461-421E-ACE6-D963C3B737ED}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6DBF7E70-C461-421E-ACE6-D963C3B737ED}.Release|Any CPU.Build.0 = Release|Any CPU
-		{B1105356-B894-4A54-986D-D87A1F1F458E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{B1105356-B894-4A54-986D-D87A1F1F458E}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{B1105356-B894-4A54-986D-D87A1F1F458E}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{B1105356-B894-4A54-986D-D87A1F1F458E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2CFFE60A-795D-4F94-81AA-2B78908007D2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2CFFE60A-795D-4F94-81AA-2B78908007D2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2CFFE60A-795D-4F94-81AA-2B78908007D2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2CFFE60A-795D-4F94-81AA-2B78908007D2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
