@@ -9,8 +9,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RareBooksService.Data", "Ra
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RareBooksService.WebApi", "RareBooksService.WebApi\RareBooksService.WebApi.csproj", "{74D44810-1A3D-437B-9C6B-57676360037F}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RareBooksService.MeshokParser", "MeshokParser\RareBooksService.MeshokParser.csproj", "{D1729B9A-7B76-49B9-9077-89C3A16CBCDA}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".vscode", ".vscode", "{7557814A-2CB6-4BD9-A0C5-7DC7272743B5}"
 EndProject
 Project("{54A90642-561A-4BB1-A94E-469ADEE60C69}") = "rarebooksservice.frontend.v3", "rarebooksservice.frontend.v3\rarebooksservice.frontend.v3.esproj", "{47A00674-B422-4446-BFE7-9E2BD2F660BC}"
