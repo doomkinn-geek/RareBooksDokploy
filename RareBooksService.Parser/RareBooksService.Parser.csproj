@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AutoMapper" Version="13.0.1" />
+    <PackageReference Include="AWSSDK.S3" Version="3.7.400.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RareBooksService.Data\RareBooksService.Data.csproj" />
+  </ItemGroup>
+
+</Project>

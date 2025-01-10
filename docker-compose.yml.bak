@@ -1,0 +1,32 @@
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: RareBooks    
+    ports:
+      - "5433:5432"
+
+  backend:
+    build:
+      context: .
+      dockerfile: RareBooksService.WebApi/Dockerfile
+    volumes:
+      - ./RareBooksService.WebApi/books_extended.db:/app/books_extended.db
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=RareBooks;Username=postgres;Password=123456
+    depends_on:
+      - postgres
+    ports:
+      - "5000:80"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: rarebooksservice.frontend.v3/Dockerfile
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"

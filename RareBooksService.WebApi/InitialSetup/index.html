@@ -1,0 +1,76 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Initial Setup</title>
+</head>
+<body>
+    <h2>Первичная настройка RareBooksService</h2>
+    <form id="setupForm">
+        <div>
+            <label>Admin Email: </label>
+            <input type="email" name="adminEmail" required />
+        </div>
+        <div>
+            <label>Admin Password: </label>
+            <input type="password" name="adminPassword" required />
+        </div>
+        <div>
+            <label>Connection String: </label>
+            <input type="text" name="connectionString" required />
+        </div>
+        <!-- Поля для JWT -->
+        <div>
+            <label>Jwt Key: </label>
+            <input type="text" name="jwtKey" required />
+        </div>
+        <div>
+            <label>Jwt Issuer: </label>
+            <input type="text" name="jwtIssuer" required />
+        </div>
+        <div>
+            <label>Jwt Audience: </label>
+            <input type="text" name="jwtAudience" required />
+        </div>
+
+        <button type="submit">Инициализировать</button>
+    </form>
+
+    <div id="setupResult" style="margin-top:10px; color:red"></div>
+
+    <script>
+const form = document.getElementById('setupForm');
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const formData = new FormData(form);
+  const payload = {
+    adminEmail: formData.get('adminEmail'),
+    adminPassword: formData.get('adminPassword'),
+    connectionString: formData.get('connectionString'),
+    jwtKey: formData.get('jwtKey'),
+    jwtIssuer: formData.get('jwtIssuer'),
+    jwtAudience: formData.get('jwtAudience'),
+  };
+
+  try {
+    const response = await fetch('/api/setup/initialize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok || data.success === false) {
+      // ошибка
+      document.getElementById('setupResult').innerText = data.message || 'Ошибка при настройке';
+    } else {
+      // успех
+      document.getElementById('setupResult').style.color = 'green';
+      document.getElementById('setupResult').innerText = data.message;
+    }
+  } catch (err) {
+    document.getElementById('setupResult').innerText = 'Fetch error: ' + err.message;
+  }
+});
+    </script>
+</body>
+</html>

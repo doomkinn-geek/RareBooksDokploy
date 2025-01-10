@@ -1,0 +1,16 @@
+﻿# .dockerignore
+
+**/bin/
+**/obj/
+**/node_modules/
+**/books_photos/
+**/*.db
+.DS_Store
+.git
+.gitignore
+.vscode
+*.sln
+*.user
+MeshokParser/
+books_extended.db
+appsettings.json

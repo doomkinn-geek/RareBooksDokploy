@@ -1,0 +1,29 @@
+﻿# RareBooksService.WebApi/Dockerfile
+
+# Используйте официальный образ .NET SDK для сборки приложения
+FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
+WORKDIR /app
+
+# Копируйте файл решения и проекты
+COPY RareBooksService.sln .
+COPY RareBooksService.Common/RareBooksService.Common.csproj RareBooksService.Common/
+COPY RareBooksService.Data/RareBooksService.Data.csproj RareBooksService.Data/
+COPY RareBooksService.WebApi/RareBooksService.WebApi.csproj RareBooksService.WebApi/
+
+# Восстанавливайте зависимости для каждого проекта
+RUN dotnet restore RareBooksService.Common/RareBooksService.Common.csproj
+RUN dotnet restore RareBooksService.Data/RareBooksService.Data.csproj
+RUN dotnet restore RareBooksService.WebApi/RareBooksService.WebApi.csproj
+
+# Копируйте остальные файлы проекта и собирайте приложение
+COPY . .
+WORKDIR /app/RareBooksService.WebApi
+RUN dotnet publish -c Release -o out
+
+# Используйте официальный образ .NET Runtime для выполнения приложения
+FROM mcr.microsoft.com/dotnet/aspnet:6.0
+WORKDIR /app
+COPY --from=build /app/RareBooksService.WebApi/out .
+COPY RareBooksService.WebApi/books_extended.db /docker-entrypoint-initdb.d/
+
+ENTRYPOINT ["dotnet", "RareBooksService.WebApi.dll"]
