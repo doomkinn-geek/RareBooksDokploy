@@ -15,6 +15,13 @@
 
   <ItemGroup>
     <None Remove="ARIALBD.TTF" />
+    <None Remove="InitialSetup\index.html" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="InitialSetup\index.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
