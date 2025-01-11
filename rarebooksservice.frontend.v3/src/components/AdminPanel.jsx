@@ -80,26 +80,26 @@ const AdminPanel = () => {
     const fetchSettings = async () => {
         try {
             const data = await getAdminSettings();
-            if (data?.yandexKassa) {
+            if (data?.YandexKassa) {
                 setYandexKassa({
-                    shopId: data.yandexKassa.ShopId || '',
-                    secretKey: data.yandexKassa.SecretKey || '',
-                    returnUrl: data.yandexKassa.ReturnUrl || '',
-                    webhookUrl: data.yandexKassa.WebhookUrl || '',
+                    shopId: data.YandexKassa.ShopId || '',
+                    secretKey: data.YandexKassa.SecretKey || '',
+                    returnUrl: data.YandexKassa.ReturnUrl || '',
+                    webhookUrl: data.YandexKassa.WebhookUrl || '',
                 });
             }
-            if (data?.yandexDisk) {
+            if (data?.YandexDisk) {
                 setYandexDisk({
                     token: data.yandexDisk.Token || ''
                 });
             }
-            if (data?.typeOfAccessImages) {
+            if (data?.TypeOfAccessImages) {
                 setTypeOfAccessImages({
                     useLocalFiles: data.typeOfAccessImages.UseLocalFiles || 'false',
                     localPathOfImages: data.typeOfAccessImages.LocalPathOfImages || ''
                 });
             }
-            if (data?.yandexCloud) {
+            if (data?.YandexCloud) {
                 setYandexCloud({
                     accessKey: data.yandexCloud.AccessKey || '',
                     secretKey: data.yandexCloud.SecretKey || '',
@@ -385,6 +385,11 @@ const AdminPanel = () => {
         });
         await fetchBookUpdateStatus();
     };
+    useEffect(() => {
+        if (currentTab === 'bookupdate') {
+            fetchBookUpdateStatus();
+        }
+    }, [currentTab]);
 
 
     // ------------------- Рендер -------------------
