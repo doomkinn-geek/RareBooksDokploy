@@ -44,6 +44,14 @@ const AdminPanel = () => {
         bucketName: ''
     });
 
+    const [bookUpdateStatus, setBookUpdateStatus] = useState({
+        isPaused: false,
+        isRunningNow: false,
+        lastRunTimeUtc: null,
+        nextRunTimeUtc: null
+    });
+
+
     // Импорт SQLite
     const [importTaskId, setImportTaskId] = useState(null);
     const [importFile, setImportFile] = useState(null);
@@ -353,33 +361,60 @@ const AdminPanel = () => {
         }
     };
 
+    // ------------------- Контроль сервиса обновления данных -----------------
+    const fetchBookUpdateStatus = async () => {
+        const token = Cookies.get('token');
+        const response = await axios.get(`${API_URL}/bookupdateservice/status`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        setBookUpdateStatus(response.data);
+    };
+
+    const pauseBookUpdate = async () => {
+        const token = Cookies.get('token');
+        await axios.post(`${API_URL}/bookupdateservice/pause`, {}, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        await fetchBookUpdateStatus(); // обновим статус
+    };
+
+    const resumeBookUpdate = async () => {
+        const token = Cookies.get('token');
+        await axios.post(`${API_URL}/bookupdateservice/resume`, {}, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        await fetchBookUpdateStatus();
+    };
+
+
     // ------------------- Рендер -------------------
     // Кнопки для вкладок
     const renderTabButtons = (
         <div className="admin-tabs">
             <button
                 className={`admin-tab-button ${currentTab === 'users' ? 'active' : ''}`}
-                onClick={() => setCurrentTab('users')}
-            >
+                onClick={() => setCurrentTab('users')}>
                 Пользователи
             </button>
             <button
                 className={`admin-tab-button ${currentTab === 'export' ? 'active' : ''}`}
-                onClick={() => setCurrentTab('export')}
-            >
+                onClick={() => setCurrentTab('export')}>
                 Экспорт данных
             </button>
             <button
                 className={`admin-tab-button ${currentTab === 'settings' ? 'active' : ''}`}
-                onClick={() => setCurrentTab('settings')}
-            >
+                onClick={() => setCurrentTab('settings')}>
                 Настройки
             </button>
             <button
                 className={`admin-tab-button ${currentTab === 'import' ? 'active' : ''}`}
-                onClick={() => setCurrentTab('import')}
-            >
+                onClick={() => setCurrentTab('import')}>
                 Импорт данных
+            </button>
+            <button
+                className={`admin-tab-button ${currentTab === 'bookupdate' ? 'active' : ''}`}
+                onClick={() => setCurrentTab('bookupdate')}>
+                Обновление книг
             </button>
         </div>
     );
@@ -672,6 +707,38 @@ const AdminPanel = () => {
                         {importProgress === 100 && <div>Импорт завершён!</div>}
 
                         {importMessage && <div style={{ marginTop: '10px' }}>{importMessage}</div>}
+                    </div>
+                )}
+                {/* Добавим блок рендера вкладки */}
+                {currentTab === 'bookupdate' && (
+                    <div className="admin-section">
+                        <h3 className="admin-section-title">Сервис обновления книг (meshok.net)</h3>
+
+                        <div style={{ marginBottom: '10px' }}>
+                            <button onClick={fetchBookUpdateStatus} className="admin-button">
+                                Обновить статус
+                            </button>
+                        </div>
+
+                        <div>
+                            <p>Статус паузы: {bookUpdateStatus.isPaused ? 'ПАУЗА' : 'Активен'}</p>
+                            <p>Сейчас идёт обновление?: {bookUpdateStatus.isRunningNow ? 'Да, в процессе' : 'Нет'}</p>
+                            <p>Последний запуск (UTC): {bookUpdateStatus.lastRunTimeUtc || '-'}</p>
+                            <p>Следующий запуск (UTC): {bookUpdateStatus.nextRunTimeUtc || '-'}</p>
+                        </div>
+
+                        <div style={{ marginTop: '10px' }}>
+                            {!bookUpdateStatus.isPaused && (
+                                <button onClick={pauseBookUpdate} className="admin-button">
+                                    Поставить на паузу
+                                </button>
+                            )}
+                            {bookUpdateStatus.isPaused && (
+                                <button onClick={resumeBookUpdate} className="admin-button">
+                                    Возобновить
+                                </button>
+                            )}
+                        </div>
                     </div>
                 )}
 
