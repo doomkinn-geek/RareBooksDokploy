@@ -60,12 +60,14 @@ namespace RareBooksService.WebApi.Controllers
                 var yandexKassaNode = rootNode["YandexKassa"]?.AsObject();
                 var yandexDiskNode = rootNode["YandexDisk"]?.AsObject();
                 var typeOfAccessImagesNode = rootNode["TypeOfAccessImages"]?.AsObject();
+                var yandexCloudNode = rootNode["YandexCloud"]?.AsObject();
 
                 return Ok(new
                 {
                     YandexKassa = yandexKassaNode,
                     YandexDisk = yandexDiskNode,
-                    TypeOfAccessImages = typeOfAccessImagesNode
+                    TypeOfAccessImages = typeOfAccessImagesNode,
+                    YandexCloud = yandexCloudNode
                 });
             }
             catch (Exception ex)
@@ -123,6 +125,15 @@ namespace RareBooksService.WebApi.Controllers
                     taNode["LocalPathOfImages"] = dto.TypeOfAccessImages.LocalPathOfImages;
                     rootNode["TypeOfAccessImages"] = taNode;
                 }
+
+                if(dto.YandexCloud != null)
+                {
+                    var ycNode = rootNode["YandexCloud"] as JsonObject ?? new JsonObject();
+                    ycNode["AccessKey"] = dto.YandexCloud.AccessKey;
+                    ycNode["SecretKey"] = dto.YandexCloud.SecretKey;
+                    ycNode["ServiceUrl"] = dto.YandexCloud.ServiceUrl;
+                    ycNode["BucketName"] = dto.YandexCloud.BucketName;
+                }    
 
                 // Записываем обратно в файл
                 // Важно: убедитесь, что у приложения есть права на перезапись appsettings.json

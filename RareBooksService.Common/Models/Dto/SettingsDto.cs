@@ -11,5 +11,6 @@ namespace RareBooksService.Common.Models.Dto
         public YandexKassaDto? YandexKassa { get; set; }
         public YandexDiskDto? YandexDisk { get; set; }
         public TypeOfAccessImagesDto? TypeOfAccessImages { get; set; }
+        public YandexCloudDto? YandexCloud { get; set; }
     }
 }

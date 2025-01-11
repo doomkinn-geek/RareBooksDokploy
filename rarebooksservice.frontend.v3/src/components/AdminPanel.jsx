@@ -36,6 +36,13 @@ const AdminPanel = () => {
         useLocalFiles: 'false',
         localPathOfImages: ''
     });
+    // ---- Добавляем блок YandexCloud ----
+    const [yandexCloud, setYandexCloud] = useState({
+        accessKey: '',
+        secretKey: '',
+        serviceUrl: '',
+        bucketName: ''
+    });
 
     // Импорт SQLite
     const [importTaskId, setImportTaskId] = useState(null);
@@ -82,6 +89,14 @@ const AdminPanel = () => {
                 setTypeOfAccessImages({
                     useLocalFiles: data.typeOfAccessImages.UseLocalFiles || 'false',
                     localPathOfImages: data.typeOfAccessImages.LocalPathOfImages || ''
+                });
+            }
+            if (data?.yandexCloud) {
+                setYandexCloud({
+                    accessKey: data.yandexCloud.AccessKey || '',
+                    secretKey: data.yandexCloud.SecretKey || '',
+                    serviceUrl: data.yandexCloud.ServiceUrl || '',
+                    bucketName: data.yandexCloud.BucketName || ''
                 });
             }
         } catch (error) {
@@ -218,6 +233,12 @@ const AdminPanel = () => {
                 typeOfAccessImages: {
                     useLocalFiles: typeOfAccessImages.useLocalFiles,
                     localPathOfImages: typeOfAccessImages.localPathOfImages
+                },
+                yandexCloud: {
+                    accessKey: yandexCloud.accessKey,
+                    secretKey: yandexCloud.secretKey,
+                    serviceUrl: yandexCloud.serviceUrl,
+                    bucketName: yandexCloud.bucketName
                 }
             };
             await updateAdminSettings(settingsDto);
@@ -551,6 +572,44 @@ const AdminPanel = () => {
                                 </div>
                             </div>
                         </div>
+                        {/* Добавляем блок YandexCloud */}
+                        <div style={{ backgroundColor: '#f9f9f9', padding: '10px', marginBottom: '10px' }}>
+                            <h4>YandexCloud</h4>
+                            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                <div>
+                                    <label>AccessKey: </label><br />
+                                    <input
+                                        type="text"
+                                        value={yandexCloud.accessKey}
+                                        onChange={(e) => setYandexCloud({ ...yandexCloud, accessKey: e.target.value })}
+                                    />
+                                </div>
+                            <div>
+                                <label>SecretKey: </label><br />
+                                <input
+                                    type="text"
+                                    value={yandexCloud.secretKey}
+                                    onChange={(e) => setYandexCloud({ ...yandexCloud, secretKey: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label>ServiceUrl: </label><br />
+                                <input
+                                    type="text"
+                                    value={yandexCloud.serviceUrl}
+                                    onChange={(e) => setYandexCloud({ ...yandexCloud, serviceUrl: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label>BucketName: </label><br />
+                                <input
+                                    type="text"
+                                    value={yandexCloud.bucketName}
+                                    onChange={(e) => setYandexCloud({ ...yandexCloud, bucketName: e.target.value })}
+                                />
+                            </div>
+                        </div>
+                    </div>
 
                         {/* Кнопка Сохранить */}
                         <div>
