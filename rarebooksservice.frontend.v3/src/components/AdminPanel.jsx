@@ -90,21 +90,21 @@ const AdminPanel = () => {
             }
             if (data?.YandexDisk) {
                 setYandexDisk({
-                    token: data.yandexDisk.Token || ''
+                    token: data.YandexDisk.Token || ''
                 });
             }
             if (data?.TypeOfAccessImages) {
                 setTypeOfAccessImages({
-                    useLocalFiles: data.typeOfAccessImages.UseLocalFiles || 'false',
-                    localPathOfImages: data.typeOfAccessImages.LocalPathOfImages || ''
+                    useLocalFiles: data.TypeOfAccessImages.UseLocalFiles || 'false',
+                    localPathOfImages: data.TypeOfAccessImages.LocalPathOfImages || ''
                 });
             }
             if (data?.YandexCloud) {
                 setYandexCloud({
-                    accessKey: data.yandexCloud.AccessKey || '',
-                    secretKey: data.yandexCloud.SecretKey || '',
-                    serviceUrl: data.yandexCloud.ServiceUrl || '',
-                    bucketName: data.yandexCloud.BucketName || ''
+                    accessKey: data.YandexCloud.AccessKey || '',
+                    secretKey: data.YandexCloud.SecretKey || '',
+                    serviceUrl: data.YandexCloud.ServiceUrl || '',
+                    bucketName: data.YandexCloud.BucketName || ''
                 });
             }
         } catch (error) {
