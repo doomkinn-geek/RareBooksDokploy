@@ -50,41 +50,46 @@ namespace RareBooksService.WebApi
                 builder.Services.Configure<YandexKassaSettings>(builder.Configuration.GetSection("YandexKassa"));
                 builder.Services.Configure<TypeOfAccessImages>(builder.Configuration.GetSection("TypeOfAccessImages"));
 
-                builder.Services.AddAuthentication(options =>
+
+                var jwtKey = builder.Configuration["Jwt:Key"];
+                if (!string.IsNullOrWhiteSpace(jwtKey))
                 {
-                    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-                    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-                })
-                .AddJwtBearer(options =>
-                {
-                    options.RequireHttpsMetadata = false;
-                    options.SaveToken = true;
-                    options.TokenValidationParameters = new TokenValidationParameters
+                    builder.Services.AddAuthentication(options =>
                     {
-                        ValidateIssuer = true,
-                        ValidateAudience = true,
-                        ValidateLifetime = true,
-                        ValidateIssuerSigningKey = true,
-                        ValidIssuer = builder.Configuration["Jwt:Issuer"],
-                        ValidAudience = builder.Configuration["Jwt:Audience"],
-                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])),
-                        RoleClaimType = "roles",
-                        NameClaimType = ClaimTypes.NameIdentifier
-                    };
-                    options.Events = new JwtBearerEvents
+                        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+                    })
+                    .AddJwtBearer(options =>
                     {
-                        OnAuthenticationFailed = context =>
+                        options.RequireHttpsMetadata = false;
+                        options.SaveToken = true;
+                        options.TokenValidationParameters = new TokenValidationParameters
                         {
-                            Console.WriteLine("Authentication failed: " + context.Exception.Message);
-                            return Task.CompletedTask;
-                        },
-                        OnTokenValidated = context =>
+                            ValidateIssuer = true,
+                            ValidateAudience = true,
+                            ValidateLifetime = true,
+                            ValidateIssuerSigningKey = true,
+                            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+                            ValidAudience = builder.Configuration["Jwt:Audience"],
+                            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])),
+                            RoleClaimType = "roles",
+                            NameClaimType = ClaimTypes.NameIdentifier
+                        };
+                        options.Events = new JwtBearerEvents
                         {
-                            Console.WriteLine("Token validated: " + context.SecurityToken.Id);
-                            return Task.CompletedTask;
-                        }
-                    };
-                });
+                            OnAuthenticationFailed = context =>
+                            {
+                                Console.WriteLine("Authentication failed: " + context.Exception.Message);
+                                return Task.CompletedTask;
+                            },
+                            OnTokenValidated = context =>
+                            {
+                                Console.WriteLine("Token validated: " + context.SecurityToken.Id);
+                                return Task.CompletedTask;
+                            }
+                        };
+                    });
+                }
 
                 builder.Services.AddAuthorization(options =>
                 {
@@ -121,6 +126,7 @@ namespace RareBooksService.WebApi
 
                 // В ConfigureServices:
                 builder.Services.AddSingleton<ICaptchaService, CaptchaService>();
+                builder.Services.AddSingleton<ISetupStateService, SetupStateService>();
                 builder.Services.AddMemoryCache();
 
 
@@ -179,11 +185,58 @@ namespace RareBooksService.WebApi
 
                 var app = builder.Build();
 
+
+                var setupService = app.Services.GetRequiredService<ISetupStateService>();
+                setupService.DetermineIfSetupNeeded();
+
+                app.Use(async (context, next) =>
+                {
+                    // 1. Разрешаем запросы к /api/setup/ и /api/setupcheck/, 
+                    //    чтобы SetupController и SetupCheckController продолжали работать
+                    if (context.Request.Path.StartsWithSegments("/api/setup") ||
+                        context.Request.Path.StartsWithSegments("/api/setupcheck"))
+                    {
+                        await next.Invoke();
+                        return;
+                    }
+
+                    // 2. Если IsInitialSetupNeeded, то показываем HTML со страницей настройки
+                    if (setupService.IsInitialSetupNeeded)
+                    {
+                        // (а) Если пришел запрос на /api/*, но не /api/setup, даем 403
+                        if (context.Request.Path.StartsWithSegments("/api"))
+                        {
+                            context.Response.StatusCode = 403;
+                            await context.Response.WriteAsync("System not configured. Please do initial setup via /api/setup or special HTML page.");
+                            return;
+                        }
+
+                        // (б) Иначе отдаем статику из папки InitialSetup (index.html)
+                        var filePath = Path.Combine(app.Environment.ContentRootPath, "InitialSetup", "index.html");
+                        if (System.IO.File.Exists(filePath))
+                        {
+                            context.Response.ContentType = "text/html; charset=utf-8";
+                            await context.Response.SendFileAsync(filePath);
+                        }
+                        else
+                        {
+                            context.Response.StatusCode = 404;
+                            await context.Response.WriteAsync("InitialSetup page not found. Please contact admin.");
+                        }
+                        return;
+                    }
+
+                    // Если система настроена, идем дальше
+                    await next.Invoke();
+                });
+
+
+
                 var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
                 // Apply migrations at startup and seed admin user
                 using (var scope = app.Services.CreateScope())
                 {
-                    var dbContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
+                    /*var dbContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
                     dbContext.Database.Migrate();
 
                     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
@@ -197,7 +250,7 @@ namespace RareBooksService.WebApi
                     {
                         var migrationService = scope.ServiceProvider.GetRequiredService<MigrationService>();
                         migrationService.MigrateDataAsync().Wait();
-                    }
+                    }*/
 
                     var exportService = scope.ServiceProvider.GetRequiredService<IExportService>();
 
