@@ -26,12 +26,8 @@ namespace RareBooksService.WebApi.Controllers
         }
 
         [HttpGet("status")]
-        public async Task<IActionResult> GetStatus()
+        public IActionResult GetStatus()
         {
-            var currentUser = await _userManager.GetUserAsync(User);
-            if (currentUser == null || currentUser.Role != "Admin")
-                return Forbid();
-
             return Ok(new
             {
                 isPaused = _bookUpdateService.IsPaused,
@@ -42,23 +38,15 @@ namespace RareBooksService.WebApi.Controllers
         }
 
         [HttpPost("pause")]
-        public async Task<IActionResult> Pause()
+        public IActionResult Pause()
         {
-            var currentUser = await _userManager.GetUserAsync(User);
-            if (currentUser == null || currentUser.Role != "Admin")
-                return Forbid();
-
             _bookUpdateService.ForcePause();
             return Ok(new { message = "BookUpdateService paused" });
         }
 
         [HttpPost("resume")]
-        public async Task<IActionResult> Resume()
+        public IActionResult Resume()
         {
-            var currentUser = await _userManager.GetUserAsync(User);
-            if (currentUser == null || currentUser.Role != "Admin")
-                return Forbid();
-
             _bookUpdateService.ForceResume();
             return Ok(new { message = "BookUpdateService resumed" });
         }
