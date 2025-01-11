@@ -33,44 +33,83 @@
             <input type="text" name="jwtAudience" required />
         </div>
 
+        <!-- Поля для TypeOfAccessImages -->
+        <hr>
+        <h3>TypeOfAccessImages</h3>
+        <div>
+            <label>UseLocalFiles: </label>
+            <input type="text" name="typeOfAccessImagesUseLocalFiles" placeholder="true/false" />
+        </div>
+        <div>
+            <label>LocalPathOfImages: </label>
+            <input type="text" name="typeOfAccessImagesLocalPathOfImages" />
+        </div>
+
+        <!-- Поля для YandexCloud -->
+        <hr>
+        <h3>YandexCloud</h3>
+        <div>
+            <label>AccessKey: </label>
+            <input type="text" name="yandexCloudAccessKey" />
+        </div>
+        <div>
+            <label>SecretKey: </label>
+            <input type="text" name="yandexCloudSecretKey" />
+        </div>
+        <div>
+            <label>ServiceUrl: </label>
+            <input type="text" name="yandexCloudServiceUrl" />
+        </div>
+        <div>
+            <label>BucketName: </label>
+            <input type="text" name="yandexCloudBucketName" />
+        </div>
+
         <button type="submit">Инициализировать</button>
     </form>
 
     <div id="setupResult" style="margin-top:10px; color:red"></div>
 
     <script>
-const form = document.getElementById('setupForm');
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const formData = new FormData(form);
-  const payload = {
-    adminEmail: formData.get('adminEmail'),
-    adminPassword: formData.get('adminPassword'),
-    connectionString: formData.get('connectionString'),
-    jwtKey: formData.get('jwtKey'),
-    jwtIssuer: formData.get('jwtIssuer'),
-    jwtAudience: formData.get('jwtAudience'),
-  };
+        const form = document.getElementById('setupForm');
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(form);
+            const payload = {
+                adminEmail: formData.get('adminEmail'),
+                adminPassword: formData.get('adminPassword'),
+                connectionString: formData.get('connectionString'),
+                jwtKey: formData.get('jwtKey'),
+                jwtIssuer: formData.get('jwtIssuer'),
+                jwtAudience: formData.get('jwtAudience'),
+                // Новые поля
+                typeOfAccessImagesUseLocalFiles: formData.get('typeOfAccessImagesUseLocalFiles'),
+                typeOfAccessImagesLocalPathOfImages: formData.get('typeOfAccessImagesLocalPathOfImages'),
+                yandexCloudAccessKey: formData.get('yandexCloudAccessKey'),
+                yandexCloudSecretKey: formData.get('yandexCloudSecretKey'),
+                yandexCloudServiceUrl: formData.get('yandexCloudServiceUrl'),
+                yandexCloudBucketName: formData.get('yandexCloudBucketName'),
+            };
 
-  try {
-    const response = await fetch('/api/setup/initialize', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await response.json();
-    if (!response.ok || data.success === false) {
-      // ошибка
-      document.getElementById('setupResult').innerText = data.message || 'Ошибка при настройке';
-    } else {
-      // успех
-      document.getElementById('setupResult').style.color = 'green';
-      document.getElementById('setupResult').innerText = data.message;
-    }
-  } catch (err) {
-    document.getElementById('setupResult').innerText = 'Fetch error: ' + err.message;
-  }
-});
+            try {
+                const response = await fetch('/api/setup/initialize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json();
+                if (!response.ok || data.success === false) {
+                    // ошибка
+                    document.getElementById('setupResult').innerText = data.message || 'Ошибка при настройке';
+                } else {
+                    // успех
+                    document.getElementById('setupResult').style.color = 'green';
+                    document.getElementById('setupResult').innerText = data.message;
+                }
+            } catch (err) {
+                document.getElementById('setupResult').innerText = 'Fetch error: ' + err.message;
+            }
+        });
     </script>
 </body>
 </html>

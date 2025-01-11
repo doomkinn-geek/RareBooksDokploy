@@ -37,11 +37,22 @@ namespace RareBooksService.WebApi.Controllers
             public string AdminPassword { get; set; }
             public string ConnectionString { get; set; } // для DefaultConnection
 
-            // Новые поля для JWT
+            // Поля для JWT
             public string JwtKey { get; set; }
             public string JwtIssuer { get; set; }
             public string JwtAudience { get; set; }
+
+            // Новые поля для TypeOfAccessImages:
+            public string TypeOfAccessImagesUseLocalFiles { get; set; }
+            public string TypeOfAccessImagesLocalPathOfImages { get; set; }
+
+            // Новые поля для YandexCloud:
+            public string YandexCloudAccessKey { get; set; }
+            public string YandexCloudSecretKey { get; set; }
+            public string YandexCloudServiceUrl { get; set; }
+            public string YandexCloudBucketName { get; set; }
         }
+
         // Внутри SetupController
         [HttpGet("")]
         public IActionResult GetSetupPage()
@@ -120,7 +131,7 @@ namespace RareBooksService.WebApi.Controllers
                 if (string.IsNullOrWhiteSpace(oldJson))
                 {
                     // Создаём заготовку
-                    oldJson = "{\"ConnectionStrings\": {}, \"Jwt\": {}}";
+                    oldJson = "{\"ConnectionStrings\": {}, \"Jwt\": {}, \"YandexCloud\": {}, \"TypeOfAccessImages\": {}}";
                 }
 
                 var dict = JsonSerializer.Deserialize<Dictionary<string, object>>(oldJson)
@@ -131,7 +142,6 @@ namespace RareBooksService.WebApi.Controllers
                 {
                     dict["ConnectionStrings"] = new Dictionary<string, string>();
                 }
-
                 var connectionStringsObj = dict["ConnectionStrings"];
                 Dictionary<string, string> cstrDict;
                 if (connectionStringsObj is JsonElement je)
@@ -152,7 +162,6 @@ namespace RareBooksService.WebApi.Controllers
                 dict["ConnectionStrings"] = cstrDict;
 
                 // --- Jwt ---
-                // Аналогично создаём / обновляем секцию Jwt
                 var jwtDict = new Dictionary<string, string>
                 {
                     ["Key"] = dto.JwtKey ?? "SomeKey",
@@ -161,12 +170,68 @@ namespace RareBooksService.WebApi.Controllers
                 };
                 dict["Jwt"] = jwtDict;
 
+                // --- TypeOfAccessImages ---
+                // Если нет, создаём
+                if (!dict.ContainsKey("TypeOfAccessImages"))
+                {
+                    dict["TypeOfAccessImages"] = new Dictionary<string, string>();
+                }
+                var typeOfAccessObj = dict["TypeOfAccessImages"];
+                Dictionary<string, string> typeOfAccessDict;
+                if (typeOfAccessObj is JsonElement tae)
+                {
+                    typeOfAccessDict = JsonSerializer.Deserialize<Dictionary<string, string>>(tae.GetRawText())
+                        ?? new Dictionary<string, string>();
+                }
+                else if (typeOfAccessObj is Dictionary<string, string> realTypeOfAccessDict)
+                {
+                    typeOfAccessDict = realTypeOfAccessDict;
+                }
+                else
+                {
+                    typeOfAccessDict = new Dictionary<string, string>();
+                }
+
+                // Заполняем
+                typeOfAccessDict["UseLocalFiles"] = dto.TypeOfAccessImagesUseLocalFiles ?? "false";
+                typeOfAccessDict["LocalPathOfImages"] = dto.TypeOfAccessImagesLocalPathOfImages ?? "";
+                dict["TypeOfAccessImages"] = typeOfAccessDict;
+
+                // --- YandexCloud ---
+                if (!dict.ContainsKey("YandexCloud"))
+                {
+                    dict["YandexCloud"] = new Dictionary<string, string>();
+                }
+                var ycloudObj = dict["YandexCloud"];
+                Dictionary<string, string> ycloudDict;
+                if (ycloudObj is JsonElement yce)
+                {
+                    ycloudDict = JsonSerializer.Deserialize<Dictionary<string, string>>(yce.GetRawText())
+                        ?? new Dictionary<string, string>();
+                }
+                else if (ycloudObj is Dictionary<string, string> realYcloudDict)
+                {
+                    ycloudDict = realYcloudDict;
+                }
+                else
+                {
+                    ycloudDict = new Dictionary<string, string>();
+                }
+
+                ycloudDict["AccessKey"] = dto.YandexCloudAccessKey ?? "";
+                ycloudDict["SecretKey"] = dto.YandexCloudSecretKey ?? "";
+                ycloudDict["ServiceUrl"] = dto.YandexCloudServiceUrl ?? "";
+                ycloudDict["BucketName"] = dto.YandexCloudBucketName ?? "";
+
+                dict["YandexCloud"] = ycloudDict;
+
+                // Сериализуем обратно
                 var newJson = JsonSerializer.Serialize(dict, new JsonSerializerOptions
                 {
                     WriteIndented = true
                 });
-
                 await System.IO.File.WriteAllTextAsync(appSettingsPath, newJson);
+
                 return "";
             }
             catch (Exception ex)
@@ -174,6 +239,7 @@ namespace RareBooksService.WebApi.Controllers
                 return ex.Message;
             }
         }
+
 
         private async Task<string> RunMigrations(string connectionString)
         {
