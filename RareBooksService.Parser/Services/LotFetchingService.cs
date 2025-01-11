@@ -10,10 +10,10 @@ namespace RareBooksService.Parser.Services
     public interface ILotFetchingService
     {
         Task FetchFreeListData(List<int> ids);
-        Task FetchAllNewData();
+        Task FetchAllNewData(CancellationToken token);
         Task FetchAllOldDataExtended(int groupNumber);
         Task FetchAllOldDataWithLetterGroup(char groupLetter);
-        Task FetchSoldFixedPriceLotsAsync();
+        Task FetchSoldFixedPriceLotsAsync(CancellationToken token);
     }
 
     public class LotFetchingService : ILotFetchingService
@@ -54,7 +54,7 @@ namespace RareBooksService.Parser.Services
         }
 
         // Новый метод для загрузки проданных лотов с фиксированной ценой
-        public async Task FetchSoldFixedPriceLotsAsync()
+        public async Task FetchSoldFixedPriceLotsAsync(CancellationToken token)
         {
             _logger.LogInformation("Начинаем загрузку проданных лотов с фиксированной ценой.");
 
@@ -76,6 +76,7 @@ namespace RareBooksService.Parser.Services
 
             while (true)
             {
+                token.ThrowIfCancellationRequested();  // проверка отмены
                 try
                 {
                     await ProcessLotAsync(currentId++, nonStandardPricesFilePath, nonStandardPricesSovietFilePath);
@@ -97,12 +98,13 @@ namespace RareBooksService.Parser.Services
             _logger.LogInformation("Завершена загрузка проданных лотов с фиксированной ценой.");
         }               
 
-        public async Task FetchAllNewData()
+        public async Task FetchAllNewData(CancellationToken token)
         {
             _logger.LogInformation("Starting FetchAllNewData.");
 
             foreach (var categoryId in InterestedCategories.Concat(SovietCategories))
             {
+                token.ThrowIfCancellationRequested();  // проверка отмены
                 try
                 {
                     _logger.LogInformation("Fetching lots list for categoryId = {CategoryId}", categoryId);

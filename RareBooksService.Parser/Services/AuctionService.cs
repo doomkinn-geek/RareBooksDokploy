@@ -13,7 +13,7 @@ namespace RareBooksService.Parser.Services
 {
     public interface IAuctionService
     {
-        Task UpdateCompletedAuctionsAsync();
+        Task UpdateCompletedAuctionsAsync(CancellationToken token);
     }
     public class AuctionService : IAuctionService
     {        
@@ -32,7 +32,7 @@ namespace RareBooksService.Parser.Services
 
         //18.12.2024 случайно обнаружил, что финальные цены записываются не в ту базу данных
         //записывается в старую базу SQLite. Меняю так, чтобы данные были заполнены верно.
-        public async Task UpdateCompletedAuctionsAsync()
+        public async Task UpdateCompletedAuctionsAsync(CancellationToken token)
         {
             //using (ExtendedBooksContext context = new ExtendedBooksContext())
             //using (RegularBaseBooksContext context = new RegularBaseBooksContext())
@@ -43,6 +43,7 @@ namespace RareBooksService.Parser.Services
 
                 foreach (var book in booksToUpdate)
                 {
+                    token.ThrowIfCancellationRequested();  // проверка отмены
                     try
                     {
                         var updatedLotData = await _lotDataService.GetLotDataAsync(book.Id);

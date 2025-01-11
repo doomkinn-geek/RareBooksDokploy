@@ -127,6 +127,18 @@ namespace RareBooksService.WebApi
                 // В ConfigureServices:
                 builder.Services.AddSingleton<ICaptchaService, CaptchaService>();
                 builder.Services.AddSingleton<ISetupStateService, SetupStateService>();
+
+                // Добавляем BookUpdateService как Singleton, чтобы 
+                // 1) Он мог жить всё время 
+                // 2) Контроллеры могли его внедрять как IBookUpdateService
+                builder.Services.AddSingleton<IBookUpdateService, BookUpdateService>();
+
+                // Регистрируем его как HostedService, чтобы ASP.NET Core его запустил в фоне.
+                // Т.к. нам нужен сам объект BookUpdateService из предыдущей регистрации, 
+                // мы вызываем GetRequiredService<BookUpdateService>.
+                builder.Services.AddHostedService(sp => (BookUpdateService)sp.GetRequiredService<IBookUpdateService>());
+
+
                 builder.Services.AddMemoryCache();
 
 

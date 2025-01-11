@@ -10,47 +10,56 @@ namespace RareBooksService.WebApi.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize] // Только админ может видеть и управлять
-    public class BookUpdateServiceController : BaseController
+    [Authorize]
+    public class BookUpdateServiceController : ControllerBase
     {
+        private readonly IBookUpdateService _bookUpdateService;
+        private readonly UserManager<ApplicationUser> _userManager;
+
         public BookUpdateServiceController(
-            UserManager<ApplicationUser> userManager)
-            : base(userManager)
-        { }
+            IBookUpdateService bookUpdateService,        // <-- Получаем через DI
+            UserManager<ApplicationUser> userManager
+        )
+        {
+            _bookUpdateService = bookUpdateService;
+            _userManager = userManager;
+        }
 
         [HttpGet("status")]
-        public IActionResult GetStatus()
+        public async Task<IActionResult> GetStatus()
         {
+            var currentUser = await _userManager.GetUserAsync(User);
+            if (currentUser == null || currentUser.Role != "Admin")
+                return Forbid();
+
             return Ok(new
             {
-                isPaused = BookUpdateService.IsPaused,
-                isRunningNow = BookUpdateService.IsRunningNow,
-                lastRunTimeUtc = BookUpdateService.LastRunTimeUtc,
-                nextRunTimeUtc = BookUpdateService.NextRunTimeUtc
+                isPaused = _bookUpdateService.IsPaused,
+                isRunningNow = _bookUpdateService.IsRunningNow,
+                lastRunTimeUtc = _bookUpdateService.LastRunTimeUtc,
+                nextRunTimeUtc = _bookUpdateService.NextRunTimeUtc
             });
         }
 
         [HttpPost("pause")]
         public async Task<IActionResult> Pause()
         {
-            var currentUser = await GetCurrentUserAsync();
-            if (!IsUserAdmin(currentUser))
-            {                
-                return Forbid("Просматривать список пользователей может только администратор");
-            }
-            BookUpdateService.IsPaused = true;
+            var currentUser = await _userManager.GetUserAsync(User);
+            if (currentUser == null || currentUser.Role != "Admin")
+                return Forbid();
+
+            _bookUpdateService.ForcePause();
             return Ok(new { message = "BookUpdateService paused" });
         }
 
         [HttpPost("resume")]
         public async Task<IActionResult> Resume()
         {
-            var currentUser = await GetCurrentUserAsync();
-            if (!IsUserAdmin(currentUser))
-            {
-                return Forbid("Просматривать список пользователей может только администратор");
-            }
-            BookUpdateService.IsPaused = false;
+            var currentUser = await _userManager.GetUserAsync(User);
+            if (currentUser == null || currentUser.Role != "Admin")
+                return Forbid();
+
+            _bookUpdateService.ForceResume();
             return Ok(new { message = "BookUpdateService resumed" });
         }
     }
