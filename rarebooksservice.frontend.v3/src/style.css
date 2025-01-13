@@ -52,6 +52,41 @@ button, input {
     }
 }
 
+@media (max-width: 768px) {
+    .search-box {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+        .search-box input,
+        .search-box button {
+            width: 100%;
+        }
+
+    .categories ul {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+        .categories ul li a {
+            text-align: center;
+        }
+
+    .header, .footer {
+        padding: 15px;
+        font-size: 18px;
+    }
+
+    .card {
+        margin: 10px 0;
+    }
+
+    .user-details-container,
+    .admin-panel-container {
+        padding: 10px;
+    }
+}
+
 
 
 .images {
