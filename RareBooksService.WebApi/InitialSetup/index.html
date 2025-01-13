@@ -8,60 +8,66 @@
     <h2>Первичная настройка RareBooksService</h2>
     <form id="setupForm">
         <div>
-            <label>Admin Email: </label>
+            <label>Admin Email:</label>
             <input type="email" name="adminEmail" required />
         </div>
         <div>
-            <label>Admin Password: </label>
+            <label>Admin Password:</label>
             <input type="password" name="adminPassword" required />
         </div>
         <div>
-            <label>Connection String: </label>
+            <label>Connection String:</label>
             <input type="text" name="connectionString" required />
         </div>
         <!-- Поля для JWT -->
+        <h3>JWT Settings</h3>
         <div>
-            <label>Jwt Key: </label>
+            <label>Jwt Key:</label>
             <input type="text" name="jwtKey" required />
         </div>
         <div>
-            <label>Jwt Issuer: </label>
+            <label>Jwt Issuer:</label>
             <input type="text" name="jwtIssuer" required />
         </div>
         <div>
-            <label>Jwt Audience: </label>
+            <label>Jwt Audience:</label>
             <input type="text" name="jwtAudience" required />
         </div>
 
-        <!-- Поля для TypeOfAccessImages -->
-        <hr>
+        <!-- YandexDisk (пример) -->
+        <h3>YandexDisk</h3>
+        <div>
+            <label>Token:</label>
+            <input type="text" name="yandexDiskToken" />
+        </div>
+
+        <!-- TypeOfAccessImages -->
         <h3>TypeOfAccessImages</h3>
         <div>
-            <label>UseLocalFiles: </label>
+            <label>UseLocalFiles:</label>
             <input type="text" name="typeOfAccessImagesUseLocalFiles" placeholder="true/false" />
         </div>
         <div>
-            <label>LocalPathOfImages: </label>
+            <label>LocalPathOfImages:</label>
             <input type="text" name="typeOfAccessImagesLocalPathOfImages" />
         </div>
 
-        <!-- Поля для YandexCloud -->
-        <hr>
+        <!-- YandexCloud -->
         <h3>YandexCloud</h3>
         <div>
-            <label>AccessKey: </label>
+            <label>AccessKey:</label>
             <input type="text" name="yandexCloudAccessKey" />
         </div>
         <div>
-            <label>SecretKey: </label>
+            <label>SecretKey:</label>
             <input type="text" name="yandexCloudSecretKey" />
         </div>
         <div>
-            <label>ServiceUrl: </label>
+            <label>ServiceUrl:</label>
             <input type="text" name="yandexCloudServiceUrl" />
         </div>
         <div>
-            <label>BucketName: </label>
+            <label>BucketName:</label>
             <input type="text" name="yandexCloudBucketName" />
         </div>
 
@@ -72,8 +78,12 @@
 
     <script>
         const form = document.getElementById('setupForm');
+        const setupResultDiv = document.getElementById('setupResult');
+
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+
+            // Собираем данные
             const formData = new FormData(form);
             const payload = {
                 adminEmail: formData.get('adminEmail'),
@@ -82,32 +92,54 @@
                 jwtKey: formData.get('jwtKey'),
                 jwtIssuer: formData.get('jwtIssuer'),
                 jwtAudience: formData.get('jwtAudience'),
-                // Новые поля
+                yandexDiskToken: formData.get('yandexDiskToken'),
                 typeOfAccessImagesUseLocalFiles: formData.get('typeOfAccessImagesUseLocalFiles'),
                 typeOfAccessImagesLocalPathOfImages: formData.get('typeOfAccessImagesLocalPathOfImages'),
                 yandexCloudAccessKey: formData.get('yandexCloudAccessKey'),
                 yandexCloudSecretKey: formData.get('yandexCloudSecretKey'),
                 yandexCloudServiceUrl: formData.get('yandexCloudServiceUrl'),
-                yandexCloudBucketName: formData.get('yandexCloudBucketName'),
+                yandexCloudBucketName: formData.get('yandexCloudBucketName')
             };
 
+            // Отправляем запрос
             try {
                 const response = await fetch('/api/setup/initialize', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
+
+                // Если получили 403 — значит, возможно система уже настроена.
+                if (response.status === 403) {
+                    const text = await response.text();
+                    // text может быть JSON или строкой
+                    // Попробуем аккуратно
+                    try {
+                        const obj = JSON.parse(text);
+                        if (obj?.message) {
+                            setupResultDiv.innerText = 'Ошибка 403: ' + obj.message;
+                        } else {
+                            setupResultDiv.innerText = 'Ошибка 403: System probably configured.';
+                        }
+                    } catch {
+                        setupResultDiv.innerText = 'Ошибка 403: System probably configured.';
+                    }
+                    return;
+                }
+
+                // Попробуем распарсить ответ, как JSON
                 const data = await response.json();
+
                 if (!response.ok || data.success === false) {
-                    // ошибка
-                    document.getElementById('setupResult').innerText = data.message || 'Ошибка при настройке';
+                    setupResultDiv.style.color = 'red';
+                    setupResultDiv.innerText = data.message || 'Ошибка при настройке';
                 } else {
-                    // успех
-                    document.getElementById('setupResult').style.color = 'green';
-                    document.getElementById('setupResult').innerText = data.message;
+                    // Успех
+                    setupResultDiv.style.color = 'green';
+                    setupResultDiv.innerText = data.message;
                 }
             } catch (err) {
-                document.getElementById('setupResult').innerText = 'Fetch error: ' + err.message;
+                setupResultDiv.innerText = 'Fetch error: ' + err.message;
             }
         });
     </script>

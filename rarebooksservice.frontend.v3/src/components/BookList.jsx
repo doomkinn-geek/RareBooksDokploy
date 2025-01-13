@@ -1,94 +1,159 @@
-﻿//src/components/BookList.jsx
-import React, { useEffect, useState, useContext } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+﻿// src/components/BookList.jsx
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, Typography, Box, Button, Pagination } from '@mui/material';
-import { getBookImages, getBookThumbnail } from '../api';
-import { UserContext } from '../context/UserContext';
+import { useNavigate } from 'react-router-dom';
+
+// Импортируем метод для запроса миниатюры
+import { getBookThumbnail } from '../api';
 
 const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
-    const [thumbnails, setThumbnails] = useState({});
-    const [error, setError] = useState(null);
     const navigate = useNavigate();
-    const { user } = useContext(UserContext);
 
+    // Словарь (bookId -> blobUrl), где храним URL созданный через URL.createObjectURL()
+    const [thumbnails, setThumbnails] = useState({});
+    const [error, setError] = useState('');
+
+    // При изменении массива books получаем миниатюры
     useEffect(() => {
+        if (!books || books.length === 0) return;
+
         const fetchThumbnails = async () => {
-            if (!books || books.length === 0) return; // Нет книг - нет запросов
-
-            const newThumbnails = {};
+            const newThumbs = {}; // bookId -> blobUrl
             for (const book of books) {
-                try {
-                    const response = await getBookImages(book.id);
-                    const thumbnailName = response.data.thumbnails[0];
-
-                    if (thumbnailName) {
-                        const thumbnailResponse = await getBookThumbnail(book.id, thumbnailName);
-                        const thumbnailUrl = URL.createObjectURL(thumbnailResponse.data);
-                        newThumbnails[book.id] = thumbnailUrl;
+                // Если у книги есть имя миниатюры
+                if (book.firstThumbnailName) {
+                    try {
+                        const response = await getBookThumbnail(book.id, book.firstThumbnailName);
+                        const blobUrl = URL.createObjectURL(response.data);
+                        newThumbs[book.id] = blobUrl;
+                    } catch (err) {
+                        console.error('Ошибка при загрузке миниатюры для книги', book.id, err);
+                        setError('Не удалось загрузить некоторые миниатюры.');
                     }
-                } catch (error) {
-                    console.error(`Error fetching thumbnails for book ${book.id}:`, error.response || error.message);
-                    setError('Failed to load thumbnails. Please try again later.');
                 }
             }
-            setThumbnails(newThumbnails);
+            setThumbnails(newThumbs);
         };
 
         fetchThumbnails();
     }, [books]);
 
-    const handleNextPage = () => {
-        if (currentPage < totalPages) {
-            setCurrentPage(currentPage + 1);
-        }
-    };
-
+    // Переход между страницами
     const handlePreviousPage = () => {
         if (currentPage > 1) {
             setCurrentPage(currentPage - 1);
         }
     };
-
+    const handleNextPage = () => {
+        if (currentPage < totalPages) {
+            setCurrentPage(currentPage + 1);
+        }
+    };
     const handlePageChange = (event, value) => {
         setCurrentPage(value);
     };
 
+    // Переход к деталям книги
     const handleBookClick = (bookId) => {
         navigate(`/books/${bookId}`, { state: { fromPage: currentPage } });
     };
 
     return (
         <Box sx={{ my: 2 }}>
-            {error && <Typography color="error">{error}</Typography>}
-            {books.map((book) => (
-                <Card key={book.id} sx={{ my: 1 }}>
-                    <CardContent sx={{ display: 'flex' }}>
-                        {thumbnails[book.id] && (
-                            <Box sx={{ width: '150px', marginRight: '16px' }}>
-                                <img
-                                    src={thumbnails[book.id]}
-                                    alt="Book Thumbnail"
-                                    style={{ width: '100%', height: 'auto' }}
-                                />
+            {/* Показываем сообщение об ошибке (если было) */}
+            {error && (
+                <Typography color="error" sx={{ mb: 2 }}>
+                    {error}
+                </Typography>
+            )}
+
+            {/* Список книг */}
+            <Box
+                className="book-list"
+                sx={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 2,
+                }}
+            >
+                {books.map((book) => (
+                    <Card
+                        key={book.id}
+                        sx={{
+                            my: 1,
+                            borderRadius: '5px',
+                        }}
+                    >
+                        <CardContent
+                            sx={{
+                                display: 'flex',
+                                flexDirection: { xs: 'column', sm: 'row' },
+                                gap: 2,
+                            }}
+                        >
+                            {/* Если у книги есть имя миниатюры -> пытаемся вывести её */}
+                            {book.firstThumbnailName && thumbnails[book.id] && (
+                                <Box
+                                    sx={{
+                                        width: { xs: '100%', sm: '150px' },
+                                        marginBottom: { xs: 2, sm: 0 },
+                                    }}
+                                >
+                                    <img
+                                        src={thumbnails[book.id]}
+                                        alt="Book Thumbnail"
+                                        style={{
+                                            width: '100%',
+                                            height: 'auto',
+                                            objectFit: 'contain',
+                                            display: 'block',
+                                        }}
+                                    />
+                                </Box>
+                            )}
+
+                            {/* Основная информация о книге */}
+                            <Box sx={{ flex: 1 }}>
+                                <Typography
+                                    variant="h6"
+                                    onClick={() => handleBookClick(book.id)}
+                                    sx={{
+                                        cursor: 'pointer',
+                                        textDecoration: 'none',
+                                        color: 'inherit',
+                                        overflowWrap: 'break-word',
+                                    }}
+                                >
+                                    {book.title}
+                                </Typography>
+                                <Typography variant="body1">Цена: {book.price}</Typography>
+                                <Typography variant="body1">Дата: {book.date}</Typography>
+                                <Typography variant="body1">
+                                    Продавец: {book.sellerName}
+                                </Typography>
+                                <Typography variant="body1">Тип: {book.type}</Typography>
                             </Box>
-                        )}
-                        <Box>
-                            <Typography variant="h5" component="div" onClick={() => handleBookClick(book.id)} style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
-                                {book.title}
-                            </Typography>
-                            <Typography variant="body1">Цена: {book.price}</Typography>
-                            <Typography variant="body1">Дата: {book.date}</Typography>
-                            <Typography variant="body2" component={Link} to={`/searchBySeller/${book.sellerName}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-                                Продавец: {book.sellerName}
-                            </Typography>
-                            <Typography variant="body1">Тип: {book.type}</Typography>
-                        </Box>
-                    </CardContent>
-                </Card>
-            ))}
+                        </CardContent>
+                    </Card>
+                ))}
+            </Box>
+
+            {/* Пагинация, если есть книги */}
             {books.length > 0 && (
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
-                    <Button variant="contained" onClick={handlePreviousPage} disabled={currentPage === 1}>
+                <Box
+                    sx={{
+                        display: 'flex',
+                        justifyContent: 'center',
+                        mt: 2,
+                        flexWrap: 'wrap',
+                        gap: 2,
+                    }}
+                >
+                    <Button
+                        variant="contained"
+                        onClick={handlePreviousPage}
+                        disabled={currentPage === 1}
+                    >
                         Предыдущая страница
                     </Button>
                     <Pagination
@@ -96,8 +161,14 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                         page={currentPage}
                         onChange={handlePageChange}
                         color="primary"
+                        siblingCount={0}
+                        boundaryCount={1}
                     />
-                    <Button variant="contained" onClick={handleNextPage} disabled={currentPage === totalPages}>
+                    <Button
+                        variant="contained"
+                        onClick={handleNextPage}
+                        disabled={currentPage === totalPages}
+                    >
                         Следующая страница
                     </Button>
                 </Box>

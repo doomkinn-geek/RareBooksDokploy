@@ -1,37 +1,28 @@
-.images {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-}
+/* ===================================
+   1) БАЗОВЫЕ СТИЛИ (общие)
+   =================================== */
 
-    .images img {
-        max-width: 100%;
-        height: auto;
-        display: block;
-        margin: 0 auto;
-    }
-
+/* Сброс или базовые настройки, если нужно */
 body {
     font-family: 'Arial', sans-serif;
     background-color: #f0f0f0;
     margin: 0;
     padding: 0;
     color: #333;
-    display: flex;
+    display: flex; /* делает html/body flex-контейнерами */
     flex-direction: column;
-    height: 100vh;
+    height: 100vh; /* иногда полезно для 100% высоты */
 }
 
+/* Контейнер, в который всё завёрнуто */
 .container {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    padding: 20px;
+    padding: 20px; /* базовое значение (для десктопа) */
+    box-sizing: border-box; /* чтобы padding учитывался в width */
     width: 100%;
+    max-width: 100%;
 }
 
+/* Стили для шапки и подвала */
 .header, .footer {
     background-color: #2c3e50;
     color: #fff;
@@ -40,125 +31,21 @@ body {
     text-align: center;
 }
 
-    .header h1, .footer p {
+    .header h1,
+    .footer p {
         margin: 0;
         font-size: 24px;
     }
 
-.search-box {
-    display: flex;
-    justify-content: center;
-    margin: 20px 0;
-    background-color: #fff;
-    padding: 20px;
-    border-radius: 5px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    width: 100%;
-    max-width: 800px;
+/* Кнопки и инпуты по умолчанию */
+button, input {
+    font-size: 16px;
+    padding: 12px;
 }
 
-    .search-box input {
-        flex: 1;
-        padding: 10px;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-        margin-right: 10px;
-    }
-
-    .search-box button {
-        padding: 10px 20px;
-        border: none;
-        background-color: #ffcc00;
-        color: #000;
-        cursor: pointer;
-        border-radius: 4px;
-    }
-
-        .search-box button:hover {
-            background-color: #ff9900;
-        }
-
-.categories {
-    background-color: #fff;
-    padding: 20px;
-    border-radius: 5px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    width: 100%;
-    max-width: 800px;
-    margin-top: 20px;
-}
-
-    .categories h2 {
-        margin-top: 0;
-        text-align: center;
-    }
-
-    .categories ul {
-        list-style-type: none;
-        padding: 0;
-        display: flex;
-        flex-wrap: wrap;
-    }
-
-        .categories ul li {
-            flex: 1 1 45%;
-            margin: 5px;
-        }
-
-            .categories ul li a {
-                text-decoration: none;
-                color: #333;
-                display: block;
-                padding: 10px;
-                background-color: #f9f9f9;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                text-align: center;
-            }
-
-                .categories ul li a:hover {
-                    background-color: #ffcc00;
-                    color: #000;
-                }
-
-.auth-links {
-    margin-top: 20px;
-    display: flex;
-    gap: 10px;
-}
-
-.auth-form {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    width: 100%;
-    max-width: 400px;
-    margin: 0 auto;
-    background-color: #fff;
-    padding: 20px;
-    border-radius: 5px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-    .auth-form input {
-        padding: 10px;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-    }
-
-    .auth-form button {
-        padding: 10px;
-        border: none;
-        background-color: #ffcc00;
-        color: #000;
-        cursor: pointer;
-        border-radius: 4px;
-    }
-
-        .auth-form button:hover {
-            background-color: #ff9900;
-        }
-
+/* ----------------------
+   1.1) Навигация/меню
+---------------------- */
 .header nav {
     display: flex;
     gap: 20px;
@@ -175,11 +62,14 @@ body {
             text-decoration: underline;
         }
 
+/* =============================
+   2) КАРТОЧКИ, ФОРМЫ, БЛОКИ
+   ============================= */
 .card {
     background-color: #fff;
     padding: 20px;
     border-radius: 5px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     width: 100%;
     max-width: 500px;
     margin: 20px auto;
@@ -210,7 +100,278 @@ body {
                 background-color: #ff9900;
             }
 
-/* Добавляем стили для UserDetailsPage */
+/* Блоки для отображения изображений */
+.images {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+    .images img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 0 auto;
+    }
+
+/* =============================
+   3) ФОРМЫ АВТОРИЗАЦИИ/РЕГИСТР.
+   ============================= */
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    max-width: 400px;
+    margin: 0 auto;
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+    .auth-form input {
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+    }
+
+    .auth-form button {
+        padding: 10px;
+        border: none;
+        background-color: #ffcc00;
+        color: #000;
+        cursor: pointer;
+        border-radius: 4px;
+    }
+
+        .auth-form button:hover {
+            background-color: #ff9900;
+        }
+
+/* Ссылки на вход/регистрацию */
+.auth-links {
+    margin-top: 20px;
+    display: flex;
+    gap: 10px;
+}
+
+/* =============================
+   4) Поиск, категории
+   ============================= */
+.search-box {
+    display: flex;
+    justify-content: center;
+    margin: 20px 0;
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    width: 100%;
+    max-width: 800px;
+}
+
+    .search-box input {
+        flex: 1;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        margin-right: 10px;
+    }
+
+    .search-box button {
+        padding: 10px 20px;
+        border: none;
+        background-color: #ffcc00;
+        color: #000;
+        cursor: pointer;
+        border-radius: 4px;
+    }
+
+        .search-box button:hover {
+            background-color: #ff9900;
+        }
+
+.categories {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    width: 100%;
+    max-width: 800px;
+    margin-top: 20px;
+}
+
+    .categories h2 {
+        margin-top: 0;
+        text-align: center;
+    }
+
+    .categories ul {
+        list-style-type: none;
+        padding: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+        .categories ul li {
+            flex: 1 1 45%;
+        }
+
+            .categories ul li a {
+                text-decoration: none;
+                color: #333;
+                display: block;
+                padding: 10px;
+                background-color: #f9f9f9;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                text-align: center;
+            }
+
+                .categories ul li a:hover {
+                    background-color: #ffcc00;
+                    color: #000;
+                }
+
+/* =============================
+   5) ПАНЕЛЬ АДМИНА, ТАБЛИЦЫ
+   ============================= */
+.admin-panel-container {
+    max-width: 1100px;
+    min-width: 760px;
+    margin: 20px auto;
+    background: #fff;
+    padding: 20px;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.admin-title {
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 24px;
+}
+
+.admin-error {
+    color: red;
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+
+.admin-section {
+    background: #f9f9f9;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.admin-section-title {
+    margin-top: 0;
+    font-size: 1.4em;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 5px;
+    margin-bottom: 10px;
+}
+
+/* Кнопки действий в админке */
+.admin-actions {
+    margin-bottom: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.admin-button {
+    margin-right: 10px;
+    padding: 5px 10px;
+    cursor: pointer;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    background: #fff;
+}
+
+    .admin-button:hover {
+        background: #eee;
+    }
+
+.admin-button-disabled {
+    background: #eee;
+    cursor: not-allowed;
+}
+
+/* Базовая таблица на десктопе */
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+}
+
+    .admin-table th,
+    .admin-table td {
+        border-bottom: 1px solid #ccc;
+        padding: 8px;
+        text-align: left;
+    }
+
+    .admin-table th {
+        background-color: #eee;
+        font-weight: bold;
+    }
+
+/* Экспорт / Импорт */
+.admin-export-status,
+.admin-export-complete {
+    margin-top: 10px;
+}
+
+/* Вкладки */
+.admin-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    justify-content: center;
+}
+
+.admin-tab-button {
+    padding: 8px 15px;
+    border: 1px solid #ddd;
+    background: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s;
+}
+
+    .admin-tab-button:hover {
+        background: #f3f3f3;
+    }
+
+    .admin-tab-button.active {
+        background: #e7e7e7;
+        border: 1px solid #bbb;
+    }
+
+.admin-tab-selector {
+    font-size: 14px;
+    padding: 10px;
+    width: 100%;
+}
+
+.admin-tab-content {
+    min-height: 500px;
+    border: 1px solid #ccc;
+    padding: 20px;
+    background: #fff;
+    border-radius: 5px;
+}
+
+/* =============================
+   6) ДРУГИЕ СТРАНИЦЫ (ПРИМЕРЫ)
+   ============================= */
+/* UserDetailsPage */
 .user-details-container {
     max-width: 800px;
     margin: 20px auto;
@@ -238,7 +399,8 @@ body {
     margin-top: 10px;
 }
 
-.user-history-table th, .user-history-table td {
+.user-history-table th,
+.user-history-table td {
     padding: 8px;
     border-bottom: 1px solid #ccc;
 }
@@ -255,131 +417,235 @@ body {
     font-size: 1.2em;
     color: #555;
 }
-.admin-panel-container {
-    max-width: 1100px;
-    min-width: 1000px;
-    margin: 20px auto;
+
+/* =============================
+   7) "RESPONSIVE-TABLE" (для data-label)
+   ============================= */
+.responsive-table {
+    /* 
+       Просто указатель, что эта таблица 
+       будет обрабатываться "mobile" правилами
+    */
+}
+
+/* На десктопе .actions-container кнопки в строку */
+.actions-container button {
+    margin-right: 6px;
+}
+
+/* =============================
+   8) МЕДИАЗАПРОСЫ (до 768px)
+   ============================= */
+@media (max-width: 768px) {
+
+    /* 8.1) Общие правки мобильного вида */
+    .container {
+        padding: 10px; /* вместо 20px */
+    }
+
+    button, input {
+        font-size: 14px;
+        padding: 10px;
+    }
+
+    /* Уменьшаем отступы, меняем флексы на колонки и т.д. */
+    .header, .footer {
+        padding: 10px 0;
+        font-size: 16px;
+        text-align: center;
+    }
+
+    .card {
+        margin: 10px 0;
+    }
+
+    /* Меняем верстку поиска и категорий на «вертикальную» */
+    .search-box {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+        .search-box input,
+        .search-box button {
+            width: 100%;
+        }
+
+    .categories ul {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+        .categories ul li a {
+            text-align: center;
+        }
+
+    /* 8.2) AdminPanel контейнер */
+    .admin-panel-container {
+        max-width: 100%;
+        min-width: 0;
+        margin: 10px auto;
+        padding: 10px;
+    }
+
+    .admin-title {
+        font-size: 20px;
+        margin-bottom: 10px;
+    }
+
+    .admin-section {
+        padding: 10px;
+        margin-bottom: 15px;
+    }
+
+    .admin-section-title {
+        font-size: 18px;
+    }
+
+    /* Вкладки в столбец */
+    .admin-tabs {
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .admin-tab-button {
+        font-size: 14px;
+        padding: 10px;
+        text-align: center;
+        width: 100%;
+    }
+
+    .admin-tab-content {
+        padding: 10px;
+    }
+
+    /* 8.3) "глобальные" настройки для admin-table 
+       (если не используем data-label) — 
+       но мы удалим дублирования и не будем повторять.
+       Оставим нужное только для overflow-x: auto, 
+       если кто-то не хочет data-label.
+    */
+    .admin-table {
+        display: block; /* таблица блочным элементом */
+        overflow-x: auto; /* скролл, если колонок много */
+        width: 100%;
+        font-size: 14px;
+    }
+
+        .admin-table th,
+        .admin-table td {
+            white-space: nowrap; /* чтобы колонки не ломались */
+            padding: 8px;
+            text-align: left;
+        }
+
+    /* 8.4) "responsive-table" с data-label 
+       — только если мы хотим "карточный" вид
+    */
+    .responsive-table thead {
+        display: none; /* скрываем шапку */
+    }
+
+    .responsive-table,
+    .responsive-table tbody,
+    .responsive-table tr,
+    .responsive-table td {
+        display: block;
+        width: 100%;
+    }
+
+        .responsive-table tr {
+            margin-bottom: 1rem;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .responsive-table td {
+            position: relative;
+            padding-left: 45%; /* место под псевдо-метку */
+            border: none;
+            white-space: normal; /* можно переносить строки */
+        }
+
+            .responsive-table td:before {
+                content: attr(data-label);
+                position: absolute;
+                left: 0.8rem;
+                width: 40%; /* ~40% под метку, 60% под содержимое */
+                font-weight: bold;
+                white-space: nowrap;
+            }
+
+            .responsive-table td .actions-container {
+                display: flex;
+                flex-direction: column;
+            }
+
+                .responsive-table td .actions-container button {
+                    display: block;
+                    width: 100%;
+                    margin: 4px 0;
+                    white-space: normal; /* перенос текста внутри кнопок */
+                    word-break: break-word; /* если очень длинные */
+                }
+}
+
+@media (max-width: 768px) {
+    .search-section {
+        /* чуть меньший внутренний отступ, чтобы гармонично смотрелось */
+        margin: 10px 0;
+    }
+
+    .search-box {
+        display: flex;
+        flex-direction: column; /* вертикально */
+        gap: 10px;
+        margin-bottom: 15px; /* отступ между разными поисками */
+    }
+
+        .search-box input,
+        .search-box button {
+            width: 100%;
+        }
+    /* и т.д. */
+}
+
+.book-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 20px 0;
+}
+
+.book-item {
     background: #fff;
-    padding: 20px;
-    border-radius: 5px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.admin-title {
-    text-align: center;
-    margin-bottom: 20px;
-}
-
-.admin-error {
-    color: red;
-    margin-bottom: 10px;
-    font-weight: bold;
-}
-
-.admin-section {
-    background: #f9f9f9;
-    border: 1px solid #ccc;
+    border: 1px solid #ddd;
     border-radius: 5px;
     padding: 15px;
-    margin-bottom: 20px;
-}    
-
-.admin-section-title {
-    margin-top: 0;
-    font-size: 1.4em;
-    border-bottom: 1px solid #ccc;
-    padding-bottom: 5px;
-    margin-bottom: 10px;
+    max-width: 600px; /* или 100% */
+    margin: 0 auto; /* центрируем */
 }
 
-.admin-actions {
-    margin-bottom: 10px;
-}
-
-.admin-button {
-    margin-right: 10px;
-    padding: 5px 10px;
-    cursor: pointer;
-    border: 1px solid #ccc;
-    border-radius: 3px;
-    background: #fff;
-}
-
-    .admin-button:hover {
-        background: #eee;
+    /* Сами изображения */
+    .book-item img {
+        width: 100%;
+        height: auto;
+        display: block;
+        object-fit: contain;
+        margin-bottom: 10px;
     }
 
-.admin-button-disabled {
-    background: #eee;
-    cursor: not-allowed;
-}
-
-.admin-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-    .admin-table th, .admin-table td {
-        border-bottom: 1px solid #ccc;
-        padding: 8px;
-        text-align: left;
-    }
-
-    .admin-table th {
-        background: #eee;
+    .book-item .book-title {
+        font-size: 1rem; /* или чуть меньше */
         font-weight: bold;
+        overflow-wrap: break-word; /* Для длинных слов */
     }
 
-.admin-export-status {
-    margin-top: 10px;
-}
-
-.admin-export-complete {
-    margin-top: 10px;
-}
-
-/* Добавим стили для вкладок в админ-панели */
-.admin-tabs {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 20px;
-    justify-content: center;
-}
-    
-
-.admin-tab-button {
-    padding: 8px 15px;
-    border: 1px solid #ddd;
-    background: #fff;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: background 0.2s;
-}
-
-    .admin-tab-button:hover {
-        background: #f3f3f3;
+@media (max-width: 768px) {
+    .book-item {
+        max-width: 100%; /* чтобы точно влезало */
+        margin: 0; /* без горизонтальных отступов */
     }
 
-    .admin-tab-button.active {
-        background: #e7e7e7;
-        border: 1px solid #bbb;
-    }
-
-/* Контейнер для вкладки (tab content) */
-.admin-tab-content {
-    min-height: 500px; /* чтобы вкладки имели одинаковую высоту */
-    border: 1px solid #ccc;
-    padding: 20px;
-    background: #fff;
-    border-radius: 5px;
-}
-
-/* Для заголовков секций внутри вкладки */
-.admin-section-title {
-    margin-top: 0;
-    font-size: 1.4em;
-    border-bottom: 1px solid #ccc;
-    padding-bottom: 5px;
-    margin-bottom: 10px;
+        .book-item .book-title {
+            font-size: 0.95rem;
+        }
 }

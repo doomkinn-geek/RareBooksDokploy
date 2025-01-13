@@ -24,6 +24,8 @@ namespace RareBooksService.WebApi.Services
 
         public void DetermineIfSetupNeeded()
         {
+            //_isSetupNeeded = true;
+            //return;
             try
             {
                 // 0) Проверяем, есть ли appsettings.json

@@ -1,4 +1,4 @@
-﻿//src/components/AdminPanel.jsx
+﻿// src/components/AdminPanel.jsx
 import React, { useEffect, useState } from 'react';
 import {
     getUsers, updateUserSubscription, updateUserRole, getUserById,
@@ -11,20 +11,20 @@ import { API_URL } from '../api';
 import Cookies from 'js-cookie';
 
 const AdminPanel = () => {
-    // Вкладки: 'users' | 'export' | 'settings' | 'import'
+    // Вкладки: 'users' | 'export' | 'settings' | 'import' | 'bookupdate'
     const [currentTab, setCurrentTab] = useState('users');
 
     // Состояния пользователей
     const [users, setUsers] = useState([]);
     const [error, setError] = useState('');
 
-    // Экспорт
+    // Состояния для Экспорта
     const [exportTaskId, setExportTaskId] = useState(null);
     const [progress, setProgress] = useState(null);
     const [isExporting, setIsExporting] = useState(false);
     const [intervalId, setIntervalId] = useState(null);
 
-    // Настройки
+    // Состояния для Настроек
     const [yandexKassa, setYandexKassa] = useState({
         shopId: '',
         secretKey: '',
@@ -36,7 +36,6 @@ const AdminPanel = () => {
         useLocalFiles: 'false',
         localPathOfImages: ''
     });
-    // ---- Добавляем блок YandexCloud ----
     const [yandexCloud, setYandexCloud] = useState({
         accessKey: '',
         secretKey: '',
@@ -44,6 +43,7 @@ const AdminPanel = () => {
         bucketName: ''
     });
 
+    // Состояние сервиса обновления книг
     const [bookUpdateStatus, setBookUpdateStatus] = useState({
         isPaused: false,
         isRunningNow: false,
@@ -51,8 +51,7 @@ const AdminPanel = () => {
         nextRunTimeUtc: null
     });
 
-
-    // Импорт SQLite
+    // Состояния для Импорта
     const [importTaskId, setImportTaskId] = useState(null);
     const [importFile, setImportFile] = useState(null);
     const [importUploadProgress, setImportUploadProgress] = useState(0);
@@ -69,58 +68,56 @@ const AdminPanel = () => {
             try {
                 const response = await getUsers();
                 setUsers(response.data);
-            } catch (error) {
-                console.error('Error fetching users:', error);
+            } catch (err) {
+                console.error('Error fetching users:', err);
             }
         };
         fetchUsers();
     }, []);
 
     // ------------------- Загрузка настроек -------------------
-    const fetchSettings = async () => {
-        try {
-            const data = await getAdminSettings();
-            if (data?.YandexKassa) {
+    useEffect(() => {
+        const fetchSettings = async () => {
+            try {
+                const data = await getAdminSettings();
                 setYandexKassa({
-                    shopId: data.YandexKassa.ShopId || '',
-                    secretKey: data.YandexKassa.SecretKey || '',
-                    returnUrl: data.YandexKassa.ReturnUrl || '',
-                    webhookUrl: data.YandexKassa.WebhookUrl || '',
+                    shopId: data.yandexKassa?.ShopId ?? '',
+                    secretKey: data.yandexKassa?.SecretKey ?? '',
+                    returnUrl: data.yandexKassa?.ReturnUrl ?? '',
+                    webhookUrl: data.yandexKassa?.WebhookUrl ?? ''
                 });
-            }
-            if (data?.YandexDisk) {
                 setYandexDisk({
-                    token: data.YandexDisk.Token || ''
+                    token: data.yandexDisk?.Token ?? ''
                 });
-            }
-            if (data?.TypeOfAccessImages) {
                 setTypeOfAccessImages({
-                    useLocalFiles: data.TypeOfAccessImages.UseLocalFiles || 'false',
-                    localPathOfImages: data.TypeOfAccessImages.LocalPathOfImages || ''
+                    useLocalFiles: data.typeOfAccessImages?.UseLocalFiles ?? 'false',
+                    localPathOfImages: data.typeOfAccessImages?.LocalPathOfImages ?? ''
                 });
-            }
-            if (data?.YandexCloud) {
                 setYandexCloud({
-                    accessKey: data.YandexCloud.AccessKey || '',
-                    secretKey: data.YandexCloud.SecretKey || '',
-                    serviceUrl: data.YandexCloud.ServiceUrl || '',
-                    bucketName: data.YandexCloud.BucketName || ''
+                    accessKey: data.yandexCloud?.AccessKey ?? '',
+                    secretKey: data.yandexCloud?.SecretKey ?? '',
+                    serviceUrl: data.yandexCloud?.ServiceUrl ?? '',
+                    bucketName: data.yandexCloud?.BucketName ?? ''
                 });
+            } catch (err) {
+                console.error('Error fetching admin settings:', err);
             }
-        } catch (error) {
-            console.error('Error fetching admin settings:', error);
-        }
-    };
-    useEffect(() => { fetchSettings(); }, []);
+        };
+        fetchSettings();
+    }, []);
 
     // ------------------- Методы работы с пользователями -------------------
     const handleUpdateUserSubscription = async (userId, hasSubscription) => {
         if (isExporting || isImporting) return;
         try {
             await updateUserSubscription(userId, hasSubscription);
-            setUsers(users.map(user => user.id === userId ? { ...user, hasSubscription } : user));
-        } catch (error) {
-            console.error('Error updating subscription:', error);
+            setUsers((prev) =>
+                prev.map((user) =>
+                    user.id === userId ? { ...user, hasSubscription } : user
+                )
+            );
+        } catch (err) {
+            console.error('Error updating subscription:', err);
         }
     };
 
@@ -128,9 +125,13 @@ const AdminPanel = () => {
         if (isExporting || isImporting) return;
         try {
             await updateUserRole(userId, role);
-            setUsers(users.map(user => user.id === userId ? { ...user, role } : user));
-        } catch (error) {
-            console.error('Error updating role:', error);
+            setUsers((prev) =>
+                prev.map((user) =>
+                    user.id === userId ? { ...user, role } : user
+                )
+            );
+        } catch (err) {
+            console.error('Error updating role:', err);
         }
     };
 
@@ -139,8 +140,8 @@ const AdminPanel = () => {
         try {
             await getUserById(userId);
             history(`/user/${userId}`);
-        } catch (error) {
-            console.error('Error fetching user details:', error);
+        } catch (err) {
+            console.error('Error fetching user details:', err);
         }
     };
 
@@ -166,7 +167,10 @@ const AdminPanel = () => {
                     );
                     setProgress(progressRes.data.progress);
 
-                    if (progressRes.data.progress >= 100 || progressRes.data.progress === -1) {
+                    if (
+                        progressRes.data.progress >= 100 ||
+                        progressRes.data.progress === -1
+                    ) {
                         clearInterval(id);
                         setIntervalId(null);
                         setIsExporting(false);
@@ -180,9 +184,8 @@ const AdminPanel = () => {
                 }
             }, 500);
             setIntervalId(id);
-
-        } catch (e) {
-            console.error(e);
+        } catch (err) {
+            console.error(err);
             setError('Ошибка при запуске экспорта.');
             setIsExporting(false);
         }
@@ -195,8 +198,8 @@ const AdminPanel = () => {
             await axios.post(`${API_URL}/admin/cancel-export/${exportTaskId}`, {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-        } catch (e) {
-            console.error(e);
+        } catch (err) {
+            console.error(err);
             setError('Ошибка при отмене экспорта.');
         }
     };
@@ -206,7 +209,7 @@ const AdminPanel = () => {
         const token = Cookies.get('token');
         try {
             const response = await fetch(`${API_URL}/admin/download-exported-file/${exportTaskId}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token}` }
             });
             if (!response.ok) throw new Error('Не удалось скачать файл');
 
@@ -219,8 +222,8 @@ const AdminPanel = () => {
             a.click();
             a.remove();
             URL.revokeObjectURL(url);
-        } catch (error) {
-            console.error('Error downloading file:', error);
+        } catch (err) {
+            console.error('Error downloading file:', err);
             setError('Ошибка при скачивании файла.');
         }
     };
@@ -260,8 +263,8 @@ const AdminPanel = () => {
     // ------------------- Импорт SQLite -------------------
     const initImportTask = async (fileSize) => {
         const res = await initImport(fileSize);
-        setImportTaskId(res.importTaskId); // обновляем стейт
-        return res.importTaskId; // возвращаем, чтобы сразу использовать
+        setImportTaskId(res.importTaskId);
+        return res.importTaskId;
     };
 
     const uploadFileChunks = async (file, taskId) => {
@@ -269,9 +272,8 @@ const AdminPanel = () => {
         let offset = 0;
         while (offset < file.size) {
             const slice = file.slice(offset, offset + chunkSize);
-            await uploadImportChunk(taskId, slice, (progressEvent) => {
-                const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-                // ... можно логировать
+            await uploadImportChunk(taskId, slice, () => {
+                // можно при желании отслеживать прогресс chunk'а
             });
             offset += chunkSize;
             const overallPct = Math.round((offset * 100) / file.size);
@@ -296,8 +298,8 @@ const AdminPanel = () => {
                 setImportPollIntervalId(null);
                 setIsImporting(false);
             }
-        } catch (e) {
-            console.error('Poll error:', e);
+        } catch (err) {
+            console.error('Poll error:', err);
         }
     };
 
@@ -312,23 +314,22 @@ const AdminPanel = () => {
         setImportMessage('');
 
         try {
-            // init
+            // Шаг 1: init
             const newTaskId = await initImportTask(importFile.size);
 
-            // upload
+            // Шаг 2: upload
             await uploadFileChunks(importFile, newTaskId);
 
-            // finish
+            // Шаг 3: finish
             await finishUpload(newTaskId);
 
-            // poll
+            // Шаг 4: poll
             const pid = setInterval(() => {
                 pollImportProgress(newTaskId);
             }, 500);
             setImportPollIntervalId(pid);
-
-        } catch (e) {
-            console.error('Import error:', e);
+        } catch (err) {
+            console.error('Import error:', err);
             setIsImporting(false);
             alert('Ошибка импорта');
         }
@@ -349,15 +350,14 @@ const AdminPanel = () => {
         if (!importTaskId) return;
         try {
             await cancelImport(importTaskId);
-            alert("Импорт отменён");
+            alert('Импорт отменён');
             setIsImporting(false);
             if (importPollIntervalId) {
                 clearInterval(importPollIntervalId);
                 setImportPollIntervalId(null);
             }
-        } catch (e) {
-            console.error(e);
-            alert("Ошибка отмены импорта");
+        } catch (err) {
+            console.error('Ошибка при отмене импорта:', err);
         }
     };
 
@@ -375,7 +375,7 @@ const AdminPanel = () => {
         await axios.post(`${API_URL}/bookupdateservice/pause`, {}, {
             headers: { Authorization: `Bearer ${token}` }
         });
-        await fetchBookUpdateStatus(); // обновим статус
+        await fetchBookUpdateStatus();
     };
 
     const resumeBookUpdate = async () => {
@@ -385,97 +385,99 @@ const AdminPanel = () => {
         });
         await fetchBookUpdateStatus();
     };
+
     useEffect(() => {
         if (currentTab === 'bookupdate') {
             fetchBookUpdateStatus();
         }
+        // eslint-disable-next-line
     }, [currentTab]);
 
-
-    // ------------------- Рендер -------------------
-    // Кнопки для вкладок
+    // ------------------- Кнопки для вкладок (через <select>) -------------------
     const renderTabButtons = (
         <div className="admin-tabs">
-            <button
-                className={`admin-tab-button ${currentTab === 'users' ? 'active' : ''}`}
-                onClick={() => setCurrentTab('users')}>
-                Пользователи
-            </button>
-            <button
-                className={`admin-tab-button ${currentTab === 'export' ? 'active' : ''}`}
-                onClick={() => setCurrentTab('export')}>
-                Экспорт данных
-            </button>
-            <button
-                className={`admin-tab-button ${currentTab === 'settings' ? 'active' : ''}`}
-                onClick={() => setCurrentTab('settings')}>
-                Настройки
-            </button>
-            <button
-                className={`admin-tab-button ${currentTab === 'import' ? 'active' : ''}`}
-                onClick={() => setCurrentTab('import')}>
-                Импорт данных
-            </button>
-            <button
-                className={`admin-tab-button ${currentTab === 'bookupdate' ? 'active' : ''}`}
-                onClick={() => setCurrentTab('bookupdate')}>
-                Обновление книг
-            </button>
+            <select
+                className="admin-tab-selector"
+                value={currentTab}
+                onChange={(e) => setCurrentTab(e.target.value)}
+            >
+                <option value="users">Пользователи</option>
+                <option value="export">Экспорт данных</option>
+                <option value="settings">Настройки</option>
+                <option value="import">Импорт данных</option>
+                <option value="bookupdate">Обновление книг</option>
+            </select>
         </div>
     );
 
+    // ------------------- Рендер основного контента -------------------
     return (
         <div className="admin-panel-container">
             <h2 className="admin-title">Панель администратора</h2>
             {error && <div className="admin-error">{error}</div>}
 
-            {/* Рендерим кнопки вкладок */}
             {renderTabButtons}
 
-            {/* Контейнер для вкладок */}
             <div className="admin-tab-content">
 
-                {/* Вкладка "users" */}
+                {/* ------------------ Вкладка: Пользователи ------------------ */}
                 {currentTab === 'users' && (
                     <div className="admin-section">
                         <h3 className="admin-section-title">Управление пользователями</h3>
-                        <table className="admin-table">
+                        <table className="admin-table responsive-table">
                             <thead>
                                 <tr>
-                                    <th>E-mail</th>
+                                    <th>Email</th>
                                     <th>Роль</th>
                                     <th>Подписка</th>
                                     <th>Действия</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {users.map(user => (
+                                {users.map((user) => (
                                     <tr key={user.id}>
-                                        <td>{user.email}</td>
-                                        <td>{user.role}</td>
-                                        <td>{user.hasSubscription ? 'Да' : 'Нет'}</td>
-                                        <td>
-                                            <button
-                                                onClick={() => handleUpdateUserSubscription(user.id, !user.hasSubscription)}
-                                                disabled={isExporting || isImporting}
-                                                className={`admin-button ${isExporting || isImporting ? 'admin-button-disabled' : ''}`}
-                                            >
-                                                {user.hasSubscription ? 'Отменить подписку' : 'Подключить подписку'}
-                                            </button>
-                                            <button
-                                                onClick={() => handleUpdateUserRole(user.id, user.role === 'Admin' ? 'User' : 'Admin')}
-                                                disabled={isExporting || isImporting}
-                                                className={`admin-button ${isExporting || isImporting ? 'admin-button-disabled' : ''}`}
-                                            >
-                                                {user.role === 'Admin' ? 'Разжаловать в User' : 'Предоставить Admin'}
-                                            </button>
-                                            <button
-                                                onClick={() => handleViewDetails(user.id)}
-                                                disabled={isExporting || isImporting}
-                                                className={`admin-button ${isExporting || isImporting ? 'admin-button-disabled' : ''}`}
-                                            >
-                                                Просмотр
-                                            </button>
+                                        {/* data-label -> для мобильного отображения через :before */}
+                                        <td data-label="Email">{user.email}</td>
+                                        <td data-label="Роль">{user.role}</td>
+                                        <td data-label="Подписка">
+                                            {user.hasSubscription ? 'Да' : 'Нет'}
+                                        </td>
+                                        <td data-label="Действия">
+                                            <div className="actions-container">
+                                                <button
+                                                    onClick={() =>
+                                                        handleUpdateUserSubscription(
+                                                            user.id,
+                                                            !user.hasSubscription
+                                                        )
+                                                    }
+                                                >
+                                                    {user.hasSubscription
+                                                        ? 'Отменить подписку'
+                                                        : 'Подключить подписку'}
+                                                </button>
+                                                <button
+                                                    onClick={() =>
+                                                        handleUpdateUserRole(
+                                                            user.id,
+                                                            user.role === 'Admin'
+                                                                ? 'User'
+                                                                : 'Admin'
+                                                        )
+                                                    }
+                                                >
+                                                    {user.role === 'Admin'
+                                                        ? 'Разжаловать в User'
+                                                        : 'Предоставить Admin'}
+                                                </button>
+                                                <button
+                                                    onClick={() =>
+                                                        handleViewDetails(user.id)
+                                                    }
+                                                >
+                                                    Просмотр
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -484,14 +486,15 @@ const AdminPanel = () => {
                     </div>
                 )}
 
-                {/* Вкладка "export" */}
+                {/* ------------------ Вкладка: Экспорт данных ------------------ */}
                 {currentTab === 'export' && (
                     <div className="admin-section">
                         <h3 className="admin-section-title">Экспорт данных</h3>
                         <div className="admin-actions" style={{ marginBottom: '15px' }}>
                             <button
                                 onClick={startExport}
-                                className={`admin-button ${isExporting || isImporting ? 'admin-button-disabled' : ''}`}
+                                className={`admin-button ${isExporting || isImporting ? 'admin-button-disabled' : ''
+                                    }`}
                                 disabled={isExporting || isImporting}
                             >
                                 Начать экспорт в SQLite
@@ -519,7 +522,10 @@ const AdminPanel = () => {
                                 {progress >= 100 && (
                                     <div className="admin-export-complete">
                                         Экспорт завершен!
-                                        <button onClick={downloadExportedFile} className="admin-button">
+                                        <button
+                                            onClick={downloadExportedFile}
+                                            className="admin-button"
+                                        >
                                             Скачать файл
                                         </button>
                                     </div>
@@ -529,129 +535,216 @@ const AdminPanel = () => {
                     </div>
                 )}
 
-                {/* Вкладка "settings" */}
+                {/* ------------------ Вкладка: Настройки ------------------ */}
                 {currentTab === 'settings' && (
                     <div className="admin-section">
-                        <h3 className="admin-section-title">Редактирование настроек (appsettings.json)</h3>
+                        <h3>Редактирование настроек (appsettings.json)</h3>
 
-                        {/* Блок YandexKassa */}
-                        <div style={{ backgroundColor: '#f9f9f9', padding: '10px', marginBottom: '10px' }}>
+                        {/* YandexKassa */}
+                        <div
+                            style={{
+                                backgroundColor: '#f9f9f9',
+                                padding: 10,
+                                marginBottom: 10
+                            }}
+                        >
                             <h4>YandexKassa</h4>
                             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                                 <div>
-                                    <label>ShopId: </label><br />
+                                    <label>ShopId:</label>
+                                    <br />
                                     <input
                                         type="text"
                                         value={yandexKassa.shopId}
-                                        onChange={(e) => setYandexKassa({ ...yandexKassa, shopId: e.target.value })}
+                                        onChange={(e) =>
+                                            setYandexKassa({ ...yandexKassa, shopId: e.target.value })
+                                        }
                                     />
                                 </div>
                                 <div>
-                                    <label>SecretKey: </label><br />
+                                    <label>SecretKey:</label>
+                                    <br />
                                     <input
                                         type="text"
                                         value={yandexKassa.secretKey}
-                                        onChange={(e) => setYandexKassa({ ...yandexKassa, secretKey: e.target.value })}
+                                        onChange={(e) =>
+                                            setYandexKassa({
+                                                ...yandexKassa,
+                                                secretKey: e.target.value
+                                            })
+                                        }
                                     />
                                 </div>
                                 <div>
-                                    <label>ReturnUrl: </label><br />
+                                    <label>ReturnUrl:</label>
+                                    <br />
                                     <input
                                         type="text"
                                         value={yandexKassa.returnUrl}
-                                        onChange={(e) => setYandexKassa({ ...yandexKassa, returnUrl: e.target.value })}
+                                        onChange={(e) =>
+                                            setYandexKassa({
+                                                ...yandexKassa,
+                                                returnUrl: e.target.value
+                                            })
+                                        }
                                     />
                                 </div>
                                 <div>
-                                    <label>WebhookUrl: </label><br />
+                                    <label>WebhookUrl:</label>
+                                    <br />
                                     <input
                                         type="text"
                                         value={yandexKassa.webhookUrl}
-                                        onChange={(e) => setYandexKassa({ ...yandexKassa, webhookUrl: e.target.value })}
+                                        onChange={(e) =>
+                                            setYandexKassa({
+                                                ...yandexKassa,
+                                                webhookUrl: e.target.value
+                                            })
+                                        }
                                     />
                                 </div>
                             </div>
                         </div>
 
-                        {/* Блок YandexDisk */}
-                        <div style={{ backgroundColor: '#f9f9f9', padding: '10px', marginBottom: '10px' }}>
+                        {/* YandexDisk */}
+                        <div
+                            style={{
+                                backgroundColor: '#f9f9f9',
+                                padding: 10,
+                                marginBottom: 10
+                            }}
+                        >
                             <h4>YandexDisk</h4>
                             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                                 <div>
-                                    <label>Token: </label><br />
+                                    <label>Token:</label>
+                                    <br />
                                     <input
                                         type="text"
                                         value={yandexDisk.token}
-                                        onChange={(e) => setYandexDisk({ ...yandexDisk, token: e.target.value })}
+                                        onChange={(e) =>
+                                            setYandexDisk({
+                                                ...yandexDisk,
+                                                token: e.target.value
+                                            })
+                                        }
                                     />
                                 </div>
                             </div>
                         </div>
 
-                        {/* Блок TypeOfAccessImages */}
-                        <div style={{ backgroundColor: '#f9f9f9', padding: '10px', marginBottom: '10px' }}>
+                        {/* TypeOfAccessImages */}
+                        <div
+                            style={{
+                                backgroundColor: '#f9f9f9',
+                                padding: 10,
+                                marginBottom: 10
+                            }}
+                        >
                             <h4>TypeOfAccessImages</h4>
                             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                                 <div>
-                                    <label>UseLocalFiles: </label><br />
+                                    <label>UseLocalFiles:</label>
+                                    <br />
                                     <select
                                         value={typeOfAccessImages.useLocalFiles}
-                                        onChange={(e) => setTypeOfAccessImages({ ...typeOfAccessImages, useLocalFiles: e.target.value })}
+                                        onChange={(e) =>
+                                            setTypeOfAccessImages({
+                                                ...typeOfAccessImages,
+                                                useLocalFiles: e.target.value
+                                            })
+                                        }
                                     >
                                         <option value="false">false</option>
                                         <option value="true">true</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label>LocalPathOfImages: </label><br />
+                                    <label>LocalPathOfImages:</label>
+                                    <br />
                                     <input
                                         type="text"
                                         value={typeOfAccessImages.localPathOfImages}
-                                        onChange={(e) => setTypeOfAccessImages({ ...typeOfAccessImages, localPathOfImages: e.target.value })}
+                                        onChange={(e) =>
+                                            setTypeOfAccessImages({
+                                                ...typeOfAccessImages,
+                                                localPathOfImages: e.target.value
+                                            })
+                                        }
                                     />
                                 </div>
                             </div>
                         </div>
-                        {/* Добавляем блок YandexCloud */}
-                        <div style={{ backgroundColor: '#f9f9f9', padding: '10px', marginBottom: '10px' }}>
+
+                        {/* YandexCloud */}
+                        <div
+                            style={{
+                                backgroundColor: '#f9f9f9',
+                                padding: 10,
+                                marginBottom: 10
+                            }}
+                        >
                             <h4>YandexCloud</h4>
                             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                                 <div>
-                                    <label>AccessKey: </label><br />
+                                    <label>AccessKey:</label>
+                                    <br />
                                     <input
                                         type="text"
                                         value={yandexCloud.accessKey}
-                                        onChange={(e) => setYandexCloud({ ...yandexCloud, accessKey: e.target.value })}
+                                        onChange={(e) =>
+                                            setYandexCloud({
+                                                ...yandexCloud,
+                                                accessKey: e.target.value
+                                            })
+                                        }
                                     />
                                 </div>
-                            <div>
-                                <label>SecretKey: </label><br />
-                                <input
-                                    type="text"
-                                    value={yandexCloud.secretKey}
-                                    onChange={(e) => setYandexCloud({ ...yandexCloud, secretKey: e.target.value })}
-                                />
-                            </div>
-                            <div>
-                                <label>ServiceUrl: </label><br />
-                                <input
-                                    type="text"
-                                    value={yandexCloud.serviceUrl}
-                                    onChange={(e) => setYandexCloud({ ...yandexCloud, serviceUrl: e.target.value })}
-                                />
-                            </div>
-                            <div>
-                                <label>BucketName: </label><br />
-                                <input
-                                    type="text"
-                                    value={yandexCloud.bucketName}
-                                    onChange={(e) => setYandexCloud({ ...yandexCloud, bucketName: e.target.value })}
-                                />
+                                <div>
+                                    <label>SecretKey:</label>
+                                    <br />
+                                    <input
+                                        type="text"
+                                        value={yandexCloud.secretKey}
+                                        onChange={(e) =>
+                                            setYandexCloud({
+                                                ...yandexCloud,
+                                                secretKey: e.target.value
+                                            })
+                                        }
+                                    />
+                                </div>
+                                <div>
+                                    <label>ServiceUrl:</label>
+                                    <br />
+                                    <input
+                                        type="text"
+                                        value={yandexCloud.serviceUrl}
+                                        onChange={(e) =>
+                                            setYandexCloud({
+                                                ...yandexCloud,
+                                                serviceUrl: e.target.value
+                                            })
+                                        }
+                                    />
+                                </div>
+                                <div>
+                                    <label>BucketName:</label>
+                                    <br />
+                                    <input
+                                        type="text"
+                                        value={yandexCloud.bucketName}
+                                        onChange={(e) =>
+                                            setYandexCloud({
+                                                ...yandexCloud,
+                                                bucketName: e.target.value
+                                            })
+                                        }
+                                    />
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                        {/* Кнопка Сохранить */}
                         <div>
                             <button onClick={handleSaveSettings} className="admin-button">
                                 Сохранить
@@ -660,7 +753,7 @@ const AdminPanel = () => {
                     </div>
                 )}
 
-                {/* Вкладка "import" */}
+                {/* ------------------ Вкладка: Импорт данных ------------------ */}
                 {currentTab === 'import' && (
                     <div className="admin-section">
                         <h3 className="admin-section-title">Импорт данных из SQLite</h3>
@@ -697,7 +790,7 @@ const AdminPanel = () => {
                             )}
                         </div>
 
-                        {/* Прогресс ЗАГРУЗКИ файла */}
+                        {/* Прогресс загрузки файла */}
                         {importUploadProgress > 0 && importUploadProgress < 100 && (
                             <div style={{ marginTop: '10px' }}>
                                 Загрузка файла: {importUploadProgress}%
@@ -705,16 +798,19 @@ const AdminPanel = () => {
                         )}
                         {importUploadProgress === 100 && <div>Файл загружен, идёт импорт...</div>}
 
-                        {/* Прогресс ИМПОРТА */}
+                        {/* Прогресс импорта */}
                         {importProgress > 0 && importProgress < 100 && (
                             <div>Импорт: {importProgress}%</div>
                         )}
                         {importProgress === 100 && <div>Импорт завершён!</div>}
 
-                        {importMessage && <div style={{ marginTop: '10px' }}>{importMessage}</div>}
+                        {importMessage && (
+                            <div style={{ marginTop: '10px' }}>{importMessage}</div>
+                        )}
                     </div>
                 )}
-                {/* Добавим блок рендера вкладки */}
+
+                {/* ------------------ Вкладка: Обновление книг (meshok.net) ------------------ */}
                 {currentTab === 'bookupdate' && (
                     <div className="admin-section">
                         <h3 className="admin-section-title">Сервис обновления книг (meshok.net)</h3>
@@ -746,7 +842,6 @@ const AdminPanel = () => {
                         </div>
                     </div>
                 )}
-
             </div>
         </div>
     );

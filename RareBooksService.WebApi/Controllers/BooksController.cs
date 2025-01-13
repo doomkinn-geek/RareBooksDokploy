@@ -60,6 +60,7 @@ namespace RareBooksService.WebApi.Controllers
                 b.Price = 0;
                 // Вместо реальной даты отображаем сообщение
                 b.Date = "Только для подписчиков";
+                b.FirstThumbnailName = "";
             }
         }
 
@@ -69,7 +70,8 @@ namespace RareBooksService.WebApi.Controllers
             _logger.LogInformation("Запрос поиска по названию: '{Title}', точная фраза: {ExactPhrase}, страница: {Page}, размер страницы: {PageSize}", title, exactPhrase, page, pageSize);
 
             var books = await _booksRepository.GetBooksByTitleAsync(title, page, pageSize, exactPhrase);
-            var hasSubscription = await UserHasSubscriptionAsync();
+            var hasSubscription = await UserHasSubscriptionAsync();           
+
 
             if (!hasSubscription)
             {

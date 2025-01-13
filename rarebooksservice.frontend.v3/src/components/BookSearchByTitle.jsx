@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { searchBooksByTitle } from '../api';
-import BookList from './BookList.jsx';
+import BookList from './BookList';
 import { Typography, Box } from '@mui/material';
 import ErrorMessage from './ErrorMessage';
 
@@ -13,7 +13,6 @@ const BookSearchByTitle = () => {
 
     const query = new URLSearchParams(location.search);
     const exactPhrase = query.get('exactPhrase') === 'true';
-    // Считаем текущую страницу из URL, если нет - по умолчанию 1
     const initialPage = parseInt(query.get('page'), 10) || 1;
 
     const [books, setBooks] = useState([]);
@@ -37,7 +36,7 @@ const BookSearchByTitle = () => {
                 }
             } catch (error) {
                 console.error('Ошибка поиска книг по названию:', error);
-                setErrorMessage('Произошла ошибка при поиске книг. Пожалуйста, попробуйте позже.');
+                setErrorMessage('Произошла ошибка при поиске книг. Попробуйте позже.');
             } finally {
                 setLoading(false);
             }
@@ -46,9 +45,8 @@ const BookSearchByTitle = () => {
         fetchBooks(currentPage);
     }, [title, exactPhrase, currentPage]);
 
-    // Обновляем URL при изменении currentPage или exactPhrase
+    // При изменении страницы или флага exactPhrase меняем URL
     useEffect(() => {
-        // Формируем новый URL с текущими параметрами
         const newQuery = new URLSearchParams();
         newQuery.set('exactPhrase', exactPhrase);
         newQuery.set('page', currentPage);
@@ -57,23 +55,35 @@ const BookSearchByTitle = () => {
 
     return (
         <div className="container">
-            <header className="header">
-                <h1><Link to="/" style={{ color: '#fff', textDecoration: 'none' }}>Rare Books Service</Link></h1>
-            </header>
-            <Box>
-                <Typography variant="h4">Книги по названию: {title}</Typography>
-                <ErrorMessage message={errorMessage} />
-                {loading && <Typography variant="h5">Загрузка...</Typography>}
-                {!loading && books.length > 0 && (
-                    <BookList
-                        books={books}
-                        totalPages={totalPages}
-                        currentPage={currentPage}
-                        setCurrentPage={setCurrentPage}
-                    />
-                )}
+            {/* Можно маленький блок вместо громоздкого header */}
+            <Box sx={{ mb: 2 }}>
+                <Typography
+                    variant="h5"
+                    sx={{
+                        fontWeight: 'bold',
+                        marginTop: '10px'
+                    }}
+                >
+                    Книги по названию: {title}
+                </Typography>
             </Box>
-            <footer className="footer">
+
+            {/* Сообщение об ошибке или отсутствии результатов */}
+            <ErrorMessage message={errorMessage} />
+            {loading && <Typography variant="h6">Загрузка...</Typography>}
+
+            {/* Список книг (если есть) */}
+            {!loading && books.length > 0 && (
+                <BookList
+                    books={books}
+                    totalPages={totalPages}
+                    currentPage={currentPage}
+                    setCurrentPage={setCurrentPage}
+                />
+            )}
+
+            {/* Небольшой футер */}
+            <footer className="footer" style={{ marginTop: '20px' }}>
                 <p>&copy; 2024 Rare Books Service. All rights reserved.</p>
             </footer>
         </div>

@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using NLog.Web;
-using RareBooksService.Common.Models;
+using RareBooksService.Common.Models;            // <-- Для YandexCloudSettings
 using RareBooksService.Data;
 using RareBooksService.Data.Interfaces;
 using RareBooksService.Data.Services;
@@ -28,13 +28,14 @@ namespace RareBooksService.WebApi
             {
                 var builder = WebApplication.CreateBuilder(args);
 
-                // Remove default logging providers and add NLog
+                // Убираем дефолтных провайдеров логов и подключаем NLog
                 builder.Logging.ClearProviders();
                 builder.Host.UseNLog();
 
-                // Add services to the container.
+                // 1) Добавляем контроллеры
                 builder.Services.AddControllers();
 
+                // 2) Настройка DbContext
                 builder.Services.AddSingleton<NullToZeroMaterializationInterceptor>();
                 builder.Services.AddDbContext<RegularBaseBooksContext>((serviceProvider, options) =>
                 {
@@ -43,14 +44,20 @@ namespace RareBooksService.WebApi
                     options.AddInterceptors(interceptor);
                 });
 
+                // 3) Identity
                 builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
                     .AddEntityFrameworkStores<RegularBaseBooksContext>()
                     .AddDefaultTokenProviders();
 
+                // 4) Если у вас есть отдельные настройки YandexKassa, TypeOfAccessImages – ок
+                //    Добавим РОВНО так же "YandexCloud" -> YandexCloudSettings:
                 builder.Services.Configure<YandexKassaSettings>(builder.Configuration.GetSection("YandexKassa"));
                 builder.Services.Configure<TypeOfAccessImages>(builder.Configuration.GetSection("TypeOfAccessImages"));
+                builder.Services.Configure<YandexCloudSettings>(builder.Configuration.GetSection("YandexCloud"));
+                //                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                // Так мы гарантируем, что при обращении к IOptions<YandexCloudSettings> будут значения из appsettings.json
 
-
+                // 5) JWT
                 var jwtKey = builder.Configuration["Jwt:Key"];
                 if (!string.IsNullOrWhiteSpace(jwtKey))
                 {
@@ -71,7 +78,7 @@ namespace RareBooksService.WebApi
                             ValidateIssuerSigningKey = true,
                             ValidIssuer = builder.Configuration["Jwt:Issuer"],
                             ValidAudience = builder.Configuration["Jwt:Audience"],
-                            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])),
+                            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
                             RoleClaimType = "roles",
                             NameClaimType = ClaimTypes.NameIdentifier
                         };
@@ -91,19 +98,25 @@ namespace RareBooksService.WebApi
                     });
                 }
 
+                // 6) Authorization 
                 builder.Services.AddAuthorization(options =>
                 {
                     options.AddPolicy("RequireAdministratorRole", policy => policy.RequireRole("Admin"));
                 });
 
+                // 7) Разные scoped-сервисы
                 builder.Services.AddScoped<IRegularBaseBooksRepository, RegularBaseBooksRepository>();
                 builder.Services.AddScoped<IUserService, UserService>();
                 builder.Services.AddScoped<ISearchHistoryService, SearchHistoryService>();
-                builder.Services.AddScoped<IYandexStorageService, YandexStorageService>();
-                builder.Services.AddScoped<MigrationService>();
-                builder.Services.AddScoped<IExportService, ExportService>();
                 builder.Services.AddScoped<IImportService, ImportService>();
+                builder.Services.AddScoped<IExportService, ExportService>();
+                builder.Services.AddScoped<MigrationService>();
 
+                // 8) Регистрируем YandexStorageService теперь ТОЛЬКО через AddScoped<IYandexStorageService, YandexStorageService>()
+                //    и в самом YandexStorageService используем IOptions<YandexCloudSettings>
+                builder.Services.AddScoped<IYandexStorageService, YandexStorageService>();
+
+                // 9) IdentityOptions
                 builder.Services.Configure<IdentityOptions>(options =>
                 {
                     options.Password.RequireDigit = false;
@@ -114,46 +127,31 @@ namespace RareBooksService.WebApi
                     options.Password.RequiredUniqueChars = 1;
                 });
 
-
-                // Register parser services
+                // 10) Parser services
                 builder.Services.AddScoped<ILotDataWebService, LotDataWebService>();
                 builder.Services.AddScoped<ILotDataHandler, LotDataHandler>();
                 builder.Services.AddScoped<ILotFetchingService, LotFetchingService>();
                 builder.Services.AddScoped<IAuctionService, AuctionService>();
 
-                // Register Yandex Storage Service
-                builder.Services.AddScoped<IYandexStorageService, YandexStorageService>();
-
-                // В ConfigureServices:
+                // 11) Прочие singletons
                 builder.Services.AddSingleton<ICaptchaService, CaptchaService>();
                 builder.Services.AddSingleton<ISetupStateService, SetupStateService>();
 
-                // Добавляем BookUpdateService как Singleton, чтобы 
-                // 1) Он мог жить всё время 
-                // 2) Контроллеры могли его внедрять как IBookUpdateService
+                // 12) BookUpdateService – singleton + HostedService
                 builder.Services.AddSingleton<IBookUpdateService, BookUpdateService>();
-
-                // Регистрируем его как HostedService, чтобы ASP.NET Core его запустил в фоне.
-                // Т.к. нам нужен сам объект BookUpdateService из предыдущей регистрации, 
-                // мы вызываем GetRequiredService<BookUpdateService>.
                 builder.Services.AddHostedService(sp => (BookUpdateService)sp.GetRequiredService<IBookUpdateService>());
 
-
+                // 13) MemoryCache, AutoMapper, ...
                 builder.Services.AddMemoryCache();
-
-
-                // Register AutoMapper
                 builder.Services.AddAutoMapper(typeof(AutoMapperProfile));
 
-                // Register Background Service
-                builder.Services.AddHostedService<BookUpdateService>();
+                // 14) Optionally: ещё раз – не нужно, т. к. уже выше
+                // builder.Services.AddHostedService<BookUpdateService>();
 
-                // Swagger configuration
+                // Swagger
                 builder.Services.AddSwaggerGen(c =>
                 {
                     c.SwaggerDoc("v1", new OpenApiInfo { Title = "RareBooksService.WebApi", Version = "v1" });
-
-                    // Configure Swagger to use JWT authentication
                     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
                     {
                         In = ParameterLocation.Header,
@@ -162,9 +160,8 @@ namespace RareBooksService.WebApi
                         Type = SecuritySchemeType.ApiKey,
                         Scheme = "Bearer"
                     });
-
                     c.AddSecurityRequirement(new OpenApiSecurityRequirement {
-                     {
+                    {
                         new OpenApiSecurityScheme {
                             Reference = new OpenApiReference {
                                 Type = ReferenceType.SecurityScheme,
@@ -172,39 +169,32 @@ namespace RareBooksService.WebApi
                             }
                         },
                         new string[] {}
-                    }
-                    });
+                    }});
                 });
 
-                // Configure CORS
-                /*builder.Services.AddCors(options =>
-                {
-                    options.AddPolicy("AllowAllOrigins",
-                        builder => builder.AllowAnyOrigin()
-                                          .AllowAnyMethod()
-                                          .AllowAnyHeader());
-                });*/
                 builder.Services.AddCors(options =>
                 {
-                    options.AddPolicy("AllowAll", builder =>
+                    options.AddPolicy("AllowAll", policy =>
                     {
-                        builder.AllowAnyOrigin()
-                               .AllowAnyMethod()
-                               .AllowAnyHeader()
-                               .WithExposedHeaders("X-Captcha-Token"); // expose custom header
+                        policy.AllowAnyOrigin()
+                              .AllowAnyMethod()
+                              .AllowAnyHeader()
+                              .WithExposedHeaders("X-Captcha-Token");
                     });
                 });
 
+                // Строим приложение
                 var app = builder.Build();
 
-
+                // Проверяем, нужно ли показывать InitialSetup
                 var setupService = app.Services.GetRequiredService<ISetupStateService>();
                 setupService.DetermineIfSetupNeeded();
 
+                // Middleware: если IsInitialSetupNeeded == true – отдаём InitialSetup
                 app.Use(async (context, next) =>
+                
                 {
-                    // 1. Разрешаем запросы к /api/setup/ и /api/setupcheck/, 
-                    //    чтобы SetupController и SetupCheckController продолжали работать
+                    // Разрешаем /api/setup/ и /api/setupcheck/
                     if (context.Request.Path.StartsWithSegments("/api/setup") ||
                         context.Request.Path.StartsWithSegments("/api/setupcheck"))
                     {
@@ -212,18 +202,15 @@ namespace RareBooksService.WebApi
                         return;
                     }
 
-                    // 2. Если IsInitialSetupNeeded, то показываем HTML со страницей настройки
+                    // Если IsInitialSetupNeeded
                     if (setupService.IsInitialSetupNeeded)
                     {
-                        // (а) Если пришел запрос на /api/*, но не /api/setup, даем 403
                         if (context.Request.Path.StartsWithSegments("/api"))
                         {
                             context.Response.StatusCode = 403;
                             await context.Response.WriteAsync("System not configured. Please do initial setup via /api/setup or special HTML page.");
                             return;
                         }
-
-                        // (б) Иначе отдаем статику из папки InitialSetup (index.html)
                         var filePath = Path.Combine(app.Environment.ContentRootPath, "InitialSetup", "index.html");
                         if (System.IO.File.Exists(filePath))
                         {
@@ -238,64 +225,35 @@ namespace RareBooksService.WebApi
                         return;
                     }
 
-                    // Если система настроена, идем дальше
+                    // Иначе – всё ок
                     await next.Invoke();
                 });
 
-
-
-                var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
-                // Apply migrations at startup and seed admin user
+                // Optional: миграции + seed
                 using (var scope = app.Services.CreateScope())
                 {
-                    /*var dbContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
-                    dbContext.Database.Migrate();
-
-                    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-                    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-                    var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-                    DataInitializer.SeedData(userManager, roleManager, configuration).Wait();
-
-                    // Check if there are no books in the database and perform migration if necessary
-                    var booksExist = dbContext.BooksInfo.Any();
-                    if (!booksExist)
-                    {
-                        var migrationService = scope.ServiceProvider.GetRequiredService<MigrationService>();
-                        migrationService.MigrateDataAsync().Wait();
-                    }*/
-
-                    var exportService = scope.ServiceProvider.GetRequiredService<IExportService>();
-
-                    lifetime.ApplicationStopping.Register(() =>
-                    {
-                        exportService.CleanupAllFiles();
-                    });
+                    // var dbContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
+                    // dbContext.Database.Migrate();
+                    // ...
                 }
 
-                // Configure the HTTP request pipeline.
-                //if (app.Environment.IsDevelopment())
-                //{
+                // Swagger
                 app.UseSwagger();
                 app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "RareBooksService.WebApi v1"));
-                //}
 
+                // и т. д.
                 app.UseHttpsRedirection();
-
                 app.UseRouting();
-
-                //app.UseCors("AllowAllOrigins");
                 app.UseCors("AllowAll");
-
                 app.UseAuthentication();
                 app.UseAuthorization();
 
-                app.MapControllers();                
+                app.MapControllers();
 
                 app.Run();
             }
             catch (Exception ex)
             {
-                // NLog: catch setup errors
                 logger.Error(ex, "Stopped program because of an exception");
                 throw;
             }
