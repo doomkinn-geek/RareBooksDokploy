@@ -348,7 +348,7 @@ body {
 }
 .admin-panel-container {
     max-width: 1100px;
-    min-width: 1000px;
+    min-width: 760px;
     margin: 20px auto;
     background: #fff;
     padding: 20px;
