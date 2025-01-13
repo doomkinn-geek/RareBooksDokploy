@@ -353,15 +353,6 @@ body {
     font-size: 1.2em;
     color: #555;
 }
-.admin-panel-container {
-    max-width: 1100px;
-    min-width: 760px;
-    margin: 20px auto;
-    background: #fff;
-    padding: 20px;
-    border-radius: 5px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
 
 .admin-title {
     text-align: center;
@@ -484,7 +475,10 @@ body {
 
 @media (max-width: 768px) {
     .admin-panel-container {
-        padding: 10px;
+        max-width: 100%;
+        min-width: 0; /* Сбрасываем жёсткий минимум */
+        margin: 10px auto; /* Можно уменьшить/убрать отступы */
+        padding: 10px; /* Уже есть, но можно отрегулировать при желании */
     }
 
     .admin-tabs {
@@ -537,6 +531,14 @@ body {
 
     .admin-button {
         width: 100%; /* Кнопки на всю ширину */
+    }
+    .admin-title {
+        font-size: 20px;
+        margin-bottom: 10px;
+    }
+
+    .admin-section-title {
+        font-size: 18px;
     }
 }
 @media (max-width: 768px) {
