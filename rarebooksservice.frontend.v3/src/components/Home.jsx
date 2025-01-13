@@ -185,61 +185,64 @@ const Home = () => {
                             </Typography>
                         </div>
                     )}
-                    <div className="search-box">
-                        <input
-                            type="text"
-                            placeholder="Поиск по названию книги"
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
-                        />
-                        <FormControlLabel
-                            control={<Checkbox
-                                checked={exactPhraseTitle}
-                                onChange={(e) => setExactPhraseTitle(e.target.checked)}
-                            />}
-                            label="Искать точную фразу"
-                        />
-                        <button onClick={handleTitleSearch}>Поиск</button>
-                    </div>
-                    <div className="search-box">
-                        <input
-                            type="text"
-                            placeholder="Поиск по описанию"
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                        />
-                        <FormControlLabel
-                            control={<Checkbox
-                                checked={exactPhraseDescription}
-                                onChange={(e) => setExactPhraseDescription(e.target.checked)}
-                            />}
-                            label="Искать точную фразу"
-                        />
-                        <button onClick={handleDescriptionSearch}>Поиск</button>
-                    </div>
-                    <div className="search-box">
-                        <input
-                            type="text"
-                            placeholder="Минимальная цена"
-                            value={minPrice}
-                            onChange={(e) => setMinPrice(e.target.value)}
-                        />
-                        <input
-                            type="text"
-                            placeholder="Максимальная цена"
-                            value={maxPrice}
-                            onChange={(e) => setMaxPrice(e.target.value)}
-                        />
-                        <button onClick={handlePriceRangeSearch}>Поиск</button>
-                    </div>
-                    <div className="search-box">
-                        <input
-                            type="text"
-                            placeholder="Введите ID книги"
-                            value={bookId}
-                            onChange={(e) => setBookId(e.target.value)}
-                        />
-                        <button onClick={handleIdSearch}>Поиск по ID</button>
+                    <div className="search-section">
+                        <h2>Поиск</h2>
+                        <div className="search-box">
+                            <input
+                                type="text"
+                                placeholder="Поиск по названию книги"
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                            />
+                            <FormControlLabel
+                                control={<Checkbox
+                                    checked={exactPhraseTitle}
+                                    onChange={(e) => setExactPhraseTitle(e.target.checked)}
+                                />}
+                                label="Искать точную фразу"
+                            />
+                            <button onClick={handleTitleSearch}>Поиск</button>
+                        </div>
+                        <div className="search-box">
+                            <input
+                                type="text"
+                                placeholder="Поиск по описанию"
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                            />
+                            <FormControlLabel
+                                control={<Checkbox
+                                    checked={exactPhraseDescription}
+                                    onChange={(e) => setExactPhraseDescription(e.target.checked)}
+                                />}
+                                label="Искать точную фразу"
+                            />
+                            <button onClick={handleDescriptionSearch}>Поиск</button>
+                        </div>
+                        <div className="search-box">
+                            <input
+                                type="text"
+                                placeholder="Минимальная цена"
+                                value={minPrice}
+                                onChange={(e) => setMinPrice(e.target.value)}
+                            />
+                            <input
+                                type="text"
+                                placeholder="Максимальная цена"
+                                value={maxPrice}
+                                onChange={(e) => setMaxPrice(e.target.value)}
+                            />
+                            <button onClick={handlePriceRangeSearch}>Поиск</button>
+                        </div>
+                        <div className="search-box">
+                            <input
+                                type="text"
+                                placeholder="Введите ID книги"
+                                value={bookId}
+                                onChange={(e) => setBookId(e.target.value)}
+                            />
+                            <button onClick={handleIdSearch}>Поиск по ID</button>
+                        </div>
                     </div>
                     <div className="categories">
                         <h2>Категории</h2>
