@@ -1,4 +1,4 @@
-﻿//src/components/BookDetail.jsx
+﻿// src/components/BookDetail.jsx
 import React, { useEffect, useState } from 'react';
 import { useParams, useLocation, useNavigate, Link } from 'react-router-dom';
 import { getBookById, getBookImages, getBookImageFile } from '../api';
@@ -9,8 +9,7 @@ import DOMPurify from 'dompurify';
 
 const BookDetail = () => {
     const { id } = useParams();
-    const location = useLocation(); // Получаем информацию о предыдущем состоянии
-    const navigate = useNavigate(); 
+    const navigate = useNavigate();
     const [book, setBook] = useState(null);
     const [imageUrls, setImageUrls] = useState([]);
     const [error, setError] = useState(null);
@@ -23,10 +22,12 @@ const BookDetail = () => {
             try {
                 const response = await getBookById(id);
                 setBook(response.data);
-            } catch (error) {
-                console.error('Ошибка при получении данных книги:', error);
+            } catch (err) {
+                console.error('Ошибка при получении данных книги:', err);
                 setError('Failed to load book details.');
-                setErrorDetails(error.response?.data?.errorDetails || error.message || 'Неизвестная ошибка');
+                setErrorDetails(
+                    err.response?.data?.errorDetails || err.message || 'Неизвестная ошибка'
+                );
             }
         };
 
@@ -35,16 +36,20 @@ const BookDetail = () => {
                 const response = await getBookImages(id);
                 const images = response.data.images;
 
-                const imageUrls = await Promise.all(images.map(async (image) => {
-                    const imageResponse = await getBookImageFile(id, image);
-                    return URL.createObjectURL(imageResponse.data);
-                }));
+                const imageUrls = await Promise.all(
+                    images.map(async (image) => {
+                        const imageResponse = await getBookImageFile(id, image);
+                        return URL.createObjectURL(imageResponse.data);
+                    })
+                );
 
                 setImageUrls(imageUrls);
-            } catch (error) {
-                console.error('Ошибка при получении изображений книги:', error);
+            } catch (err) {
+                console.error('Ошибка при получении изображений книги:', err);
                 setError('Failed to load book images.');
-                setErrorDetails(error.response?.data?.message || error.message || 'Unknown error');
+                setErrorDetails(
+                    err.response?.data?.message || err.message || 'Unknown error'
+                );
             }
         };
 
@@ -56,7 +61,9 @@ const BookDetail = () => {
         return (
             <div className="container">
                 <Typography color="error">{error}</Typography>
-                {errorDetails && <Typography color="textSecondary">{errorDetails}</Typography>}
+                {errorDetails && (
+                    <Typography color="textSecondary">{errorDetails}</Typography>
+                )}
                 <Button variant="contained" onClick={() => navigate(-1)}>Назад</Button>
             </div>
         );
@@ -68,39 +75,73 @@ const BookDetail = () => {
 
     return (
         <div className="container">
-            <header className="header">
-                <h1><Link to="/" style={{ color: '#fff', textDecoration: 'none' }}>Rare Books Service</Link></h1>
-            </header>
-            <Card>
+            {/* 
+               Удаляем/упрощаем второй большой header,
+               пусть остается только общий header из App.jsx или Home.jsx
+            */}
+            <Card sx={{ marginTop: 2 }}>
                 <CardContent>
-                    <Typography variant="h4">{book.title}</Typography>
-                    <Typography variant="body1">
-                        <span dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(book.description) }} />
+                    <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+                        {book.title}
                     </Typography>
-                    <Typography variant="h6">Цена: {book.price}</Typography>
-                    <Typography variant="h6">
-                        <Link to={`/searchBySeller/${book.sellerName}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-                            Продавец: {book.sellerName}
+                    <Typography variant="body1" sx={{ marginTop: 1 }}>
+                        <span
+                            dangerouslySetInnerHTML={{
+                                __html: DOMPurify.sanitize(book.description)
+                            }}
+                        />
+                    </Typography>
+                    <Typography variant="subtitle1" sx={{ marginTop: 1 }}>
+                        Цена: {book.price}
+                    </Typography>
+                    <Typography variant="subtitle1">
+                        Продавец:{" "}
+                        <Link
+                            to={`/searchBySeller/${book.sellerName}`}
+                            style={{ textDecoration: 'none' }}
+                        >
+                            {book.sellerName}
                         </Link>
                     </Typography>
-                    <Typography variant="h6">Тип: {book.type}</Typography>
-                    <Typography variant="h6">Дата: {book.endDate}</Typography>
+                    <Typography variant="subtitle1">Тип: {book.type}</Typography>
+                    <Typography variant="subtitle1">Дата: {book.endDate}</Typography>
+
                     <Box sx={{ my: 2 }}>
-                        <Typography variant="h5">Изображения</Typography>
+                        <Typography variant="h6">Изображения</Typography>
                         {imageUrls.length > 0 ? (
-                            <SlideshowLightbox theme="day" showThumbnails={true} className="images" roundedImages={true}>
+                            <SlideshowLightbox
+                                theme="day"
+                                showThumbnails={true}
+                                className="images"
+                                roundedImages={true}
+                            >
                                 {imageUrls.map((url, index) => (
-                                    <img key={index} src={url} alt="Book" style={{ width: '100%', maxWidth: '700px', maxHeight: '700px', height: 'auto', objectFit: 'contain' }} />
+                                    <img
+                                        key={index}
+                                        src={url}
+                                        alt="Book"
+                                        style={{
+                                            width: '100%',
+                                            maxWidth: '700px',
+                                            height: 'auto',
+                                            objectFit: 'contain'
+                                        }}
+                                    />
                                 ))}
                             </SlideshowLightbox>
                         ) : (
                             <Typography>Изображения отсутствуют.</Typography>
                         )}
                     </Box>
-                    <Button variant="contained" onClick={() => navigate(-1)}>Назад</Button>
+
+                    <Button variant="contained" onClick={() => navigate(-1)}>
+                        Назад
+                    </Button>
                 </CardContent>
             </Card>
-            <footer className="footer">
+
+            {/* Можно добавить футер, если хотите */}
+            <footer className="footer" style={{ marginTop: '20px' }}>
                 <p>&copy; 2024 Rare Books Service. All rights reserved.</p>
             </footer>
         </div>

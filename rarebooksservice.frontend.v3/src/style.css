@@ -587,3 +587,23 @@ button, input {
                     word-break: break-word; /* если очень длинные */
                 }
 }
+
+@media (max-width: 768px) {
+    .search-section {
+        /* чуть меньший внутренний отступ, чтобы гармонично смотрелось */
+        margin: 10px 0;
+    }
+
+    .search-box {
+        display: flex;
+        flex-direction: column; /* вертикально */
+        gap: 10px;
+        margin-bottom: 15px; /* отступ между разными поисками */
+    }
+
+        .search-box input,
+        .search-box button {
+            width: 100%;
+        }
+    /* и т.д. */
+}

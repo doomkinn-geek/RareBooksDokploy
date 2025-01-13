@@ -13,7 +13,6 @@ const BookSearchByTitle = () => {
 
     const query = new URLSearchParams(location.search);
     const exactPhrase = query.get('exactPhrase') === 'true';
-    // Считаем текущую страницу из URL, если нет - по умолчанию 1
     const initialPage = parseInt(query.get('page'), 10) || 1;
 
     const [books, setBooks] = useState([]);
@@ -37,7 +36,9 @@ const BookSearchByTitle = () => {
                 }
             } catch (error) {
                 console.error('Ошибка поиска книг по названию:', error);
-                setErrorMessage('Произошла ошибка при поиске книг. Пожалуйста, попробуйте позже.');
+                setErrorMessage(
+                    'Произошла ошибка при поиске книг. Пожалуйста, попробуйте позже.'
+                );
             } finally {
                 setLoading(false);
             }
@@ -46,9 +47,8 @@ const BookSearchByTitle = () => {
         fetchBooks(currentPage);
     }, [title, exactPhrase, currentPage]);
 
-    // Обновляем URL при изменении currentPage или exactPhrase
+    // При изменении страницы или exactPhrase меняем URL
     useEffect(() => {
-        // Формируем новый URL с текущими параметрами
         const newQuery = new URLSearchParams();
         newQuery.set('exactPhrase', exactPhrase);
         newQuery.set('page', currentPage);
@@ -57,23 +57,36 @@ const BookSearchByTitle = () => {
 
     return (
         <div className="container">
-            <header className="header">
-                <h1><Link to="/" style={{ color: '#fff', textDecoration: 'none' }}>Rare Books Service</Link></h1>
-            </header>
-            <Box>
-                <Typography variant="h4">Книги по названию: {title}</Typography>
-                <ErrorMessage message={errorMessage} />
-                {loading && <Typography variant="h5">Загрузка...</Typography>}
-                {!loading && books.length > 0 && (
-                    <BookList
-                        books={books}
-                        totalPages={totalPages}
-                        currentPage={currentPage}
-                        setCurrentPage={setCurrentPage}
-                    />
-                )}
+            {/* 
+               Убираем второй большой header, 
+               т.к. в App.jsx (или Home.jsx) уже есть основной (если вы не хотите его дублировать).
+               Если нужен логотип/название, делайте его меньше, 
+               например <div style={{ fontSize: '1.2rem', marginBottom: '10px' }}>Rare Books Service</div>
+            */}
+            <Box sx={{ mb: 2 }}>
+                <Typography
+                    variant="h5" /* чуть меньше, чем h4 */
+                    sx={{
+                        fontWeight: 'bold',
+                        marginTop: '10px'
+                    }}
+                >
+                    Книги по названию: {title}
+                </Typography>
             </Box>
-            <footer className="footer">
+            <ErrorMessage message={errorMessage} />
+            {loading && <Typography variant="h6">Загрузка...</Typography>}
+            {!loading && books.length > 0 && (
+                <BookList
+                    books={books}
+                    totalPages={totalPages}
+                    currentPage={currentPage}
+                    setCurrentPage={setCurrentPage}
+                />
+            )}
+
+            {/* Футер тоже можно сделать компактнее на мобилке */}
+            <footer className="footer" style={{ marginTop: '20px' }}>
                 <p>&copy; 2024 Rare Books Service. All rights reserved.</p>
             </footer>
         </div>
