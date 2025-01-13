@@ -581,7 +581,7 @@ button, input {
 
                 .responsive-table td .actions-container button {
                     display: block;
-                    width: 100%;
+                    width: 50%;
                     margin: 4px 0;
                     white-space: normal; /* перенос текста внутри кнопок */
                     word-break: break-word; /* если очень длинные */

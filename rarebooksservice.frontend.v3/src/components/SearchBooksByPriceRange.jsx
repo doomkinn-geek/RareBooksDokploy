@@ -44,6 +44,7 @@ const SearchBooksByPriceRange = () => {
         fetchBooks(currentPage);
     }, [minPrice, maxPrice, currentPage]);
 
+    // При изменении currentPage обновляем URL
     useEffect(() => {
         const newQuery = new URLSearchParams();
         newQuery.set('page', currentPage);
@@ -53,12 +54,26 @@ const SearchBooksByPriceRange = () => {
     return (
         <div className="container">
             <header className="header">
-                <h1><Link to="/" style={{ color: '#fff', textDecoration: 'none' }}>Rare Books Service</Link></h1>
+                <h1>
+                    <Link to="/" style={{ color: '#fff', textDecoration: 'none' }}>
+                        Rare Books Service
+                    </Link>
+                </h1>
             </header>
+
             <Box>
-                <Typography variant="h4">Книги в диапазоне цен: {minPrice} - {maxPrice}</Typography>
+                <Typography variant="h4">
+                    Книги в диапазоне цен: {minPrice} - {maxPrice}
+                </Typography>
+
                 <ErrorMessage message={errorMessage} />
-                {loading && <Typography variant="h5">Загрузка...</Typography>}
+
+                {loading && (
+                    <Typography variant="h5">
+                        Загрузка...
+                    </Typography>
+                )}
+
                 {!loading && books.length > 0 && (
                     <BookList
                         books={books}
@@ -68,6 +83,7 @@ const SearchBooksByPriceRange = () => {
                     />
                 )}
             </Box>
+
             <footer className="footer">
                 <p>&copy; 2024 Rare Books Service. All rights reserved.</p>
             </footer>
