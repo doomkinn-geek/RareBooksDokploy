@@ -404,7 +404,7 @@ const AdminPanel = () => {
 
     // ------------------- Рендер -------------------
     // Кнопки для вкладок
-    const renderTabButtons = (
+    /*const renderTabButtons = (
         <div className="admin-tabs">
             <button
                 className={`admin-tab-button ${currentTab === 'users' ? 'active' : ''}`}
@@ -431,6 +431,22 @@ const AdminPanel = () => {
                 onClick={() => setCurrentTab('bookupdate')}>
                 Обновление книг
             </button>
+        </div>
+    );*/
+
+    const renderTabButtons = (
+        <div className="admin-tabs">
+            <select
+                className="admin-tab-selector"
+                value={currentTab}
+                onChange={(e) => setCurrentTab(e.target.value)}
+            >
+                <option value="users">Пользователи</option>
+                <option value="export">Экспорт данных</option>
+                <option value="settings">Настройки</option>
+                <option value="import">Импорт данных</option>
+                <option value="bookupdate">Обновление книг</option>
+            </select>
         </div>
     );
 

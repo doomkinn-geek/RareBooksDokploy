@@ -474,3 +474,65 @@ body {
     padding-bottom: 5px;
     margin-bottom: 10px;
 }
+
+@media (max-width: 768px) {
+    .admin-panel-container {
+        padding: 10px;
+    }
+
+    .admin-tabs {
+        flex-direction: column; /* Кнопки вкладок в колонку */
+        gap: 5px;
+    }
+
+    .admin-tab-button {
+        font-size: 14px;
+        padding: 10px;
+        text-align: center;
+        width: 100%; /* На всю ширину экрана */
+    }
+
+    .admin-section {
+        padding: 10px;
+        margin-bottom: 15px;
+    }
+
+    .admin-table {
+        font-size: 12px;
+        overflow-x: auto; /* Горизонтальная прокрутка, если таблица слишком широкая */
+        display: block; /* Блоковый контейнер для лучшей адаптации */
+    }
+
+        .admin-table th, .admin-table td {
+            padding: 8px 5px; /* Уменьшение отступов для мобильных */
+            text-align: left;
+        }
+
+    .admin-export-status,
+    .admin-export-complete {
+        font-size: 14px;
+        margin-top: 10px;
+    }
+
+    input, select, button {
+        font-size: 14px; /* Увеличить удобство ввода */
+        width: 100%; /* Растянуть на весь экран */
+        margin-bottom: 10px;
+    }
+
+    .admin-actions {
+        flex-direction: column; /* Кнопки действий в колонку */
+        gap: 5px;
+    }
+
+    .admin-button {
+        width: 100%; /* Кнопки на всю ширину */
+    }
+}
+@media (max-width: 768px) {
+    .admin-tab-selector {
+        font-size: 14px;
+        padding: 10px;
+        width: 100%;
+    }
+}
