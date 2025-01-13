@@ -20,32 +20,27 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
 
     useEffect(() => {
         const fetchThumbnails = async () => {
-            if (!books || books.length === 0) return; // Нет книг - нет запросов
+            if (!books || books.length === 0) return;
 
             const newThumbnails = {};
             for (const book of books) {
                 try {
-                    const response = await getBookImages(book.id);
-                    const thumbnailName = response.data.thumbnails[0];
+                    // Вызываем эндпоинт, который отдаёт ТОЛЬКО thumbnails
+                    const response = await getBookThumbnailsInfo(book.id);
+                    // Берём первую миниатюру
+                    const thumbnailName = response.data.thumbnails?.[0];
 
                     if (thumbnailName) {
-                        const thumbnailResponse = await getBookThumbnail(
-                            book.id,
-                            thumbnailName
-                        );
-                        const thumbnailUrl = URL.createObjectURL(
-                            thumbnailResponse.data
-                        );
+                        const thumbnailResponse = await getBookThumbnail(book.id, thumbnailName);
+                        const thumbnailUrl = URL.createObjectURL(thumbnailResponse.data);
                         newThumbnails[book.id] = thumbnailUrl;
                     }
-                } catch (error) {
+                } catch (err) {
                     console.error(
                         `Error fetching thumbnail for book ${book.id}:`,
-                        error.response || error.message
+                        err.response || err.message
                     );
-                    setError(
-                        'Failed to load thumbnails. Please try again later.'
-                    );
+                    setError('Failed to load thumbnails. Please try again later.');
                 }
             }
             setThumbnails(newThumbnails);

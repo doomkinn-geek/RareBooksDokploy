@@ -47,6 +47,12 @@ export const getBookById = (id) =>
         headers: getAuthHeaders(),
     });
 
+export const getBookThumbnailsInfo = (id) =>
+    axios.get(`${API_URL}/books/${id}/thumbnailsinfo`, {
+        headers: getAuthHeaders(),
+    });
+
+
 export const getBookImages = (id) =>
     axios.get(`${API_URL}/books/${id}/images`, {
         headers: getAuthHeaders(),
@@ -220,3 +226,4 @@ export async function cancelImport(importTaskId) {
     const headers = getAuthHeaders();
     await axios.post(`${API_URL}/import/cancel?importTaskId=${importTaskId}`, null, { headers });
 }
+
