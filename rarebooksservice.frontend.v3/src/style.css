@@ -607,3 +607,45 @@ button, input {
         }
     /* и т.д. */
 }
+
+.book-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 20px 0;
+}
+
+.book-item {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 15px;
+    max-width: 600px; /* или 100% */
+    margin: 0 auto; /* центрируем */
+}
+
+    /* Сами изображения */
+    .book-item img {
+        width: 100%;
+        height: auto;
+        display: block;
+        object-fit: contain;
+        margin-bottom: 10px;
+    }
+
+    .book-item .book-title {
+        font-size: 1rem; /* или чуть меньше */
+        font-weight: bold;
+        overflow-wrap: break-word; /* Для длинных слов */
+    }
+
+@media (max-width: 768px) {
+    .book-item {
+        max-width: 100%; /* чтобы точно влезало */
+        margin: 0; /* без горизонтальных отступов */
+    }
+
+        .book-item .book-title {
+            font-size: 0.95rem;
+        }
+}

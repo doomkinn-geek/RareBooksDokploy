@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { searchBooksByTitle } from '../api';
-import BookList from './BookList.jsx';
+import BookList from './BookList';
 import { Typography, Box } from '@mui/material';
 import ErrorMessage from './ErrorMessage';
 
@@ -36,9 +36,7 @@ const BookSearchByTitle = () => {
                 }
             } catch (error) {
                 console.error('Ошибка поиска книг по названию:', error);
-                setErrorMessage(
-                    'Произошла ошибка при поиске книг. Пожалуйста, попробуйте позже.'
-                );
+                setErrorMessage('Произошла ошибка при поиске книг. Попробуйте позже.');
             } finally {
                 setLoading(false);
             }
@@ -47,7 +45,7 @@ const BookSearchByTitle = () => {
         fetchBooks(currentPage);
     }, [title, exactPhrase, currentPage]);
 
-    // При изменении страницы или exactPhrase меняем URL
+    // При изменении страницы или флага exactPhrase меняем URL
     useEffect(() => {
         const newQuery = new URLSearchParams();
         newQuery.set('exactPhrase', exactPhrase);
@@ -57,15 +55,10 @@ const BookSearchByTitle = () => {
 
     return (
         <div className="container">
-            {/* 
-               Убираем второй большой header, 
-               т.к. в App.jsx (или Home.jsx) уже есть основной (если вы не хотите его дублировать).
-               Если нужен логотип/название, делайте его меньше, 
-               например <div style={{ fontSize: '1.2rem', marginBottom: '10px' }}>Rare Books Service</div>
-            */}
+            {/* Можно маленький блок вместо громоздкого header */}
             <Box sx={{ mb: 2 }}>
                 <Typography
-                    variant="h5" /* чуть меньше, чем h4 */
+                    variant="h5"
                     sx={{
                         fontWeight: 'bold',
                         marginTop: '10px'
@@ -74,8 +67,12 @@ const BookSearchByTitle = () => {
                     Книги по названию: {title}
                 </Typography>
             </Box>
+
+            {/* Сообщение об ошибке или отсутствии результатов */}
             <ErrorMessage message={errorMessage} />
             {loading && <Typography variant="h6">Загрузка...</Typography>}
+
+            {/* Список книг (если есть) */}
             {!loading && books.length > 0 && (
                 <BookList
                     books={books}
@@ -85,7 +82,7 @@ const BookSearchByTitle = () => {
                 />
             )}
 
-            {/* Футер тоже можно сделать компактнее на мобилке */}
+            {/* Небольшой футер */}
             <footer className="footer" style={{ marginTop: '20px' }}>
                 <p>&copy; 2024 Rare Books Service. All rights reserved.</p>
             </footer>
