@@ -468,41 +468,43 @@ const AdminPanel = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {users.map(user => (
-                                    <tr key={user.id}>                                        
+                                {users.map((user) => (
+                                    <tr key={user.id}>
+                                        {/* data-label укажет заголовок, который появится через :before в mobile */}
                                         <td data-label="Email">{user.email}</td>
                                         <td data-label="Роль">{user.role}</td>
                                         <td data-label="Подписка">
                                             {user.hasSubscription ? 'Да' : 'Нет'}
                                         </td>
                                         <td data-label="Действия">
-                                            <button
-                                                onClick={() => handleUpdateUserSubscription(
-                                                    user.id,
-                                                    !user.hasSubscription
-                                                )}
-                                            >
-                                                {user.hasSubscription
-                                                    ? 'Отменить подписку'
-                                                    : 'Подключить подписку'
-                                                }
-                                            </button>
-                                            <button
-                                                onClick={() => handleUpdateUserRole(
-                                                    user.id,
-                                                    user.role === 'Admin' ? 'User' : 'Admin'
-                                                )}
-                                            >
-                                                {user.role === 'Admin'
-                                                    ? 'Разжаловать в User'
-                                                    : 'Предоставить Admin'
-                                                }
-                                            </button>
-                                            <button
-                                                onClick={() => handleViewDetails(user.id)}
-                                            >
-                                                Просмотр
-                                            </button>
+                                            {/* 
+                                                Оборачиваем кнопки в отдельный контейнер, 
+                                                чтобы на мобильном «раскладывать» их вертикально
+                                              */}
+                                            <div className="actions-container">
+                                                <button
+                                                    onClick={() =>
+                                                        handleUpdateUserSubscription(user.id, !user.hasSubscription)
+                                                    }
+                                                >
+                                                    {user.hasSubscription ? 'Отменить подписку' : 'Подключить подписку'}
+                                                </button>
+                                                <button
+                                                    onClick={() =>
+                                                        handleUpdateUserRole(
+                                                            user.id,
+                                                            user.role === 'Admin' ? 'User' : 'Admin'
+                                                        )
+                                                    }
+                                                >
+                                                    {user.role === 'Admin'
+                                                        ? 'Разжаловать в User'
+                                                        : 'Предоставить Admin'}
+                                                </button>
+                                                <button onClick={() => handleViewDetails(user.id)}>
+                                                    Просмотр
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}

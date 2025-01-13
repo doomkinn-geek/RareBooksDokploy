@@ -403,20 +403,18 @@ body {
     cursor: not-allowed;
 }
 
+/* Обычная (десктопная) таблица */
 .admin-table {
     width: 100%;
     border-collapse: collapse;
+    margin-top: 1rem;
 }
 
-    .admin-table th, .admin-table td {
+    .admin-table th,
+    .admin-table td {
         border-bottom: 1px solid #ccc;
         padding: 8px;
         text-align: left;
-    }
-
-    .admin-table th {
-        background: #eee;
-        font-weight: bold;
     }
 
 .admin-export-status {
@@ -632,4 +630,74 @@ body {
                 font-weight: bold;
                 white-space: nowrap;
             }
+}
+
+/* Добавляем класс .responsive-table для "data-label" трюка */
+.responsive-table th {
+    background-color: #eee;
+    font-weight: bold;
+}
+
+/* Контейнер для кнопок */
+.actions-container button {
+    margin-right: 6px; /* небольшой отступ между кнопками (на десктопе) */
+}
+
+/* --- Мобильное отображение --- */
+@media (max-width: 768px) {
+
+    .responsive-table thead {
+        display: none; /* Скрываем заголовки */
+    }
+
+    .responsive-table,
+    .responsive-table tbody,
+    .responsive-table tr,
+    .responsive-table td {
+        display: block; /* Каждый элемент блочный */
+        width: 100%;
+    }
+
+        .responsive-table tr {
+            margin-bottom: 1rem; /* Отступ между «записями» */
+            border-bottom: 1px solid #ddd;
+        }
+
+        .responsive-table td {
+            position: relative;
+            /* Оставляем место слева под подпись через :before */
+            padding-left: 45%;
+            border: none;
+            white-space: normal; /* Разрешаем перенос строк внутри ячеек */
+        }
+
+            /* Псевдоэлемент с текстом заголовка */
+            .responsive-table td:before {
+                content: attr(data-label);
+                position: absolute;
+                left: 0.8rem;
+                width: 40%; /* Можно чуть уменьшить, чтобы кнопкам досталось больше места */
+                font-weight: bold;
+                white-space: nowrap; /* Метка не переносится */
+            }
+
+            /* Кнопки в моб. режиме выкладываем вертикально */
+            .responsive-table td .actions-container {
+                display: flex; /* вместо inline-block */
+                flex-direction: column;
+            }
+
+                .responsive-table td .actions-container button {
+                    display: block;
+                    width: 100%;
+                    margin: 4px 0; /* отступы между кнопками */
+                    /* Разрешаем длинным подписям переноситься */
+                    white-space: normal;
+                }
+
+    /* Если текст очень длинный, можно добавить word-break */  
+  .responsive-table td .actions-container button {
+    word-break: break-word;
+  }
+  
 }
