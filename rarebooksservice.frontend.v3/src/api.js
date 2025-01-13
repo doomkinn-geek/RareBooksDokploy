@@ -47,12 +47,6 @@ export const getBookById = (id) =>
         headers: getAuthHeaders(),
     });
 
-export const getBookThumbnailsInfo = (id) =>
-    axios.get(`${API_URL}/books/${id}/thumbnailsinfo`, {
-        headers: getAuthHeaders(),
-    });
-
-
 export const getBookImages = (id) =>
     axios.get(`${API_URL}/books/${id}/images`, {
         headers: getAuthHeaders(),

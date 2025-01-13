@@ -78,10 +78,21 @@ namespace RareBooksService.Data
             var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
 
             var books = await query
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .Select(b => new BookSearchResultDto { Id = b.Id, Title = b.Title, Price = b.Price, SellerName = b.SellerName, Date = b.EndDate.ToShortDateString(), Type = b.Type })
-                .ToListAsync();
+                        .Skip((page - 1) * pageSize)
+                        .Take(pageSize)
+                        .Select(b => new BookSearchResultDto
+                        {
+                            Id = b.Id,
+                            Title = b.Title,
+                            Price = b.Price,
+                            SellerName = b.SellerName,
+                            Date = b.EndDate.ToShortDateString(),
+                            Type = b.Type,
+                            // Если у пользователя нет подписки — null
+                            // Если подписка есть — первый элемент из b.ThumbnailUrls (или null, если список пуст)
+                            FirstThumbnailName = b.ThumbnailUrls.FirstOrDefault()
+                        })
+                        .ToListAsync();
 
             return new PagedResultDto<BookSearchResultDto> { Items = books, TotalPages = totalPages };
         }
@@ -112,7 +123,7 @@ namespace RareBooksService.Data
             var books = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(b => new BookSearchResultDto { Id = b.Id, Title = b.Title, Price = b.Price, SellerName = b.SellerName, Date = b.EndDate.ToShortDateString(), Type = b.Type })
+                .Select(b => new BookSearchResultDto { Id = b.Id, Title = b.Title, Price = b.Price, SellerName = b.SellerName, Date = b.EndDate.ToShortDateString(), Type = b.Type, FirstThumbnailName = b.ThumbnailUrls.FirstOrDefault() })
                 .ToListAsync();
 
             return new PagedResultDto<BookSearchResultDto> { Items = books, TotalPages = totalPages };
@@ -131,7 +142,7 @@ namespace RareBooksService.Data
             var books = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(b => new BookSearchResultDto { Id = b.Id, Title = b.Title, Price = b.Price, SellerName = b.SellerName, Date = b.EndDate.ToShortDateString(), Type = b.Type })
+                .Select(b => new BookSearchResultDto { Id = b.Id, Title = b.Title, Price = b.Price, SellerName = b.SellerName, Date = b.EndDate.ToShortDateString(), Type = b.Type, FirstThumbnailName = b.ThumbnailUrls.FirstOrDefault() })
                 .ToListAsync();
 
             return new PagedResultDto<BookSearchResultDto> { Items = books, TotalPages = totalPages };
@@ -150,7 +161,7 @@ namespace RareBooksService.Data
             var books = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(b => new BookSearchResultDto { Id = b.Id, Title = b.Title, Price = b.Price, SellerName = b.SellerName, Date = b.EndDate.ToShortDateString(), Type = b.Type })
+                .Select(b => new BookSearchResultDto { Id = b.Id, Title = b.Title, Price = b.Price, SellerName = b.SellerName, Date = b.EndDate.ToShortDateString(), Type = b.Type, FirstThumbnailName = b.ThumbnailUrls.FirstOrDefault() })
                 .ToListAsync();
 
             return new PagedResultDto<BookSearchResultDto> { Items = books, TotalPages = totalPages };
@@ -169,7 +180,7 @@ namespace RareBooksService.Data
             var books = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(b => new BookSearchResultDto { Id = b.Id, Title = b.Title, Price = b.Price, SellerName = b.SellerName, Date = b.EndDate.ToShortDateString(), Type = b.Type })
+                .Select(b => new BookSearchResultDto { Id = b.Id, Title = b.Title, Price = b.Price, SellerName = b.SellerName, Date = b.EndDate.ToShortDateString(), Type = b.Type, FirstThumbnailName = b.ThumbnailUrls.FirstOrDefault() })
                 .ToListAsync();
 
             return new PagedResultDto<BookSearchResultDto> { Items = books, TotalPages = totalPages };

@@ -60,6 +60,7 @@ namespace RareBooksService.WebApi.Controllers
                 b.Price = 0;
                 // Вместо реальной даты отображаем сообщение
                 b.Date = "Только для подписчиков";
+                b.FirstThumbnailName = "";
             }
         }
 
@@ -69,7 +70,8 @@ namespace RareBooksService.WebApi.Controllers
             _logger.LogInformation("Запрос поиска по названию: '{Title}', точная фраза: {ExactPhrase}, страница: {Page}, размер страницы: {PageSize}", title, exactPhrase, page, pageSize);
 
             var books = await _booksRepository.GetBooksByTitleAsync(title, page, pageSize, exactPhrase);
-            var hasSubscription = await UserHasSubscriptionAsync();
+            var hasSubscription = await UserHasSubscriptionAsync();           
+
 
             if (!hasSubscription)
             {
@@ -363,117 +365,6 @@ namespace RareBooksService.WebApi.Controllers
             _logger.LogInformation("Возвращение списка изображений и миниатюр для книги с ID {BookId}", id);
             return Ok(new { images, thumbnails });
         }
-
-        [HttpGet("{id}/thumbnailsinfo")]
-        public async Task<ActionResult> GetBookThumbnailsInfo(int id)
-        {
-            _logger.LogInformation("Запрос получения ТОЛЬКО миниатюр для книги с ID {BookId}", id);
-
-            var hasSubscription = await UserHasSubscriptionAsync();
-            var book = await _booksRepository.GetBookByIdAsync(id);
-
-            if (book == null)
-            {
-                _logger.LogWarning("Книга с ID {BookId} не найдена.", id);
-                return NotFound();
-            }
-
-            // Если нет подписки, по логике вашего сервиса либо отдаём пустой список, либо 1 миниатюру
-            if (!hasSubscription)
-            {
-                // Например, вернём одну миниатюру (или вообще пустой список).
-                // Здесь оставляю как пример - решите, как должно быть по бизнес-требованиям
-            }
-
-            bool useLocalFiles = bool.TryParse(_configuration["TypeOfAccessImages:UseLocalFiles"], out var useLocal) && useLocal;
-            string localPathOfImages = _configuration["TypeOfAccessImages:LocalPathOfImages"];
-
-            List<string> thumbnails = new List<string>();
-
-            if (book.IsImagesCompressed)
-            {
-                _logger.LogInformation("Книга {BookId}: миниатюры хранятся в сжатом архиве.", id);
-
-                if (useLocalFiles)
-                {
-                    var archivePath = book.ImageArchiveUrl;
-                    if (!System.IO.File.Exists(archivePath))
-                    {
-                        _logger.LogWarning("Архив не найден по пути {0}", archivePath);
-                        return NotFound();
-                    }
-
-                    using (var archive = System.IO.Compression.ZipFile.OpenRead(archivePath))
-                    {
-                        foreach (var entry in archive.Entries)
-                        {
-                            // берем только thumbnails/
-                            if (!string.IsNullOrEmpty(entry.Name) && entry.FullName.StartsWith("thumbnails/"))
-                            {
-                                thumbnails.Add(entry.Name); // "thumbnails/xxx.jpg"
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    // Облачное хранение
-                    var archiveStream = await _yandexStorageService.GetArchiveStreamAsync(book.ImageArchiveUrl);
-                    if (archiveStream == null)
-                    {
-                        return NotFound();
-                    }
-
-                    using (var archive = new System.IO.Compression.ZipArchive(archiveStream, System.IO.Compression.ZipArchiveMode.Read))
-                    {
-                        foreach (var entry in archive.Entries)
-                        {
-                            if (!string.IsNullOrEmpty(entry.Name) && entry.FullName.StartsWith("thumbnails/"))
-                            {
-                                thumbnails.Add(entry.Name);
-                            }
-                        }
-                    }
-                }
-            }
-            else
-            {
-                _logger.LogInformation("Книга {BookId}: miniатюры лежат НЕ в архиве.", id);
-
-                if (useLocalFiles)
-                {
-                    var basePath = Path.Combine(AppContext.BaseDirectory, "books_photos", id.ToString());
-                    if (!string.IsNullOrWhiteSpace(localPathOfImages))
-                        basePath = Path.Combine(localPathOfImages, id.ToString());
-
-                    var thumbsPath = Path.Combine(basePath, "thumbnails");
-                    if (!Directory.Exists(thumbsPath))
-                    {
-                        _logger.LogWarning("Миниатюры для книги {BookId} не найдены по пути {0}", thumbsPath);
-                        return Ok(new { thumbnails = new List<string>() });
-                    }
-
-                    thumbnails = Directory.GetFiles(thumbsPath)
-                                          .Select(Path.GetFileName)
-                                          .ToList();
-                }
-                else
-                {
-                    // Облачное хранилище
-                    thumbnails = await _yandexStorageService.GetThumbnailKeysAsync(id);
-                }
-            }
-
-            // Если нет подписки, можно показать, например, только 1 миниатюру
-            if (!hasSubscription)
-            {
-                thumbnails = thumbnails.Take(1).ToList();
-            }
-
-            _logger.LogInformation("Возвращаем {Count} миниатюр для книги {BookId}", thumbnails.Count, id);
-            return Ok(new { thumbnails });
-        }
-
 
         [HttpGet("{id}/images/{imageName}")]
         public async Task<ActionResult> GetImage(int id, string imageName)
