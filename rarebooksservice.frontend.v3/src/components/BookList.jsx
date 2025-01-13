@@ -1,37 +1,73 @@
 ﻿// src/components/BookList.jsx
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, Typography, Box, Button, Pagination } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+
+// Импортируем метод для запроса миниатюры
+import { getBookThumbnail } from '../api';
 
 const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
     const navigate = useNavigate();
 
-    // Обработка перехода к предыдущей/следующей странице (если нужны кнопки), 
-    // либо можно ограничиться только компонентом <Pagination>.
+    // Словарь (bookId -> blobUrl), где храним URL созданный через URL.createObjectURL()
+    const [thumbnails, setThumbnails] = useState({});
+    const [error, setError] = useState('');
+
+    // При изменении массива books получаем миниатюры
+    useEffect(() => {
+        if (!books || books.length === 0) return;
+
+        const fetchThumbnails = async () => {
+            const newThumbs = {}; // bookId -> blobUrl
+            for (const book of books) {
+                // Если у книги есть имя миниатюры
+                if (book.firstThumbnailName) {
+                    try {
+                        const response = await getBookThumbnail(book.id, book.firstThumbnailName);
+                        const blobUrl = URL.createObjectURL(response.data);
+                        newThumbs[book.id] = blobUrl;
+                    } catch (err) {
+                        console.error('Ошибка при загрузке миниатюры для книги', book.id, err);
+                        setError('Не удалось загрузить некоторые миниатюры.');
+                    }
+                }
+            }
+            setThumbnails(newThumbs);
+        };
+
+        fetchThumbnails();
+    }, [books]);
+
+    // Переход между страницами
     const handlePreviousPage = () => {
         if (currentPage > 1) {
             setCurrentPage(currentPage - 1);
         }
     };
-
     const handleNextPage = () => {
         if (currentPage < totalPages) {
             setCurrentPage(currentPage + 1);
         }
     };
-
     const handlePageChange = (event, value) => {
         setCurrentPage(value);
     };
 
-    // При нажатии на книгу переходим на страницу "детали книги"
+    // Переход к деталям книги
     const handleBookClick = (bookId) => {
         navigate(`/books/${bookId}`, { state: { fromPage: currentPage } });
     };
 
     return (
         <Box sx={{ my: 2 }}>
-            {/* Отображаем список книг */}
+            {/* Показываем сообщение об ошибке (если было) */}
+            {error && (
+                <Typography color="error" sx={{ mb: 2 }}>
+                    {error}
+                </Typography>
+            )}
+
+            {/* Список книг */}
             <Box
                 className="book-list"
                 sx={{
@@ -55,21 +91,16 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                                 gap: 2,
                             }}
                         >
-                            {/* Если у книги есть firstThumbnailName, показываем миниатюру: */}
-                            {book.firstThumbnailName && (
+                            {/* Если у книги есть имя миниатюры -> пытаемся вывести её */}
+                            {book.firstThumbnailName && thumbnails[book.id] && (
                                 <Box
                                     sx={{
                                         width: { xs: '100%', sm: '150px' },
                                         marginBottom: { xs: 2, sm: 0 },
                                     }}
                                 >
-                                    {/* 
-                                         Запрос миниатюры идёт по адресу:
-                                         GET /api/books/{book.id}/thumbnails/{book.firstThumbnailName}.
-                                         Сервер уже умеет проверять подписку (или локальные файлы).
-                                      */}
                                     <img
-                                        src={`/api/books/${book.id}/thumbnails/${book.firstThumbnailName}`}
+                                        src={thumbnails[book.id]}
                                         alt="Book Thumbnail"
                                         style={{
                                             width: '100%',
@@ -97,7 +128,9 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                                 </Typography>
                                 <Typography variant="body1">Цена: {book.price}</Typography>
                                 <Typography variant="body1">Дата: {book.date}</Typography>
-                                <Typography variant="body1">Продавец: {book.sellerName}</Typography>
+                                <Typography variant="body1">
+                                    Продавец: {book.sellerName}
+                                </Typography>
                                 <Typography variant="body1">Тип: {book.type}</Typography>
                             </Box>
                         </CardContent>
@@ -105,7 +138,7 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                 ))}
             </Box>
 
-            {/* Пагинация (если есть хотя бы одна книга) */}
+            {/* Пагинация, если есть книги */}
             {books.length > 0 && (
                 <Box
                     sx={{
@@ -123,7 +156,6 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                     >
                         Предыдущая страница
                     </Button>
-
                     <Pagination
                         count={totalPages}
                         page={currentPage}
@@ -132,7 +164,6 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                         siblingCount={0}
                         boundaryCount={1}
                     />
-
                     <Button
                         variant="contained"
                         onClick={handleNextPage}
