@@ -73,9 +73,11 @@ button, input {
         }
 
     .header, .footer {
-        padding: 15px;
-        font-size: 18px;
+        padding: 10px 0; /* Уменьшаем вертикальные отступы */
+        font-size: 16px; /* Уменьшаем размер текста */
+        text-align: center;
     }
+
 
     .card {
         margin: 10px 0;
@@ -83,8 +85,15 @@ button, input {
 
     .user-details-container,
     .admin-panel-container {
-        padding: 10px;
+        max-width: 100%; /* Ограничить ширину панели в пределах экрана */
+        min-width: 100%; /* Убрать фиксированную минимальную ширину */
+        margin: 20px auto;
+        background: #fff;
+        padding: 20px;
+        border-radius: 5px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
+
 }
 
 
@@ -114,14 +123,12 @@ body {
 }
 
 .container {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    padding: 20px;
-    width: 100%;
+    padding: 0 10px; /* Сокращаем горизонтальные отступы */
+    box-sizing: border-box; /* Убедимся, что padding учитывается в ширине элемента */
+    width: 100%; /* Задаем ширину 100% */
+    max-width: 100%; /* Ограничиваем максимальную ширину */
 }
+
 
 .header, .footer {
     background-color: #2c3e50;
@@ -498,15 +505,18 @@ body {
     }
 
     .admin-table {
-        font-size: 12px;
-        overflow-x: auto; /* Горизонтальная прокрутка, если таблица слишком широкая */
-        display: block; /* Блоковый контейнер для лучшей адаптации */
+        display: block; /* Делаем таблицу блочным элементом */
+        overflow-x: auto; /* Включаем горизонтальную прокрутку */
+        width: 100%; /* Ограничиваем ширину таблицы */
+        font-size: 14px; /* Уменьшаем размер текста */
     }
 
         .admin-table th, .admin-table td {
-            padding: 8px 5px; /* Уменьшение отступов для мобильных */
+            white-space: nowrap; /* Отключаем перенос текста */
+            padding: 8px;
             text-align: left;
         }
+
 
     .admin-export-status,
     .admin-export-complete {
@@ -535,4 +545,31 @@ body {
         padding: 10px;
         width: 100%;
     }
+}
+
+@media (max-width: 768px) {
+    .admin-tabs {
+        flex-direction: column; /* Вкладки вертикально */
+        gap: 5px; /* Меньший разрыв между вкладками */
+    }
+
+    .admin-tab-button {
+        width: 100%; /* Кнопки на всю ширину экрана */
+        font-size: 14px; /* Уменьшаем размер шрифта */
+        padding: 8px 10px;
+        text-align: center;
+    }
+
+    .admin-tab-content {
+        padding: 10px; /* Уменьшаем отступы внутри вкладок */
+    }
+}
+
+.user-card {
+    padding: 10px;
+    margin: 10px 0;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
