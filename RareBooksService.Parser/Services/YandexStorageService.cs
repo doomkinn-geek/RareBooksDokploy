@@ -1,7 +1,7 @@
 ﻿using Amazon.S3;
 using Amazon.S3.Model;
 using Amazon.S3.Transfer;
-using Microsoft.Extensions.Configuration;
+using System.Text.Json;
 
 namespace RareBooksService.Parser.Services
 {
@@ -12,38 +12,60 @@ namespace RareBooksService.Parser.Services
         Task<Stream> GetImageStreamAsync(string key);
         Task<Stream> GetThumbnailStreamAsync(string key);
 
-        // Добавленные методы
         Task UploadImageAsync(string key, Stream imageStream);
         Task UploadThumbnailAsync(string key, Stream thumbnailStream);
         Task UploadCompressedImageArchiveAsync(string key, Stream archiveStream);
         Task<Stream> GetArchiveStreamAsync(string key);
     }
+
     public class YandexStorageService : IYandexStorageService
     {
         private readonly AmazonS3Client _s3Client;
         private readonly string _bucketName;
         private readonly bool _isInitialized;
 
-        public YandexStorageService(IConfiguration configuration)
+        private readonly string _appSettingsPath;
+
+        public YandexStorageService()
         {
+            _appSettingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+
             try
             {
-                var accessKey = configuration["YandexCloud:AccessKey"];
-                var secretKey = configuration["YandexCloud:SecretKey"];
-                var serviceUrl = configuration["YandexCloud:ServiceUrl"];
-                _bucketName = configuration["YandexCloud:BucketName"];
+                // 1) Читаем файл appsettings.json (из /app папки внутри контейнера)
+                if (!File.Exists(_appSettingsPath))
+                    throw new FileNotFoundException("appsettings.json not found at " + _appSettingsPath);
 
-                if (string.IsNullOrEmpty(accessKey) || string.IsNullOrEmpty(secretKey) || string.IsNullOrEmpty(serviceUrl) || string.IsNullOrEmpty(_bucketName))
+                var jsonText = File.ReadAllText(_appSettingsPath);
+                using var doc = JsonDocument.Parse(jsonText);
+                var root = doc.RootElement;
+
+                // 2) Ищем секцию "YandexCloud"
+                if (!root.TryGetProperty("YandexCloud", out var yandexCloudElement))
+                    throw new Exception("Section 'YandexCloud' not found in appsettings.json");
+
+                // 3) Достаём поля AccessKey / SecretKey / ServiceUrl / BucketName
+                var accessKey = yandexCloudElement.GetProperty("AccessKey").GetString();
+                var secretKey = yandexCloudElement.GetProperty("SecretKey").GetString();
+                var serviceUrl = yandexCloudElement.GetProperty("ServiceUrl").GetString();
+                var bucketName = yandexCloudElement.GetProperty("BucketName").GetString();
+
+                // 4) Проверяем
+                if (string.IsNullOrEmpty(accessKey) ||
+                    string.IsNullOrEmpty(secretKey) ||
+                    string.IsNullOrEmpty(serviceUrl) ||
+                    string.IsNullOrEmpty(bucketName))
                 {
-                    throw new ArgumentException("Invalid configuration for Yandex Object Storage.");
+                    throw new ArgumentException("Invalid YandexCloud config in appsettings.json");
                 }
 
+                // 5) Создаём AmazonS3Client
                 _s3Client = new AmazonS3Client(accessKey, secretKey, new AmazonS3Config
                 {
                     ServiceURL = serviceUrl,
                     ForcePathStyle = true
                 });
-
+                _bucketName = bucketName;
                 _isInitialized = true;
             }
             catch (Exception ex)
@@ -121,7 +143,7 @@ namespace RareBooksService.Parser.Services
             }
             catch (Exception e)
             {
-                Console.WriteLine($"Error retrieving stream: {e.Message}");
+                Console.WriteLine($"Error retrieving stream for '{key}': {e.Message}");
                 return null;
             }
         }
@@ -171,7 +193,7 @@ namespace RareBooksService.Parser.Services
             }
             catch (Exception e)
             {
-                Console.WriteLine($"Error uploading file: {e.Message}");
+                Console.WriteLine($"Error uploading file '{key}': {e.Message}");
             }
         }
     }
