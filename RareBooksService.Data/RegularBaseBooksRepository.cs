@@ -28,6 +28,27 @@ namespace RareBooksService.Data
             };
         }
 
+        // ------------------ НОВЫЙ ПОМОГАЮЩИЙ МЕТОД ------------------
+        private static string? ExtractImageName(string? fullUrl)
+        {
+            if (string.IsNullOrWhiteSpace(fullUrl))
+                return null;
+
+            // Отсекаем всё до последнего слэша
+            int lastSlash = fullUrl.LastIndexOf('/');
+            var fileName = (lastSlash >= 0)
+                ? fullUrl.Substring(lastSlash + 1)
+                : fullUrl;
+
+            // Убираем query‑параметры, если есть '?'
+            int qPos = fileName.IndexOf('?');
+            if (qPos >= 0)
+                fileName = fileName.Substring(0, qPos);
+
+            return fileName;
+        }
+        // ----------------------------------------------------------
+
         private string PreprocessText(string text, out string detectedLanguage)
         {
             detectedLanguage = DetectLanguage(text);
@@ -61,7 +82,8 @@ namespace RareBooksService.Data
             if (!exactPhrase)
                 processedTitle = PreprocessText(title.ToLower(), out detectedLanguage);
             else
-                processedTitle =title.ToLower();
+                processedTitle = title.ToLower();
+
             var searchWords = processedTitle.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
             var query = _context.BooksInfo.AsQueryable();
@@ -71,28 +93,27 @@ namespace RareBooksService.Data
                 query = query.Where(b => EF.Functions.Like(b.NormalizedTitle, $"%{word}%"));
             }
 
-            // Сортировка перед постраничной выборкой
             query = query.OrderBy(b => b.EndDate);
 
             var totalItems = await query.CountAsync();
             var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
 
             var books = await query
-                        .Skip((page - 1) * pageSize)
-                        .Take(pageSize)
-                        .Select(b => new BookSearchResultDto
-                        {
-                            Id = b.Id,
-                            Title = b.Title,
-                            Price = b.Price,
-                            SellerName = b.SellerName,
-                            Date = b.EndDate.ToShortDateString(),
-                            Type = b.Type,
-                            // Если у пользователя нет подписки — null
-                            // Если подписка есть — первый элемент из b.ThumbnailUrls (или null, если список пуст)
-                            FirstThumbnailName = b.ThumbnailUrls.FirstOrDefault()
-                        })
-                        .ToListAsync();
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(b => new BookSearchResultDto
+                {
+                    Id = b.Id,
+                    Title = b.Title,
+                    Price = b.Price,
+                    SellerName = b.SellerName,
+                    Date = b.EndDate.ToShortDateString(),
+                    Type = b.Type,
+                    FirstThumbnailName = b.ThumbnailUrls
+                        .Select(url => ExtractImageName(url))
+                        .FirstOrDefault()
+                })
+                .ToListAsync();
 
             return new PagedResultDto<BookSearchResultDto> { Items = books, TotalPages = totalPages };
         }
@@ -105,6 +126,7 @@ namespace RareBooksService.Data
                 processedDescription = PreprocessText(description.ToLower(), out detectedLanguage);
             else
                 processedDescription = description.ToLower();
+
             var searchWords = processedDescription.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
             var query = _context.BooksInfo.AsQueryable();
@@ -114,7 +136,6 @@ namespace RareBooksService.Data
                 query = query.Where(b => EF.Functions.Like(b.NormalizedDescription, $"%{word}%"));
             }
 
-            // Сортировка перед постраничной выборкой
             query = query.OrderBy(b => b.EndDate);
 
             var totalItems = await query.CountAsync();
@@ -123,7 +144,18 @@ namespace RareBooksService.Data
             var books = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(b => new BookSearchResultDto { Id = b.Id, Title = b.Title, Price = b.Price, SellerName = b.SellerName, Date = b.EndDate.ToShortDateString(), Type = b.Type, FirstThumbnailName = b.ThumbnailUrls.FirstOrDefault() })
+                .Select(b => new BookSearchResultDto
+                {
+                    Id = b.Id,
+                    Title = b.Title,
+                    Price = b.Price,
+                    SellerName = b.SellerName,
+                    Date = b.EndDate.ToShortDateString(),
+                    Type = b.Type,
+                    FirstThumbnailName = b.ThumbnailUrls
+                        .Select(url => ExtractImageName(url))
+                        .FirstOrDefault()
+                })
                 .ToListAsync();
 
             return new PagedResultDto<BookSearchResultDto> { Items = books, TotalPages = totalPages };
@@ -131,10 +163,8 @@ namespace RareBooksService.Data
 
         public async Task<PagedResultDto<BookSearchResultDto>> GetBooksByCategoryAsync(int categoryId, int page, int pageSize)
         {
-            var query = _context.BooksInfo.Where(b => b.CategoryId == categoryId);
-
-            // Сортировка перед постраничной выборкой
-            query = query.OrderBy(b => b.EndDate);
+            var query = _context.BooksInfo.Where(b => b.CategoryId == categoryId)
+                                          .OrderBy(b => b.EndDate);
 
             var totalItems = await query.CountAsync();
             var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
@@ -142,7 +172,18 @@ namespace RareBooksService.Data
             var books = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(b => new BookSearchResultDto { Id = b.Id, Title = b.Title, Price = b.Price, SellerName = b.SellerName, Date = b.EndDate.ToShortDateString(), Type = b.Type, FirstThumbnailName = b.ThumbnailUrls.FirstOrDefault() })
+                .Select(b => new BookSearchResultDto
+                {
+                    Id = b.Id,
+                    Title = b.Title,
+                    Price = b.Price,
+                    SellerName = b.SellerName,
+                    Date = b.EndDate.ToShortDateString(),
+                    Type = b.Type,
+                    FirstThumbnailName = b.ThumbnailUrls
+                        .Select(url => ExtractImageName(url))
+                        .FirstOrDefault()
+                })
                 .ToListAsync();
 
             return new PagedResultDto<BookSearchResultDto> { Items = books, TotalPages = totalPages };
@@ -150,10 +191,9 @@ namespace RareBooksService.Data
 
         public async Task<PagedResultDto<BookSearchResultDto>> GetBooksByPriceRangeAsync(double minPrice, double maxPrice, int page, int pageSize)
         {
-            var query = _context.BooksInfo.Where(b => b.Price >= minPrice && b.Price <= maxPrice);
-
-            // Сортировка перед постраничной выборкой
-            query = query.OrderBy(b => b.Price);
+            var query = _context.BooksInfo
+                .Where(b => b.Price >= minPrice && b.Price <= maxPrice)
+                .OrderBy(b => b.Price);
 
             var totalItems = await query.CountAsync();
             var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
@@ -161,7 +201,18 @@ namespace RareBooksService.Data
             var books = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(b => new BookSearchResultDto { Id = b.Id, Title = b.Title, Price = b.Price, SellerName = b.SellerName, Date = b.EndDate.ToShortDateString(), Type = b.Type, FirstThumbnailName = b.ThumbnailUrls.FirstOrDefault() })
+                .Select(b => new BookSearchResultDto
+                {
+                    Id = b.Id,
+                    Title = b.Title,
+                    Price = b.Price,
+                    SellerName = b.SellerName,
+                    Date = b.EndDate.ToShortDateString(),
+                    Type = b.Type,
+                    FirstThumbnailName = b.ThumbnailUrls
+                        .Select(url => ExtractImageName(url))
+                        .FirstOrDefault()
+                })
                 .ToListAsync();
 
             return new PagedResultDto<BookSearchResultDto> { Items = books, TotalPages = totalPages };
@@ -169,10 +220,9 @@ namespace RareBooksService.Data
 
         public async Task<PagedResultDto<BookSearchResultDto>> GetBooksBySellerAsync(string sellerName, int page, int pageSize)
         {
-            var query = _context.BooksInfo.Where(b => b.SellerName == sellerName);
-
-            // Сортировка перед постраничной выборкой
-            query = query.OrderBy(b => b.EndDate);
+            var query = _context.BooksInfo
+                .Where(b => b.SellerName == sellerName)
+                .OrderBy(b => b.EndDate);
 
             var totalItems = await query.CountAsync();
             var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
@@ -180,7 +230,18 @@ namespace RareBooksService.Data
             var books = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(b => new BookSearchResultDto { Id = b.Id, Title = b.Title, Price = b.Price, SellerName = b.SellerName, Date = b.EndDate.ToShortDateString(), Type = b.Type, FirstThumbnailName = b.ThumbnailUrls.FirstOrDefault() })
+                .Select(b => new BookSearchResultDto
+                {
+                    Id = b.Id,
+                    Title = b.Title,
+                    Price = b.Price,
+                    SellerName = b.SellerName,
+                    Date = b.EndDate.ToShortDateString(),
+                    Type = b.Type,
+                    FirstThumbnailName = b.ThumbnailUrls
+                        .Select(url => ExtractImageName(url))
+                        .FirstOrDefault()
+                })
                 .ToListAsync();
 
             return new PagedResultDto<BookSearchResultDto> { Items = books, TotalPages = totalPages };
@@ -208,7 +269,8 @@ namespace RareBooksService.Data
                     SellerName = b.SellerName,
                     ImageArchiveUrl = b.ImageArchiveUrl,
                     IsImagesCompressed = b.IsImagesCompressed
-                }).FirstOrDefaultAsync();
+                })
+                .FirstOrDefaultAsync();
         }
 
         public async Task<List<CategoryDto>> GetCategoriesAsync()
@@ -221,6 +283,7 @@ namespace RareBooksService.Data
                 })
                 .ToListAsync();
         }
+
         public async Task<CategoryDto> GetCategoryByIdAsync(int id)
         {
             return await _context.Categories
@@ -248,7 +311,10 @@ namespace RareBooksService.Data
                 _context.UserSearchHistories.Add(searchHistory);
                 await _context.SaveChangesAsync();
             }
-            catch (Exception ex) { return; }
-        }        
+            catch (Exception ex)
+            {
+                // Логируем, игнорируем или пробрасываем выше по необходимости
+            }
+        }
     }
 }
