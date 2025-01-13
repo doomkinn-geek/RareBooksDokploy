@@ -81,16 +81,7 @@ const AdminPanel = () => {
     // ------------------- Загрузка настроек -------------------
     const fetchSettings = async () => {
         try {
-            const data = await getAdminSettings();
-            // Пример ответа (часть может быть null):
-            // {
-            //   "yandexKassa": null,
-            //   "yandexDisk": { "Token": "..." },
-            //   "typeOfAccessImages": { "UseLocalFiles": "...", "LocalPathOfImages": "..." },
-            //   "yandexCloud": { ... }
-            // }
-
-            // Если yandexKassa = null, подставляем пустые строки
+            const data = await getAdminSettings();            
             setYandexKassa({
                 shopId: data.yandexKassa?.ShopId ?? '',
                 secretKey: data.yandexKassa?.SecretKey ?? '',

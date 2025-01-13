@@ -575,3 +575,26 @@ body {
     border-radius: 5px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
+@media (max-width: 768px) {
+    .user-card-mobile {
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 10px;
+        margin: 0 auto;
+    }
+
+        .user-card-mobile div {
+            margin-bottom: 5px;
+        }
+
+    .user-actions-mobile {
+        display: flex;
+        flex-direction: column;
+        gap: 5px; /* вертикальный интервал между кнопками */
+    }
+
+        .user-actions-mobile button {
+            width: 100%; /* на всю ширину */
+        }
+}
