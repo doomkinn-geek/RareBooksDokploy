@@ -1,3 +1,59 @@
+/* Общие стили для всех экранов */
+.container {
+    padding: 20px;
+}
+
+/* Стили для смартфонов (до 768px ширины) */
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+
+    .search-box {
+        flex-direction: column; /* Ставим элементы вертикально */
+        gap: 10px;
+    }
+
+        .search-box input,
+        .search-box button {
+            width: 100%; /* Элементы занимают всю ширину контейнера */
+        }
+
+    .categories ul {
+        flex-direction: column; /* Ставим категории вертикально */
+    }
+
+        .categories ul li {
+            flex: 1 1 auto; /* Все категории занимают доступное место */
+        }
+}
+
+button, input {
+    font-size: 16px;
+    padding: 12px;
+}
+
+@media (max-width: 768px) {
+    button, input {
+        font-size: 14px;
+        padding: 10px;
+    }
+}
+
+.categories ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+@media (max-width: 768px) {
+    .categories ul {
+        flex-direction: column; /* Вертикальная компоновка */
+    }
+}
+
+
+
 .images {
     display: flex;
     flex-direction: row;
