@@ -80,38 +80,46 @@ const AdminPanel = () => {
     const fetchSettings = async () => {
         try {
             const data = await getAdminSettings();
-            if (data?.YandexKassa) {
-                setYandexKassa({
-                    shopId: data.YandexKassa.ShopId || '',
-                    secretKey: data.YandexKassa.SecretKey || '',
-                    returnUrl: data.YandexKassa.ReturnUrl || '',
-                    webhookUrl: data.YandexKassa.WebhookUrl || '',
-                });
-            }
-            if (data?.YandexDisk) {
-                setYandexDisk({
-                    token: data.YandexDisk.Token || ''
-                });
-            }
-            if (data?.TypeOfAccessImages) {
-                setTypeOfAccessImages({
-                    useLocalFiles: data.TypeOfAccessImages.UseLocalFiles || 'false',
-                    localPathOfImages: data.TypeOfAccessImages.LocalPathOfImages || ''
-                });
-            }
-            if (data?.YandexCloud) {
-                setYandexCloud({
-                    accessKey: data.YandexCloud.AccessKey || '',
-                    secretKey: data.YandexCloud.SecretKey || '',
-                    serviceUrl: data.YandexCloud.ServiceUrl || '',
-                    bucketName: data.YandexCloud.BucketName || ''
-                });
-            }
+            // Пример ответа (часть может быть null):
+            // {
+            //   "yandexKassa": null,
+            //   "yandexDisk": { "Token": "..." },
+            //   "typeOfAccessImages": { "UseLocalFiles": "...", "LocalPathOfImages": "..." },
+            //   "yandexCloud": { ... }
+            // }
+
+            // Если yandexKassa = null, подставляем пустые строки
+            setYandexKassa({
+                shopId: data.yandexKassa?.ShopId ?? '',
+                secretKey: data.yandexKassa?.SecretKey ?? '',
+                returnUrl: data.yandexKassa?.ReturnUrl ?? '',
+                webhookUrl: data.yandexKassa?.WebhookUrl ?? ''
+            });
+
+            // Аналогично для остальных
+            setYandexDisk({
+                token: data.yandexDisk?.Token ?? ''
+            });
+
+            setTypeOfAccessImages({
+                useLocalFiles: data.typeOfAccessImages?.UseLocalFiles ?? 'false',
+                localPathOfImages: data.typeOfAccessImages?.LocalPathOfImages ?? ''
+            });
+
+            setYandexCloud({
+                accessKey: data.yandexCloud?.AccessKey ?? '',
+                secretKey: data.yandexCloud?.SecretKey ?? '',
+                serviceUrl: data.yandexCloud?.ServiceUrl ?? '',
+                bucketName: data.yandexCloud?.BucketName ?? ''
+            });
+
         } catch (error) {
             console.error('Error fetching admin settings:', error);
         }
     };
-    useEffect(() => { fetchSettings(); }, []);
+    useEffect(() => {
+        fetchSettings();
+    }, []);
 
     // ------------------- Методы работы с пользователями -------------------
     const handleUpdateUserSubscription = async (userId, hasSubscription) => {
@@ -228,6 +236,7 @@ const AdminPanel = () => {
     // ------------------- Сохранение настроек -------------------
     const handleSaveSettings = async () => {
         try {
+            // Всегда передаём все поля, даже если они пустые
             const settingsDto = {
                 yandexKassa: {
                     shopId: yandexKassa.shopId,
@@ -256,6 +265,7 @@ const AdminPanel = () => {
             alert('Ошибка при сохранении настроек.');
         }
     };
+
 
     // ------------------- Импорт SQLite -------------------
     const initImportTask = async (fileSize) => {
@@ -529,17 +539,17 @@ const AdminPanel = () => {
                     </div>
                 )}
 
-                {/* Вкладка "settings" */}
+                {/* 3) Вкладка 'settings' */}
                 {currentTab === 'settings' && (
                     <div className="admin-section">
-                        <h3 className="admin-section-title">Редактирование настроек (appsettings.json)</h3>
+                        <h3>Редактирование настроек (appsettings.json)</h3>
 
-                        {/* Блок YandexKassa */}
-                        <div style={{ backgroundColor: '#f9f9f9', padding: '10px', marginBottom: '10px' }}>
+                        {/* YandexKassa */}
+                        <div style={{ backgroundColor: '#f9f9f9', padding: 10, marginBottom: 10 }}>
                             <h4>YandexKassa</h4>
                             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                                 <div>
-                                    <label>ShopId: </label><br />
+                                    <label>ShopId:</label><br />
                                     <input
                                         type="text"
                                         value={yandexKassa.shopId}
@@ -547,7 +557,7 @@ const AdminPanel = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label>SecretKey: </label><br />
+                                    <label>SecretKey:</label><br />
                                     <input
                                         type="text"
                                         value={yandexKassa.secretKey}
@@ -555,7 +565,7 @@ const AdminPanel = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label>ReturnUrl: </label><br />
+                                    <label>ReturnUrl:</label><br />
                                     <input
                                         type="text"
                                         value={yandexKassa.returnUrl}
@@ -563,7 +573,7 @@ const AdminPanel = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label>WebhookUrl: </label><br />
+                                    <label>WebhookUrl:</label><br />
                                     <input
                                         type="text"
                                         value={yandexKassa.webhookUrl}
@@ -573,12 +583,12 @@ const AdminPanel = () => {
                             </div>
                         </div>
 
-                        {/* Блок YandexDisk */}
-                        <div style={{ backgroundColor: '#f9f9f9', padding: '10px', marginBottom: '10px' }}>
+                        {/* YandexDisk */}
+                        <div style={{ backgroundColor: '#f9f9f9', padding: 10, marginBottom: 10 }}>
                             <h4>YandexDisk</h4>
                             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                                 <div>
-                                    <label>Token: </label><br />
+                                    <label>Token:</label><br />
                                     <input
                                         type="text"
                                         value={yandexDisk.token}
@@ -588,12 +598,12 @@ const AdminPanel = () => {
                             </div>
                         </div>
 
-                        {/* Блок TypeOfAccessImages */}
-                        <div style={{ backgroundColor: '#f9f9f9', padding: '10px', marginBottom: '10px' }}>
+                        {/* TypeOfAccessImages */}
+                        <div style={{ backgroundColor: '#f9f9f9', padding: 10, marginBottom: 10 }}>
                             <h4>TypeOfAccessImages</h4>
                             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                                 <div>
-                                    <label>UseLocalFiles: </label><br />
+                                    <label>UseLocalFiles:</label><br />
                                     <select
                                         value={typeOfAccessImages.useLocalFiles}
                                         onChange={(e) => setTypeOfAccessImages({ ...typeOfAccessImages, useLocalFiles: e.target.value })}
@@ -603,7 +613,7 @@ const AdminPanel = () => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label>LocalPathOfImages: </label><br />
+                                    <label>LocalPathOfImages:</label><br />
                                     <input
                                         type="text"
                                         value={typeOfAccessImages.localPathOfImages}
@@ -612,46 +622,46 @@ const AdminPanel = () => {
                                 </div>
                             </div>
                         </div>
-                        {/* Добавляем блок YandexCloud */}
-                        <div style={{ backgroundColor: '#f9f9f9', padding: '10px', marginBottom: '10px' }}>
+
+                        {/* YandexCloud */}
+                        <div style={{ backgroundColor: '#f9f9f9', padding: 10, marginBottom: 10 }}>
                             <h4>YandexCloud</h4>
                             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                                 <div>
-                                    <label>AccessKey: </label><br />
+                                    <label>AccessKey:</label><br />
                                     <input
                                         type="text"
                                         value={yandexCloud.accessKey}
                                         onChange={(e) => setYandexCloud({ ...yandexCloud, accessKey: e.target.value })}
                                     />
                                 </div>
-                            <div>
-                                <label>SecretKey: </label><br />
-                                <input
-                                    type="text"
-                                    value={yandexCloud.secretKey}
-                                    onChange={(e) => setYandexCloud({ ...yandexCloud, secretKey: e.target.value })}
-                                />
-                            </div>
-                            <div>
-                                <label>ServiceUrl: </label><br />
-                                <input
-                                    type="text"
-                                    value={yandexCloud.serviceUrl}
-                                    onChange={(e) => setYandexCloud({ ...yandexCloud, serviceUrl: e.target.value })}
-                                />
-                            </div>
-                            <div>
-                                <label>BucketName: </label><br />
-                                <input
-                                    type="text"
-                                    value={yandexCloud.bucketName}
-                                    onChange={(e) => setYandexCloud({ ...yandexCloud, bucketName: e.target.value })}
-                                />
+                                <div>
+                                    <label>SecretKey:</label><br />
+                                    <input
+                                        type="text"
+                                        value={yandexCloud.secretKey}
+                                        onChange={(e) => setYandexCloud({ ...yandexCloud, secretKey: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <label>ServiceUrl:</label><br />
+                                    <input
+                                        type="text"
+                                        value={yandexCloud.serviceUrl}
+                                        onChange={(e) => setYandexCloud({ ...yandexCloud, serviceUrl: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <label>BucketName:</label><br />
+                                    <input
+                                        type="text"
+                                        value={yandexCloud.bucketName}
+                                        onChange={(e) => setYandexCloud({ ...yandexCloud, bucketName: e.target.value })}
+                                    />
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                        {/* Кнопка Сохранить */}
                         <div>
                             <button onClick={handleSaveSettings} className="admin-button">
                                 Сохранить

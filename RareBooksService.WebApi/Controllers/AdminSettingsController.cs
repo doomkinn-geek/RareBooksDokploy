@@ -29,7 +29,8 @@ namespace RareBooksService.WebApi.Controllers
             _env = env;
             // Путь к appsettings.json в корне проекта:
             // Обычно это то же место, где запускается приложение.
-            _appSettingsPath = Path.Combine(env.ContentRootPath, "appsettings.json");
+            //_appSettingsPath = Path.Combine(env.ContentRootPath, "appsettings.json");
+            _appSettingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
         }
 
         // GET: api/AdminSettings
