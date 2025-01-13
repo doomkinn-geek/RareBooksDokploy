@@ -192,6 +192,7 @@ namespace RareBooksService.WebApi
 
                 // Middleware: если IsInitialSetupNeeded == true – отдаём InitialSetup
                 app.Use(async (context, next) =>
+                
                 {
                     // Разрешаем /api/setup/ и /api/setupcheck/
                     if (context.Request.Path.StartsWithSegments("/api/setup") ||

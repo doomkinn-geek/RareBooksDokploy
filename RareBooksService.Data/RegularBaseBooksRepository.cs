@@ -88,6 +88,7 @@ namespace RareBooksService.Data
 
             var query = _context.BooksInfo.AsQueryable();
 
+            // Применяем поиск по каждому слову
             foreach (var word in searchWords)
             {
                 query = query.Where(b => EF.Functions.Like(b.NormalizedTitle, $"%{word}%"));
@@ -98,24 +99,42 @@ namespace RareBooksService.Data
             var totalItems = await query.CountAsync();
             var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
 
-            var books = await query
+            // ------ Шаг 1: выбираем "сырой" набор данных в анонимный объект ------
+            var rawData = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(b => new BookSearchResultDto
+                .Select(b => new
                 {
-                    Id = b.Id,
-                    Title = b.Title,
-                    Price = b.Price,
-                    SellerName = b.SellerName,
-                    Date = b.EndDate.ToShortDateString(),
-                    Type = b.Type,
-                    FirstThumbnailName = b.ThumbnailUrls
-                        .Select(url => ExtractImageName(url))
-                        .FirstOrDefault()
+                    b.Id,
+                    b.Title,
+                    b.Price,
+                    b.SellerName,
+                    b.EndDate,
+                    b.Type,
+                    b.ThumbnailUrls
                 })
                 .ToListAsync();
 
-            return new PagedResultDto<BookSearchResultDto> { Items = books, TotalPages = totalPages };
+            // ------ Шаг 2: на стороне клиента формируем нужный DTO ------
+            var books = rawData.Select(b => new BookSearchResultDto
+            {
+                Id = b.Id,
+                Title = b.Title,
+                Price = b.Price,
+                SellerName = b.SellerName,
+                Date = b.EndDate.ToShortDateString(),
+                Type = b.Type,
+                FirstThumbnailName = b.ThumbnailUrls
+                    .Select(url => ExtractImageName(url))
+                    .FirstOrDefault()
+            })
+            .ToList();
+
+            return new PagedResultDto<BookSearchResultDto>
+            {
+                Items = books,
+                TotalPages = totalPages
+            };
         }
 
         public async Task<PagedResultDto<BookSearchResultDto>> GetBooksByDescriptionAsync(string description, int page, int pageSize, bool exactPhrase = false)
@@ -131,6 +150,7 @@ namespace RareBooksService.Data
 
             var query = _context.BooksInfo.AsQueryable();
 
+            // Применяем поиск по каждому слову
             foreach (var word in searchWords)
             {
                 query = query.Where(b => EF.Functions.Like(b.NormalizedDescription, $"%{word}%"));
@@ -141,24 +161,42 @@ namespace RareBooksService.Data
             var totalItems = await query.CountAsync();
             var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
 
-            var books = await query
+            // ------ Шаг 1: выбираем "сырой" набор данных ------
+            var rawData = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(b => new BookSearchResultDto
+                .Select(b => new
                 {
-                    Id = b.Id,
-                    Title = b.Title,
-                    Price = b.Price,
-                    SellerName = b.SellerName,
-                    Date = b.EndDate.ToShortDateString(),
-                    Type = b.Type,
-                    FirstThumbnailName = b.ThumbnailUrls
-                        .Select(url => ExtractImageName(url))
-                        .FirstOrDefault()
+                    b.Id,
+                    b.Title,
+                    b.Price,
+                    b.SellerName,
+                    b.EndDate,
+                    b.Type,
+                    b.ThumbnailUrls
                 })
                 .ToListAsync();
 
-            return new PagedResultDto<BookSearchResultDto> { Items = books, TotalPages = totalPages };
+            // ------ Шаг 2: формируем DTO ------
+            var books = rawData.Select(b => new BookSearchResultDto
+            {
+                Id = b.Id,
+                Title = b.Title,
+                Price = b.Price,
+                SellerName = b.SellerName,
+                Date = b.EndDate.ToShortDateString(),
+                Type = b.Type,
+                FirstThumbnailName = b.ThumbnailUrls
+                    .Select(url => ExtractImageName(url))
+                    .FirstOrDefault()
+            })
+            .ToList();
+
+            return new PagedResultDto<BookSearchResultDto>
+            {
+                Items = books,
+                TotalPages = totalPages
+            };
         }
 
         public async Task<PagedResultDto<BookSearchResultDto>> GetBooksByCategoryAsync(int categoryId, int page, int pageSize)
@@ -169,24 +207,42 @@ namespace RareBooksService.Data
             var totalItems = await query.CountAsync();
             var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
 
-            var books = await query
+            // ------ Шаг 1: выбираем "сырой" набор ------
+            var rawData = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(b => new BookSearchResultDto
+                .Select(b => new
                 {
-                    Id = b.Id,
-                    Title = b.Title,
-                    Price = b.Price,
-                    SellerName = b.SellerName,
-                    Date = b.EndDate.ToShortDateString(),
-                    Type = b.Type,
-                    FirstThumbnailName = b.ThumbnailUrls
-                        .Select(url => ExtractImageName(url))
-                        .FirstOrDefault()
+                    b.Id,
+                    b.Title,
+                    b.Price,
+                    b.SellerName,
+                    b.EndDate,
+                    b.Type,
+                    b.ThumbnailUrls
                 })
                 .ToListAsync();
 
-            return new PagedResultDto<BookSearchResultDto> { Items = books, TotalPages = totalPages };
+            // ------ Шаг 2: формируем DTO ------
+            var books = rawData.Select(b => new BookSearchResultDto
+            {
+                Id = b.Id,
+                Title = b.Title,
+                Price = b.Price,
+                SellerName = b.SellerName,
+                Date = b.EndDate.ToShortDateString(),
+                Type = b.Type,
+                FirstThumbnailName = b.ThumbnailUrls
+                    .Select(url => ExtractImageName(url))
+                    .FirstOrDefault()
+            })
+            .ToList();
+
+            return new PagedResultDto<BookSearchResultDto>
+            {
+                Items = books,
+                TotalPages = totalPages
+            };
         }
 
         public async Task<PagedResultDto<BookSearchResultDto>> GetBooksByPriceRangeAsync(double minPrice, double maxPrice, int page, int pageSize)
@@ -198,24 +254,42 @@ namespace RareBooksService.Data
             var totalItems = await query.CountAsync();
             var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
 
-            var books = await query
+            // ------ Шаг 1: выбираем "сырой" набор ------
+            var rawData = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(b => new BookSearchResultDto
+                .Select(b => new
                 {
-                    Id = b.Id,
-                    Title = b.Title,
-                    Price = b.Price,
-                    SellerName = b.SellerName,
-                    Date = b.EndDate.ToShortDateString(),
-                    Type = b.Type,
-                    FirstThumbnailName = b.ThumbnailUrls
-                        .Select(url => ExtractImageName(url))
-                        .FirstOrDefault()
+                    b.Id,
+                    b.Title,
+                    b.Price,
+                    b.SellerName,
+                    b.EndDate,
+                    b.Type,
+                    b.ThumbnailUrls
                 })
                 .ToListAsync();
 
-            return new PagedResultDto<BookSearchResultDto> { Items = books, TotalPages = totalPages };
+            // ------ Шаг 2: формируем DTO ------
+            var books = rawData.Select(b => new BookSearchResultDto
+            {
+                Id = b.Id,
+                Title = b.Title,
+                Price = b.Price,
+                SellerName = b.SellerName,
+                Date = b.EndDate.ToShortDateString(),
+                Type = b.Type,
+                FirstThumbnailName = b.ThumbnailUrls
+                    .Select(url => ExtractImageName(url))
+                    .FirstOrDefault()
+            })
+            .ToList();
+
+            return new PagedResultDto<BookSearchResultDto>
+            {
+                Items = books,
+                TotalPages = totalPages
+            };
         }
 
         public async Task<PagedResultDto<BookSearchResultDto>> GetBooksBySellerAsync(string sellerName, int page, int pageSize)
@@ -227,24 +301,42 @@ namespace RareBooksService.Data
             var totalItems = await query.CountAsync();
             var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
 
-            var books = await query
+            // ------ Шаг 1: выбираем "сырой" набор ------
+            var rawData = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(b => new BookSearchResultDto
+                .Select(b => new
                 {
-                    Id = b.Id,
-                    Title = b.Title,
-                    Price = b.Price,
-                    SellerName = b.SellerName,
-                    Date = b.EndDate.ToShortDateString(),
-                    Type = b.Type,
-                    FirstThumbnailName = b.ThumbnailUrls
-                        .Select(url => ExtractImageName(url))
-                        .FirstOrDefault()
+                    b.Id,
+                    b.Title,
+                    b.Price,
+                    b.SellerName,
+                    b.EndDate,
+                    b.Type,
+                    b.ThumbnailUrls
                 })
                 .ToListAsync();
 
-            return new PagedResultDto<BookSearchResultDto> { Items = books, TotalPages = totalPages };
+            // ------ Шаг 2: формируем DTO ------
+            var books = rawData.Select(b => new BookSearchResultDto
+            {
+                Id = b.Id,
+                Title = b.Title,
+                Price = b.Price,
+                SellerName = b.SellerName,
+                Date = b.EndDate.ToShortDateString(),
+                Type = b.Type,
+                FirstThumbnailName = b.ThumbnailUrls
+                    .Select(url => ExtractImageName(url))
+                    .FirstOrDefault()
+            })
+            .ToList();
+
+            return new PagedResultDto<BookSearchResultDto>
+            {
+                Items = books,
+                TotalPages = totalPages
+            };
         }
 
         public async Task<BookDetailDto> GetBookByIdAsync(int id)
