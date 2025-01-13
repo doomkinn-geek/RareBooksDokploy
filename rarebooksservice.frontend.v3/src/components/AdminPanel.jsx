@@ -467,8 +467,7 @@ const AdminPanel = () => {
                                     <th>Действия</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                <tbody>
+                            <tbody>                                
                                     {isMobile
                                         // --- Если мобильное устройство, рендерим карточки ---
                                         ? users.map(user => (
@@ -524,8 +523,7 @@ const AdminPanel = () => {
                                                 </td>
                                             </tr>
                                         ))
-                                    }
-                                </tbody>
+                                    }                            
                             </tbody>
                         </table>
                     </div>
