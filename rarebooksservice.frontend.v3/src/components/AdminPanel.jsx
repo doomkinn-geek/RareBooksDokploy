@@ -458,72 +458,54 @@ const AdminPanel = () => {
                 {currentTab === 'users' && (
                     <div className="admin-section">
                         <h3 className="admin-section-title">Управление пользователями</h3>
-                        <table className="admin-table">
+                        <table className="admin-table responsive-table">
                             <thead>
                                 <tr>
-                                    <th>E-mail</th>
+                                    <th>Email</th>
                                     <th>Роль</th>
                                     <th>Подписка</th>
                                     <th>Действия</th>
                                 </tr>
                             </thead>
-                            <tbody>                                
-                                    {isMobile
-                                        // --- Если мобильное устройство, рендерим карточки ---
-                                        ? users.map(user => (
-                                            <tr key={user.id} style={{ display: 'block', marginBottom: '10px' }}>
-                                                <td colSpan={4} style={{ border: 'none', padding: '0' }}>
-                                                    <div className="user-card-mobile">
-                                                        <div><strong>Email:</strong> {user.email}</div>
-                                                        <div><strong>Роль:</strong> {user.role}</div>
-                                                        <div><strong>Подписка:</strong> {user.hasSubscription ? 'Да' : 'Нет'}</div>
-                                                        <div className="user-actions-mobile">
-                                                            <button
-                                                                onClick={() => handleUpdateUserSubscription(user.id, !user.hasSubscription)}
-                                                            >
-                                                                {user.hasSubscription ? 'Отменить подписку' : 'Подключить подписку'}
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleUpdateUserRole(user.id, user.role === 'Admin' ? 'User' : 'Admin')}
-                                                            >
-                                                                {user.role === 'Admin' ? 'Разжаловать в User' : 'Предоставить Admin'}
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleViewDetails(user.id)}
-                                                            >
-                                                                Просмотр
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))
-                                        // --- Иначе (desktop) рендерим обычную таблицу ---
-                                        : users.map(user => (
-                                            <tr key={user.id}>
-                                                <td>{user.email}</td>
-                                                <td>{user.role}</td>
-                                                <td>{user.hasSubscription ? 'Да' : 'Нет'}</td>
-                                                <td>
-                                                    <button
-                                                        onClick={() => handleUpdateUserSubscription(user.id, !user.hasSubscription)}
-                                                    >
-                                                        {user.hasSubscription ? 'Отменить подписку' : 'Подключить подписку'}
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleUpdateUserRole(user.id, user.role === 'Admin' ? 'User' : 'Admin')}
-                                                    >
-                                                        {user.role === 'Admin' ? 'Разжаловать в User' : 'Предоставить Admin'}
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleViewDetails(user.id)}
-                                                    >
-                                                        Просмотр
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))
-                                    }                            
+                            <tbody>
+                                {users.map(user => (
+                                    <tr key={user.id}>                                        
+                                        <td data-label="Email">{user.email}</td>
+                                        <td data-label="Роль">{user.role}</td>
+                                        <td data-label="Подписка">
+                                            {user.hasSubscription ? 'Да' : 'Нет'}
+                                        </td>
+                                        <td data-label="Действия">
+                                            <button
+                                                onClick={() => handleUpdateUserSubscription(
+                                                    user.id,
+                                                    !user.hasSubscription
+                                                )}
+                                            >
+                                                {user.hasSubscription
+                                                    ? 'Отменить подписку'
+                                                    : 'Подключить подписку'
+                                                }
+                                            </button>
+                                            <button
+                                                onClick={() => handleUpdateUserRole(
+                                                    user.id,
+                                                    user.role === 'Admin' ? 'User' : 'Admin'
+                                                )}
+                                            >
+                                                {user.role === 'Admin'
+                                                    ? 'Разжаловать в User'
+                                                    : 'Предоставить Admin'
+                                                }
+                                            </button>
+                                            <button
+                                                onClick={() => handleViewDetails(user.id)}
+                                            >
+                                                Просмотр
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
                             </tbody>
                         </table>
                     </div>

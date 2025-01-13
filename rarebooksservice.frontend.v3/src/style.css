@@ -598,3 +598,38 @@ body {
             width: 100%; /* на всю ширину */
         }
 }
+
+@media (max-width: 768px) {
+    .admin-table thead {
+        display: none; /* Скрыть заголовки */
+    }
+
+    .admin-table,
+    .admin-table tbody,
+    .admin-table tr,
+    .admin-table td {
+        display: block; /* Каждый элемент блочный */
+        width: 100%;
+    }
+
+        .admin-table tr {
+            margin-bottom: 1rem; /* Отступ между «записями» */
+        }
+
+        .admin-table td {
+            position: relative;
+            padding-left: 50%; /* Оставляем место под подпись слева */
+            text-align: left;
+            border: none; /* Можно убрать границы */
+            white-space: normal; /* Чтобы переносился текст, если что */
+        }
+
+            .admin-table td:before {
+                content: attr(data-label);
+                position: absolute;
+                left: 0.5rem;
+                width: 45%;
+                font-weight: bold;
+                white-space: nowrap;
+            }
+}
