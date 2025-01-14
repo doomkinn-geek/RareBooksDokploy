@@ -922,17 +922,11 @@ const AdminPanel = () => {
                             Допустим, вы используете bookUpdateStatus.progressMessage 
                             для хранения длинного текста.
                         */}
-                        <div style={{ marginTop: '20px' }}>
+                        <div className="admin-log-container" style={{ marginTop: '20px' }}>
                             <h4>Подробная информация / логи:</h4>
-                            <div className="admin-log-container">
-                                {/* 
-                                   Предположим, у вас есть поле bookUpdateStatus.progressMessage. 
-                                   Или вы можете заменить на то поле, где хранится полный текст/лог.
-                                */}
-                                {bookUpdateStatus.lastProcessedLotTitle
+                            {bookUpdateStatus.lastProcessedLotTitle
                                     ? bookUpdateStatus.lastProcessedLotTitle
-                                    : 'Пока нет дополнительных сообщений.'}
-                            </div>
+                                    : 'Пока нет дополнительных сообщений.'}                        
                         </div>
                     </div>
                 )}
