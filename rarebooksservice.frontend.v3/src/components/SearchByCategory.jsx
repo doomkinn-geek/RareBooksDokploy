@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { searchBooksByCategory } from '../api';
-import BookList from './BookList.jsx';
+import BookList from './BookList';
 import { Typography, Box } from '@mui/material';
 import ErrorMessage from './ErrorMessage';
 
@@ -11,15 +11,18 @@ const SearchByCategory = () => {
     const location = useLocation();
     const navigate = useNavigate();
 
+    // Извлекаем ?page=... из URL, если он есть, иначе берём 1
     const query = new URLSearchParams(location.search);
     const initialPage = parseInt(query.get('page'), 10) || 1;
 
+    // Состояния для книг, текущей/общей страниц
     const [books, setBooks] = useState([]);
     const [currentPage, setCurrentPage] = useState(initialPage);
     const [totalPages, setTotalPages] = useState(1);
     const [errorMessage, setErrorMessage] = useState('');
     const [loading, setLoading] = useState(false);
 
+    // Загружаем книги по категории при изменении categoryId или currentPage
     useEffect(() => {
         const fetchBooks = async (page = 1) => {
             setLoading(true);
@@ -44,7 +47,7 @@ const SearchByCategory = () => {
         fetchBooks(currentPage);
     }, [categoryId, currentPage]);
 
-    // При изменении currentPage обновляем URL
+    // Синхронизируем ?page=... в URL при изменении currentPage
     useEffect(() => {
         const newQuery = new URLSearchParams();
         newQuery.set('page', currentPage);
@@ -62,18 +65,21 @@ const SearchByCategory = () => {
             </header>
 
             <Box>
-                <Typography variant="h4">
+                <Typography variant="h4" sx={{ mb: 2 }}>
                     Книги по категории: {categoryId}
                 </Typography>
 
+                {/* Сообщение об ошибке, если есть */}
                 <ErrorMessage message={errorMessage} />
 
+                {/* Состояние загрузки */}
                 {loading && (
-                    <Typography variant="h5">
+                    <Typography variant="h5" sx={{ mb: 2 }}>
                         Загрузка...
                     </Typography>
                 )}
 
+                {/* Если не загружается и есть книги — показываем список */}
                 {!loading && books.length > 0 && (
                     <BookList
                         books={books}
