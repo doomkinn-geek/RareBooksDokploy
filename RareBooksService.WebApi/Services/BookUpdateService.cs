@@ -52,9 +52,20 @@ namespace RareBooksService.WebApi.Services
         private static DateTime? _lastRunTimeUtc = null;
         private static DateTime? _nextRunTimeUtc = null;
 
-        // Для отмены текущего прогона (подробнее см. предыдущий пример)
+        // Новые поля для прогресса
+        private static string? _currentOperationName;
+        private static int _processedCount;
+        private static int _lastProcessedLotId;
+        private static string? _lastProcessedLotTitle;
+
         private CancellationTokenSource? _ctsForCurrentRun;
         private Task? _currentRunTask;
+
+        // Свойства для прогресса
+        public string? CurrentOperationName => _currentOperationName;
+        public int ProcessedCount => _processedCount;
+        public int LastProcessedLotId => _lastProcessedLotId;
+        public string? LastProcessedLotTitle => _lastProcessedLotTitle;
 
         public bool IsPaused
         {
@@ -73,7 +84,6 @@ namespace RareBooksService.WebApi.Services
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            // Пример «вечного» цикла, который планирует задание раз в 3 дня
             while (!stoppingToken.IsCancellationRequested)
             {
                 var nextRun = DateTime.UtcNow.Date.AddDays(3);
@@ -81,7 +91,6 @@ namespace RareBooksService.WebApi.Services
                     nextRun = nextRun.AddDays(3);
 
                 _nextRunTimeUtc = nextRun;
-
                 var delay = nextRun - DateTime.UtcNow;
                 if (delay < TimeSpan.Zero)
                     delay = TimeSpan.Zero;
@@ -141,25 +150,39 @@ namespace RareBooksService.WebApi.Services
             _lastRunTimeUtc = DateTime.UtcNow;
 
             using var scope = _serviceProvider.CreateScope();
-            // Пример получения необходимых сервисов
             var lotFetchingService = scope.ServiceProvider.GetRequiredService<ILotFetchingService>();
             var auctionService = scope.ServiceProvider.GetRequiredService<IAuctionService>();
 
+            // Подписываемся на событие прогресса (если нужно)
+            if (lotFetchingService is LotFetchingService realLotFetchingService)
+            {
+                realLotFetchingService.ProgressChanged += OnLotProgressChanged;
+            }
+
             try
             {
+                // 1) FetchAllNewData
+                _currentOperationName = "FetchAllNewData";
+                ResetProgress();
                 _logger.LogInformation("Starting fetchAllNewData...");
                 await lotFetchingService.FetchAllNewData(token);
 
+                // 2) UpdateCompletedAuctionsAsync
+                _currentOperationName = "UpdateCompletedAuctionsAsync";
+                ResetProgress();
                 _logger.LogInformation("Updating completed auctions...");
                 await auctionService.UpdateCompletedAuctionsAsync(token);
 
+                // 3) FetchSoldFixedPriceLotsAsync
+                _currentOperationName = "FetchSoldFixedPriceLotsAsync";
+                ResetProgress();
                 _logger.LogInformation("Fetching sold fixed price lots...");
                 await lotFetchingService.FetchSoldFixedPriceLotsAsync(token);
             }
             catch (OperationCanceledException)
             {
                 _logger.LogInformation("RunUpdateBooksAsync прерван из-за отмены (OperationCanceledException).");
-                throw; // пробрасываем выше
+                throw;
             }
             catch (Exception ex)
             {
@@ -167,14 +190,39 @@ namespace RareBooksService.WebApi.Services
             }
             finally
             {
+                // Отписываемся
+                if (lotFetchingService is LotFetchingService realLotFetchingService2)
+                {
+                    realLotFetchingService2.ProgressChanged -= OnLotProgressChanged;
+                }
+
                 _isRunningNow = false;
+                _currentOperationName = null;
             }
+        }
+
+        private void OnLotProgressChanged(int currentLotId, string? currentTitle)
+        {
+            _processedCount++;
+            _lastProcessedLotId = currentLotId;
+
+            if(currentTitle.Trim() != "")
+                _lastProcessedLotTitle = currentTitle;
+
+            // Пример: если хотите прям во время выполнения логировать:
+            _logger.LogInformation("Progress: processed lot #{LotId}, '{Title}'", currentLotId, currentTitle);
+        }
+
+        private void ResetProgress()
+        {
+            _processedCount = 0;
+            _lastProcessedLotId = 0;
+            _lastProcessedLotTitle = null;
         }
 
         public void ForcePause()
         {
             _isPaused = true;
-            // Отменяем текущий прогон, если он есть
             if (_ctsForCurrentRun != null)
             {
                 _logger.LogInformation("Cancel current run because of ForcePause()");
@@ -187,6 +235,22 @@ namespace RareBooksService.WebApi.Services
             _isPaused = false;
             // Если хотим прямо сейчас запустить — можно вручную запустить, 
             // иначе дождемся планового времени
+        }
+
+        public void ForceRunNow()
+        {
+            if (_currentRunTask != null && !_currentRunTask.IsCompleted)
+            {
+                _logger.LogWarning("Уже идёт текущая операция, дождитесь окончания или сделайте Pause().");
+                return;
+            }
+
+            _ctsForCurrentRun = new CancellationTokenSource();
+            var token = _ctsForCurrentRun.Token;
+
+            _logger.LogInformation("ForceRunNow: запускаем RunUpdateBooksAsync...");
+            _currentRunTask = RunUpdateBooksAsync(token);
+            // без await, пусть в фоне
         }
     }
 }

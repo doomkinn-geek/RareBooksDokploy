@@ -17,7 +17,7 @@ namespace RareBooksService.WebApi.Controllers
         private readonly UserManager<ApplicationUser> _userManager;
 
         public BookUpdateServiceController(
-            IBookUpdateService bookUpdateService,        // <-- Получаем через DI
+            IBookUpdateService bookUpdateService,
             UserManager<ApplicationUser> userManager
         )
         {
@@ -28,12 +28,20 @@ namespace RareBooksService.WebApi.Controllers
         [HttpGet("status")]
         public IActionResult GetStatus()
         {
+            // Чтобы показать доп. поля, приведём к BookUpdateService (или сделайте их в IBookUpdateService)
+            var bus = _bookUpdateService as BookUpdateService;
+
             return Ok(new
             {
                 isPaused = _bookUpdateService.IsPaused,
                 isRunningNow = _bookUpdateService.IsRunningNow,
                 lastRunTimeUtc = _bookUpdateService.LastRunTimeUtc,
-                nextRunTimeUtc = _bookUpdateService.NextRunTimeUtc
+                nextRunTimeUtc = _bookUpdateService.NextRunTimeUtc,
+
+                currentOperationName = bus?.CurrentOperationName,
+                processedCount = bus?.ProcessedCount,
+                lastProcessedLotId = bus?.LastProcessedLotId,
+                lastProcessedLotTitle = bus?.LastProcessedLotTitle
             });
         }
 
@@ -50,5 +58,19 @@ namespace RareBooksService.WebApi.Controllers
             _bookUpdateService.ForceResume();
             return Ok(new { message = "BookUpdateService resumed" });
         }
+
+        [HttpPost("runNow")]
+        public IActionResult RunNow()
+        {
+            var service = _bookUpdateService as BookUpdateService;
+            if (service == null)
+            {
+                return BadRequest("Сервис не найден или не является BookUpdateService.");
+            }
+
+            service.ForceRunNow();
+            return Ok(new { message = "BookUpdateService runNow called" });
+        }
     }
+
 }

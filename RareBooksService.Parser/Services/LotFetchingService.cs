@@ -29,7 +29,7 @@ namespace RareBooksService.Parser.Services
         private static readonly List<int> InterestedCategories = new List<int> { 13870, 13871, 13872, 13873 };
         private static readonly List<int> SovietCategories = new List<int> { 13874, 13875, 13876 };
 
-        public delegate void ProgressChangedHandler(int currentLotId);
+        public delegate void ProgressChangedHandler(int currentLotId, string? currentTitle);
         public event ProgressChangedHandler ProgressChanged;
 
         public LotFetchingService(
@@ -48,7 +48,7 @@ namespace RareBooksService.Parser.Services
 
         private void OnProgressChanged(int currentLotId)
         {
-            ProgressChanged?.Invoke(currentLotId);
+            ProgressChanged?.Invoke(currentLotId, "");
             //_logger.LogInformation("Progress updated: currentLotId = {LotId}", currentLotId);
             Console.Title = $"Processing lot: {currentLotId}";
         }
@@ -286,7 +286,9 @@ namespace RareBooksService.Parser.Services
             {
                 if ((lotData.result.startPrice == 1 || (lotData.result.status == 2 && lotData.result.soldQuantity > 0)) && isInterestedCategory)
                 {
-                    _logger.LogInformation("{LotId} - Found a book '{Title}' in interested category.", lotData.result.id, lotData.result.title);
+                    string infoMessage = $"{lotData.result.id} - Found a book '{lotData.result.title}' in interested category.";
+                    _logger.LogInformation(infoMessage);
+                    ProgressChanged?.Invoke(lotData.result.id, infoMessage);
 
                     await _lotDataHandler.SaveLotDataAsync(lotData.result, lotData.result.categoryId);
 

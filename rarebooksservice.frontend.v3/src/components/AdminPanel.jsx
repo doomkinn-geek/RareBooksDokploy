@@ -48,8 +48,15 @@ const AdminPanel = () => {
         isPaused: false,
         isRunningNow: false,
         lastRunTimeUtc: null,
-        nextRunTimeUtc: null
+        nextRunTimeUtc: null,
+
+        // Новые поля:
+        currentOperationName: null,
+        processedCount: 0,
+        lastProcessedLotId: 0,
+        lastProcessedLotTitle: ''
     });
+
 
     // Состояния для Импорта
     const [importTaskId, setImportTaskId] = useState(null);
@@ -385,6 +392,23 @@ const AdminPanel = () => {
         });
         await fetchBookUpdateStatus();
     };
+
+    // Пример:
+    const runBookUpdateNow = async () => {
+        const token = Cookies.get('token');
+        try {
+            // POST-запрос к /api/bookupdateservice/runNow
+            await axios.post(`${API_URL}/bookupdateservice/runNow`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            // После запуска — можем сразу попросить статус,
+            // чтобы увидеть, что сервис запустился
+            await fetchBookUpdateStatus();
+        } catch (err) {
+            console.error('Ошибка при запуске обновления:', err);
+        }
+    };
+
 
     useEffect(() => {
         if (currentTab === 'bookupdate') {
@@ -823,9 +847,14 @@ const AdminPanel = () => {
 
                         <div>
                             <p>Статус паузы: {bookUpdateStatus.isPaused ? 'ПАУЗА' : 'Активен'}</p>
-                            <p>Сейчас идёт обновление?: {bookUpdateStatus.isRunningNow ? 'Да, в процессе' : 'Нет'}</p>
+                            <p>Сейчас идёт обновление?: {bookUpdateStatus.isRunningNow ? 'Да' : 'Нет'}</p>
                             <p>Последний запуск (UTC): {bookUpdateStatus.lastRunTimeUtc || '-'}</p>
                             <p>Следующий запуск (UTC): {bookUpdateStatus.nextRunTimeUtc || '-'}</p>
+
+                            <p>Текущая операция: {bookUpdateStatus.currentOperationName || '-'}</p>
+                            <p>Обработано лотов за текущую операцию: {bookUpdateStatus.processedCount}</p>
+                            <p>Последний обработанный лот (ID): {bookUpdateStatus.lastProcessedLotId}</p>
+                            <p>Последний обработанный лот (Title): {bookUpdateStatus.lastProcessedLotTitle}</p>
                         </div>
 
                         <div style={{ marginTop: '10px' }}>
@@ -837,6 +866,16 @@ const AdminPanel = () => {
                             {bookUpdateStatus.isPaused && (
                                 <button onClick={resumeBookUpdate} className="admin-button">
                                     Возобновить
+                                </button>
+                            )}
+
+                            {!bookUpdateStatus.isRunningNow && (
+                                <button
+                                    onClick={runBookUpdateNow}
+                                    className="admin-button"
+                                    style={{ marginLeft: 8 }}
+                                >
+                                    Запустить обновление сейчас
                                 </button>
                             )}
                         </div>
