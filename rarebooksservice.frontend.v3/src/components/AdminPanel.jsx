@@ -924,15 +924,7 @@ const AdminPanel = () => {
                         */}
                         <div style={{ marginTop: '20px' }}>
                             <h4>Подробная информация / логи:</h4>
-                            <div
-                                style={{
-                                    whiteSpace: 'pre-wrap',    // Чтобы переносить строки и не обрезать
-                                    border: '1px solid #ccc',
-                                    padding: '10px',
-                                    maxHeight: '200px',        // Максимальная высота блока
-                                    overflowY: 'auto'          // Прокрутка, если текста много
-                                }}
-                            >
+                            <div className="admin-log-container">
                                 {/* 
                                    Предположим, у вас есть поле bookUpdateStatus.progressMessage. 
                                    Или вы можете заменить на то поле, где хранится полный текст/лог.

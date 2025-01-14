@@ -367,6 +367,18 @@ button, input {
     background: #fff;
     border-radius: 5px;
 }
+/* Лог в админке, чтобы содержимое не обрезалось */
+.admin-log-container {
+    white-space: pre-wrap; /* Сохраняем переносы строк */
+    word-wrap: break-word; /* Переносим слова, если слишком длинные */
+    overflow-y: auto; /* Включаем вертикальную прокрутку */
+    max-height: 250px; /* При желании ограничиваем высоту */
+    border: 1px solid #ccc;
+    margin-top: 10px;
+    padding: 10px;
+    background: #fafafa; /* Немного другой фон, если надо */
+}
+
 
 /* =============================
    6) ДРУГИЕ СТРАНИЦЫ (ПРИМЕРЫ)
@@ -649,3 +661,4 @@ button, input {
             font-size: 0.95rem;
         }
 }
+
