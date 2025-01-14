@@ -1,6 +1,4 @@
-﻿// BookUpdateServiceController.cs
-
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using RareBooksService.Common.Models;
@@ -10,7 +8,7 @@ namespace RareBooksService.WebApi.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
+    [Authorize] // Если нужно авторизоваться
     public class BookUpdateServiceController : ControllerBase
     {
         private readonly IBookUpdateService _bookUpdateService;
@@ -28,7 +26,7 @@ namespace RareBooksService.WebApi.Controllers
         [HttpGet("status")]
         public IActionResult GetStatus()
         {
-            // Чтобы показать доп. поля, приведём к BookUpdateService (или сделайте их в IBookUpdateService)
+            // Чтобы показать доп. поля, приводим к BookUpdateService только для чтения расширенных свойств
             var bus = _bookUpdateService as BookUpdateService;
 
             return Ok(new
@@ -72,5 +70,4 @@ namespace RareBooksService.WebApi.Controllers
             return Ok(new { message = "BookUpdateService runNow called" });
         }
     }
-
 }

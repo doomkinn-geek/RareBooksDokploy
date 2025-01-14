@@ -57,7 +57,6 @@ const AdminPanel = () => {
         lastProcessedLotTitle: ''
     });
 
-
     // Состояния для Импорта
     const [importTaskId, setImportTaskId] = useState(null);
     const [importFile, setImportFile] = useState(null);
@@ -69,7 +68,7 @@ const AdminPanel = () => {
 
     const history = useNavigate();
 
-    // ------------------- Загрузка пользователей -------------------
+    // =========================== Загрузка пользователей ===========================
     useEffect(() => {
         const fetchUsers = async () => {
             try {
@@ -82,7 +81,7 @@ const AdminPanel = () => {
         fetchUsers();
     }, []);
 
-    // ------------------- Загрузка настроек -------------------
+    // =========================== Загрузка настроек ===========================
     useEffect(() => {
         const fetchSettings = async () => {
             try {
@@ -113,7 +112,7 @@ const AdminPanel = () => {
         fetchSettings();
     }, []);
 
-    // ------------------- Методы работы с пользователями -------------------
+    // =========================== Методы работы с пользователями ===========================
     const handleUpdateUserSubscription = async (userId, hasSubscription) => {
         if (isExporting || isImporting) return;
         try {
@@ -133,9 +132,7 @@ const AdminPanel = () => {
         try {
             await updateUserRole(userId, role);
             setUsers((prev) =>
-                prev.map((user) =>
-                    user.id === userId ? { ...user, role } : user
-                )
+                prev.map((user) => (user.id === userId ? { ...user, role } : user))
             );
         } catch (err) {
             console.error('Error updating role:', err);
@@ -152,7 +149,7 @@ const AdminPanel = () => {
         }
     };
 
-    // ------------------- Экспорт -------------------
+    // =========================== Экспорт ===========================
     const startExport = async () => {
         if (isExporting || isImporting) return;
         try {
@@ -161,9 +158,11 @@ const AdminPanel = () => {
             setIsExporting(true);
 
             const token = Cookies.get('token');
-            const response = await axios.post(`${API_URL}/admin/export-data`, {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const response = await axios.post(
+                `${API_URL}/admin/export-data`,
+                {},
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
             setExportTaskId(response.data.taskId);
 
             const id = setInterval(async () => {
@@ -202,9 +201,11 @@ const AdminPanel = () => {
         if (!exportTaskId) return;
         const token = Cookies.get('token');
         try {
-            await axios.post(`${API_URL}/admin/cancel-export/${exportTaskId}`, {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            await axios.post(
+                `${API_URL}/admin/cancel-export/${exportTaskId}`,
+                {},
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
         } catch (err) {
             console.error(err);
             setError('Ошибка при отмене экспорта.');
@@ -215,9 +216,10 @@ const AdminPanel = () => {
         if (!exportTaskId) return;
         const token = Cookies.get('token');
         try {
-            const response = await fetch(`${API_URL}/admin/download-exported-file/${exportTaskId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const response = await fetch(
+                `${API_URL}/admin/download-exported-file/${exportTaskId}`,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
             if (!response.ok) throw new Error('Не удалось скачать файл');
 
             const blob = await response.blob();
@@ -235,7 +237,7 @@ const AdminPanel = () => {
         }
     };
 
-    // ------------------- Сохранение настроек -------------------
+    // =========================== Сохранение настроек ===========================
     const handleSaveSettings = async () => {
         try {
             const settingsDto = {
@@ -267,7 +269,7 @@ const AdminPanel = () => {
         }
     };
 
-    // ------------------- Импорт SQLite -------------------
+    // =========================== Импорт SQLite ===========================
     const initImportTask = async (fileSize) => {
         const res = await initImport(fileSize);
         setImportTaskId(res.importTaskId);
@@ -280,7 +282,7 @@ const AdminPanel = () => {
         while (offset < file.size) {
             const slice = file.slice(offset, offset + chunkSize);
             await uploadImportChunk(taskId, slice, () => {
-                // можно при желании отслеживать прогресс chunk'а
+                // при желании можно отслеживать прогресс chunk'а
             });
             offset += chunkSize;
             const overallPct = Math.round((offset * 100) / file.size);
@@ -368,56 +370,79 @@ const AdminPanel = () => {
         }
     };
 
-    // ------------------- Контроль сервиса обновления данных -----------------
+    // =========================== Контроль сервиса обновления данных ===========================
     const fetchBookUpdateStatus = async () => {
-        const token = Cookies.get('token');
-        const response = await axios.get(`${API_URL}/bookupdateservice/status`, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
-        setBookUpdateStatus(response.data);
+        try {
+            const token = Cookies.get('token');
+            const response = await axios.get(`${API_URL}/bookupdateservice/status`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setBookUpdateStatus(response.data);
+        } catch (err) {
+            console.error('Ошибка при получении статуса сервиса обновления книг:', err);
+        }
     };
 
     const pauseBookUpdate = async () => {
-        const token = Cookies.get('token');
-        await axios.post(`${API_URL}/bookupdateservice/pause`, {}, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
-        await fetchBookUpdateStatus();
+        try {
+            const token = Cookies.get('token');
+            await axios.post(`${API_URL}/bookupdateservice/pause`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            await fetchBookUpdateStatus();
+        } catch (err) {
+            console.error('Ошибка при постановке на паузу:', err);
+        }
     };
 
     const resumeBookUpdate = async () => {
-        const token = Cookies.get('token');
-        await axios.post(`${API_URL}/bookupdateservice/resume`, {}, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
-        await fetchBookUpdateStatus();
+        try {
+            const token = Cookies.get('token');
+            await axios.post(`${API_URL}/bookupdateservice/resume`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            await fetchBookUpdateStatus();
+        } catch (err) {
+            console.error('Ошибка при возобновлении:', err);
+        }
     };
 
-    // Пример:
     const runBookUpdateNow = async () => {
-        const token = Cookies.get('token');
         try {
-            // POST-запрос к /api/bookupdateservice/runNow
+            const token = Cookies.get('token');
             await axios.post(`${API_URL}/bookupdateservice/runNow`, {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            // После запуска — можем сразу попросить статус,
-            // чтобы увидеть, что сервис запустился
+            // После запуска — сразу обновляем статус:
             await fetchBookUpdateStatus();
         } catch (err) {
             console.error('Ошибка при запуске обновления:', err);
         }
     };
 
-
+    // =========================== Авто-обновление статуса сервиса обновления каждые 2 секунды ===========================
     useEffect(() => {
+        let pollingId;
+
         if (currentTab === 'bookupdate') {
+            // 1) Сразу считываем статус:
             fetchBookUpdateStatus();
+            // 2) Каждые 2 секунды обновляем:
+            pollingId = setInterval(() => {
+                fetchBookUpdateStatus();
+            }, 2000);
         }
+
+        // При переключении вкладки или размонтировании — отменяем интервал
+        return () => {
+            if (pollingId) {
+                clearInterval(pollingId);
+            }
+        };
         // eslint-disable-next-line
     }, [currentTab]);
 
-    // ------------------- Кнопки для вкладок (через <select>) -------------------
+    // =========================== Кнопки для вкладок (через <select>) ===========================
     const renderTabButtons = (
         <div className="admin-tabs">
             <select
@@ -434,7 +459,7 @@ const AdminPanel = () => {
         </div>
     );
 
-    // ------------------- Рендер основного контента -------------------
+    // =========================== Рендер основного контента ===========================
     return (
         <div className="admin-panel-container">
             <h2 className="admin-title">Панель администратора</h2>
@@ -444,7 +469,7 @@ const AdminPanel = () => {
 
             <div className="admin-tab-content">
 
-                {/* ------------------ Вкладка: Пользователи ------------------ */}
+                {/* ====================== Вкладка: Пользователи ====================== */}
                 {currentTab === 'users' && (
                     <div className="admin-section">
                         <h3 className="admin-section-title">Управление пользователями</h3>
@@ -460,7 +485,6 @@ const AdminPanel = () => {
                             <tbody>
                                 {users.map((user) => (
                                     <tr key={user.id}>
-                                        {/* data-label -> для мобильного отображения через :before */}
                                         <td data-label="Email">{user.email}</td>
                                         <td data-label="Роль">{user.role}</td>
                                         <td data-label="Подписка">
@@ -495,9 +519,7 @@ const AdminPanel = () => {
                                                         : 'Предоставить Admin'}
                                                 </button>
                                                 <button
-                                                    onClick={() =>
-                                                        handleViewDetails(user.id)
-                                                    }
+                                                    onClick={() => handleViewDetails(user.id)}
                                                 >
                                                     Просмотр
                                                 </button>
@@ -510,7 +532,7 @@ const AdminPanel = () => {
                     </div>
                 )}
 
-                {/* ------------------ Вкладка: Экспорт данных ------------------ */}
+                {/* ====================== Вкладка: Экспорт данных ====================== */}
                 {currentTab === 'export' && (
                     <div className="admin-section">
                         <h3 className="admin-section-title">Экспорт данных</h3>
@@ -524,10 +546,7 @@ const AdminPanel = () => {
                                 Начать экспорт в SQLite
                             </button>
                             {isExporting && exportTaskId && (
-                                <button
-                                    onClick={cancelExport}
-                                    className="admin-button"
-                                >
+                                <button onClick={cancelExport} className="admin-button">
                                     Отменить экспорт
                                 </button>
                             )}
@@ -559,7 +578,7 @@ const AdminPanel = () => {
                     </div>
                 )}
 
-                {/* ------------------ Вкладка: Настройки ------------------ */}
+                {/* ====================== Вкладка: Настройки ====================== */}
                 {currentTab === 'settings' && (
                     <div className="admin-section">
                         <h3>Редактирование настроек (appsettings.json)</h3>
@@ -581,7 +600,10 @@ const AdminPanel = () => {
                                         type="text"
                                         value={yandexKassa.shopId}
                                         onChange={(e) =>
-                                            setYandexKassa({ ...yandexKassa, shopId: e.target.value })
+                                            setYandexKassa({
+                                                ...yandexKassa,
+                                                shopId: e.target.value
+                                            })
                                         }
                                     />
                                 </div>
@@ -647,10 +669,7 @@ const AdminPanel = () => {
                                         type="text"
                                         value={yandexDisk.token}
                                         onChange={(e) =>
-                                            setYandexDisk({
-                                                ...yandexDisk,
-                                                token: e.target.value
-                                            })
+                                            setYandexDisk({ ...yandexDisk, token: e.target.value })
                                         }
                                     />
                                 </div>
@@ -777,7 +796,7 @@ const AdminPanel = () => {
                     </div>
                 )}
 
-                {/* ------------------ Вкладка: Импорт данных ------------------ */}
+                {/* ====================== Вкладка: Импорт данных ====================== */}
                 {currentTab === 'import' && (
                     <div className="admin-section">
                         <h3 className="admin-section-title">Импорт данных из SQLite</h3>
@@ -834,7 +853,7 @@ const AdminPanel = () => {
                     </div>
                 )}
 
-                {/* ------------------ Вкладка: Обновление книг (meshok.net) ------------------ */}
+                {/* ====================== Вкладка: Обновление книг (meshok.net) ====================== */}
                 {currentTab === 'bookupdate' && (
                     <div className="admin-section">
                         <h3 className="admin-section-title">Сервис обновления книг (meshok.net)</h3>
@@ -847,14 +866,31 @@ const AdminPanel = () => {
 
                         <div>
                             <p>Статус паузы: {bookUpdateStatus.isPaused ? 'ПАУЗА' : 'Активен'}</p>
-                            <p>Сейчас идёт обновление?: {bookUpdateStatus.isRunningNow ? 'Да' : 'Нет'}</p>
-                            <p>Последний запуск (UTC): {bookUpdateStatus.lastRunTimeUtc || '-'}</p>
-                            <p>Следующий запуск (UTC): {bookUpdateStatus.nextRunTimeUtc || '-'}</p>
+                            <p>
+                                Сейчас идёт обновление?:{' '}
+                                {bookUpdateStatus.isRunningNow ? 'Да' : 'Нет'}
+                            </p>
+                            <p>
+                                Последний запуск (UTC):{' '}
+                                {bookUpdateStatus.lastRunTimeUtc || '-'}
+                            </p>
+                            <p>
+                                Следующий запуск (UTC):{' '}
+                                {bookUpdateStatus.nextRunTimeUtc || '-'}
+                            </p>
 
-                            <p>Текущая операция: {bookUpdateStatus.currentOperationName || '-'}</p>
-                            <p>Обработано лотов за текущую операцию: {bookUpdateStatus.processedCount}</p>
-                            <p>Последний обработанный лот (ID): {bookUpdateStatus.lastProcessedLotId}</p>
-                            <p>Последний обработанный лот (Title): {bookUpdateStatus.lastProcessedLotTitle}</p>
+                            <p>
+                                Текущая операция:{' '}
+                                {bookUpdateStatus.currentOperationName || '-'}
+                            </p>
+                            <p>
+                                Обработано лотов за текущую операцию:{' '}
+                                {bookUpdateStatus.processedCount}
+                            </p>
+                            <p>
+                                Последний обработанный лот (ID):{' '}
+                                {bookUpdateStatus.lastProcessedLotId}
+                            </p>                            
                         </div>
 
                         <div style={{ marginTop: '10px' }}>
@@ -879,8 +915,36 @@ const AdminPanel = () => {
                                 </button>
                             )}
                         </div>
+
+                        {/* 
+                            Дополнительный блок для вывода объемного текста (лога или сообщений), 
+                            чтобы он не обрезался и был доступен для прокрутки.
+                            Допустим, вы используете bookUpdateStatus.progressMessage 
+                            для хранения длинного текста.
+                        */}
+                        <div style={{ marginTop: '20px' }}>
+                            <h4>Подробная информация / логи:</h4>
+                            <div
+                                style={{
+                                    whiteSpace: 'pre-wrap',    // Чтобы переносить строки и не обрезать
+                                    border: '1px solid #ccc',
+                                    padding: '10px',
+                                    maxHeight: '200px',        // Максимальная высота блока
+                                    overflowY: 'auto'          // Прокрутка, если текста много
+                                }}
+                            >
+                                {/* 
+                                   Предположим, у вас есть поле bookUpdateStatus.progressMessage. 
+                                   Или вы можете заменить на то поле, где хранится полный текст/лог.
+                                */}
+                                {bookUpdateStatus.lastProcessedLotTitle
+                                    ? bookUpdateStatus.lastProcessedLotTitle
+                                    : 'Пока нет дополнительных сообщений.'}
+                            </div>
+                        </div>
                     </div>
                 )}
+
             </div>
         </div>
     );

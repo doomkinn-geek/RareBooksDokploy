@@ -1,8 +1,7 @@
-﻿// BookUpdateService.cs
-
-using RareBooksService.Parser.Services;
+﻿using RareBooksService.Parser.Services;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,35 +10,17 @@ namespace RareBooksService.WebApi.Services
 {
     public interface IBookUpdateService
     {
-        /// <summary>
-        /// Указывает, стоит ли сейчас на паузе сервис (не выполняет основные операции).
-        /// </summary>
         bool IsPaused { get; set; }
-
-        /// <summary>
-        /// Показывает, выполняется ли сейчас какая-то операция (FetchAllNewData, и т.д.).
-        /// </summary>
         bool IsRunningNow { get; }
-
-        /// <summary>
-        /// Время последнего запуска (UTC).
-        /// </summary>
         DateTime? LastRunTimeUtc { get; }
-
-        /// <summary>
-        /// Время следующего запланированного запуска (UTC).
-        /// </summary>
         DateTime? NextRunTimeUtc { get; }
 
-        /// <summary>
-        /// Принудительно поставить сервис на паузу, отменяя любую текущую операцию.
-        /// </summary>
-        void ForcePause();
+        // Признак, что последняя запланированная задача была пропущена из-за паузы.
+        bool MissedRunDueToPause { get; }
 
-        /// <summary>
-        /// Снять паузу, чтобы сервис мог выполнять следующие операции.
-        /// </summary>
+        void ForcePause();
         void ForceResume();
+        void ForceRunNow();
     }
 
     public class BookUpdateService : BackgroundService, IBookUpdateService
@@ -47,34 +28,31 @@ namespace RareBooksService.WebApi.Services
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<BookUpdateService> _logger;
 
-        private static bool _isPaused = false;
-        private static bool _isRunningNow = false;
-        private static DateTime? _lastRunTimeUtc = null;
-        private static DateTime? _nextRunTimeUtc = null;
+        private bool _isPaused;
+        private bool _isRunningNow;
+        private DateTime? _lastRunTimeUtc;
+        private DateTime? _nextRunTimeUtc;
 
-        // Новые поля для прогресса
-        private static string? _currentOperationName;
-        private static int _processedCount;
-        private static int _lastProcessedLotId;
-        private static string? _lastProcessedLotTitle;
+        // Флаг: был ли пропущен запуск из-за паузы
+        private bool _missedRunDueToPause = false;
 
-        private CancellationTokenSource? _ctsForCurrentRun;
-        private Task? _currentRunTask;
+        // Флаг: «мягкая отмена» текущего процесса, чтобы дождаться завершения текущего лота
+        private bool _cancellationRequested = false;
 
-        // Свойства для прогресса
+        // Прогресс-данные
+        private string? _currentOperationName;
+        private int _processedCount;
+        private int _lastProcessedLotId;
+        private string? _lastProcessedLotTitle;
+
+        // Свойства для чтения этих данных извне:
         public string? CurrentOperationName => _currentOperationName;
         public int ProcessedCount => _processedCount;
         public int LastProcessedLotId => _lastProcessedLotId;
         public string? LastProcessedLotTitle => _lastProcessedLotTitle;
 
-        public bool IsPaused
-        {
-            get => _isPaused;
-            set => _isPaused = value;
-        }
-        public bool IsRunningNow => _isRunningNow;
-        public DateTime? LastRunTimeUtc => _lastRunTimeUtc;
-        public DateTime? NextRunTimeUtc => _nextRunTimeUtc;
+        // Текущая задача (на случай, если нужно дождаться её завершения)
+        private Task? _currentRunTask;
 
         public BookUpdateService(IServiceProvider serviceProvider, ILogger<BookUpdateService> logger)
         {
@@ -82,51 +60,59 @@ namespace RareBooksService.WebApi.Services
             _logger = logger;
         }
 
+        public bool IsPaused
+        {
+            get => _isPaused;
+            set => _isPaused = value;
+        }
+
+        public bool IsRunningNow => _isRunningNow;
+        public DateTime? LastRunTimeUtc => _lastRunTimeUtc;
+        public DateTime? NextRunTimeUtc => _nextRunTimeUtc;
+
+        public bool MissedRunDueToPause => _missedRunDueToPause;
+
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                // 1) Сначала запускаем задачу обновления
-                _ctsForCurrentRun = new CancellationTokenSource();
-                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
-                    stoppingToken,
-                    _ctsForCurrentRun.Token
-                );
-                var actualToken = linkedCts.Token;
+                // Если подошло время запуститься
+                // (по примеру — каждые 3 дня, либо можно вычислять дату и т. п.)
+                // Для наглядности считаем, что сразу запускаем задачу, 
+                // а потом ждем 3 дня.
 
-                
-                _currentRunTask = RunUpdateBooksAsync(actualToken);
-                
+                _cancellationRequested = false;  // сброс флага на каждую попытку
 
-                try
+                if (_isPaused)
                 {
-                    await _currentRunTask;
+                    // Если сервис на паузе — пропускаем запуск
+                    _logger.LogInformation("Сервис на паузе, пропускаем плановый запуск");
+                    _missedRunDueToPause = true;
                 }
-                catch (OperationCanceledException)
+                else
                 {
-                    _logger.LogInformation("RunUpdateBooksAsync был прерван (OperationCanceledException).");
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Неожиданная ошибка в RunUpdateBooksAsync");
-                }
-                finally
-                {
-                    _currentRunTask = null;
-                    _ctsForCurrentRun.Dispose();
-                    _ctsForCurrentRun = null;
+                    // Запускаем «работу»
+                    _currentRunTask = RunUpdateBooksAsync(stoppingToken);
+                    try
+                    {
+                        await _currentRunTask;
+                    }
+                    catch (Exception ex)
+                    {
+                        // Ловим любые ошибки
+                        _logger.LogError(ex, "Ошибка в RunUpdateBooksAsync");
+                    }
+                    finally
+                    {
+                        _currentRunTask = null;
+                    }
                 }
 
-                // Если за время выполнения остановили службу – выходим из цикла
                 if (stoppingToken.IsCancellationRequested)
                     return;
 
-                // 2) Теперь делаем «паузу» на 3 дня
-                // (точнее, ждём до следующего календарного дня + 3 суток)
-                var nextRun = DateTime.UtcNow.Date.AddDays(3);
-                if (nextRun < DateTime.UtcNow)
-                    nextRun = nextRun.AddDays(3);
-
+                // Запланируем следующий запуск через 3 дня
+                var nextRun = DateTime.UtcNow.AddDays(3);
                 _nextRunTimeUtc = nextRun;
                 var delay = nextRun - DateTime.UtcNow;
                 if (delay < TimeSpan.Zero)
@@ -138,73 +124,70 @@ namespace RareBooksService.WebApi.Services
                 }
                 catch (TaskCanceledException)
                 {
-                    // Если отменили в процессе ожидания – завершаем службу
                     return;
                 }
             }
         }
 
-
-        private async Task RunUpdateBooksAsync(CancellationToken token)
+        // Основной метод, в котором мы вызываем lotFetchingService
+        private async Task RunUpdateBooksAsync(CancellationToken externalStoppingToken)
         {
-            if (_isPaused)
-            {
-                _logger.LogInformation("BookUpdateService: пауза, пропускаем обновление.");
-                return;
-            }
-
             _isRunningNow = true;
             _lastRunTimeUtc = DateTime.UtcNow;
+            _missedRunDueToPause = false; // Так как мы сейчас успешно запускаемся
 
             using var scope = _serviceProvider.CreateScope();
             var lotFetchingService = scope.ServiceProvider.GetRequiredService<ILotFetchingService>();
             var auctionService = scope.ServiceProvider.GetRequiredService<IAuctionService>();
 
-            // Подписываемся на событие прогресса (если нужно)
+            // Подписываемся на ProgressChanged, чтобы обновлять поля
             if (lotFetchingService is LotFetchingService realLotFetchingService)
             {
                 realLotFetchingService.ProgressChanged += OnLotProgressChanged;
+                // Передадим ему «делегат/флаг» для graceful-cancel на уровне лотов
+                realLotFetchingService.SetCancellationCheckFunc(() => _cancellationRequested || externalStoppingToken.IsCancellationRequested);
             }
 
             try
             {
                 // 1) FetchAllNewData
-                _currentOperationName = "FetchAllNewData";
-                ResetProgress();
-                _logger.LogInformation("Starting fetchAllNewData...");
-                await lotFetchingService.FetchAllNewData(token);
+                if (!_cancellationRequested && !externalStoppingToken.IsCancellationRequested)
+                {
+                    _currentOperationName = "FetchAllNewData";
+                    ResetProgress();
+                    _logger.LogInformation("Starting fetchAllNewData...");
+                    await lotFetchingService.FetchAllNewData(externalStoppingToken);
+                }
 
                 // 2) UpdateCompletedAuctionsAsync
-                _currentOperationName = "UpdateCompletedAuctionsAsync";
-                ResetProgress();
-                _logger.LogInformation("Updating completed auctions...");
-                await auctionService.UpdateCompletedAuctionsAsync(token);
+                if (!_cancellationRequested && !externalStoppingToken.IsCancellationRequested)
+                {
+                    _currentOperationName = "UpdateCompletedAuctionsAsync";
+                    ResetProgress();
+                    _logger.LogInformation("Updating completed auctions...");
+                    await auctionService.UpdateCompletedAuctionsAsync(externalStoppingToken);
+                }
 
                 // 3) FetchSoldFixedPriceLotsAsync
-                _currentOperationName = "FetchSoldFixedPriceLotsAsync";
-                ResetProgress();
-                _logger.LogInformation("Fetching sold fixed price lots...");
-                await lotFetchingService.FetchSoldFixedPriceLotsAsync(token);
-            }
-            catch (OperationCanceledException)
-            {
-                _logger.LogInformation("RunUpdateBooksAsync прерван из-за отмены (OperationCanceledException).");
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Ошибка получения/обновления данных с meshok.net");
+                if (!_cancellationRequested && !externalStoppingToken.IsCancellationRequested)
+                {
+                    _currentOperationName = "FetchSoldFixedPriceLotsAsync";
+                    ResetProgress();
+                    _logger.LogInformation("Fetching sold fixed price lots...");
+                    await lotFetchingService.FetchSoldFixedPriceLotsAsync(externalStoppingToken);
+                }
             }
             finally
             {
-                // Отписываемся
                 if (lotFetchingService is LotFetchingService realLotFetchingService2)
                 {
                     realLotFetchingService2.ProgressChanged -= OnLotProgressChanged;
+                    realLotFetchingService2.SetCancellationCheckFunc(null);
                 }
 
                 _isRunningNow = false;
                 _currentOperationName = null;
+                _logger.LogInformation("RunUpdateBooksAsync завершён. cancellationRequested={0}", _cancellationRequested);
             }
         }
 
@@ -212,12 +195,10 @@ namespace RareBooksService.WebApi.Services
         {
             _processedCount++;
             _lastProcessedLotId = currentLotId;
-
-            if(currentTitle.Trim() != "")
+            if (!string.IsNullOrWhiteSpace(currentTitle))
                 _lastProcessedLotTitle = currentTitle;
 
-            // Пример: если хотите прям во время выполнения логировать:
-            _logger.LogInformation("Progress: processed lot #{LotId}, '{Title}'", currentLotId, currentTitle);
+            _logger.LogInformation("Обработан лот #{LotId}, '{Title}'", currentLotId, currentTitle);
         }
 
         private void ResetProgress()
@@ -227,37 +208,67 @@ namespace RareBooksService.WebApi.Services
             _lastProcessedLotTitle = null;
         }
 
+        /// <summary>
+        /// Запросить «мягкую» отмену: после текущего лота остановиться.
+        /// + перевести сервис в паузу, чтобы пропускать будущие запуска.
+        /// </summary>
         public void ForcePause()
         {
-            _isPaused = true;
-            if (_ctsForCurrentRun != null)
+            if (_isPaused)
             {
-                _logger.LogInformation("Cancel current run because of ForcePause()");
-                _ctsForCurrentRun.Cancel();
-            }
-        }
-
-        public void ForceResume()
-        {
-            _isPaused = false;
-            // Если хотим прямо сейчас запустить — можно вручную запустить, 
-            // иначе дождемся планового времени
-        }
-
-        public void ForceRunNow()
-        {
-            if (_currentRunTask != null && !_currentRunTask.IsCompleted)
-            {
-                _logger.LogWarning("Уже идёт текущая операция, дождитесь окончания или сделайте Pause().");
+                _logger.LogInformation("Сервис уже на паузе");
                 return;
             }
 
-            _ctsForCurrentRun = new CancellationTokenSource();
-            var token = _ctsForCurrentRun.Token;
+            _logger.LogInformation("Паузим сервис (с остановкой текущего процесса после лота).");
+            _isPaused = true;
+            _cancellationRequested = true;
+            // Теперь в процессе (RunUpdateBooksAsync) после каждого лота мы будем проверять _cancellationRequested
+            // и выйдем аккуратно.
+        }
 
-            _logger.LogInformation("ForceRunNow: запускаем RunUpdateBooksAsync...");
+        /// <summary>
+        /// Снять паузу. Если во время паузы пропустили запуск, _missedRunDueToPause = true,
+        /// но мы НЕ запускаем сразу автоматически => ждём планового (или жмём RunNow).
+        /// </summary>
+        public void ForceResume()
+        {
+            if (!_isPaused)
+            {
+                _logger.LogInformation("Сервис и так не на паузе.");
+                return;
+            }
+
+            _logger.LogInformation("Resume: снимаем паузу. (Но не запускаем автоматически — ждём планового запуска или ForceRunNow.)");
+            _isPaused = false;
+            _cancellationRequested = false; // Если вдруг был запрос на отмену, снимаем.
+        }
+
+        /// <summary>
+        /// Внеплановый запуск (если сервис не запущен и не на паузе).
+        /// </summary>
+        public void ForceRunNow()
+        {
+            // Если хотим запретить запуск, пока сервис на паузе:
+            if (_isPaused)
+            {
+                _logger.LogWarning("Сервис на паузе — сначала сделайте Resume().");
+                return;
+            }
+
+            // Проверяем, не идёт ли уже операция
+            if (_currentRunTask != null && !_currentRunTask.IsCompleted)
+            {
+                _logger.LogWarning("Уже идёт текущая операция, дождитесь окончания или нажмите Pause().");
+                return;
+            }
+
+            _cancellationRequested = false;
+            _logger.LogInformation("ForceRunNow: запускаем RunUpdateBooksAsync внепланово.");
+
+            // Запускаем задачу в фоне (не дожидаемся её тут)
+            var token = new CancellationToken(); // местный, т.к. у нас нет прямого Cancel
             _currentRunTask = RunUpdateBooksAsync(token);
-            // без await, пусть в фоне
         }
     }
 }

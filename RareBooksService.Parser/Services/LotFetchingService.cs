@@ -32,6 +32,8 @@ namespace RareBooksService.Parser.Services
         public delegate void ProgressChangedHandler(int currentLotId, string? currentTitle);
         public event ProgressChangedHandler ProgressChanged;
 
+        private Func<bool>? _checkCancellationFunc;
+
         public LotFetchingService(
             ILotDataWebService lotDataService,
             ILotDataHandler lotDataHandler,
@@ -44,6 +46,21 @@ namespace RareBooksService.Parser.Services
             _mapper = mapper;
             _logger = logger;
             _context = context;
+
+            // Подписываемся на событие LotDataHandler
+            _lotDataHandler.ProgressChanged += OnLotDataHandlerProgressChanged;
+        }
+
+        public void SetCancellationCheckFunc(Func<bool>? fn)
+        {
+            _checkCancellationFunc = fn;
+        }
+
+        private void OnLotDataHandlerProgressChanged(int lotId, string message)
+        {
+            // Здесь мы можем вызвать свое событие ProgressChanged (что уже есть в LotFetchingService),
+            // чтобы BookUpdateService мог слушать общий прогресс.
+            ProgressChanged?.Invoke(lotId, message);
         }
 
         private void OnProgressChanged(int currentLotId)
@@ -76,7 +93,12 @@ namespace RareBooksService.Parser.Services
 
             while (true)
             {
-                token.ThrowIfCancellationRequested();  // проверка отмены
+                // сначала проверка внешняя (через token) или внутренняя:
+                if (token.IsCancellationRequested || (_checkCancellationFunc?.Invoke() == true))
+                {
+                    Console.WriteLine("Операция прервана (после завершения предыдущего лота).");
+                    break; // выходим из цикла, тем самым останавливая процесс
+                }
                 try
                 {
                     await ProcessLotAsync(currentId++, nonStandardPricesFilePath, nonStandardPricesSovietFilePath);
@@ -96,33 +118,45 @@ namespace RareBooksService.Parser.Services
             }
 
             _logger.LogInformation("Завершена загрузка проданных лотов с фиксированной ценой.");
-        }               
+        }
 
         public async Task FetchAllNewData(CancellationToken token)
         {
             _logger.LogInformation("Starting FetchAllNewData.");
 
-            foreach (var categoryId in InterestedCategories.Concat(SovietCategories))
+            // Собираем все категории в один список:
+            var allCategories = InterestedCategories.Concat(SovietCategories).ToList();
+
+            // Можно вывести общее число категорий (при желании).
+            int totalCategories = allCategories.Count;
+            int categoryIndex = 0;
+
+            // Для каждой категории получаем список лотов и обрабатываем
+            foreach (var categoryId in allCategories)
             {
-                token.ThrowIfCancellationRequested();  // проверка отмены
-                try
+                // Проверка отмены
+                if (token.IsCancellationRequested || (_checkCancellationFunc?.Invoke() == true))
                 {
-                    _logger.LogInformation("Fetching lots list for categoryId = {CategoryId}", categoryId);
-
-                    var (categoryName, lotIds) = await _lotDataService.GetLotsListAsync(categoryId);
-
-                    _logger.LogInformation("Fetched {LotCount} lots for category '{CategoryName}' (ID: {CategoryId})", lotIds.Count, categoryName, categoryId);
-
-                    await FetchAndSaveLotsDataAsync(lotIds, categoryName);
+                    Console.WriteLine("Операция прервана (FetchAllNewData).");
+                    break;
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error fetching new data for categoryId = {CategoryId}", categoryId);
-                }
+
+                categoryIndex++;
+                _logger.LogInformation("Fetching lots list for categoryId = {CategoryId} (категория {Index} из {Total})",
+                    categoryId, categoryIndex, totalCategories);
+
+                var (categoryName, lotIds) = await _lotDataService.GetLotsListAsync(categoryId);
+
+                _logger.LogInformation("Fetched {LotCount} lots for category '{CategoryName}' (ID: {CategoryId})",
+                    lotIds.Count, categoryName, categoryId);
+
+                // Далее обрабатываем лоты (с передачей общего числа лотов и т.д.)
+                await FetchAndSaveLotsDataAsync(lotIds, token, categoryName);
             }
 
             _logger.LogInformation("Completed FetchAllNewData.");
         }
+
 
         public async Task FetchFreeListData(List<int> ids)
         {
@@ -228,27 +262,50 @@ namespace RareBooksService.Parser.Services
             _logger.LogInformation("Completed FetchAllOldDataWithLetterGroup for groupLetter = {GroupLetter}", groupLetter);
         }
 
-        private async Task FetchAndSaveLotsDataAsync(List<int> lotIds, string categoryName = "unknown")
+        private async Task FetchAndSaveLotsDataAsync(List<int> lotIds, CancellationToken token, string categoryName = "unknown")
         {
-            _logger.LogInformation("Fetching and saving data for {LotCount} lots in category '{CategoryName}'", lotIds.Count, categoryName);
+            _logger.LogInformation("Fetching and saving data for {LotCount} lots in category '{CategoryName}'",
+                lotIds.Count, categoryName);
+
+            int totalLots = lotIds.Count;
+            int processedCount = 0;
 
             foreach (var lotId in lotIds)
             {
+                // Проверка отмены
+                if (token.IsCancellationRequested || (_checkCancellationFunc?.Invoke() == true))
+                {
+                    Console.WriteLine("Операция прервана (FetchAndSaveLotsDataAsync).");
+                    break;
+                }
+
+                processedCount++;
+
+                _logger.LogDebug("Fetching data for lot ID {LotId}", lotId);
+
                 try
                 {
-                    _logger.LogDebug("Fetching data for lot ID {LotId}", lotId);
-
                     var queryResult = await _lotDataService.GetLotDataAsync(lotId);
                     if (queryResult != null)
                     {
                         _logger.LogDebug("Saving data for lot ID {LotId}", lotId);
 
-                        await _lotDataHandler.SaveLotDataAsync(queryResult.result, queryResult.result.categoryId, categoryName);
+                        await _lotDataHandler.SaveLotDataAsync(
+                            queryResult.result,
+                            queryResult.result.categoryId,
+                            categoryName
+                        );
                     }
                     else
                     {
                         _logger.LogWarning("Lot data is null for lot ID {LotId}", lotId);
                     }
+
+                    // Вызов события ProgressChanged: передаём ID и текст для верхнего уровня
+                    ProgressChanged?.Invoke(
+                        lotId,
+                        $"Category '{categoryName}': processed {processedCount} of {totalLots} (lot {lotId})."
+                    );
                 }
                 catch (Exception ex)
                 {
@@ -258,7 +315,8 @@ namespace RareBooksService.Parser.Services
 
             _logger.LogInformation("Completed fetching and saving data for category '{CategoryName}'", categoryName);
         }
-        
+
+
 
         private async Task ProcessLotAsync(int lotId, string nonStandardPricesFilePath = "", string nonStandardPricesSovietFilePath = "")
         {

@@ -22,6 +22,8 @@ namespace RareBooksService.Parser.Services
     public interface ILotDataHandler
     {
         Task SaveLotDataAsync(MeshokBook lotData, int categoryId, string categoryName = "unknown", bool downloadImages = true, bool isLessValuableLot = false);
+        // Новое событие: (lotId, message)
+        event Action<int, string> ProgressChanged;
     }
 
     public class LotDataHandler : ILotDataHandler, IDisposable
@@ -35,6 +37,14 @@ namespace RareBooksService.Parser.Services
         private readonly CookieContainer _cookieContainer;
         private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(5); // Ограничиваем до 5 одновременных запросов
         private bool _cookiesInitialized = false;
+
+        // Реализация события:
+        public event Action<int, string> ProgressChanged;
+
+        private void OnProgressChanged(int lotId, string message)
+        {
+            ProgressChanged?.Invoke(lotId, message);
+        }
 
         public LotDataHandler(
             RegularBaseBooksContext context,
@@ -59,6 +69,7 @@ namespace RareBooksService.Parser.Services
             //например, вызвать InitializeCookiesAsync единожды в SaveLotDataAsync(или любой другой метод), но асинхронно.            
             //InitializeCookiesAsync("https://meshok.net").Wait();
         }        
+
 
         public async Task EnsureCookiesInitializedAsync()
         {
@@ -102,11 +113,16 @@ namespace RareBooksService.Parser.Services
             try
             {
                 await EnsureCookiesInitializedAsync();
+
+                // Сигнализируем, что начали обработку (если нужно):
+                OnProgressChanged(lotData.id, $"Начало обработки лота {lotData.id}.");
+
                 _logger.LogInformation("Обработка лота с ID {LotId}", lotData.id);
 
                 if (!await _context.BooksInfo.AnyAsync(b => b.Id == lotData.id))
                 {
                     _logger.LogInformation("Лот {LotId} отсутствует в базе данных. Сохранение нового лота.", lotData.id);
+                    OnProgressChanged(lotData.id, $"Лот {lotData.id} отсутствует в БД. Сохраняем...");
 
                     var category = await GetOrCreateCategoryAsync(categoryId, categoryName);
                     _logger.LogInformation("Используется категория с ID {CategoryId} и названием '{CategoryName}'", categoryId, categoryName);
@@ -121,10 +137,11 @@ namespace RareBooksService.Parser.Services
                     bookInfo.Description = await _lotDataService.GetBookDescriptionAsync(lotData.id);
                     bookInfo.NormalizedDescription = bookInfo.Description.ToLower();
                     _logger.LogDebug("Получено описание для лота {LotId}", lotData.id);
+                    OnProgressChanged(lotData.id, $"Получено описание для лота {lotData.id}.");
 
                     // Извлечение года публикации
                     bookInfo.YearPublished = PublishingYearExtractor.ExtractYearFromDescription(bookInfo.Description)
-                                                ?? PublishingYearExtractor.ExtractYearFromDescription(bookInfo.Title);
+                                            ?? PublishingYearExtractor.ExtractYearFromDescription(bookInfo.Title);
                     _logger.LogDebug("Извлечен год публикации для лота {LotId}: {YearPublished}", lotData.id, bookInfo.YearPublished);
 
                     bookInfo.IsMonitored = lotData.endDate >= DateTime.UtcNow;
@@ -136,10 +153,12 @@ namespace RareBooksService.Parser.Services
                     _context.BooksInfo.Add(bookInfo);
                     await _context.SaveChangesAsync();
                     _logger.LogInformation("Лот {LotId} сохранен в базе данных.", lotData.id);
+                    OnProgressChanged(lotData.id, $"Лот {lotData.id} сохранён в БД.");
 
                     if (downloadImages)
                     {
                         _logger.LogInformation("Скачивание изображений для лота {LotId}", lotData.id);
+                        OnProgressChanged(lotData.id, $"Скачивание изображений для лота {lotData.id}...");
                         await DownloadImagesForBookAsync(bookInfo, bookInfo.ImageUrls, bookInfo.ThumbnailUrls, isLessValuableLot);
 
                         // Обновляем запись в базе данных с путем или ключом архива, если изображения были сжаты
@@ -153,14 +172,18 @@ namespace RareBooksService.Parser.Services
                 else
                 {
                     _logger.LogInformation("Лот {LotId} уже существует в базе данных.", lotData.id);
+                    OnProgressChanged(lotData.id, $"Лот {lotData.id} уже существует в БД (пропускаем).");
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Произошла ошибка при сохранении данных лота с ID {LotId}", lotData.id);
+                // Можно тоже пробросить сообщение:
+                OnProgressChanged(lotData.id, $"Ошибка при сохранении лота {lotData.id}: {ex.Message}");
                 throw;
             }
         }
+
 
 
         private async Task<RegularBaseCategory> GetOrCreateCategoryAsync(int categoryId, string categoryName)
@@ -190,17 +213,20 @@ namespace RareBooksService.Parser.Services
         {
             int bookId = bookInfo.Id;
             _logger.LogInformation("Начало скачивания изображений для книги с ID {BookId}", bookId);
+            OnProgressChanged(bookId, $"Начало скачивания изображений (ID {bookId})...");
 
             string imageArchivePathOrKey = null;
 
             if (_imageStorageOptions.UseLocalFiles)
             {
                 _logger.LogInformation("Сохранение изображений локально в папку '{LocalPath}'", _imageStorageOptions.LocalPathOfImages);
+                OnProgressChanged(bookId, $"Сохранение изображений локально для лота {bookId}...");
                 imageArchivePathOrKey = await SaveImagesLocallyAsync(bookId, imageUrls, thumbnailUrls, isLessValuableLot);
             }
             else
             {
                 _logger.LogInformation("Загрузка изображений в облачное хранилище Yandex Object Storage");
+                OnProgressChanged(bookId, $"Загрузка в Yandex Object Storage (ID {bookId})...");
                 if (isLessValuableLot)
                 {
                     imageArchivePathOrKey = await UploadCompressedImagesAsync(bookId, imageUrls, thumbnailUrls);
@@ -218,6 +244,7 @@ namespace RareBooksService.Parser.Services
             }
 
             _logger.LogInformation("Завершено скачивание изображений для книги с ID {BookId}", bookId);
+            OnProgressChanged(bookId, $"Изображения для лота {bookId} скачаны/загружены.");
         }
 
 

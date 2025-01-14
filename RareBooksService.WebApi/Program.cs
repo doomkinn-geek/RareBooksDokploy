@@ -170,6 +170,7 @@ namespace RareBooksService.WebApi
                 builder.Services.AddSingleton<IBookUpdateService, BookUpdateService>();
                 builder.Services.AddHostedService(sp => (BookUpdateService)sp.GetRequiredService<IBookUpdateService>());
 
+
                 // 13) MemoryCache, AutoMapper, ...
                 builder.Services.AddMemoryCache();
                 builder.Services.AddAutoMapper(typeof(AutoMapperProfile));
