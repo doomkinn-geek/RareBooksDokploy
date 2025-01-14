@@ -430,7 +430,7 @@ const AdminPanel = () => {
             // 2) Каждые 2 секунды обновляем:
             pollingId = setInterval(() => {
                 fetchBookUpdateStatus();
-            }, 2000);
+            }, 200);
         }
 
         // При переключении вкладки или размонтировании — отменяем интервал
@@ -924,9 +924,15 @@ const AdminPanel = () => {
                         */}
                         <div className="admin-log-container" style={{ marginTop: '20px' }}>
                             <h4>Подробная информация / логи:</h4>
-                            {bookUpdateStatus.lastProcessedLotTitle
+                            <div>
+                                {/* 
+                                   Предположим, у вас есть поле bookUpdateStatus.progressMessage. 
+                                   Или вы можете заменить на то поле, где хранится полный текст/лог.
+                                */}
+                                {bookUpdateStatus.lastProcessedLotTitle
                                     ? bookUpdateStatus.lastProcessedLotTitle
-                                    : 'Пока нет дополнительных сообщений.'}                        
+                                    : 'Пока нет дополнительных сообщений.'}
+                            </div>
                         </div>
                     </div>
                 )}
