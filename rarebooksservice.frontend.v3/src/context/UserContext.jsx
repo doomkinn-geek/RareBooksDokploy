@@ -10,8 +10,6 @@ export const UserProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    // -- УДАЛЁН код "isConfigured", "checkSetup", "configCheckDone"
-
     useEffect(() => {
         // При старте просто пытаемся получить текущего пользователя (если есть токен).
         const fetchUser = async () => {
