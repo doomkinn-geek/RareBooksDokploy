@@ -86,28 +86,7 @@ namespace RareBooksService.WebApi.Services
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                var nextRun = DateTime.UtcNow.Date.AddDays(3);
-                if (nextRun < DateTime.UtcNow)
-                    nextRun = nextRun.AddDays(3);
-
-                _nextRunTimeUtc = nextRun;
-                var delay = nextRun - DateTime.UtcNow;
-                if (delay < TimeSpan.Zero)
-                    delay = TimeSpan.Zero;
-
-                try
-                {
-                    await Task.Delay(delay, stoppingToken);
-                }
-                catch (TaskCanceledException)
-                {
-                    return; // завершаем службу
-                }
-
-                if (stoppingToken.IsCancellationRequested)
-                    return;
-
-                // Создаем токен на текущий запуск
+                // 1) Сначала запускаем задачу обновления
                 _ctsForCurrentRun = new CancellationTokenSource();
                 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
                     stoppingToken,
@@ -115,7 +94,9 @@ namespace RareBooksService.WebApi.Services
                 );
                 var actualToken = linkedCts.Token;
 
+                
                 _currentRunTask = RunUpdateBooksAsync(actualToken);
+                
 
                 try
                 {
@@ -135,8 +116,34 @@ namespace RareBooksService.WebApi.Services
                     _ctsForCurrentRun.Dispose();
                     _ctsForCurrentRun = null;
                 }
+
+                // Если за время выполнения остановили службу – выходим из цикла
+                if (stoppingToken.IsCancellationRequested)
+                    return;
+
+                // 2) Теперь делаем «паузу» на 3 дня
+                // (точнее, ждём до следующего календарного дня + 3 суток)
+                var nextRun = DateTime.UtcNow.Date.AddDays(3);
+                if (nextRun < DateTime.UtcNow)
+                    nextRun = nextRun.AddDays(3);
+
+                _nextRunTimeUtc = nextRun;
+                var delay = nextRun - DateTime.UtcNow;
+                if (delay < TimeSpan.Zero)
+                    delay = TimeSpan.Zero;
+
+                try
+                {
+                    await Task.Delay(delay, stoppingToken);
+                }
+                catch (TaskCanceledException)
+                {
+                    // Если отменили в процессе ожидания – завершаем службу
+                    return;
+                }
             }
         }
+
 
         private async Task RunUpdateBooksAsync(CancellationToken token)
         {

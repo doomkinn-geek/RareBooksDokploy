@@ -12,6 +12,7 @@ namespace RareBooksService.Parser.Services
         private HttpClient _httpClient;
         private HttpClientHandler _httpClientHandler;
         private bool _disposed = false;
+        private bool _initialized = false;
 
         // Добавляем SemaphoreSlim для ограничения параллелизма
         private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1);
@@ -20,7 +21,10 @@ namespace RareBooksService.Parser.Services
         {
             try
             {
-                InitializeHttpClientAsync().GetAwaiter().GetResult();
+                //синхронный вызов async - метода в конструкторе.
+                //Рекомендуется убрать его и сделать инициализацию «ленивой»,
+                //как и в примере выше.Или же запускать её где - то в Program.cs при старте, но асинхронно.
+                //InitializeHttpClientAsync().GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {
@@ -30,8 +34,38 @@ namespace RareBooksService.Parser.Services
                 // Retry logic или просто пропустить.
             }
         }
+        public async Task EnsureInitializedAsync()
+        {
+            if (_initialized) return;
+            _initialized = true;
 
-        private async Task InitializeHttpClientAsync()
+            _httpClientHandler?.Dispose();
+            _httpClient?.Dispose();
+
+            _httpClientHandler = new HttpClientHandler()
+            {
+                UseCookies = true,
+                CookieContainer = new System.Net.CookieContainer()
+            };
+
+            _httpClient = new HttpClient(_httpClientHandler, disposeHandler: true)
+            {
+                Timeout = TimeSpan.FromSeconds(30)
+            };
+
+            ConfigureDefaultHeaders();
+
+            try
+            {
+                await FetchInitialCookies();
+            }
+            catch (HttpRequestException ex)
+            {
+                Console.WriteLine($"Failed to fetch initial cookies: {ex.Message}");
+            }
+        }
+
+        /*private async Task InitializeHttpClientAsync()
         {
             _httpClientHandler?.Dispose();
             _httpClient?.Dispose();
@@ -58,7 +92,7 @@ namespace RareBooksService.Parser.Services
                 Console.WriteLine($"Failed to fetch initial cookies: {ex.Message}");
                 // Можно при желании повторить попытку несколько раз или просто продолжить.
             }
-        }
+        }*/
 
         private void ConfigureDefaultHeaders()
         {

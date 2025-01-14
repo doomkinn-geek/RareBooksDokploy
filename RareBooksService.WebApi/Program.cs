@@ -52,7 +52,36 @@ namespace RareBooksService.WebApi
                 // 4) Если у вас есть отдельные настройки YandexKassa, TypeOfAccessImages – ок
                 //    Добавим РОВНО так же "YandexCloud" -> YandexCloudSettings:
                 builder.Services.Configure<YandexKassaSettings>(builder.Configuration.GetSection("YandexKassa"));
-                builder.Services.Configure<TypeOfAccessImages>(builder.Configuration.GetSection("TypeOfAccessImages"));
+
+                
+                builder.Services.Configure<TypeOfAccessImages>(options =>
+                {
+                    // Пытаемся взять секцию
+                    var section = builder.Configuration.GetSection("TypeOfAccessImages");
+                    // Если секция не существует или пуста — можно пропустить
+                    if (!section.Exists())
+                    {
+                        // задать значения по умолчанию
+                        options.UseLocalFiles = false;
+                        options.LocalPathOfImages = "default_path";
+                        return;
+                    }
+
+                    try
+                    {
+                        section.Bind(options);
+                    }
+                    catch (Exception ex)
+                    {
+                        // логируем, ставим default
+                        Console.WriteLine("Ошибка при конфигурации TypeOfAccessImages: " + ex.Message);
+                        options.UseLocalFiles = false;
+                        options.LocalPathOfImages = "default_path";
+                    }
+                });
+
+
+
                 builder.Services.Configure<YandexCloudSettings>(builder.Configuration.GetSection("YandexCloud"));
                 //                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
                 // Так мы гарантируем, что при обращении к IOptions<YandexCloudSettings> будут значения из appsettings.json

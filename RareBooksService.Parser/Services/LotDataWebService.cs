@@ -52,7 +52,7 @@ namespace RareBooksService.Parser.Services
         {
             _requestCount++;
             if (_requestCount >= RequestsBeforeRenew)
-            {
+            {                
                 await _httpClientService.FetchInitialCookies(); // Обновление cookies
                 _requestCount = 0; // Сброс счётчика запросов
             }
@@ -62,6 +62,7 @@ namespace RareBooksService.Parser.Services
             await RenewCookiesIfNeeded();
             try
             {
+                await _httpClientService.EnsureInitializedAsync();
                 return await _httpClientService.PostAsync<BookItemFromMeshok>(GetLotByIdUrl, new { lotId = lotId });
             }
             catch (TimeoutException ex)
@@ -82,6 +83,7 @@ namespace RareBooksService.Parser.Services
             await RenewCookiesIfNeeded();
             try
             {
+                await _httpClientService.EnsureInitializedAsync();
                 var descriptionObject = await _httpClientService.PostAsync<MeshokLotDescription>(GetLotDescriptionUrl, new { lotId = lotId });
                 return descriptionObject?.result.description;
             }
@@ -149,6 +151,7 @@ namespace RareBooksService.Parser.Services
 
                 try
                 {
+                    await _httpClientService.EnsureInitializedAsync();
                     var lotsResponse = await _httpClientService.PostAsync<LotsParsedFromMeshok>(GetLotsListUrl, requestBody);
 
                     if (lotsResponse != null && lotsResponse.result.lots.Any())

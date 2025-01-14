@@ -34,6 +34,7 @@ namespace RareBooksService.Parser.Services
         private readonly ILogger<LotDataHandler> _logger;
         private readonly CookieContainer _cookieContainer;
         private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(5); // Ограничиваем до 5 одновременных запросов
+        private bool _cookiesInitialized = false;
 
         public LotDataHandler(
             RegularBaseBooksContext context,
@@ -52,8 +53,20 @@ namespace RareBooksService.Parser.Services
 
             _cookieContainer = new CookieContainer();
 
-            // Получаем начальные cookies для домена meshok.net
-            InitializeCookiesAsync("https://meshok.net").Wait();
+
+            //Лучше вообще не вызывать в конструкторе асинхронный метод. Можно отложить инициализацию cookie до момента фактического использования.
+            //Например, вы можете убрать эту строчку из конструктора и,
+            //например, вызвать InitializeCookiesAsync единожды в SaveLotDataAsync(или любой другой метод), но асинхронно.            
+            //InitializeCookiesAsync("https://meshok.net").Wait();
+        }        
+
+        public async Task EnsureCookiesInitializedAsync()
+        {
+            if (!_cookiesInitialized)
+            {
+                await InitializeCookiesAsync("https://meshok.net");
+                _cookiesInitialized = true;
+            }
         }
 
         private async Task InitializeCookiesAsync(string url)
@@ -61,7 +74,6 @@ namespace RareBooksService.Parser.Services
             try
             {
                 var baseUri = new Uri(url).GetLeftPart(UriPartial.Authority);
-
                 using var handler = new HttpClientHandler
                 {
                     CookieContainer = _cookieContainer,
@@ -70,7 +82,6 @@ namespace RareBooksService.Parser.Services
                 };
 
                 using var httpClient = new HttpClient(handler);
-
                 httpClient.DefaultRequestHeaders.Accept.Clear();
                 httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/html"));
                 httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
@@ -90,6 +101,7 @@ namespace RareBooksService.Parser.Services
         {
             try
             {
+                await EnsureCookiesInitializedAsync();
                 _logger.LogInformation("Обработка лота с ID {LotId}", lotData.id);
 
                 if (!await _context.BooksInfo.AnyAsync(b => b.Id == lotData.id))
