@@ -4,20 +4,19 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { UserContext } from '../context/UserContext';
 
 const PrivateRoute = () => {
-    const { user, isConfigured } = React.useContext(UserContext);
+    const { user, loading } = React.useContext(UserContext);
 
-    // 1) Если система не настроена, 
-    //    перенаправляем на '/', где будет показана страница initial setup.
-    if (!isConfigured) {
-        return <Navigate to="/" />;
+    // Пока грузим пользователя — можно показывать Spinner или возвращать null
+    if (loading) {
+        return <div>Загрузка...</div>;
     }
 
-    // 2) Если система настроена, а user отсутствует — редирект на /login.
+    // Если user отсутствует — редирект на /login
     if (!user) {
         return <Navigate to="/login" />;
     }
 
-    // Иначе всё ок, пускаем
+    // Иначе всё ок
     return <Outlet />;
 };
 

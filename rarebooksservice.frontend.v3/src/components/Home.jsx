@@ -8,10 +8,7 @@ import axios from 'axios';
 import { API_URL } from '../api';
 
 const Home = () => {
-    const {
-        user, setUser,
-        loading, isConfigured, setIsConfigured, configCheckDone
-    } = useContext(UserContext);
+    const { user, setUser, loading } = useContext(UserContext);
 
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
@@ -28,7 +25,6 @@ const Home = () => {
     // Грузим категории (если система настроена)
     // ------------------------------------------------------------
     useEffect(() => {
-        if (!isConfigured) return;
         const fetchCategories = async () => {
             try {
                 const response = await getCategories();
@@ -40,7 +36,7 @@ const Home = () => {
             }
         };
         fetchCategories();
-    }, [isConfigured]);
+    }, []);
 
     // ------------------ Обработчики поиска ------------------
     const handleTitleSearch = () => {
