@@ -2,43 +2,52 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, Typography, Box, Button, Pagination } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-
-// Импортируем метод для запроса миниатюры
-import { getBookThumbnail } from '../api';
+import { getBookImageFile } from '../api';
 
 const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
     const navigate = useNavigate();
 
-    // Словарь (bookId -> blobUrl), где храним URL созданный через URL.createObjectURL()
+    // храним URL'ы миниатюр по ключу bookId
     const [thumbnails, setThumbnails] = useState({});
     const [error, setError] = useState('');
 
-    // При изменении массива books получаем миниатюры
+    // При изменении books загружаем миниатюры
     useEffect(() => {
-        if (!books || books.length === 0) return;
+        // Если нет книг — сбрасываем миниатюры
+        if (!books || books.length === 0) {
+            setThumbnails({});
+            return;
+        }
 
-        const fetchThumbnails = async () => {
-            const newThumbs = {}; // bookId -> blobUrl
-            for (const book of books) {
-                // Если у книги есть имя миниатюры
-                if (book.firstThumbnailName) {
-                    try {
-                        const response = await getBookThumbnail(book.id, book.firstThumbnailName);
+        // Очищаем, чтобы при обновлении списка "старые" миниатюры не мешались
+        setThumbnails({});
+        setError('');
+
+        // Для каждой книги, если есть firstImageName, запрашиваем миниатюру
+        books.forEach((book) => {
+            if (book.firstImageName) {
+                getBookImageFile(book.id, book.firstImageName)
+                    .then((response) => {
                         const blobUrl = URL.createObjectURL(response.data);
-                        newThumbs[book.id] = blobUrl;
-                    } catch (err) {
-                        console.error('Ошибка при загрузке миниатюры для книги', book.id, err);
+                        // Записываем миниатюру для конкретной книги
+                        setThumbnails((prev) => ({
+                            ...prev,
+                            [book.id]: blobUrl,
+                        }));
+                    })
+                    .catch((err) => {
+                        console.error(
+                            'Ошибка при загрузке миниатюры для книги',
+                            book.id,
+                            err
+                        );
                         setError('Не удалось загрузить некоторые миниатюры.');
-                    }
-                }
+                    });
             }
-            setThumbnails(newThumbs);
-        };
-
-        fetchThumbnails();
+        });
     }, [books]);
 
-    // Переход между страницами
+    // Переход к предыдущей / следующей странице
     const handlePreviousPage = () => {
         if (currentPage > 1) {
             setCurrentPage(currentPage - 1);
@@ -53,21 +62,19 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
         setCurrentPage(value);
     };
 
-    // Переход к деталям книги
+    // Переход на страницу деталей
     const handleBookClick = (bookId) => {
         navigate(`/books/${bookId}`, { state: { fromPage: currentPage } });
     };
 
     return (
         <Box sx={{ my: 2 }}>
-            {/* Показываем сообщение об ошибке (если было) */}
             {error && (
                 <Typography color="error" sx={{ mb: 2 }}>
                     {error}
                 </Typography>
             )}
 
-            {/* Список книг */}
             <Box
                 className="book-list"
                 sx={{
@@ -91,8 +98,7 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                                 gap: 2,
                             }}
                         >
-                            {/* Если у книги есть имя миниатюры -> пытаемся вывести её */}
-                            {book.firstThumbnailName && thumbnails[book.id] && (
+                            {book.firstImageName && thumbnails[book.id] && (
                                 <Box
                                     sx={{
                                         width: { xs: '100%', sm: '150px' },
@@ -112,7 +118,6 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                                 </Box>
                             )}
 
-                            {/* Основная информация о книге */}
                             <Box sx={{ flex: 1 }}>
                                 <Typography
                                     variant="h6"
@@ -126,19 +131,24 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                                 >
                                     {book.title}
                                 </Typography>
-                                <Typography variant="body1">Цена: {book.price}</Typography>
-                                <Typography variant="body1">Дата: {book.date}</Typography>
+                                <Typography variant="body1">
+                                    Цена: {book.price}
+                                </Typography>
+                                <Typography variant="body1">
+                                    Дата: {book.date}
+                                </Typography>
                                 <Typography variant="body1">
                                     Продавец: {book.sellerName}
                                 </Typography>
-                                <Typography variant="body1">Тип: {book.type}</Typography>
+                                <Typography variant="body1">
+                                    Тип: {book.type}
+                                </Typography>
                             </Box>
                         </CardContent>
                     </Card>
                 ))}
             </Box>
 
-            {/* Пагинация, если есть книги */}
             {books.length > 0 && (
                 <Box
                     sx={{

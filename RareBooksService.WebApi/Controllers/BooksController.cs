@@ -60,7 +60,7 @@ namespace RareBooksService.WebApi.Controllers
                 b.Price = 0;
                 // Вместо реальной даты отображаем сообщение
                 b.Date = "Только для подписчиков";
-                b.FirstThumbnailName = "";
+                b.FirstImageName = "";
             }
         }
 

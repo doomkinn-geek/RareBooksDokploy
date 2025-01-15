@@ -16,6 +16,6 @@ namespace RareBooksService.Common.Models.Dto
         public string Type { get; set; }
 
         // Новое поле – имя первой миниатюры
-        public string? FirstThumbnailName { get; set; }
+        public string? FirstImageName { get; set; }
     }
 }

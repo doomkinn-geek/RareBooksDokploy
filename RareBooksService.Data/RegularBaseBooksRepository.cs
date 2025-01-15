@@ -111,7 +111,8 @@ namespace RareBooksService.Data
                     b.SellerName,
                     b.EndDate,
                     b.Type,
-                    b.ThumbnailUrls
+                    //b.ThumbnailUrls
+                    b.ImageUrls
                 })
                 .ToListAsync();
 
@@ -124,7 +125,7 @@ namespace RareBooksService.Data
                 SellerName = b.SellerName,
                 Date = b.EndDate.ToShortDateString(),
                 Type = b.Type,
-                FirstThumbnailName = b.ThumbnailUrls
+                FirstImageName = b.ImageUrls
                     .Select(url => ExtractImageName(url))
                     .FirstOrDefault()
             })
@@ -173,7 +174,8 @@ namespace RareBooksService.Data
                     b.SellerName,
                     b.EndDate,
                     b.Type,
-                    b.ThumbnailUrls
+                    //b.ThumbnailUrls
+                    b.ImageUrls
                 })
                 .ToListAsync();
 
@@ -186,7 +188,7 @@ namespace RareBooksService.Data
                 SellerName = b.SellerName,
                 Date = b.EndDate.ToShortDateString(),
                 Type = b.Type,
-                FirstThumbnailName = b.ThumbnailUrls
+                FirstImageName = b.ImageUrls
                     .Select(url => ExtractImageName(url))
                     .FirstOrDefault()
             })
@@ -219,7 +221,8 @@ namespace RareBooksService.Data
                     b.SellerName,
                     b.EndDate,
                     b.Type,
-                    b.ThumbnailUrls
+                    //b.ThumbnailUrls
+                    b.ImageUrls
                 })
                 .ToListAsync();
 
@@ -232,7 +235,7 @@ namespace RareBooksService.Data
                 SellerName = b.SellerName,
                 Date = b.EndDate.ToShortDateString(),
                 Type = b.Type,
-                FirstThumbnailName = b.ThumbnailUrls
+                FirstImageName = b.ImageUrls
                     .Select(url => ExtractImageName(url))
                     .FirstOrDefault()
             })
@@ -266,7 +269,7 @@ namespace RareBooksService.Data
                     b.SellerName,
                     b.EndDate,
                     b.Type,
-                    b.ThumbnailUrls
+                    b.ImageUrls
                 })
                 .ToListAsync();
 
@@ -279,7 +282,7 @@ namespace RareBooksService.Data
                 SellerName = b.SellerName,
                 Date = b.EndDate.ToShortDateString(),
                 Type = b.Type,
-                FirstThumbnailName = b.ThumbnailUrls
+                FirstImageName = b.ImageUrls
                     .Select(url => ExtractImageName(url))
                     .FirstOrDefault()
             })
@@ -313,7 +316,7 @@ namespace RareBooksService.Data
                     b.SellerName,
                     b.EndDate,
                     b.Type,
-                    b.ThumbnailUrls
+                    b.ImageUrls
                 })
                 .ToListAsync();
 
@@ -326,7 +329,7 @@ namespace RareBooksService.Data
                 SellerName = b.SellerName,
                 Date = b.EndDate.ToShortDateString(),
                 Type = b.Type,
-                FirstThumbnailName = b.ThumbnailUrls
+                FirstImageName = b.ImageUrls
                     .Select(url => ExtractImageName(url))
                     .FirstOrDefault()
             })

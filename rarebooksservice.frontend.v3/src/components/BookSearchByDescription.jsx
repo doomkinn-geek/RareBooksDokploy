@@ -70,11 +70,8 @@ const BookSearchByDescription = () => {
 
                 <ErrorMessage message={errorMessage} />
 
-                {loading && (
-                    <Typography variant="h5">
-                        Загрузка...
-                    </Typography>
-                )}
+                {loading && <Typography variant="h6">Загрузка...</Typography>}
+
 
                 {!loading && books.length > 0 && (
                     <BookList
