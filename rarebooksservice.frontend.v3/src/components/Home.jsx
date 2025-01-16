@@ -199,22 +199,22 @@ const Home = () => {
 
                     {/* Секция категорий */}
                     {user.role === 'Admin' && (
-                        <div className="categories">
-                            <h2>Категории</h2>
-                            <ul>
-                                {Array.isArray(categories) ? (
-                                    categories.map((category) => (
-                                        <li key={category.id}>
-                                            <Link to={`/searchByCategory/${category.id}`}>
-                                                {category.name}
-                                            </Link>
-                                        </li>
-                                    ))
-                                ) : (
-                                    <li>Категории не найдены</li>
-                                )}
-                            </ul>
-                        </div>)}
+                    <div className="categories">
+                        <h2>Категории</h2>
+                        <ul>
+                            {Array.isArray(categories) ? (
+                                categories.map((category) => (
+                                    <li key={category.id}>
+                                        <Link to={`/searchByCategory/${category.id}`}>
+                                            {category.name}
+                                        </Link>
+                                    </li>
+                                ))
+                            ) : (
+                                <li>Категории не найдены</li>
+                            )}
+                        </ul>
+                    </div>)}
 
                     <div className="auth-links">
                         <Button
