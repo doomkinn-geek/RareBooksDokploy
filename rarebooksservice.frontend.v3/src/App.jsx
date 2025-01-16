@@ -1,4 +1,4 @@
-// src/App.jsx
+п»ї// src/App.jsx
 import React from 'react';
 import { BrowserRouter as Router, Route, Routes, Link } from 'react-router-dom';
 import { UserProvider } from './context/UserContext';
@@ -44,7 +44,7 @@ const App = () => {
                         </Route>
                     </Routes>
                     <footer className="footer">
-                        <p>&copy; 2025 Сервис Редких Книг</p>
+                        <p>&copy; 2025 РЎРµСЂРІРёСЃ Р РµРґРєРёС… РљРЅРёРі</p>
                     </footer>
                 </div>
             </Router>
