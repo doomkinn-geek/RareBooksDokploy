@@ -180,39 +180,41 @@ const Home = () => {
                         </div>
 
                         {/* Поиск по ID */}
-                        <div className="search-box">
-                            <input
-                                type="text"
-                                placeholder="Введите ID книги"
-                                value={bookId}
-                                onChange={(e) => setBookId(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                        handleIdSearch();
-                                    }
-                                }}
-                            />
-                            <button onClick={handleIdSearch}>Поиск по ID</button>
-                        </div>
+                        {user.role === 'Admin' && (
+                            <div className="search-box">
+                                <input
+                                    type="text"
+                                    placeholder="Введите ID книги"
+                                    value={bookId}
+                                    onChange={(e) => setBookId(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            handleIdSearch();
+                                        }
+                                    }}
+                                />
+                                <button onClick={handleIdSearch}>Поиск по ID</button>
+                            </div>)}
                     </div>
 
                     {/* Секция категорий */}
-                    <div className="categories">
-                        <h2>Категории</h2>
-                        <ul>
-                            {Array.isArray(categories) ? (
-                                categories.map((category) => (
-                                    <li key={category.id}>
-                                        <Link to={`/searchByCategory/${category.id}`}>
-                                            {category.name}
-                                        </Link>
-                                    </li>
-                                ))
-                            ) : (
-                                <li>Категории не найдены</li>
-                            )}
-                        </ul>
-                    </div>
+                    {user.role === 'Admin' && (
+                        <div className="categories">
+                            <h2>Категории</h2>
+                            <ul>
+                                {Array.isArray(categories) ? (
+                                    categories.map((category) => (
+                                        <li key={category.id}>
+                                            <Link to={`/searchByCategory/${category.id}`}>
+                                                {category.name}
+                                            </Link>
+                                        </li>
+                                    ))
+                                ) : (
+                                    <li>Категории не найдены</li>
+                                )}
+                            </ul>
+                        </div>)}
 
                     <div className="auth-links">
                         <Button
