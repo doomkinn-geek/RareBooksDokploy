@@ -107,7 +107,7 @@ const Home = () => {
             {/* Блок описания сервиса */}
             <div style={{ margin: '20px 0' }}>
                 <Typography variant="h4" gutterBottom>
-                    Добро пожаловать в Rare Books Service
+                    Добро пожаловать в Сервис Редких Книг
                 </Typography>
                 <Typography variant="body1">
                     Сервис редких книг — это платформа, которая помогает любителям редких

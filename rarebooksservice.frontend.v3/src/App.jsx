@@ -24,7 +24,7 @@ const App = () => {
             <Router>
                 <div className="container">
                     <header className="header">
-                        <h1><Link to="/" style={{ color: '#fff', textDecoration: 'none' }}>Rare Books Service</Link></h1>
+                        <h1><Link to="/" style={{ color: '#fff', textDecoration: 'none' }}>Сервис Редких Книг</Link></h1>
                     </header>
                     <Routes>
                         <Route path="/" element={<Home />} />
