@@ -44,7 +44,7 @@ const App = () => {
                         </Route>
                     </Routes>
                     <footer className="footer">
-                        <p>&copy; 2024 Rare Books Service</p>
+                        <p>&copy; 2025 Сервис Редких Книг</p>
                     </footer>
                 </div>
             </Router>

@@ -1,11 +1,12 @@
-﻿//src/components/Login.jsx
+﻿// src/components/Login.jsx
 import React, { useState, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { UserContext } from '../context/UserContext';
 import { API_URL } from '../api';
 import ErrorMessage from './ErrorMessage';
+import { Button, TextField, Typography } from '@mui/material';
 
 const Login = () => {
     const [email, setEmail] = useState('');
@@ -21,30 +22,43 @@ const Login = () => {
             Cookies.set('token', response.data.token, { expires: 7 });
             setUser(response.data.user);
             navigate('/');
-        } catch (error) {
-            console.error('Ошибка входа:', error);
+        } catch (err) {
+            console.error('Ошибка входа:', err);
             setError('Неверные учетные данные или проблемы с сервером.');
         }
     };
 
     return (
-        <div className="container">
-            <h2>Вход</h2>
-            <div className="auth-form">
-                <input
+        <div className="container" style={{ maxWidth: '480px', margin: '0 auto' }}>
+            <Typography variant="h4" align="center" gutterBottom>
+                Вход
+            </Typography>
+
+            <div className="auth-form" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <TextField
                     type="email"
-                    placeholder="Email"
+                    label="Email"
+                    variant="outlined"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="username"
                 />
-                <input
+                <TextField
                     type="password"
-                    placeholder="Пароль"
+                    label="Пароль"
+                    variant="outlined"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
                 />
-                <button onClick={handleLogin}>Войти</button>
+                <Button variant="contained" onClick={handleLogin}>
+                    Войти
+                </Button>
                 <ErrorMessage message={error} />
+
+                <Typography variant="body2" align="center">
+                    Нет аккаунта? <Link to="/register">Зарегистрироваться</Link>
+                </Typography>
             </div>
         </div>
     );
