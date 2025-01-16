@@ -115,25 +115,7 @@ const Home = () => {
                     вы можете искать книги по названию, описанию, ценовому
                     диапазону. Также вы можете связаться
                     с продавцами и следить за интересующими вас лотами.
-                </Typography>
-
-                <div style={{ marginTop: '10px' }}>
-                    <Link to="/about" style={{ textDecoration: 'none', marginRight: '10px' }}>
-                        <Button variant="outlined" color="primary">
-                            О нас
-                        </Button>
-                    </Link>
-                    <Link to="/terms" style={{ textDecoration: 'none', marginRight: '10px' }}>
-                        <Button variant="outlined" color="primary">
-                            Условия использования
-                        </Button>
-                    </Link>
-                    <Link to="/contacts" style={{ textDecoration: 'none' }}>
-                        <Button variant="outlined" color="primary">
-                            Контакты
-                        </Button>
-                    </Link>
-                </div>
+                </Typography>                
             </div>
 
             {user ? (
@@ -300,6 +282,27 @@ const Home = () => {
                     </div>
                 </>
             )}            
+            {/* Диалог обратной связи */}
+            <Dialog open={isFeedbackOpen} onClose={closeFeedback}>
+                <DialogTitle>Оставить предложение</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        label="Ваше предложение"
+                        multiline
+                        rows={4}
+                        value={feedbackText}
+                        onChange={(e) => setFeedbackText(e.target.value)}
+                        variant="outlined"
+                        fullWidth
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={closeFeedback}>Отмена</Button>
+                    <Button onClick={sendFeedback} variant="contained" color="primary">
+                        Отправить
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </div>
     );
 };
