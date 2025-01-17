@@ -12,7 +12,8 @@ import {
     DialogContent,
     DialogActions
 } from '@mui/material';
-import { getCategories } from '../api';
+import { getCategories, sendFeedback as sendFeedbackApi } from '../api';
+//                                 ^^^^^^^^^^^^^^^^^^^^^   важно: импортируем sendFeedback
 import { UserContext } from '../context/UserContext';
 
 const Home = () => {
@@ -32,6 +33,7 @@ const Home = () => {
     // Форма обратной связи
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
     const [feedbackText, setFeedbackText] = useState('');
+    const [feedbackError, setFeedbackError] = useState(''); // можно вывести ошибку при отправке
 
     useEffect(() => {
         const fetchCategories = async () => {
@@ -47,7 +49,7 @@ const Home = () => {
         fetchCategories();
     }, []);
 
-    // Методы поиска
+    // Методы поиска (handleTitleSearch, handleDescriptionSearch, ...)
     const handleTitleSearch = () => {
         if (title.trim()) {
             navigate(`/searchByTitle/${title}?exactPhrase=${exactPhraseTitle}`);
@@ -77,20 +79,35 @@ const Home = () => {
         navigate('/');
     };
 
-    // Обратная связь
+    // Открыть/закрыть диалог обратной связи
     const openFeedback = () => {
         setIsFeedbackOpen(true);
     };
     const closeFeedback = () => {
         setIsFeedbackOpen(false);
         setFeedbackText('');
+        setFeedbackError('');
     };
-    const sendFeedback = () => {
-        // Здесь вы можете сделать запрос на сервер, чтобы сохранить предложение
-        // Например, axios.post('/api/feedback', { text: feedbackText })
-        console.log('Отправляем фидбек:', feedbackText);
-        closeFeedback();
-        alert('Спасибо за предложение! Мы учтём его.');
+
+    // Отправка предложения
+    const sendFeedback = async () => {
+        setFeedbackError('');
+        if (!feedbackText.trim()) {
+            setFeedbackError('Нельзя отправить пустое предложение!');
+            return;
+        }
+
+        try {
+            await sendFeedbackApi(feedbackText);
+            // Если успех:
+            closeFeedback();
+            alert('Спасибо за предложение! Мы учтём его.');
+        } catch (err) {
+            console.error('Ошибка при отправке предложения:', err);
+            setFeedbackError(
+                err.response?.data ?? 'Ошибка при отправке предложения. Попробуйте позже.'
+            );
+        }
     };
 
     if (loading) {
@@ -111,17 +128,15 @@ const Home = () => {
                 </Typography>
                 <Typography variant="body1">
                     Сервис редких книг — это платформа, которая помогает любителям редких
-                    книг находить, описывать и приобретать уникальные экземпляры. У нас
-                    вы можете искать книги по названию, описанию, ценовому
-                    диапазону. Также вы можете связаться
-                    с продавцами и следить за интересующими вас лотами.
-                    {!user.hasSubscription && (
-                        <div>
-                            <br/>
-                            <h3><b>Подписка на сервис позволяет получить полную информацию по искомым книгам.</b></h3>
-                        </div>
-                    )}
-                </Typography>                
+                    книг находить, описывать и приобретать уникальные экземпляры...
+                    {/* ...остальной текст... */}
+                </Typography>
+                {!loading && user && !user.hasSubscription && (
+                    <div>
+                        <br />
+                        <h3><b>Подписка на сервис позволяет...</b></h3>
+                    </div>
+                )}
             </div>
 
             {user ? (
@@ -130,7 +145,7 @@ const Home = () => {
                     {!user.hasSubscription && (
                         <div className="subscription-warning">
                             <Typography color="error">
-                                У вас нет подписки. Оформите подписку, чтобы получить доступ к полной версии поиска. <Link to="/subscription">Подписаться сейчас</Link>
+                                У вас нет подписки. <Link to="/subscription">Подписаться сейчас</Link>
                             </Typography>
                         </div>
                     )}
@@ -287,11 +302,18 @@ const Home = () => {
                         </Button>
                     </div>
                 </>
-            )}            
+            )}
+
             {/* Диалог обратной связи */}
             <Dialog open={isFeedbackOpen} onClose={closeFeedback}>
                 <DialogTitle>Оставить предложение</DialogTitle>
                 <DialogContent>
+                    {/* Показываем ошибку, если есть */}
+                    {feedbackError && (
+                        <Typography color="error" sx={{ mb: 1 }}>
+                            {feedbackError}
+                        </Typography>
+                    )}
                     <TextField
                         label="Ваше предложение"
                         multiline

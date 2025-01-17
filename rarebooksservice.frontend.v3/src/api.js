@@ -221,3 +221,11 @@ export async function cancelImport(importTaskId) {
     await axios.post(`${API_URL}/import/cancel?importTaskId=${importTaskId}`, null, { headers });
 }
 
+// Отправляет текст предложения на эндпоинт /api/feedback
+export const sendFeedback = async (text) => {
+    return axios.post(
+        `${API_URL}/feedback`,
+        { text }, // тело запроса
+        { headers: getAuthHeaders() } // для Bearer-токена
+    );
+};

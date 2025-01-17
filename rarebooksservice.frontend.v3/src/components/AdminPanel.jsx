@@ -43,6 +43,14 @@ const AdminPanel = () => {
         bucketName: ''
     });
 
+    // --- SMTP block ---
+    const [smtp, setSmtp] = useState({
+        host: '',
+        port: '',
+        user: '',
+        pass: ''
+    });
+
     // Состояние сервиса обновления книг
     const [bookUpdateStatus, setBookUpdateStatus] = useState({
         isPaused: false,
@@ -104,6 +112,13 @@ const AdminPanel = () => {
                     secretKey: data.yandexCloud?.SecretKey ?? '',
                     serviceUrl: data.yandexCloud?.ServiceUrl ?? '',
                     bucketName: data.yandexCloud?.BucketName ?? ''
+                });
+                // Берём smtp поля
+                setSmtp({
+                    host: data.smtp?.Host ?? '',
+                    port: data.smtp?.Port ?? '587',
+                    user: data.smtp?.User ?? '',
+                    pass: data.smtp?.Pass ?? ''
                 });
             } catch (err) {
                 console.error('Error fetching admin settings:', err);
@@ -259,6 +274,13 @@ const AdminPanel = () => {
                     secretKey: yandexCloud.secretKey,
                     serviceUrl: yandexCloud.serviceUrl,
                     bucketName: yandexCloud.bucketName
+                },
+                // --- SMTP block ---
+                smtp: {
+                    host: smtp.host,
+                    port: smtp.port,
+                    user: smtp.user,
+                    pass: smtp.pass
                 }
             };
             await updateAdminSettings(settingsDto);
@@ -782,6 +804,62 @@ const AdminPanel = () => {
                                                 ...yandexCloud,
                                                 bucketName: e.target.value
                                             })
+                                        }
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* --- SMTP block UI --- */}
+                        <div
+                            style={{
+                                backgroundColor: '#f9f9f9',
+                                padding: 10,
+                                marginBottom: 10
+                            }}>
+                            <h4>SMTP</h4>
+                            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                <div>
+                                    <label>Host:</label>
+                                    <br />
+                                    <input
+                                        type="text"
+                                        value={smtp.host}
+                                        onChange={(e) =>
+                                            setSmtp({ ...smtp, host: e.target.value })
+                                        }
+                                    />
+                                </div>
+                                <div>
+                                    <label>Port:</label>
+                                    <br />
+                                    <input
+                                        type="text"
+                                        value={smtp.port}
+                                        onChange={(e) =>
+                                            setSmtp({ ...smtp, port: e.target.value })
+                                        }
+                                    />
+                                </div>
+                                <div>
+                                    <label>User (email):</label>
+                                    <br />
+                                    <input
+                                        type="text"
+                                        value={smtp.user}
+                                        onChange={(e) =>
+                                            setSmtp({ ...smtp, user: e.target.value })
+                                        }
+                                    />
+                                </div>
+                                <div>
+                                    <label>Pass (пароль):</label>
+                                    <br />
+                                    <input
+                                        type="password"
+                                        value={smtp.pass}
+                                        onChange={(e) =>
+                                            setSmtp({ ...smtp, pass: e.target.value })
                                         }
                                     />
                                 </div>

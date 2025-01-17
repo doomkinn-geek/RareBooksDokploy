@@ -63,13 +63,18 @@ namespace RareBooksService.WebApi.Controllers
                 var typeOfAccessImagesNode = rootNode["TypeOfAccessImages"]?.AsObject();
                 var yandexCloudNode = rootNode["YandexCloud"]?.AsObject();
 
+                // Получаем из appsettings.json секцию "Smtp"
+                var smtpNode = rootNode["Smtp"]?.AsObject();
+
+                // Затем возвращаем в результате:
                 return Ok(new
                 {
                     YandexKassa = yandexKassaNode,
                     YandexDisk = yandexDiskNode,
                     TypeOfAccessImages = typeOfAccessImagesNode,
-                    YandexCloud = yandexCloudNode
-                });
+                    YandexCloud = yandexCloudNode,
+                    Smtp = smtpNode  
+                });                
             }
             catch (Exception ex)
             {
@@ -134,7 +139,18 @@ namespace RareBooksService.WebApi.Controllers
                     ycNode["SecretKey"] = dto.YandexCloud.SecretKey;
                     ycNode["ServiceUrl"] = dto.YandexCloud.ServiceUrl;
                     ycNode["BucketName"] = dto.YandexCloud.BucketName;
-                }    
+                }
+
+                if (dto.Smtp != null)
+                {
+                    var smtpNode = rootNode["Smtp"] as JsonObject ?? new JsonObject();
+                    smtpNode["Host"] = dto.Smtp.Host;
+                    smtpNode["Port"] = dto.Smtp.Port;
+                    smtpNode["User"] = dto.Smtp.User;
+                    smtpNode["Pass"] = dto.Smtp.Pass;
+
+                    rootNode["Smtp"] = smtpNode;
+                }
 
                 // Записываем обратно в файл
                 // Важно: убедитесь, что у приложения есть права на перезапись appsettings.json

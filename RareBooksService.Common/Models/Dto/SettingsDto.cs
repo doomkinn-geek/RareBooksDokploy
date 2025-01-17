@@ -12,5 +12,7 @@ namespace RareBooksService.Common.Models.Dto
         public YandexDiskDto? YandexDisk { get; set; }
         public TypeOfAccessImagesDto? TypeOfAccessImages { get; set; }
         public YandexCloudDto? YandexCloud { get; set; }
+        // Новый блок настроек SMTP
+        public SmtpDto? Smtp { get; set; }
     }
 }

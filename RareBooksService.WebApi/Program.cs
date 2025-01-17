@@ -161,6 +161,7 @@ namespace RareBooksService.WebApi
                 builder.Services.AddScoped<ILotDataHandler, LotDataHandler>();
                 builder.Services.AddScoped<ILotFetchingService, LotFetchingService>();
                 builder.Services.AddScoped<IAuctionService, AuctionService>();
+                builder.Services.AddScoped<IEmailSenderService, SmtpEmailSenderService>();
 
                 // 11) Прочие singletons
                 builder.Services.AddSingleton<ICaptchaService, CaptchaService>();
