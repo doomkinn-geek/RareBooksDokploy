@@ -98,7 +98,7 @@ const Home = () => {
     }
 
     return (
-        <div className="container">
+        <div className="container" text>
             {/* Статус API */}
             <Typography variant="h6" color={apiStatus.includes('Failed') ? 'error' : 'primary'}>
                 {apiStatus}
