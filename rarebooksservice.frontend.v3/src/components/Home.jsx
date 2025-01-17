@@ -134,7 +134,7 @@ const Home = () => {
                 {!loading && user && !user.hasSubscription && (
                     <div>
                         <br />
-                        <h3><b>Подписка на сервис позволяет...</b></h3>
+                        <h3><b>Подписка на сервис позволяет получить полную информацию по искомым книгам.</b></h3>
                     </div>
                 )}
             </div>
@@ -145,7 +145,7 @@ const Home = () => {
                     {!user.hasSubscription && (
                         <div className="subscription-warning">
                             <Typography color="error">
-                                У вас нет подписки. <Link to="/subscription">Подписаться сейчас</Link>
+                                У вас нет подписки. Оформите подписку, чтобы получить доступ к полной версии поиска.<Link to="/subscription">Подписаться сейчас</Link>
                             </Typography>
                         </div>
                     )}
