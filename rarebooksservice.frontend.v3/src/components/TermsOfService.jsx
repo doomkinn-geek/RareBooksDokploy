@@ -156,7 +156,7 @@ const TermsOfService = () => {
             </Typography>
 
             <Typography variant="body1" paragraph>
-                Дата последнего обновления: 01.09.2025
+                Дата последнего обновления: 17.01.2025
             </Typography>
         </Box>
     );
