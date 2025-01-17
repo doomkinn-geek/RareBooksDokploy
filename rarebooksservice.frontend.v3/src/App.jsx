@@ -16,6 +16,8 @@ import SearchBySeller from './components/SearchBySeller';
 import SearchBooksByPriceRange from './components/SearchBooksByPriceRange';
 import BookDetail from './components/BookDetail';
 import InitialSetupPage from './components/InitialSetupPage';
+import TermsOfService from './components/TermsOfService';
+import Contacts from './components/Contacts';
 import './style.css';
 
 const App = () => {
@@ -52,10 +54,18 @@ const App = () => {
                         {/* А публичные роуты, не требующие авторизации */}
                         <Route path="/login" element={<Login />} />
                         <Route path="/register" element={<Register />} />
+                        <Route path="/terms" element={<TermsOfService />} />
+                        <Route path="/contacts" element={<Contacts />} />
                     </Routes>
 
                     <footer className="footer">
-                        <p>&copy; 2025 Сервис Редких Книг</p>
+                        <div className="footer-content">
+                            <p>&copy; 2025 Сервис Редких Книг</p>
+                            <div className="footer-links">
+                                <Link to="/terms" className="footer-link">Публичная оферта</Link>
+                                <Link to="/contacts" className="footer-link">Контакты</Link>
+                            </div>
+                        </div>
                     </footer>
                 </div>
             </Router>
