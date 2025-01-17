@@ -24,13 +24,19 @@ const App = () => {
             <Router>
                 <div className="container">
                     <header className="header">
-                        <h1><Link to="/" style={{ color: '#fff', textDecoration: 'none' }}>Сервис Редких Книг</Link></h1>
+                        <h1>
+                            <Link to="/" style={{ color: '#fff', textDecoration: 'none' }}>
+                                Сервис Редких Книг
+                            </Link>
+                        </h1>
                     </header>
+
                     <Routes>
-                        <Route path="/" element={<Home />} />
-                        <Route path="/login" element={<Login />} />
-                        <Route path="/register" element={<Register />} />
+                        {/* Оборачиваем "/" в PrivateRoute */}
                         <Route element={<PrivateRoute />}>
+                            <Route path="/" element={<Home />} />
+
+                            {/* Остальные приватные роуты */}
                             <Route path="/subscription" element={<SubscriptionPage />} />
                             <Route path="/admin" element={<AdminPanel />} />
                             <Route path="/books/:id" element={<BookDetail />} />
@@ -42,7 +48,12 @@ const App = () => {
                             <Route path="/user/:userId" element={<UserDetailsPage />} />
                             <Route path="/initial-setup" element={<InitialSetupPage />} />
                         </Route>
+
+                        {/* А публичные роуты, не требующие авторизации */}
+                        <Route path="/login" element={<Login />} />
+                        <Route path="/register" element={<Register />} />
                     </Routes>
+
                     <footer className="footer">
                         <p>&copy; 2025 Сервис Редких Книг</p>
                     </footer>
