@@ -60,13 +60,18 @@ const App = () => {
 
                     <footer className="footer">
                         <div className="footer-content">
-                            <p>&copy; 2025 Сервис Редких Книг</p>
                             <div className="footer-links">
-                                <Link to="/terms" className="footer-link">Публичная оферта</Link>
-                                <Link to="/contacts" className="footer-link">Контакты</Link>
+                                <Link to="/terms" className="footer-link">
+                                    Публичная оферта
+                                </Link>
+                                <Link to="/contacts" className="footer-link">
+                                    Контакты
+                                </Link>
                             </div>
+                            <p>&copy; 2025 Сервис Редких Книг</p>
                         </div>
                     </footer>
+
                 </div>
             </Router>
         </UserProvider>

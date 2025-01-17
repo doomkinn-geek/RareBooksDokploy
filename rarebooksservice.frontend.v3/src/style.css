@@ -665,20 +665,25 @@ button, input {
 .footer {
     background-color: #2c3e50;
     color: #fff;
-    padding: 10px;
-    text-align: center; /* ћожно убрать, если нужен другой вид */
+    padding: 10px 0;
+    text-align: center; /* выравнивание текста, можно убрать, если не нужно */
 }
 
 .footer-content {
-    display: flex; /* √оризонтальный флекс-контейнер */
-    flex-direction: row;
+    display: flex;
     justify-content: space-between;
     align-items: center;
-    max-width: 1280px; /* ограничиваем ширину, если нужно */
+    max-width: 1280px; /* ограничение ширины при желании */
     margin: 0 auto;
-    padding: 0 20px; /* отступы слева/справа */
+    padding: 0 20px;
 }
 
+    /* Ќадпись копирайта */
+    .footer-content p {
+        margin: 0; /* убираем отступы по умолчанию, если нужно */
+    }
+
+/* Ѕлок со ссылками */
 .footer-links {
     display: flex;
     gap: 20px; /* рассто€ние между ссылками */
@@ -693,3 +698,20 @@ button, input {
     .footer-link:hover {
         text-decoration: underline;
     }
+
+/* --- ћобильна€ стилизаци€: при ширине 768px и меньше --- */
+@media (max-width: 768px) {
+    .footer-content {
+        flex-direction: column; /* –асположить блоки вертикально */
+        justify-content: center; /* ¬ыравнивание по центру */
+        align-items: center; /* ¬ыравнивание по центру */
+    }
+
+    /* —сылки тоже пойдут вертикально, 
+       либо можно оставить flex, но без space-between */
+    .footer-links {
+        flex-direction: column; /* вертикальное расположение ссылок */
+        gap: 10px; /* рассто€ние между ссылками поменьше */
+        margin-top: 10px; /* небольшой отступ сверху */
+    }
+}
