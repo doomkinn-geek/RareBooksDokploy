@@ -29,7 +29,7 @@ const Home = () => {
     const [apiStatus, setApiStatus] = useState('Checking API connection...');
     const navigate = useNavigate();
 
-    // Форма обратной связи
+    // Форма обратной связи (Dialog)
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
     const [feedbackText, setFeedbackText] = useState('');
     const [feedbackError, setFeedbackError] = useState('');
@@ -93,7 +93,6 @@ const Home = () => {
             setFeedbackError('Нельзя отправить пустое предложение!');
             return;
         }
-
         try {
             await sendFeedbackApi(feedbackText);
             closeFeedback();
@@ -122,7 +121,7 @@ const Home = () => {
                 {apiStatus}
             </Typography>
 
-            {/* Блок описания сервиса */}
+            {/* Описание сервиса */}
             <div style={{ marginBottom: 20, textAlign: 'center' }}>
                 <Typography variant="h4" gutterBottom>
                     Добро пожаловать в Сервис Редких Книг
@@ -134,6 +133,7 @@ const Home = () => {
                     диапазону. <b>Мы открыты к предложениям.</b> Вносите инициативы
                     по доработке сервиса через форму обратной связи.
                 </Typography>
+                {/* Если есть user и нет подписки — предупредим */}
                 {!loading && user && !user.hasSubscription && (
                     <div style={{ marginTop: 10 }}>
                         <Typography variant="subtitle1" color="error">
@@ -147,7 +147,10 @@ const Home = () => {
                 <>
                     {/* Предупреждение об отсутствии подписки */}
                     {!user.hasSubscription && (
-                        <div className="subscription-warning" style={{ textAlign: 'center', marginBottom: 20 }}>
+                        <div
+                            className="subscription-warning"
+                            style={{ textAlign: 'center', marginBottom: 20 }}
+                        >
                             <Typography color="error">
                                 У вас нет подписки. Оформите подписку, чтобы получить доступ к полной версии поиска.{" "}
                                 <Link to="/subscription">Подписаться сейчас</Link>
@@ -165,14 +168,7 @@ const Home = () => {
                     )}
 
                     {/* Поиск по названию */}
-                    <div className="search-box" style={{
-                        margin: '20px auto',
-                        maxWidth: '600px',
-                        textAlign: 'center',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '10px'
-                    }}>
+                    <div className="search-box">
                         <Typography variant="h6">Поиск по названию</Typography>
                         <TextField
                             label="Название"
@@ -183,7 +179,7 @@ const Home = () => {
                                 if (e.key === 'Enter') handleTitleSearch();
                             }}
                         />
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div className="search-box-row">
                             <FormControlLabel
                                 control={
                                     <Checkbox
@@ -204,14 +200,7 @@ const Home = () => {
                     </div>
 
                     {/* Поиск по описанию */}
-                    <div className="search-box" style={{
-                        margin: '20px auto',
-                        maxWidth: '600px',
-                        textAlign: 'center',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '10px'
-                    }}>
+                    <div className="search-box">
                         <Typography variant="h6">Поиск по описанию</Typography>
                         <TextField
                             label="Описание"
@@ -222,7 +211,7 @@ const Home = () => {
                                 if (e.key === 'Enter') handleDescriptionSearch();
                             }}
                         />
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div className="search-box-row">
                             <FormControlLabel
                                 control={
                                     <Checkbox
@@ -243,16 +232,9 @@ const Home = () => {
                     </div>
 
                     {/* Поиск по диапазону цен */}
-                    <div className="search-box" style={{
-                        margin: '20px auto',
-                        maxWidth: '600px',
-                        textAlign: 'center',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '10px'
-                    }}>
+                    <div className="search-box">
                         <Typography variant="h6">Поиск по диапазону цен</Typography>
-                        <div style={{ display: 'flex', gap: '10px' }}>
+                        <div className="search-box-row">
                             <TextField
                                 label="Мин. цена"
                                 variant="outlined"
@@ -287,15 +269,10 @@ const Home = () => {
 
                     {/* Поиск по ID (только администратор) */}
                     {user.role === 'Admin' && (
-                        <div className="search-box" style={{
-                            margin: '20px auto',
-                            maxWidth: '600px',
-                            textAlign: 'center',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '10px'
-                        }}>
-                            <Typography variant="h6">Поиск по ID (только для администратора)</Typography>
+                        <div className="search-box">
+                            <Typography variant="h6">
+                                Поиск по ID (только для администратора)
+                            </Typography>
                             <TextField
                                 label="ID книги"
                                 variant="outlined"
@@ -317,9 +294,9 @@ const Home = () => {
 
                     {/* Секция категорий (центрируем) */}
                     {user.role === 'Admin' && (
-                        <div className="categories" style={{ margin: '20px auto', maxWidth: '800px', textAlign: 'center' }}>
+                        <div className="categories">
                             <Typography variant="h5">Категории</Typography>
-                            <ul style={{ display: 'inline-block', textAlign: 'left', marginTop: '10px' }}>
+                            <ul>
                                 {Array.isArray(categories) ? (
                                     categories.map((category) => (
                                         <li key={category.id}>

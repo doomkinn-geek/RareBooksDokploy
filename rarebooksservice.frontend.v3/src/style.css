@@ -160,15 +160,17 @@ button, input {
    4) Поиск, категории
    ============================= */
 .search-box {
+    margin: 20px auto;
+    max-width: 800px;
+    text-align: center;
+    /* при желании можно задать доп. оформление */
     display: flex;
-    justify-content: center;
-    margin: 20px 0;
+    flex-direction: column;
+    gap: 10px;
     background-color: #fff;
     padding: 20px;
     border-radius: 5px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    width: 100%;
-    max-width: 800px;
 }
 
     .search-box input {
@@ -193,6 +195,9 @@ button, input {
         }
 
 .categories {
+    margin: 20px auto;
+    max-width: 800px;
+    text-align: center;
     background-color: #fff;
     padding: 20px;
     border-radius: 5px;
@@ -208,6 +213,8 @@ button, input {
     }
 
     .categories ul {
+        display: inline-block;
+        text-align: left;
         list-style-type: none;
         padding: 0;
         display: flex;
