@@ -10,10 +10,10 @@ import {
     Dialog,
     DialogTitle,
     DialogContent,
-    DialogActions,
-    Box
+    DialogActions
 } from '@mui/material';
 import { getCategories, sendFeedback as sendFeedbackApi } from '../api';
+//                                 ^^^^^^^^^^^^^^^^^^^^^   важно: импортируем sendFeedback
 import { UserContext } from '../context/UserContext';
 
 const Home = () => {
@@ -33,7 +33,7 @@ const Home = () => {
     // Форма обратной связи
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
     const [feedbackText, setFeedbackText] = useState('');
-    const [feedbackError, setFeedbackError] = useState('');
+    const [feedbackError, setFeedbackError] = useState(''); // можно вывести ошибку при отправке
 
     useEffect(() => {
         const fetchCategories = async () => {
@@ -49,7 +49,7 @@ const Home = () => {
         fetchCategories();
     }, []);
 
-    // Методы поиска
+    // Методы поиска (handleTitleSearch, handleDescriptionSearch, ...)
     const handleTitleSearch = () => {
         if (title.trim()) {
             navigate(`/searchByTitle/${title}?exactPhrase=${exactPhraseTitle}`);
@@ -79,7 +79,7 @@ const Home = () => {
         navigate('/');
     };
 
-    // Обратная связь (диалог)
+    // Открыть/закрыть диалог обратной связи
     const openFeedback = () => {
         setIsFeedbackOpen(true);
     };
@@ -88,14 +88,18 @@ const Home = () => {
         setFeedbackText('');
         setFeedbackError('');
     };
+
+    // Отправка предложения
     const sendFeedback = async () => {
         setFeedbackError('');
         if (!feedbackText.trim()) {
             setFeedbackError('Нельзя отправить пустое предложение!');
             return;
         }
+
         try {
             await sendFeedbackApi(feedbackText);
+            // Если успех:
             closeFeedback();
             alert('Спасибо за предложение! Мы учтём его.');
         } catch (err) {
@@ -111,75 +115,62 @@ const Home = () => {
     }
 
     return (
-        <div className="container">
+        <div className="container" text>
+            {/* Статус API */}
             <Typography variant="h6" color={apiStatus.includes('Failed') ? 'error' : 'primary'}>
                 {apiStatus}
             </Typography>
 
             {/* Блок описания сервиса */}
-            <Box sx={{ mb: 3, mt: 2 }}>
+            <div style={{ margin: '20px 0' }}>
                 <Typography variant="h4" gutterBottom>
                     Добро пожаловать в Сервис Редких Книг
                 </Typography>
                 <Typography variant="body1">
                     Сервис редких книг — это платформа, которая помогает любителям редких
-                    книг находить, описывать и приобретать уникальные экземпляры. У нас
-                    вы можете искать книги по названию, описанию, ценовому диапазону.
-                    <br />
-                    <b>Мы открыты к предложениям:</b> вносите инициативы по доработке сервиса
-                    через форму обратной связи (кнопка ниже).
+                    книг находить, описывать и приобретать уникальные экземпляры У нас
+                    вы можете искать книги по названию, описанию, ценовому
+                    диапазону. <b>Мы открыты к предложениям.</b> Вносите свои инциативы по доработке сервиса через
+                    форму обратной связи.
                 </Typography>
-                {user && !user.hasSubscription && (
-                    <Box sx={{ mt: 2 }}>
-                        <Typography variant="h6" color="error">
-                            У вас нет подписки. Оформите подписку, чтобы получить доступ к полной
-                            версии поиска. <Link to="/subscription">Подписаться сейчас</Link>
-                        </Typography>
-                    </Box>
+                {!loading && user && !user.hasSubscription && (
+                    <div>
+                        <br />
+                        <h3><b>Подписка на сервис позволяет получить полную информацию по искомым книгам.</b></h3>
+                    </div>
                 )}
-            </Box>
+            </div>
 
-            {/* Если авторизован */}
             {user ? (
                 <>
-                    {/* Если user.role === 'Admin' -> панель */}
+                    {/* Предупреждение об отсутствии подписки */}
+                    {!user.hasSubscription && (
+                        <div className="subscription-warning">
+                            <Typography color="error">
+                                У вас нет подписки. Оформите подписку, чтобы получить доступ к полной версии поиска.<Link to="/subscription">Подписаться сейчас</Link>
+                            </Typography>
+                        </div>
+                    )}
+                    {/* Ссылка на панель админа (только для Admin) */}
                     {user.role === 'Admin' && (
-                        <Box sx={{ mb: 2 }}>
+                        <div className="admin-link">
                             <Typography>
                                 <Link to="/admin">Перейти в панель администратора</Link>
                             </Typography>
-                        </Box>
+                        </div>
                     )}
 
-                    {/* Блок поиска, оформим как Login-стиль */}
-                    <Box
-                        sx={{
-                            maxWidth: 600,
-                            margin: '0 auto',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 2
-                        }}
-                    >
-                        <Typography variant="h5" align="center">
+                    {/* Блок поиска */}
+                    <div className="search-section">
+                        <Typography variant="h5" gutterBottom>
                             Поиск
                         </Typography>
 
                         {/* Поиск по названию */}
-                        <Box
-                            sx={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: 1,
-                                backgroundColor: '#fff',
-                                padding: 2,
-                                borderRadius: 2,
-                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                            }}
-                        >
-                            <TextField
-                                label="По названию"
-                                variant="outlined"
+                        <div className="search-box">
+                            <input
+                                type="text"
+                                placeholder="По названию"
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
                                 onKeyDown={(e) => {
@@ -195,26 +186,14 @@ const Home = () => {
                                 }
                                 label="Точная фраза"
                             />
-                            <Button variant="contained" onClick={handleTitleSearch}>
-                                Поиск
-                            </Button>
-                        </Box>
+                            <button onClick={handleTitleSearch}>Поиск</button>
+                        </div>
 
                         {/* Поиск по описанию */}
-                        <Box
-                            sx={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: 1,
-                                backgroundColor: '#fff',
-                                padding: 2,
-                                borderRadius: 2,
-                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                            }}
-                        >
-                            <TextField
-                                label="По описанию"
-                                variant="outlined"
+                        <div className="search-box">
+                            <input
+                                type="text"
+                                placeholder="По описанию"
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
                                 onKeyDown={(e) => {
@@ -230,104 +209,58 @@ const Home = () => {
                                 }
                                 label="Точная фраза"
                             />
-                            <Button variant="contained" onClick={handleDescriptionSearch}>
-                                Поиск
-                            </Button>
-                        </Box>
+                            <button onClick={handleDescriptionSearch}>Поиск</button>
+                        </div>
 
                         {/* Поиск по диапазону цен */}
-                        <Box
-                            sx={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: 1,
-                                backgroundColor: '#fff',
-                                padding: 2,
-                                borderRadius: 2,
-                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                            }}
-                        >
-                            <TextField
-                                label="Мин. цена"
-                                variant="outlined"
+                        <div className="search-box">
+                            <input
+                                type="text"
+                                placeholder="Мин. цена"
                                 value={minPrice}
                                 onChange={(e) => setMinPrice(e.target.value)}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter') handlePriceRangeSearch();
                                 }}
                             />
-                            <TextField
-                                label="Макс. цена"
-                                variant="outlined"
+                            <input
+                                type="text"
+                                placeholder="Макс. цена"
                                 value={maxPrice}
                                 onChange={(e) => setMaxPrice(e.target.value)}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter') handlePriceRangeSearch();
                                 }}
                             />
-                            <Button variant="contained" onClick={handlePriceRangeSearch}>
-                                Поиск
-                            </Button>
-                        </Box>
+                            <button onClick={handlePriceRangeSearch}>Поиск</button>
+                        </div>
 
                         {/* Поиск по ID (только администратор) */}
                         {user.role === 'Admin' && (
-                            <Box
-                                sx={{
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: 1,
-                                    backgroundColor: '#fff',
-                                    padding: 2,
-                                    borderRadius: 2,
-                                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                                }}
-                            >
-                                <TextField
-                                    label="Поиск по ID книги"
-                                    variant="outlined"
+                            <div className="search-box">
+                                <input
+                                    type="text"
+                                    placeholder="Введите ID книги"
                                     value={bookId}
                                     onChange={(e) => setBookId(e.target.value)}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') handleIdSearch();
                                     }}
                                 />
-                                <Button variant="contained" onClick={handleIdSearch}>
-                                    Поиск по ID
-                                </Button>
-                            </Box>
+                                <button onClick={handleIdSearch}>Поиск по ID</button>
+                            </div>
                         )}
-                    </Box>
+                    </div>
 
-                    {/* Категории (для админа) */}
+                    {/* Секция категорий (тоже только для администратора) */}
                     {user.role === 'Admin' && (
-                        <Box
-                            sx={{
-                                maxWidth: 600,
-                                margin: '20px auto 0 auto',
-                                backgroundColor: '#fff',
-                                padding: 2,
-                                borderRadius: 2,
-                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                            }}
-                        >
+                        <div className="categories">
                             <Typography variant="h5">Категории</Typography>
-                            <ul style={{ marginTop: '10px', listStyle: 'none', padding: 0 }}>
+                            <ul>
                                 {Array.isArray(categories) ? (
                                     categories.map((category) => (
-                                        <li key={category.id} style={{ marginBottom: '5px' }}>
-                                            <Link
-                                                to={`/searchByCategory/${category.id}`}
-                                                style={{
-                                                    textDecoration: 'none',
-                                                    color: '#333',
-                                                    border: '1px solid #ddd',
-                                                    padding: '8px',
-                                                    borderRadius: '4px',
-                                                    display: 'inline-block',
-                                                    backgroundColor: '#f9f9f9'
-                                                }}
-                                            >
+                                        <li key={category.id}>
+                                            <Link to={`/searchByCategory/${category.id}`}>
                                                 {category.name}
                                             </Link>
                                         </li>
@@ -336,54 +269,40 @@ const Home = () => {
                                     <li>Категории не найдены</li>
                                 )}
                             </ul>
-                        </Box>
+                        </div>
                     )}
 
-                    <Box sx={{ mt: 3, textAlign: 'center' }}>
+                    <div style={{ marginTop: '20px' }}>
                         <Button variant="outlined" onClick={openFeedback}>
                             Оставить предложение
                         </Button>
-                    </Box>
+                    </div>
 
-                    <Box sx={{ mt: 3, textAlign: 'center' }}>
+                    <div className="auth-links" style={{ marginTop: '20px' }}>
                         <Button variant="contained" color="secondary" onClick={handleLogout}>
                             Выйти
                         </Button>
-                    </Box>
-                    <Box sx={{ mt: 2, textAlign: 'center' }}>
-                        <Typography variant="body1">
-                            Добро пожаловать, <strong>{user.userName}</strong>!
-                        </Typography>
-                    </Box>
+                    </div>
+                    <div style={{ marginTop: '10px' }}>
+                        Добро пожаловать, <strong>{user.userName}</strong>!
+                    </div>
                 </>
             ) : (
-                // Если user=null
                 <>
-                    <Box sx={{ mt: 3 }}>
+                    <div style={{ marginTop: '20px' }}>
                         <Typography variant="body1">
-                            Чтобы получить полный доступ к сервису, пожалуйста,
-                            войдите или зарегистрируйтесь.
+                            Чтобы получить полный доступ к сервису, пожалуйста, войдите или зарегистрируйтесь.
                         </Typography>
-                    </Box>
+                    </div>
 
-                    <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            component={Link}
-                            to="/login"
-                        >
+                    <div className="auth-links" style={{ marginTop: '20px' }}>
+                        <Button variant="contained" color="primary" component={Link} to="/login">
                             Войти
                         </Button>
-                        <Button
-                            variant="contained"
-                            color="secondary"
-                            component={Link}
-                            to="/register"
-                        >
+                        <Button variant="contained" color="secondary" component={Link} to="/register">
                             Регистрация
                         </Button>
-                    </Box>
+                    </div>
                 </>
             )}
 
@@ -391,6 +310,7 @@ const Home = () => {
             <Dialog open={isFeedbackOpen} onClose={closeFeedback}>
                 <DialogTitle>Оставить предложение</DialogTitle>
                 <DialogContent>
+                    {/* Показываем ошибку, если есть */}
                     {feedbackError && (
                         <Typography color="error" sx={{ mb: 1 }}>
                             {feedbackError}
