@@ -313,7 +313,7 @@ const Home = () => {
                     {/* Секция категорий (если Admin) */}
                     {user.role === 'Admin' && (
                         <div className="categories">
-                            <Typography variant="h5">Категории</Typography>
+                            <Typography variant="h6">Категории</Typography>
                             <ul>
                                 {Array.isArray(categories) ? (
                                     categories.map((category) => (

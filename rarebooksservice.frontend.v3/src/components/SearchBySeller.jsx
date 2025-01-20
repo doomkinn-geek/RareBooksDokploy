@@ -83,10 +83,6 @@ const SearchBySeller = () => {
                     />
                 )}
             </Box>
-
-            <footer className="footer">
-                <p>&copy; 2024 Rare Books Service. All rights reserved.</p>
-            </footer>
         </div>
     );
 };

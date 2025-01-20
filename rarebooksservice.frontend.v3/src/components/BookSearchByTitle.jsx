@@ -80,12 +80,7 @@ const BookSearchByTitle = () => {
                     currentPage={currentPage}
                     setCurrentPage={setCurrentPage}
                 />
-            )}
-
-            {/* Небольшой футер */}
-            <footer className="footer" style={{ marginTop: '20px' }}>
-                <p>&copy; 2024 Rare Books Service. All rights reserved.</p>
-            </footer>
+            )}            
         </div>
     );
 };
