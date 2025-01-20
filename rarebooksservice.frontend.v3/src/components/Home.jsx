@@ -10,10 +10,10 @@ import {
     Dialog,
     DialogTitle,
     DialogContent,
-    DialogActions,
-    Box
+    DialogActions
 } from '@mui/material';
 import { getCategories, sendFeedback as sendFeedbackApi } from '../api';
+//                                 ^^^^^^^^^^^^^^^^^^^^^   важно: импортируем sendFeedback
 import { UserContext } from '../context/UserContext';
 
 const Home = () => {
@@ -33,7 +33,7 @@ const Home = () => {
     // Форма обратной связи
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
     const [feedbackText, setFeedbackText] = useState('');
-    const [feedbackError, setFeedbackError] = useState('');
+    const [feedbackError, setFeedbackError] = useState(''); // можно вывести ошибку при отправке
 
     useEffect(() => {
         const fetchCategories = async () => {
@@ -49,7 +49,7 @@ const Home = () => {
         fetchCategories();
     }, []);
 
-    // --- Методы поиска ---
+    // Методы поиска (handleTitleSearch, handleDescriptionSearch, ...)
     const handleTitleSearch = () => {
         if (title.trim()) {
             navigate(`/searchByTitle/${title}?exactPhrase=${exactPhraseTitle}`);
@@ -71,7 +71,7 @@ const Home = () => {
         }
     };
 
-    // --- Логаут ---
+    // Логаут
     const handleLogout = () => {
         document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
         localStorage.removeItem('token');
@@ -79,7 +79,7 @@ const Home = () => {
         navigate('/');
     };
 
-    // --- Обратная связь ---
+    // Открыть/закрыть диалог обратной связи
     const openFeedback = () => {
         setIsFeedbackOpen(true);
     };
@@ -88,14 +88,18 @@ const Home = () => {
         setFeedbackText('');
         setFeedbackError('');
     };
+
+    // Отправка предложения
     const sendFeedback = async () => {
         setFeedbackError('');
         if (!feedbackText.trim()) {
             setFeedbackError('Нельзя отправить пустое предложение!');
             return;
         }
+
         try {
             await sendFeedbackApi(feedbackText);
+            // Если успех:
             closeFeedback();
             alert('Спасибо за предложение! Мы учтём его.');
         } catch (err) {
@@ -111,30 +115,29 @@ const Home = () => {
     }
 
     return (
-        <div className="container" style={{ maxWidth: '800px', margin: '0 auto' }}>
+        <div className="container" text>
             {/* Статус API */}
             <Typography variant="h6" color={apiStatus.includes('Failed') ? 'error' : 'primary'}>
                 {apiStatus}
             </Typography>
 
-            {/* Описание сервиса */}
-            <div style={{ margin: '20px 0', textAlign: 'center' }}>
+            {/* Блок описания сервиса */}
+            <div style={{ margin: '20px 0' }}>
                 <Typography variant="h4" gutterBottom>
                     Добро пожаловать в Сервис Редких Книг
                 </Typography>
                 <Typography variant="body1">
                     Сервис редких книг — это платформа, которая помогает любителям редких
-                    книг находить, описывать и приобретать уникальные экземпляры. У нас
-                    вы можете искать книги по названию, описанию, ценовому диапазону...
-                    <b> Мы открыты к предложениям!</b>
+                    книг находить, описывать и приобретать уникальные экземпляры У нас
+                    вы можете искать книги по названию, описанию, ценовому
+                    диапазону. <b>Мы открыты к предложениям.</b> Вносите свои инциативы по доработке сервиса через
+                    форму обратной связи.
                 </Typography>
                 {!loading && user && !user.hasSubscription && (
-                    <Box sx={{ mt: 2 }}>
-                        <Typography variant="h6" color="error">
-                            Подписка на сервис позволяет получить полную информацию
-                            по искомым книгам.
-                        </Typography>
-                    </Box>
+                    <div>
+                        <br />
+                        <h3><b>Подписка на сервис позволяет получить полную информацию по искомым книгам.</b></h3>
+                    </div>
                 )}
             </div>
 
@@ -142,37 +145,37 @@ const Home = () => {
                 <>
                     {/* Предупреждение об отсутствии подписки */}
                     {!user.hasSubscription && (
-                        <div className="subscription-warning" style={{ textAlign: 'center' }}>
+                        <div className="subscription-warning">
                             <Typography color="error">
-                                У вас нет подписки. <Link to="/subscription">Подписаться сейчас</Link>
+                                У вас нет подписки. Оформите подписку, чтобы получить доступ к полной версии поиска.<Link to="/subscription">Подписаться сейчас</Link>
+                            </Typography>
+                        </div>
+                    )}
+                    {/* Ссылка на панель админа (только для Admin) */}
+                    {user.role === 'Admin' && (
+                        <div className="admin-link">
+                            <Typography>
+                                <Link to="/admin">Перейти в панель администратора</Link>
                             </Typography>
                         </div>
                     )}
 
-                    {/* Ссылка на панель админа (только для Admin) */}
-                    {user.role === 'Admin' && (
-                        <Box sx={{ textAlign: 'center', mt: 2 }}>
-                            <Typography>
-                                <Link to="/admin">Перейти в панель администратора</Link>
-                            </Typography>
-                        </Box>
-                    )}
-
-                    {/* --- Блок поиска --- */}
-                    <Box className="search-section" sx={{ mt: 4 }}>
-                        <Typography variant="h5" align="center" gutterBottom>
+                    {/* Блок поиска */}
+                    {/* Блок поиска (добавим класс/стиль для центровки) */}
+                    <div
+                        className="search-section"
+                        style={{
+                            maxWidth: '600px',
+                            margin: '0 auto',
+                            textAlign: 'center'
+                        }}
+                    >
+                        <Typography variant="h5" gutterBottom>
                             Поиск
                         </Typography>
 
                         {/* Поиск по названию */}
-                        <Box sx={{
-                            display: 'flex',
-                            gap: 2,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            mb: 2,
-                            flexWrap: 'wrap'
-                        }}>
+                        <div className="search-box" style={{ flexDirection: 'column', gap: '10px' }}>
                             <TextField
                                 label="По названию"
                                 variant="outlined"
@@ -182,29 +185,28 @@ const Home = () => {
                                     if (e.key === 'Enter') handleTitleSearch();
                                 }}
                             />
-                            <FormControlLabel
-                                control={
-                                    <Checkbox
-                                        checked={exactPhraseTitle}
-                                        onChange={(e) => setExactPhraseTitle(e.target.checked)}
-                                    />
-                                }
-                                label="Точная фраза"
-                            />
-                            <Button variant="contained" onClick={handleTitleSearch}>
-                                Поиск
-                            </Button>
-                        </Box>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <FormControlLabel
+                                    control={
+                                        <Checkbox
+                                            checked={exactPhraseTitle}
+                                            onChange={(e) => setExactPhraseTitle(e.target.checked)}
+                                        />
+                                    }
+                                    label="Точная фраза"
+                                />
+                                <Button
+                                    variant="contained"
+                                    style={{ backgroundColor: '#ffcc00', color: '#000' }}
+                                    onClick={handleTitleSearch}
+                                >
+                                    Поиск
+                                </Button>
+                            </div>
+                        </div>
 
                         {/* Поиск по описанию */}
-                        <Box sx={{
-                            display: 'flex',
-                            gap: 2,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            mb: 2,
-                            flexWrap: 'wrap'
-                        }}>
+                        <div className="search-box" style={{ flexDirection: 'column', gap: '10px' }}>
                             <TextField
                                 label="По описанию"
                                 variant="outlined"
@@ -214,68 +216,66 @@ const Home = () => {
                                     if (e.key === 'Enter') handleDescriptionSearch();
                                 }}
                             />
-                            <FormControlLabel
-                                control={
-                                    <Checkbox
-                                        checked={exactPhraseDescription}
-                                        onChange={(e) =>
-                                            setExactPhraseDescription(e.target.checked)
-                                        }
-                                    />
-                                }
-                                label="Точная фраза"
-                            />
-                            <Button variant="contained" onClick={handleDescriptionSearch}>
-                                Поиск
-                            </Button>
-                        </Box>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <FormControlLabel
+                                    control={
+                                        <Checkbox
+                                            checked={exactPhraseDescription}
+                                            onChange={(e) => setExactPhraseDescription(e.target.checked)}
+                                        />
+                                    }
+                                    label="Точная фраза"
+                                />
+                                <Button
+                                    variant="contained"
+                                    style={{ backgroundColor: '#ffcc00', color: '#000' }}
+                                    onClick={handleDescriptionSearch}
+                                >
+                                    Поиск
+                                </Button>
+                            </div>
+                        </div>
 
                         {/* Поиск по диапазону цен */}
-                        <Box sx={{
-                            display: 'flex',
-                            gap: 2,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            mb: 2,
-                            flexWrap: 'wrap'
-                        }}>
-                            <TextField
-                                label="Мин. цена"
-                                variant="outlined"
-                                value={minPrice}
-                                onChange={(e) => setMinPrice(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handlePriceRangeSearch();
-                                }}
-                                sx={{ width: '140px' }}
-                            />
-                            <TextField
-                                label="Макс. цена"
-                                variant="outlined"
-                                value={maxPrice}
-                                onChange={(e) => setMaxPrice(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handlePriceRangeSearch();
-                                }}
-                                sx={{ width: '140px' }}
-                            />
-                            <Button variant="contained" onClick={handlePriceRangeSearch}>
+                        <div className="search-box" style={{ flexDirection: 'column', gap: '10px' }}>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <TextField
+                                    label="Мин. цена"
+                                    variant="outlined"
+                                    type="number"
+                                    value={minPrice}
+                                    onChange={(e) => setMinPrice(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handlePriceRangeSearch();
+                                    }}
+                                    sx={{ flex: 1 }}
+                                />
+                                <TextField
+                                    label="Макс. цена"
+                                    variant="outlined"
+                                    type="number"
+                                    value={maxPrice}
+                                    onChange={(e) => setMaxPrice(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handlePriceRangeSearch();
+                                    }}
+                                    sx={{ flex: 1 }}
+                                />
+                            </div>
+                            <Button
+                                variant="contained"
+                                style={{ backgroundColor: '#ffcc00', color: '#000' }}
+                                onClick={handlePriceRangeSearch}
+                            >
                                 Поиск
                             </Button>
-                        </Box>
+                        </div>
 
                         {/* Поиск по ID (только администратор) */}
                         {user.role === 'Admin' && (
-                            <Box sx={{
-                                display: 'flex',
-                                gap: 2,
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                mb: 2,
-                                flexWrap: 'wrap'
-                            }}>
+                            <div className="search-box" style={{ flexDirection: 'column', gap: '10px' }}>
                                 <TextField
-                                    label="Введите ID книги"
+                                    label="ID книги"
                                     variant="outlined"
                                     value={bookId}
                                     onChange={(e) => setBookId(e.target.value)}
@@ -283,14 +283,18 @@ const Home = () => {
                                         if (e.key === 'Enter') handleIdSearch();
                                     }}
                                 />
-                                <Button variant="contained" onClick={handleIdSearch}>
+                                <Button
+                                    variant="contained"
+                                    style={{ backgroundColor: '#ffcc00', color: '#000' }}
+                                    onClick={handleIdSearch}
+                                >
                                     Поиск по ID
                                 </Button>
-                            </Box>
+                            </div>
                         )}
-                    </Box>
+                    </div>
 
-                    {/* --- Секция категорий (не меняем стили) --- */}
+                    {/* Секция категорий (не меняем!) */}
                     {user.role === 'Admin' && (
                         <div className="categories">
                             <Typography variant="h5">Категории</Typography>
@@ -310,39 +314,38 @@ const Home = () => {
                         </div>
                     )}
 
-                    <Box sx={{ textAlign: 'center', mt: 3 }}>
+                    {/* ...кнопка "Оставить предложение" и пр... */}
+                    <div style={{ marginTop: '20px' }}>
                         <Button variant="outlined" onClick={openFeedback}>
                             Оставить предложение
                         </Button>
-                    </Box>
+                    </div>
 
-                    <Box sx={{ textAlign: 'center', mt: 3 }}>
+                    <div className="auth-links" style={{ marginTop: '20px' }}>
                         <Button variant="contained" color="secondary" onClick={handleLogout}>
                             Выйти
                         </Button>
-                    </Box>
-
-                    <Box sx={{ textAlign: 'center', mt: 2 }}>
+                    </div>
+                    <div style={{ marginTop: '10px' }}>
                         Добро пожаловать, <strong>{user.userName}</strong>!
-                    </Box>
+                    </div>
                 </>
             ) : (
                 <>
-                    <Box sx={{ textAlign: 'center', mt: 4 }}>
+                    <div style={{ marginTop: '20px' }}>
                         <Typography variant="body1">
-                            Чтобы получить полный доступ к сервису, пожалуйста, войдите
-                            или зарегистрируйтесь.
+                            Чтобы получить полный доступ к сервису, пожалуйста, войдите или зарегистрируйтесь.
                         </Typography>
-                    </Box>
+                    </div>
 
-                    <Box className="auth-links" sx={{ display: 'flex', gap: 2, justifyContent: 'center', mt: 3 }}>
-                        <Button variant="contained" component={Link} to="/login">
+                    <div className="auth-links" style={{ marginTop: '20px' }}>
+                        <Button variant="contained" color="primary" component={Link} to="/login">
                             Войти
                         </Button>
                         <Button variant="contained" color="secondary" component={Link} to="/register">
                             Регистрация
                         </Button>
-                    </Box>
+                    </div>
                 </>
             )}
 
@@ -367,7 +370,11 @@ const Home = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={closeFeedback}>Отмена</Button>
-                    <Button onClick={sendFeedback} variant="contained" color="primary">
+                    <Button
+                        variant="contained"
+                        style={{ backgroundColor: '#ffcc00', color: '#000' }}
+                        onClick={sendFeedback}
+                    >
                         Отправить
                     </Button>
                 </DialogActions>
