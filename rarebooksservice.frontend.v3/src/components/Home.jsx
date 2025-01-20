@@ -48,7 +48,7 @@ const Home = () => {
         fetchCategories();
     }, []);
 
-    // Методы поиска
+    // --- Методы поиска ---
     const handleTitleSearch = () => {
         if (title.trim()) {
             navigate(`/searchByTitle/${title}?exactPhrase=${exactPhraseTitle}`);
@@ -70,7 +70,7 @@ const Home = () => {
         }
     };
 
-    // Логаут
+    // --- Логаут ---
     const handleLogout = () => {
         document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
         localStorage.removeItem('token');
@@ -78,7 +78,7 @@ const Home = () => {
         navigate('/');
     };
 
-    // Фидбек
+    // --- Обратная связь ---
     const openFeedback = () => {
         setIsFeedbackOpen(true);
     };
@@ -93,6 +93,7 @@ const Home = () => {
             setFeedbackError('Нельзя отправить пустое предложение!');
             return;
         }
+
         try {
             await sendFeedbackApi(feedbackText);
             closeFeedback();
@@ -121,7 +122,7 @@ const Home = () => {
                 {apiStatus}
             </Typography>
 
-            {/* Описание сервиса */}
+            {/* Блок описания сервиса */}
             <div style={{ marginBottom: 20, textAlign: 'center' }}>
                 <Typography variant="h4" gutterBottom>
                     Добро пожаловать в Сервис Редких Книг
@@ -130,11 +131,9 @@ const Home = () => {
                     Сервис редких книг — это платформа, которая помогает любителям редких
                     книг находить, описывать и приобретать уникальные экземпляры.
                     У нас вы можете искать книги по названию, описанию, ценовому
-                    диапазону. <b>Мы открыты к предложениям.</b> Вносите инициативы
-                    по доработке сервиса через форму обратной связи.
+                    диапазону. <b>Мы открыты к предложениям!</b>
                 </Typography>
-                {/* Если есть user и нет подписки — предупредим */}
-                {!loading && user && !user.hasSubscription && (
+                {user && !user.hasSubscription && (
                     <div style={{ marginTop: 10 }}>
                         <Typography variant="subtitle1" color="error">
                             Подписка на сервис позволяет получить полную информацию по искомым книгам.
@@ -178,8 +177,10 @@ const Home = () => {
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') handleTitleSearch();
                             }}
+                            fullWidth
                         />
-                        <div className="search-box-row">
+                        <div className="search-row">
+                            {/* Левый чекбокс */}
                             <FormControlLabel
                                 control={
                                     <Checkbox
@@ -188,9 +189,12 @@ const Home = () => {
                                     />
                                 }
                                 label="Точная фраза"
+                                className="search-checkbox"
                             />
+                            {/* Правая кнопка */}
                             <Button
                                 variant="contained"
+                                className="search-button-right"
                                 style={{ backgroundColor: '#ffcc00', color: '#000' }}
                                 onClick={handleTitleSearch}
                             >
@@ -210,19 +214,24 @@ const Home = () => {
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') handleDescriptionSearch();
                             }}
+                            fullWidth
                         />
-                        <div className="search-box-row">
+                        <div className="search-row">
                             <FormControlLabel
                                 control={
                                     <Checkbox
                                         checked={exactPhraseDescription}
-                                        onChange={(e) => setExactPhraseDescription(e.target.checked)}
+                                        onChange={(e) =>
+                                            setExactPhraseDescription(e.target.checked)
+                                        }
                                     />
                                 }
                                 label="Точная фраза"
+                                className="search-checkbox"
                             />
                             <Button
                                 variant="contained"
+                                className="search-button-right"
                                 style={{ backgroundColor: '#ffcc00', color: '#000' }}
                                 onClick={handleDescriptionSearch}
                             >
@@ -234,7 +243,7 @@ const Home = () => {
                     {/* Поиск по диапазону цен */}
                     <div className="search-box">
                         <Typography variant="h6">Поиск по диапазону цен</Typography>
-                        <div className="search-box-row">
+                        <div className="price-inputs-row">
                             <TextField
                                 label="Мин. цена"
                                 variant="outlined"
@@ -258,41 +267,67 @@ const Home = () => {
                                 sx={{ flex: 1 }}
                             />
                         </div>
-                        <Button
-                            variant="contained"
-                            style={{ backgroundColor: '#ffcc00', color: '#000' }}
-                            onClick={handlePriceRangeSearch}
-                        >
-                            Поиск
-                        </Button>
+                        <div className="search-row" style={{ justifyContent: 'flex-end' }}>
+                            <Button
+                                variant="contained"
+                                className="search-button-right"
+                                style={{ backgroundColor: '#ffcc00', color: '#000' }}
+                                onClick={handlePriceRangeSearch}
+                            >
+                                Поиск
+                            </Button>
+                        </div>
                     </div>
 
-                    {/* Поиск по ID (только администратор) */}
+                    {/* Поиск по ID (только для Admin) */}
                     {user.role === 'Admin' && (
                         <div className="search-box">
                             <Typography variant="h6">
                                 Поиск по ID (только для администратора)
                             </Typography>
-                            <TextField
-                                label="ID книги"
-                                variant="outlined"
-                                value={bookId}
-                                onChange={(e) => setBookId(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleIdSearch();
-                                }}
-                            />
-                            <Button
-                                variant="contained"
-                                style={{ backgroundColor: '#ffcc00', color: '#000' }}
-                                onClick={handleIdSearch}
-                            >
-                                Поиск по ID
-                            </Button>
+                            <div className="price-inputs-row">
+                                <TextField
+                                    label="ID книги"
+                                    variant="outlined"
+                                    value={bookId}
+                                    onChange={(e) => setBookId(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleIdSearch();
+                                    }}
+                                    sx={{ flex: 1 }}
+                                />
+                            </div>
+                            <div className="search-row" style={{ justifyContent: 'flex-end' }}>
+                                <Button
+                                    variant="contained"
+                                    className="search-button-right"
+                                    style={{ backgroundColor: '#ffcc00', color: '#000' }}
+                                    onClick={handleIdSearch}
+                                >
+                                    Поиск по ID
+                                </Button>
+                            </div>
                         </div>
                     )}
 
-                    {/* Секция категорий (центрируем) */}
+                    {/* Блок информации о пользователе и выход */}
+                    <div className="search-box">
+                        {/* Просто условно назовём это .user-info-row */}
+                        <div className="user-info-row">
+                            <Typography variant="subtitle1" sx={{ flex: 1 }}>
+                                Добро пожаловать, <strong>{user.userName}</strong>!
+                            </Typography>
+                            <Button
+                                variant="contained"
+                                color="secondary"
+                                onClick={handleLogout}
+                            >
+                                Выйти
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* Секция категорий (если Admin) */}
                     {user.role === 'Admin' && (
                         <div className="categories">
                             <Typography variant="h5">Категории</Typography>
@@ -312,22 +347,15 @@ const Home = () => {
                         </div>
                     )}
 
-                    <div style={{ marginTop: '20px', textAlign: 'center' }}>
+                    {/* Кнопка "Оставить предложение" */}
+                    <div style={{ marginTop: 20, textAlign: 'center' }}>
                         <Button variant="outlined" onClick={openFeedback}>
                             Оставить предложение
                         </Button>
                     </div>
-
-                    <div className="auth-links" style={{ marginTop: '20px', textAlign: 'center' }}>
-                        <Button variant="contained" color="secondary" onClick={handleLogout}>
-                            Выйти
-                        </Button>
-                    </div>
-                    <div style={{ marginTop: '10px', textAlign: 'center' }}>
-                        Добро пожаловать, <strong>{user.userName}</strong>!
-                    </div>
                 </>
             ) : (
+                // Если user=null
                 <>
                     <div style={{ marginTop: '20px', textAlign: 'center' }}>
                         <Typography variant="body1">

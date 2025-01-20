@@ -162,37 +162,59 @@ button, input {
 .search-box {
     margin: 20px auto;
     max-width: 800px;
-    text-align: center;
-    /* при желании можно задать доп. оформление */
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
     background-color: #fff;
     padding: 20px;
     border-radius: 5px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    text-align: left; /* чтобы тексты полей выровнялись слева */
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
 
-    .search-box input {
-        flex: 1;
-        padding: 10px;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-        margin-right: 10px;
+/* Доп. класс для горизонтальной раскладки чекбокса и кнопки */
+.search-row {
+    display: flex;
+    justify-content: space-between; /* чекбокс "слева", кнопка "справа" */
+    align-items: center;
+}
+
+/* Для блоков "Мин. цена" и "Макс. цена" */
+.price-inputs-row {
+    display: flex;
+    gap: 10px; /* отступ между полями */
+    margin-bottom: 10px; /* небольшой отступ от кнопки */
+}
+
+/* Информация о пользователе и кнопка "Выйти" */
+.user-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Для мобильных устройств можно дополнительно скорректировать... */
+@media (max-width: 768px) {
+    .search-row {
+        flex-direction: row; /* или column, если хотите? */
+        /* Но если вы хотите, чтобы кнопка реально была "справа",
+           можно оставить flex-direction: row, и тогда на узких экранах
+           они всё ещё будут в одной строке. */
+        gap: 10px;
     }
 
-    .search-box button {
-        padding: 10px 20px;
-        border: none;
-        background-color: #ffcc00;
-        color: #000;
-        cursor: pointer;
-        border-radius: 4px;
+    .price-inputs-row {
+        flex-direction: row; /* или column, если нужно */
+        gap: 10px;
+        /* при необходимости поля всё равно встанут друг под другом
+           если экран совсем узкий */
     }
 
-        .search-box button:hover {
-            background-color: #ff9900;
-        }
+    .user-info-row {
+        flex-direction: row; /* или column при желании */
+    }
+}
 
 .categories {
     margin: 20px auto;
@@ -477,18 +499,7 @@ button, input {
     .card {
         margin: 10px 0;
     }
-
-    /* Меняем верстку поиска и категорий на «вертикальную» */
-    .search-box {
-        flex-direction: column;
-        gap: 10px;
-    }
-
-        .search-box input,
-        .search-box button {
-            width: 100%;
-        }
-
+    
     .categories ul {
         flex-direction: column;
         gap: 10px;
@@ -605,26 +616,6 @@ button, input {
                     white-space: normal; /* перенос текста внутри кнопок */
                     word-break: break-word; /* если очень длинные */
                 }
-}
-
-@media (max-width: 768px) {
-    .search-section {
-        /* чуть меньший внутренний отступ, чтобы гармонично смотрелось */
-        margin: 10px 0;
-    }
-
-    .search-box {
-        display: flex;
-        flex-direction: column; /* вертикально */
-        gap: 10px;
-        margin-bottom: 15px; /* отступ между разными поисками */
-    }
-
-        .search-box input,
-        .search-box button {
-            width: 100%;
-        }
-    /* и т.д. */
 }
 
 .book-list {
