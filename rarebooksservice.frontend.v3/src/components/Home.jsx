@@ -308,24 +308,7 @@ const Home = () => {
                                 </Button>
                             </div>
                         </div>
-                    )}
-
-                    {/* Блок информации о пользователе и выход */}
-                    <div className="search-box">
-                        {/* Просто условно назовём это .user-info-row */}
-                        <div className="user-info-row">
-                            <Typography variant="subtitle1" sx={{ flex: 1 }}>
-                                Добро пожаловать, <strong>{user.userName}</strong>!
-                            </Typography>
-                            <Button
-                                variant="contained"
-                                color="secondary"
-                                onClick={handleLogout}
-                            >
-                                Выйти
-                            </Button>
-                        </div>
-                    </div>
+                    )}                    
 
                     {/* Секция категорий (если Admin) */}
                     {user.role === 'Admin' && (
@@ -346,6 +329,23 @@ const Home = () => {
                             </ul>
                         </div>
                     )}
+
+                    {/* Блок информации о пользователе и выход */}
+                    <div className="search-box">
+                        {/* Просто условно назовём это .user-info-row */}
+                        <div className="user-info-row">
+                            <Typography variant="subtitle1" sx={{ flex: 1 }}>
+                                Добро пожаловать, <strong>{user.userName}</strong>!
+                            </Typography>
+                            <Button
+                                variant="contained"
+                                color="secondary"
+                                onClick={handleLogout}
+                            >
+                                Выйти
+                            </Button>
+                        </div>
+                    </div>
 
                     {/* Кнопка "Оставить предложение" */}
                     <div style={{ marginTop: 20, textAlign: 'center' }}>
