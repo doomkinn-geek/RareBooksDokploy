@@ -13,7 +13,6 @@ import {
     DialogActions
 } from '@mui/material';
 import { getCategories, sendFeedback as sendFeedbackApi } from '../api';
-//                                 ^^^^^^^^^^^^^^^^^^^^^   важно: импортируем sendFeedback
 import { UserContext } from '../context/UserContext';
 
 const Home = () => {
@@ -33,7 +32,7 @@ const Home = () => {
     // Форма обратной связи
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
     const [feedbackText, setFeedbackText] = useState('');
-    const [feedbackError, setFeedbackError] = useState(''); // можно вывести ошибку при отправке
+    const [feedbackError, setFeedbackError] = useState('');
 
     useEffect(() => {
         const fetchCategories = async () => {
@@ -49,7 +48,7 @@ const Home = () => {
         fetchCategories();
     }, []);
 
-    // Методы поиска (handleTitleSearch, handleDescriptionSearch, ...)
+    // Методы поиска
     const handleTitleSearch = () => {
         if (title.trim()) {
             navigate(`/searchByTitle/${title}?exactPhrase=${exactPhraseTitle}`);
@@ -99,14 +98,11 @@ const Home = () => {
 
         try {
             await sendFeedbackApi(feedbackText);
-            // Если успех:
             closeFeedback();
             alert('Спасибо за предложение! Мы учтём его.');
         } catch (err) {
             console.error('Ошибка при отправке предложения:', err);
-            setFeedbackError(
-                err.response?.data ?? 'Ошибка при отправке предложения. Попробуйте позже.'
-            );
+            setFeedbackError(err.response?.data ?? 'Ошибка при отправке предложения. Попробуйте позже.');
         }
     };
 
@@ -115,62 +111,55 @@ const Home = () => {
     }
 
     return (
-        <div className="container" text>
+        <div className="home-container">
             {/* Статус API */}
-            <Typography variant="h6" color={apiStatus.includes('Failed') ? 'error' : 'primary'}>
-                {apiStatus}
-            </Typography>
+            {apiStatus && apiStatus.includes('Failed') ? (
+                <Typography variant="h6" color="error">
+                    {apiStatus}
+                </Typography>
+            ) : (
+                <Typography variant="h6" color="primary">
+                    {apiStatus}
+                </Typography>
+            )}
 
-            {/* Блок описания сервиса */}
-            <div style={{ margin: '20px 0' }}>
-                <Typography variant="h4" gutterBottom>
+            <div className="home-card">
+                {/* Заголовок */}
+                <Typography variant="h4" align="center" gutterBottom>
                     Добро пожаловать в Сервис Редких Книг
                 </Typography>
-                <Typography variant="body1">
-                    Сервис редких книг — это платформа, которая помогает любителям редких
-                    книг находить, описывать и приобретать уникальные экземпляры У нас
-                    вы можете искать книги по названию, описанию, ценовому
-                    диапазону. <b>Мы открыты к предложениям.</b> Вносите свои инциативы по доработке сервиса через
-                    форму обратной связи.
-                </Typography>
-                {!loading && user && !user.hasSubscription && (
-                    <div>
-                        <br />
-                        <h3><b>Подписка на сервис позволяет получить полную информацию по искомым книгам.</b></h3>
-                    </div>
-                )}
-            </div>
 
-            {user ? (
-                <>
-                    {/* Предупреждение об отсутствии подписки */}
-                    {!user.hasSubscription && (
-                        <div className="subscription-warning">
-                            <Typography color="error">
-                                У вас нет подписки. Оформите подписку, чтобы получить доступ к полной версии поиска.<Link to="/subscription">Подписаться сейчас</Link>
-                            </Typography>
-                        </div>
-                    )}
-                    {/* Ссылка на панель админа (только для Admin) */}
-                    {user.role === 'Admin' && (
-                        <div className="admin-link">
-                            <Typography>
+                <Typography variant="body1" paragraph>
+                    Сервис редких книг — это платформа, которая помогает любителям редких
+                    книг находить, описывать и приобретать уникальные экземпляры. У нас
+                    вы можете искать книги по названию, описанию, ценовому диапазону.
+                </Typography>
+
+                {user && !user.hasSubscription && (
+                    <Typography variant="body1" paragraph color="error">
+                        У вас нет подписки. <Link to="/subscription">Подписаться сейчас</Link>
+                    </Typography>
+                )}
+
+                {user ? (
+                    <>
+                        {/* Админ-ссылка, если роль Admin */}
+                        {user.role === 'Admin' && (
+                            <Typography align="center" sx={{ marginBottom: 2 }}>
                                 <Link to="/admin">Перейти в панель администратора</Link>
                             </Typography>
-                        </div>
-                    )}
+                        )}
 
-                    {/* Блок поиска */}
-                    <div className="search-section">
-                        <Typography variant="h5" gutterBottom>
+                        {/* Блок поиска */}
+                        <Typography variant="h5" align="center" gutterBottom>
                             Поиск
                         </Typography>
 
                         {/* Поиск по названию */}
-                        <div className="search-box">
-                            <input
-                                type="text"
-                                placeholder="По названию"
+                        <div className="home-search-box">
+                            <TextField
+                                label="По названию"
+                                variant="outlined"
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
                                 onKeyDown={(e) => {
@@ -186,14 +175,16 @@ const Home = () => {
                                 }
                                 label="Точная фраза"
                             />
-                            <button onClick={handleTitleSearch}>Поиск</button>
+                            <Button variant="contained" onClick={handleTitleSearch}>
+                                Поиск
+                            </Button>
                         </div>
 
                         {/* Поиск по описанию */}
-                        <div className="search-box">
-                            <input
-                                type="text"
-                                placeholder="По описанию"
+                        <div className="home-search-box">
+                            <TextField
+                                label="По описанию"
+                                variant="outlined"
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
                                 onKeyDown={(e) => {
@@ -209,108 +200,120 @@ const Home = () => {
                                 }
                                 label="Точная фраза"
                             />
-                            <button onClick={handleDescriptionSearch}>Поиск</button>
+                            <Button variant="contained" onClick={handleDescriptionSearch}>
+                                Поиск
+                            </Button>
                         </div>
 
                         {/* Поиск по диапазону цен */}
-                        <div className="search-box">
-                            <input
-                                type="text"
-                                placeholder="Мин. цена"
+                        <div className="home-search-box">
+                            <TextField
+                                label="Мин. цена"
+                                variant="outlined"
                                 value={minPrice}
                                 onChange={(e) => setMinPrice(e.target.value)}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter') handlePriceRangeSearch();
                                 }}
+                                sx={{ maxWidth: 150 }}
                             />
-                            <input
-                                type="text"
-                                placeholder="Макс. цена"
+                            <TextField
+                                label="Макс. цена"
+                                variant="outlined"
                                 value={maxPrice}
                                 onChange={(e) => setMaxPrice(e.target.value)}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter') handlePriceRangeSearch();
                                 }}
+                                sx={{ maxWidth: 150 }}
                             />
-                            <button onClick={handlePriceRangeSearch}>Поиск</button>
+                            <Button variant="contained" onClick={handlePriceRangeSearch}>
+                                Поиск
+                            </Button>
                         </div>
 
                         {/* Поиск по ID (только администратор) */}
                         {user.role === 'Admin' && (
-                            <div className="search-box">
-                                <input
-                                    type="text"
-                                    placeholder="Введите ID книги"
+                            <div className="home-search-box">
+                                <TextField
+                                    label="ID книги"
+                                    variant="outlined"
                                     value={bookId}
                                     onChange={(e) => setBookId(e.target.value)}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') handleIdSearch();
                                     }}
+                                    sx={{ maxWidth: 200 }}
                                 />
-                                <button onClick={handleIdSearch}>Поиск по ID</button>
+                                <Button variant="contained" onClick={handleIdSearch}>
+                                    Поиск по ID
+                                </Button>
                             </div>
                         )}
-                    </div>
 
-                    {/* Секция категорий (тоже только для администратора) */}
-                    {user.role === 'Admin' && (
-                        <div className="categories">
-                            <Typography variant="h5">Категории</Typography>
-                            <ul>
-                                {Array.isArray(categories) ? (
-                                    categories.map((category) => (
-                                        <li key={category.id}>
-                                            <Link to={`/searchByCategory/${category.id}`}>
-                                                {category.name}
-                                            </Link>
-                                        </li>
-                                    ))
+                        {/* Категории (тоже только для администратора) */}
+                        {user.role === 'Admin' && (
+                            <div className="home-categories">
+                                <Typography variant="h6" align="center" sx={{ marginTop: 2 }}>
+                                    Категории
+                                </Typography>
+                                {Array.isArray(categories) && categories.length > 0 ? (
+                                    <ul className="home-categories-list">
+                                        {categories.map((cat) => (
+                                            <li key={cat.id}>
+                                                <Link to={`/searchByCategory/${cat.id}`}>
+                                                    {cat.name}
+                                                </Link>
+                                            </li>
+                                        ))}
+                                    </ul>
                                 ) : (
-                                    <li>Категории не найдены</li>
+                                    <Typography variant="body2" color="textSecondary">
+                                        Категории не найдены
+                                    </Typography>
                                 )}
-                            </ul>
+                            </div>
+                        )}
+
+                        <div style={{ marginTop: '20px', textAlign: 'center' }}>
+                            <Button variant="outlined" onClick={openFeedback}>
+                                Оставить предложение
+                            </Button>
                         </div>
-                    )}
 
-                    <div style={{ marginTop: '20px' }}>
-                        <Button variant="outlined" onClick={openFeedback}>
-                            Оставить предложение
-                        </Button>
-                    </div>
+                        <div style={{ marginTop: '20px', textAlign: 'center' }}>
+                            <Button variant="contained" color="secondary" onClick={handleLogout}>
+                                Выйти
+                            </Button>
+                        </div>
 
-                    <div className="auth-links" style={{ marginTop: '20px' }}>
-                        <Button variant="contained" color="secondary" onClick={handleLogout}>
-                            Выйти
-                        </Button>
-                    </div>
-                    <div style={{ marginTop: '10px' }}>
-                        Добро пожаловать, <strong>{user.userName}</strong>!
-                    </div>
-                </>
-            ) : (
-                <>
-                    <div style={{ marginTop: '20px' }}>
-                        <Typography variant="body1">
-                            Чтобы получить полный доступ к сервису, пожалуйста, войдите или зарегистрируйтесь.
+                        <Typography variant="body2" align="center" sx={{ marginTop: 1 }}>
+                            Добро пожаловать, <strong>{user.userName}</strong>!
                         </Typography>
-                    </div>
+                    </>
+                ) : (
+                    <>
+                        <Typography variant="body1" paragraph align="center">
+                            Чтобы получить полный доступ к сервису,
+                            пожалуйста, войдите или зарегистрируйтесь.
+                        </Typography>
 
-                    <div className="auth-links" style={{ marginTop: '20px' }}>
-                        <Button variant="contained" color="primary" component={Link} to="/login">
-                            Войти
-                        </Button>
-                        <Button variant="contained" color="secondary" component={Link} to="/register">
-                            Регистрация
-                        </Button>
-                    </div>
-                </>
-            )}
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                            <Button variant="contained" color="primary" component={Link} to="/login">
+                                Войти
+                            </Button>
+                            <Button variant="contained" color="secondary" component={Link} to="/register">
+                                Регистрация
+                            </Button>
+                        </div>
+                    </>
+                )}
+            </div>
 
             {/* Диалог обратной связи */}
             <Dialog open={isFeedbackOpen} onClose={closeFeedback}>
                 <DialogTitle>Оставить предложение</DialogTitle>
                 <DialogContent>
-                    {/* Показываем ошибку, если есть */}
                     {feedbackError && (
                         <Typography color="error" sx={{ mb: 1 }}>
                             {feedbackError}
