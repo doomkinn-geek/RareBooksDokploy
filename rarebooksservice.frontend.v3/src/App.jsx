@@ -34,11 +34,11 @@ const App = () => {
                     </header>
 
                     <Routes>
-                        {/* Оборачиваем "/" в PrivateRoute */}
-                        <Route element={<PrivateRoute />}>
-                            <Route path="/" element={<Home />} />
+                        {/* Главная страница теперь общедоступная */}
+                        <Route path="/" element={<Home />} />
 
-                            {/* Остальные приватные роуты */}
+                        {/* Закрытая часть за PrivateRoute */}
+                        <Route element={<PrivateRoute />}>
                             <Route path="/subscription" element={<SubscriptionPage />} />
                             <Route path="/admin" element={<AdminPanel />} />
                             <Route path="/books/:id" element={<BookDetail />} />
@@ -51,7 +51,7 @@ const App = () => {
                             <Route path="/initial-setup" element={<InitialSetupPage />} />
                         </Route>
 
-                        {/* А публичные роуты, не требующие авторизации */}
+                        {/* Публичные маршруты */}
                         <Route path="/login" element={<Login />} />
                         <Route path="/register" element={<Register />} />
                         <Route path="/terms" element={<TermsOfService />} />
@@ -71,7 +71,6 @@ const App = () => {
                             <p>&copy; 2025 Сервис Редких Книг</p>
                         </div>
                     </footer>
-
                 </div>
             </Router>
         </UserProvider>
