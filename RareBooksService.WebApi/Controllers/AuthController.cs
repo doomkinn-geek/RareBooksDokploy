@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging; // Добавлено для ILogger
 using Microsoft.IdentityModel.Tokens;
+using Npgsql;
 using RareBooksService.Common.Models;
 using RareBooksService.WebApi.Services;
 using System.IdentityModel.Tokens.Jwt;
@@ -111,6 +112,12 @@ namespace RareBooksService.WebApi.Controllers
 
                 _logger.LogWarning("Неудачная попытка входа для пользователя {Email}", model.Email);
                 return Unauthorized(new { Message = "Неверные учетные данные" });
+            }
+            catch (PostgresException pgEx)
+            {
+                _logger.LogError(pgEx, "Проблема с PostgreSQL: {Message}", pgEx.Message);
+                // Вернём более конкретный ответ
+                return StatusCode(500, new { Message = "Ошибка в базе данных (PostgreSQL). Обратитесь к администратору." });
             }
             catch (Exception ex)
             {
