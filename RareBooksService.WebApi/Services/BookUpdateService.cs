@@ -161,7 +161,7 @@ namespace RareBooksService.WebApi.Services
                         .Select(x => int.Parse(x))
                         .ToList();
                     await lotFetchingService.FetchFreeListData(idList);
-                }
+                }*/
 
                 // 1) FetchAllNewData
                 if (!_cancellationRequested && !externalStoppingToken.IsCancellationRequested)
@@ -188,7 +188,7 @@ namespace RareBooksService.WebApi.Services
                     ResetProgress();
                     _logger.LogInformation("Fetching sold fixed price lots...");
                     await lotFetchingService.FetchSoldFixedPriceLotsAsync(externalStoppingToken);
-                }*/
+                }
             }
             finally
             {
