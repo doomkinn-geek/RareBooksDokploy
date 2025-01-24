@@ -218,13 +218,6 @@ namespace RareBooksService.WebApi
                 // Строим приложение
                 var app = builder.Build();
 
-                // Перед любым использованием базы данных делаем миграцию
-                using (var scope = app.Services.CreateScope())
-                {
-                    var dbContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
-                    dbContext.Database.Migrate();
-                }
-
                 // Проверяем, нужно ли показывать InitialSetup
                 var setupService = app.Services.GetRequiredService<ISetupStateService>();
                 setupService.DetermineIfSetupNeeded();
@@ -267,6 +260,13 @@ namespace RareBooksService.WebApi
                     // Иначе – всё ок
                     await next.Invoke();
                 });
+
+                // Перед любым использованием базы данных делаем миграцию
+                using (var scope = app.Services.CreateScope())
+                {
+                    var dbContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
+                    dbContext.Database.Migrate();
+                }
 
                 // Optional: миграции + seed
                 using (var scope = app.Services.CreateScope())
