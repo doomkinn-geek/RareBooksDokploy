@@ -261,11 +261,18 @@ namespace RareBooksService.WebApi
                     await next.Invoke();
                 });
 
-                // Перед любым использованием базы данных делаем миграцию
-                using (var scope = app.Services.CreateScope())
+                try
                 {
-                    var dbContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
-                    dbContext.Database.Migrate();
+                    // Перед любым использованием базы данных делаем миграцию
+                    using (var scope = app.Services.CreateScope())
+                    {
+                        var dbContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
+                        dbContext.Database.Migrate();
+                    }
+                }
+                catch(Exception e)
+                {
+                    ;
                 }
 
                 // Optional: миграции + seed
