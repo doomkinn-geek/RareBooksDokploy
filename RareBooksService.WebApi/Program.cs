@@ -261,28 +261,6 @@ namespace RareBooksService.WebApi
                     await next.Invoke();
                 });
 
-                /*try
-                {
-                    // Перед любым использованием базы данных делаем миграцию
-                    using (var scope = app.Services.CreateScope())
-                    {
-                        var dbContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
-                        dbContext.Database.Migrate();
-                    }
-                }
-                catch(Exception e)
-                {
-                    ;
-                }*/
-
-                // Optional: миграции + seed
-                using (var scope = app.Services.CreateScope())
-                {
-                    // var dbContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
-                    // dbContext.Database.Migrate();
-                    // ...
-                }
-
                 // Swagger
                 app.UseSwagger();
                 app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "RareBooksService.WebApi v1"));
