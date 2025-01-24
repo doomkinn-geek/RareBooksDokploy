@@ -261,7 +261,7 @@ namespace RareBooksService.WebApi
                     await next.Invoke();
                 });
 
-                try
+                /*try
                 {
                     // Перед любым использованием базы данных делаем миграцию
                     using (var scope = app.Services.CreateScope())
@@ -273,7 +273,7 @@ namespace RareBooksService.WebApi
                 catch(Exception e)
                 {
                     ;
-                }
+                }*/
 
                 // Optional: миграции + seed
                 using (var scope = app.Services.CreateScope())
