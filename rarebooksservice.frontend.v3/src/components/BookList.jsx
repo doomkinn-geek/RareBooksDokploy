@@ -13,23 +13,34 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
 
     // При изменении books загружаем миниатюры
     useEffect(() => {
-        // Если нет книг — сбрасываем миниатюры
         if (!books || books.length === 0) {
             setThumbnails({});
             return;
         }
 
-        // Очищаем, чтобы при обновлении списка "старые" миниатюры не мешались
         setThumbnails({});
         setError('');
 
-        // Для каждой книги, если есть firstImageName, запрашиваем миниатюру
         books.forEach((book) => {
-            if (book.firstImageName) {
+            if (!book.firstImageName) {
+                return; // у книги нет изображения
+            }
+
+            // Проверяем, является ли firstImageName "внешней" ссылкой
+            if (
+                book.firstImageName.startsWith('http://') ||
+                book.firstImageName.startsWith('https://')
+            ) {
+                // Малоценный лот: просто сохраняем URL как есть
+                setThumbnails((prev) => ({
+                    ...prev,
+                    [book.id]: book.firstImageName,
+                }));
+            } else {
+                // Обычный лот: скачиваем миниатюру через API
                 getBookImageFile(book.id, book.firstImageName)
                     .then((response) => {
                         const blobUrl = URL.createObjectURL(response.data);
-                        // Записываем миниатюру для конкретной книги
                         setThumbnails((prev) => ({
                             ...prev,
                             [book.id]: blobUrl,

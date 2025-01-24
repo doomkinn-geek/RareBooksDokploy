@@ -56,7 +56,8 @@ services:
       - 80:80
       - 443:443  # добавляем проброс HTTPS
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      #- ./nginx/nginx_dev.conf:/etc/nginx/nginx.conf
+      - ./nginx/nginx_prod.conf:/etc/nginx/nginx.conf
       - /home/docker/ssl/rare-books.ru:/etc/ssl/rare-books.ru:ro
     #network_mode: host
     depends_on:

@@ -139,6 +139,7 @@ namespace RareBooksService.WebApi
                 builder.Services.AddScoped<ISearchHistoryService, SearchHistoryService>();
                 builder.Services.AddScoped<IImportService, ImportService>();
                 builder.Services.AddScoped<IExportService, ExportService>();
+                builder.Services.AddScoped<IBookImagesService, BookImagesService>();
                 builder.Services.AddScoped<MigrationService>();
 
                 // 8) Регистрируем YandexStorageService теперь ТОЛЬКО через AddScoped<IYandexStorageService, YandexStorageService>()
@@ -216,6 +217,13 @@ namespace RareBooksService.WebApi
 
                 // Строим приложение
                 var app = builder.Build();
+
+                // Перед любым использованием базы данных делаем миграцию
+                using (var scope = app.Services.CreateScope())
+                {
+                    var dbContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
+                    dbContext.Database.Migrate();
+                }
 
                 // Проверяем, нужно ли показывать InitialSetup
                 var setupService = app.Services.GetRequiredService<ISetupStateService>();

@@ -34,22 +34,34 @@ const BookDetail = () => {
         const fetchBookImages = async () => {
             try {
                 const response = await getBookImages(id);
-                const images = response.data.images;
+                const images = response.data.images; // массив строк
 
-                const imageUrls = await Promise.all(
-                    images.map(async (image) => {
-                        const imageResponse = await getBookImageFile(id, image);
-                        return URL.createObjectURL(imageResponse.data);
-                    })
-                );
+                // Если массив пуст — всё просто
+                if (!images || images.length === 0) {
+                    setImageUrls([]);
+                    return;
+                }
 
-                setImageUrls(imageUrls);
+                // Определим, являются ли все ссылки "внешними"
+                // (проверим первый элемент, или даже все — смотря как вы хотите)
+                if (images[0].startsWith("http://") || images[0].startsWith("https://")) {
+                    // => Малоценный лот: сервер вернул "живые" ссылки
+                    // Сразу используем их в <img src="...">
+                    setImageUrls(images);
+                } else {
+                    // => "обычный" режим: нужно поштучно вызвать /books/{id}/images/{imageName}
+                    const imageBlobs = await Promise.all(
+                        images.map(async (imageName) => {
+                            const imageResponse = await getBookImageFile(id, imageName);
+                            return URL.createObjectURL(imageResponse.data);
+                        })
+                    );
+                    setImageUrls(imageBlobs);
+                }
             } catch (err) {
-                console.error('Ошибка при получении изображений книги:', err);
-                setError('Failed to load book images.');
-                setErrorDetails(
-                    err.response?.data?.message || err.message || 'Unknown error'
-                );
+                console.error("Ошибка при получении изображений:", err);
+                setError("Failed to load book images.");
+                setErrorDetails(err.response?.data?.message || err.message || "Unknown error");
             }
         };
 

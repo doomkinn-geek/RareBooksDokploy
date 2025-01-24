@@ -16,12 +16,18 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Элементы решения", "Элементы решения", "{B04A8C08-3F7F-42BD-AB53-C8BB991CCAFD}"
 	ProjectSection(SolutionItems) = preProject
 		.gitignore = .gitignore
-		nginx\nginx.conf = nginx\nginx.conf
+		nginx\nginx_dev.conf = nginx\nginx_dev.conf
+		nginx\nginx_prod.conf = nginx\nginx_prod.conf
 	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RareBooksService.Parser", "RareBooksService.Parser\RareBooksService.Parser.csproj", "{2CFFE60A-795D-4F94-81AA-2B78908007D2}"
 EndProject
 Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "docker-compose", "docker-compose.dcproj", "{6DBF7E70-C461-421E-ACE6-D963C3B737ED}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "nginx-dev", "nginx-dev", "{96BFBB85-E7B7-48A6-9C38-7B3BE65EA726}"
+	ProjectSection(SolutionItems) = preProject
+		nginx\nginx.conf = nginx\nginx.conf
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

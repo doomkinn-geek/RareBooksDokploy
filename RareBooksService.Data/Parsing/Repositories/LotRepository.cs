@@ -95,59 +95,6 @@ namespace RareBooksService.Data.Parsing.Repositories
             }
         }
 
-
-
-        /*public async Task DownloadImagesForBookAsync(int bookId, List<string> imageUrls, List<string> thumbnailUrls)
-        {
-            var basePath = Path.Combine("books_photos", bookId.ToString());
-            var imagesPath = Path.Combine(basePath, "images");
-            var thumbnailsPath = Path.Combine(basePath, "thumbnails");
-
-            Directory.CreateDirectory(imagesPath);
-            Directory.CreateDirectory(thumbnailsPath);
-
-            // Скачивание полноразмерных изображений
-            foreach (var imageUrl in imageUrls)
-            {
-                try
-                {
-                    var filename = Path.GetFileName(new Uri(imageUrl).AbsolutePath);
-                    var filePath = Path.Combine(imagesPath, filename);
-                    if (!File.Exists(filePath))
-                        await DownloadFileAsync(imageUrl, filePath);
-                } 
-                catch(Exception e)
-                {
-                    Console.WriteLine($"Error while download an image file: {e.ToString()}");
-                }
-            }
-
-            // Скачивание миниатюр
-            foreach (var thumbnailUrl in thumbnailUrls)
-            {
-                try
-                {
-                    var filename = Path.GetFileName(new Uri(thumbnailUrl).AbsolutePath);
-                    var filePath = Path.Combine(thumbnailsPath, filename);
-                    if (!File.Exists(filePath))
-                        await DownloadFileAsync(thumbnailUrl, filePath);
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine($"Error while download a thumbnai file: {e.ToString()}");
-                }
-            }
-
-            // Обновление записи в базе данных с относительными путями к файлам
-        }        
-        private static async Task DownloadFileAsync(string url, string outputPath)
-        {
-            using (var httpClient = new HttpClient())
-            {
-                var responseBytes = await httpClient.GetByteArrayAsync(url);
-                await File.WriteAllBytesAsync(outputPath, responseBytes);
-            }
-        }*/
         public async Task DownloadImagesForBookAsync(int bookId, List<string> imageUrls, List<string> thumbnailUrls)
         {
             var basePath = Path.Combine("books_photos", bookId.ToString());

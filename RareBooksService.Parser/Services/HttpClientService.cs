@@ -63,36 +63,7 @@ namespace RareBooksService.Parser.Services
             {
                 Console.WriteLine($"Failed to fetch initial cookies: {ex.Message}");
             }
-        }
-
-        /*private async Task InitializeHttpClientAsync()
-        {
-            _httpClientHandler?.Dispose();
-            _httpClient?.Dispose();
-
-            _httpClientHandler = new HttpClientHandler()
-            {
-                UseCookies = true,
-                CookieContainer = new System.Net.CookieContainer()
-            };
-
-            _httpClient = new HttpClient(_httpClientHandler, disposeHandler: true)
-            {
-                Timeout = TimeSpan.FromSeconds(30) // Устанавливаем таймаут 30 секунд (можно настроить)
-            };
-
-            ConfigureDefaultHeaders();
-            try
-            {
-                await FetchInitialCookies();
-            }
-            catch (HttpRequestException ex)
-            {
-                // Логируем и не бросаем исключение дальше, чтобы не ронять конструктор
-                Console.WriteLine($"Failed to fetch initial cookies: {ex.Message}");
-                // Можно при желании повторить попытку несколько раз или просто продолжить.
-            }
-        }*/
+        }       
 
         private void ConfigureDefaultHeaders()
         {

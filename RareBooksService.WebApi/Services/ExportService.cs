@@ -175,7 +175,15 @@ namespace RareBooksService.WebApi.Services
                                     SellerName = book.SellerName,
                                     PicsCount = book.PicsCount,
                                     ImageUrls = book.ImageUrls,
-                                    ThumbnailUrls = book.ThumbnailUrls
+                                    ThumbnailUrls = book.ThumbnailUrls,
+
+                                    //08.11.2024 - добавил поддержку малоценных лотов (советские до 1500) и сжатие изображений в object storage
+                                    IsImagesCompressed = book.IsImagesCompressed,
+                                    ImageArchiveUrl = book.ImageArchiveUrl,
+
+                                    //22.01.2025 - т.к. малоценных лотов очень много, храним их без загрузки изображений
+                                    //изображения будем получать по тем ссылкам, что есть на мешке
+                                    IsLessValuable = book.IsLessValuable
                                 };
 
                                 extendedContext.BooksInfo.Add(newBook);

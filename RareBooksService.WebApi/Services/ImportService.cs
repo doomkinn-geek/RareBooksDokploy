@@ -187,6 +187,8 @@ namespace RareBooksService.WebApi.Services
 
                     if (chunk.Count == 0) break; // всё прочитали
 
+                    // Готовим список объектов RegularBaseBook
+                    var listForContext = new List<RegularBaseBook>();
                     foreach (var bk in chunk)
                     {
                         // Пытаемся найти реальный PK категории
@@ -220,15 +222,74 @@ namespace RareBooksService.WebApi.Services
                             SoldQuantity = bk.SoldQuantity,
                             BidsCount = bk.BidsCount,
                             SellerName = bk.SellerName,
-                            PicsCount = bk.PicsCount
+                            PicsCount = bk.PicsCount,
+
+                            //08.11.2024 - добавил поддержку малоценных лотов (советские до 1500) и сжатие изображений в object storage
+                            IsImagesCompressed = bk.IsImagesCompressed,
+                            ImageArchiveUrl = bk.ImageArchiveUrl,
+
+                            //22.01.2025 - т.к. малоценных лотов очень много, храним их без загрузки изображений
+                            //изображения будем получать по тем ссылкам, что есть на мешке
+                            IsLessValuable = bk.IsLessValuable
                         };
 
-                        pgContext.BooksInfo.Add(newBook);
-                        processed++;
+                        listForContext.Add(newBook);
                     }
 
-                    // Сохраняем этот кусок
-                    await pgContext.SaveChangesAsync();
+                    // Добавляем все записи chunk-ом
+                    pgContext.BooksInfo.AddRange(listForContext);
+
+                    try
+                    {
+                        // Пытаемся сохранить одним махом
+                        await pgContext.SaveChangesAsync();
+
+                        // Если всё прошло успешно — значит конфликтов в этом чанке нет
+                        processed += listForContext.Count;
+                    }
+                    catch (DbUpdateException ex)
+                    {
+                        // Проверяем код ошибки — может, это именно нарушение уникальности PK
+                        if (IsDuplicateKeyException(ex))
+                        {
+                            // Очищаем ChangeTracker
+                            pgContext.ChangeTracker.Clear();
+
+                            // Переходим к поштучному режиму для этого чанка
+                            int subcount = 0;
+                            foreach (var bk in listForContext)
+                            {
+                                pgContext.BooksInfo.Add(bk);
+                                try
+                                {
+                                    await pgContext.SaveChangesAsync();
+                                    subcount++;
+                                }
+                                catch (DbUpdateException ex2)
+                                {
+                                    if (IsDuplicateKeyException(ex2))
+                                    {
+                                        // Пропускаем именно эту запись
+                                        // Чистим трекер и не увеличиваем subcount
+                                        pgContext.ChangeTracker.Clear();
+                                    }
+                                    else
+                                    {
+                                        // другая ошибка — пробрасываем выше
+                                        throw;
+                                    }
+                                }
+                            }
+                            processed += subcount;
+                        }
+                        else
+                        {
+                            // Ошибка не связана с дублированием PK — завершаем весь импорт
+                            throw;
+                        }
+                    }
+
+
                     //Это сбрасывает локальное отслеживание сущностей и позволяет отработать сборщику мусора
                     pgContext.ChangeTracker.Clear();
 
@@ -243,11 +304,23 @@ namespace RareBooksService.WebApi.Services
                 taskInfo.IsCompleted = true;
                 taskInfo.Message = $"Imported {processed} books (total), {catCount} categories.";
             }
+
             catch (Exception ex)
             {
                 taskInfo.IsCancelledOrError = true;
-                taskInfo.Message = "Error: " + ex.Message;
+                taskInfo.Message = $"Error: {ex.Message}. {ex.InnerException?.Message}";
             }
+        }
+
+        private bool IsDuplicateKeyException(DbUpdateException ex)
+        {
+            // Ищем признак, что это именно уникальный конфликт (23505)
+            if (ex.InnerException is Npgsql.PostgresException pgEx)
+            {
+                // 23505 — дублирование уникального ключа (unique_violation)
+                return pgEx.SqlState == "23505";
+            }
+            return false;
         }
 
         public ImportProgressDto GetImportProgress(Guid importTaskId)

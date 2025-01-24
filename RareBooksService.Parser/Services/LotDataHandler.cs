@@ -9,10 +9,10 @@ using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
+using System.Text.Json;
 
 namespace RareBooksService.Parser.Services
 {
-    // Класс опций для хранения настроек сохранения изображений
     public class TypeOfAccessImages
     {
         public bool UseLocalFiles { get; set; }
@@ -21,8 +21,11 @@ namespace RareBooksService.Parser.Services
 
     public interface ILotDataHandler
     {
-        Task SaveLotDataAsync(MeshokBook lotData, int categoryId, string categoryName = "unknown", bool downloadImages = true, bool isLessValuableLot = false);
-        // Новое событие: (lotId, message)
+        Task SaveLotDataAsync(MeshokBook lotData, int categoryId,
+                              string categoryName = "unknown",
+                              bool downloadImages = true,
+                              bool isLessValuableLot = false);
+
         event Action<int, string> ProgressChanged;
     }
 
@@ -35,12 +38,12 @@ namespace RareBooksService.Parser.Services
         private readonly TypeOfAccessImages _imageStorageOptions;
         private readonly ILogger<LotDataHandler> _logger;
         private readonly CookieContainer _cookieContainer;
-        private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(5); // Ограничиваем до 5 одновременных запросов
+        private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(5);
         private bool _cookiesInitialized = false;
 
-        // Реализация события:
-        public event Action<int, string> ProgressChanged;
+        private readonly string _appSettingsPath;
 
+        public event Action<int, string> ProgressChanged;
         private void OnProgressChanged(int lotId, string message)
         {
             ProgressChanged?.Invoke(lotId, message);
@@ -54,23 +57,39 @@ namespace RareBooksService.Parser.Services
             IOptions<TypeOfAccessImages> imageStorageOptions,
             ILogger<LotDataHandler> logger)
         {
+            _appSettingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+
             _context = context;
             _mapper = mapper;
             _lotDataService = lotDataService;
             _yandexStorageService = yandexStorageService;
             _imageStorageOptions = imageStorageOptions.Value;
             _logger = logger;
-
             _cookieContainer = new CookieContainer();
 
+            var jsonText = File.ReadAllText(_appSettingsPath);
+            using var doc = JsonDocument.Parse(jsonText);
+            var root = doc.RootElement;
 
-            //Лучше вообще не вызывать в конструкторе асинхронный метод. Можно отложить инициализацию cookie до момента фактического использования.
-            //Например, вы можете убрать эту строчку из конструктора и,
-            //например, вызвать InitializeCookiesAsync единожды в SaveLotDataAsync(или любой другой метод), но асинхронно.            
-            //InitializeCookiesAsync("https://meshok.net").Wait();
-        }        
+            // 2) Ищем секцию "YandexCloud"
+            if (!root.TryGetProperty("TypeOfAccessImages", out var typeOfAccessImagesElement))
+                throw new Exception("Section 'TypeOfAccessImages' not found in appsettings.json");
 
+            // 3) Достаём поля AccessKey / SecretKey / ServiceUrl / BucketName
+            var useLocal = typeOfAccessImagesElement.GetProperty("UseLocalFiles").GetString();
+            var localPath = typeOfAccessImagesElement.GetProperty("LocalPathOfImages").GetString();            
 
+            // 4) Проверяем
+            if (string.IsNullOrEmpty(useLocal) ||
+                string.IsNullOrEmpty(localPath))
+            {
+                throw new ArgumentException("Invalid YandexCloud config in appsettings.json");
+            }
+            _imageStorageOptions.LocalPathOfImages = localPath;
+            _imageStorageOptions.UseLocalFiles = Convert.ToBoolean(useLocal);
+        }
+
+        // Инициализация cookies
         public async Task EnsureCookiesInitializedAsync()
         {
             if (!_cookiesInitialized)
@@ -108,399 +127,229 @@ namespace RareBooksService.Parser.Services
             }
         }
 
-        public async Task SaveLotDataAsync(MeshokBook lotData, int categoryId, string categoryName = "unknown", bool downloadImages = true, bool isLessValuableLot = false)
+        public async Task SaveLotDataAsync(
+            MeshokBook lotData,
+            int categoryId,
+            string categoryName = "unknown",
+            bool downloadImages = true,
+            bool isLessValuableLot = false)
         {
             try
             {
                 await EnsureCookiesInitializedAsync();
 
-                // Сигнализируем, что начали обработку (если нужно):
                 OnProgressChanged(lotData.id, $"Начало обработки лота {lotData.id}.");
-
                 _logger.LogInformation("Обработка лота с ID {LotId}", lotData.id);
 
-                if (!await _context.BooksInfo.AnyAsync(b => b.Id == lotData.id))
+                // Проверяем, нет ли уже такого лота в БД
+                bool alreadyExists = await _context.BooksInfo.AnyAsync(b => b.Id == lotData.id);
+                if (alreadyExists)
                 {
-                    _logger.LogInformation("Лот {LotId} отсутствует в базе данных. Сохранение нового лота.", lotData.id);
-                    OnProgressChanged(lotData.id, $"Лот {lotData.id} отсутствует в БД. Сохраняем...");
+                    _logger.LogInformation("Лот {LotId} уже существует в базе. Пропускаем.", lotData.id);
+                    OnProgressChanged(lotData.id, $"Лот {lotData.id} уже есть в БД.");
+                    return;
+                }
 
-                    var category = await GetOrCreateCategoryAsync(categoryId, categoryName);
-                    _logger.LogInformation("Используется категория с ID {CategoryId} и названием '{CategoryName}'", categoryId, categoryName);
+                // Нет в БД, создаём
+                _logger.LogInformation("Лот {LotId} отсутствует в базе. Сохраняем.", lotData.id);
+                OnProgressChanged(lotData.id, $"Лот {lotData.id} отсутствует в БД. Сохраняем...");
 
-                    var bookInfo = _mapper.Map<RegularBaseBook>(lotData);
-                    bookInfo.Category = category;
+                // Создаём категорию (или берём существующую)
+                var category = await GetOrCreateCategoryAsync(categoryId, categoryName);
 
-                    // Установка типа лота
-                    bookInfo.Type = lotData.type;
+                // Создаём RegularBaseBook
+                var bookInfo = _mapper.Map<RegularBaseBook>(lotData);
+                bookInfo.Category = category;
+                bookInfo.Type = lotData.type;
 
-                    // Получение и установка описания
-                    bookInfo.Description = await _lotDataService.GetBookDescriptionAsync(lotData.id);
-                    bookInfo.NormalizedDescription = bookInfo.Description.ToLower();
-                    _logger.LogDebug("Получено описание для лота {LotId}", lotData.id);
-                    OnProgressChanged(lotData.id, $"Получено описание для лота {lotData.id}.");
+                // Описание
+                bookInfo.Description = await _lotDataService.GetBookDescriptionAsync(lotData.id);
+                bookInfo.NormalizedDescription = bookInfo.Description.ToLower();
 
-                    // Извлечение года публикации
-                    bookInfo.YearPublished = PublishingYearExtractor.ExtractYearFromDescription(bookInfo.Description)
-                                            ?? PublishingYearExtractor.ExtractYearFromDescription(bookInfo.Title);
-                    _logger.LogDebug("Извлечен год публикации для лота {LotId}: {YearPublished}", lotData.id, bookInfo.YearPublished);
+                // Год
+                bookInfo.YearPublished = PublishingYearExtractor.ExtractYearFromDescription(bookInfo.Description)
+                                        ?? PublishingYearExtractor.ExtractYearFromDescription(bookInfo.Title);
 
-                    bookInfo.IsMonitored = lotData.endDate >= DateTime.UtcNow;
-                    bookInfo.FinalPrice = lotData.endDate < DateTime.UtcNow ? lotData.normalizedPrice : null;
+                // Признак малоценности
+                bookInfo.IsLessValuable = isLessValuableLot;
 
-                    // Новая логика
-                    bookInfo.IsImagesCompressed = isLessValuableLot;
+                // IsImagesCompressed = false по умолчанию (при необходимости)
+                bookInfo.IsImagesCompressed = false;
+                bookInfo.ImageArchiveUrl = null;
 
-                    _context.BooksInfo.Add(bookInfo);
-                    await _context.SaveChangesAsync();
-                    _logger.LogInformation("Лот {LotId} сохранен в базе данных.", lotData.id);
-                    OnProgressChanged(lotData.id, $"Лот {lotData.id} сохранён в БД.");
-
-                    if (downloadImages)
-                    {
-                        _logger.LogInformation("Скачивание изображений для лота {LotId}", lotData.id);
-                        OnProgressChanged(lotData.id, $"Скачивание изображений для лота {lotData.id}...");
-                        await DownloadImagesForBookAsync(bookInfo, bookInfo.ImageUrls, bookInfo.ThumbnailUrls, isLessValuableLot);
-
-                        // Обновляем запись в базе данных с путем или ключом архива, если изображения были сжаты
-                        if (isLessValuableLot)
-                        {
-                            _context.BooksInfo.Update(bookInfo);
-                            await _context.SaveChangesAsync();
-                        }
-                    }
+                // Заполняем IsMonitored / FinalPrice
+                if (lotData.beginDate == null || lotData.endDate == null)
+                {
+                    bookInfo.IsMonitored = false;
+                    bookInfo.FinalPrice = lotData.normalizedPrice;
                 }
                 else
                 {
-                    _logger.LogInformation("Лот {LotId} уже существует в базе данных.", lotData.id);
-                    OnProgressChanged(lotData.id, $"Лот {lotData.id} уже существует в БД (пропускаем).");
+                    bookInfo.IsMonitored = (lotData.endDate >= DateTime.UtcNow);
+                    bookInfo.FinalPrice = (lotData.endDate < DateTime.UtcNow) ? lotData.normalizedPrice : null;
+                }
+
+                _context.BooksInfo.Add(bookInfo);
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Лот {LotId} сохранён в БД.", lotData.id);
+
+                // Если не малоценный => скачиваем + архивируем
+                if (!isLessValuableLot && downloadImages)
+                {
+                    await ArchiveImagesForBookAsync(bookInfo);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Произошла ошибка при сохранении данных лота с ID {LotId}", lotData.id);
-                // Можно тоже пробросить сообщение:
+                _logger.LogError(ex, "Ошибка при сохранении лота {LotId}", lotData.id);
                 OnProgressChanged(lotData.id, $"Ошибка при сохранении лота {lotData.id}: {ex.Message}");
                 throw;
             }
         }
 
-
-
-        private async Task<RegularBaseCategory> GetOrCreateCategoryAsync(int categoryId, string categoryName)
-        {
-            _logger.LogDebug("Получение категории с ID {CategoryId}", categoryId);
-
-            var category = await _context.Categories.FirstOrDefaultAsync(c => c.CategoryId == categoryId);
-            if (category == null)
-            {
-                _logger.LogInformation("Категория с ID {CategoryId} не найдена. Создание новой категории с названием '{CategoryName}'", categoryId, categoryName);
-
-                category = new RegularBaseCategory { CategoryId = categoryId, Name = categoryName };
-                _context.Categories.Add(category);
-                await _context.SaveChangesAsync();
-
-                _logger.LogInformation("Создана новая категория с ID {CategoryId} и названием '{CategoryName}'", categoryId, categoryName);
-            }
-            else
-            {
-                _logger.LogDebug("Категория с ID {CategoryId} найдена с названием '{CategoryName}'", categoryId, category.Name);
-            }
-
-            return category;
-        }
-
-        private async Task DownloadImagesForBookAsync(RegularBaseBook bookInfo, List<string> imageUrls, List<string> thumbnailUrls, bool isLessValuableLot)
+        /// <summary>
+        /// Качаем все изображения (images + thumbnails), помещаем в папки "images/" и "thumbnails/" внутри архива.
+        /// После удачного архивирования -> IsImagesCompressed = true, ImageArchiveUrl = ... 
+        /// </summary>
+        private async Task ArchiveImagesForBookAsync(RegularBaseBook bookInfo)
         {
             int bookId = bookInfo.Id;
-            _logger.LogInformation("Начало скачивания изображений для книги с ID {BookId}", bookId);
-            OnProgressChanged(bookId, $"Начало скачивания изображений (ID {bookId})...");
+            var imageUrls = bookInfo.ImageUrls;
+            var thumbnailUrls = bookInfo.ThumbnailUrls;
 
-            string imageArchivePathOrKey = null;
+            _logger.LogInformation("Архивирование изображений для лота {LotId}", bookId);
+            OnProgressChanged(bookId, $"Архивирование изображений (ID {bookId})...");
+
+            string archiveKeyOrPath = null;
 
             if (_imageStorageOptions.UseLocalFiles)
             {
-                _logger.LogInformation("Сохранение изображений локально в папку '{LocalPath}'", _imageStorageOptions.LocalPathOfImages);
-                OnProgressChanged(bookId, $"Сохранение изображений локально для лота {bookId}...");
-                imageArchivePathOrKey = await SaveImagesLocallyAsync(bookId, imageUrls, thumbnailUrls, isLessValuableLot);
+                archiveKeyOrPath = await CreateLocalArchiveWithFolders(bookId, imageUrls, thumbnailUrls);
             }
             else
             {
-                _logger.LogInformation("Загрузка изображений в облачное хранилище Yandex Object Storage");
-                OnProgressChanged(bookId, $"Загрузка в Yandex Object Storage (ID {bookId})...");
-                if (isLessValuableLot)
-                {
-                    imageArchivePathOrKey = await UploadCompressedImagesAsync(bookId, imageUrls, thumbnailUrls);
-                }
-                else
-                {
-                    await UploadImagesToYandexAsync(bookId, imageUrls, thumbnailUrls);
-                }
+                archiveKeyOrPath = await CreateObjectStorageArchiveWithFolders(bookId, imageUrls, thumbnailUrls);
             }
 
-            // Обновляем информацию о пути или ключе архива
-            if (isLessValuableLot && !string.IsNullOrEmpty(imageArchivePathOrKey))
+            if (!string.IsNullOrEmpty(archiveKeyOrPath))
             {
-                bookInfo.ImageArchiveUrl = imageArchivePathOrKey;
-            }
-
-            _logger.LogInformation("Завершено скачивание изображений для книги с ID {BookId}", bookId);
-            OnProgressChanged(bookId, $"Изображения для лота {bookId} скачаны/загружены.");
-        }
-
-
-        private async Task<string> UploadCompressedImagesAsync(int bookId, List<string> imageUrls, List<string> thumbnailUrls)
-        {
-            try
-            {
-                _logger.LogInformation("Скачивание и сжатие изображений для лота с ID {BookId}", bookId);
-
-                // Создаем временную директорию для хранения изображений
-                string tempDirectory = Path.Combine(Path.GetTempPath(), $"lot_{bookId}");
-                Directory.CreateDirectory(tempDirectory);
-
-                // Список путей к скачанным изображениям
-                List<string> downloadedImagePaths = new List<string>();
-
-                // Скачиваем изображения
-                foreach (var imageUrl in imageUrls)
-                {
-                    var filename = Path.GetFileName(new Uri(imageUrl).AbsolutePath);
-                    var filePath = Path.Combine(tempDirectory, filename);
-
-                    using var imageStream = await DownloadFileStreamWithRetryAsync(imageUrl);
-                    using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
-                    await imageStream.CopyToAsync(fileStream);
-
-                    downloadedImagePaths.Add(filePath);
-                }
-
-                // Скачиваем миниатюры
-                foreach (var thumbnailUrl in thumbnailUrls)
-                {
-                    var filename = Path.GetFileName(new Uri(thumbnailUrl).AbsolutePath);
-                    var filePath = Path.Combine(tempDirectory, filename);
-
-                    using var imageStream = await DownloadFileStreamWithRetryAsync(thumbnailUrl);
-                    using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
-                    await imageStream.CopyToAsync(fileStream);
-
-                    downloadedImagePaths.Add(filePath);
-                }
-
-                // Сжимаем изображения в архив
-                string archivePath = Path.Combine(Path.GetTempPath(), $"lot_{bookId}.zip");
-                ZipFile.CreateFromDirectory(tempDirectory, archivePath, CompressionLevel.Optimal, false);
-
-                _logger.LogInformation("Изображения для лота {BookId} сжаты в архив {ArchivePath}", bookId, archivePath);
-
-                // Загружаем архив в object storage
-                string key = $"compressed_images/{bookId}.zip";
-
-                using var archiveStream = new FileStream(archivePath, FileMode.Open, FileAccess.Read);
-                await _yandexStorageService.UploadCompressedImageArchiveAsync(key, archiveStream);
-
-                _logger.LogInformation("Архив изображений для лота {BookId} загружен с ключом {Key}", bookId, key);
-
-                // Удаляем временные файлы
-                Directory.Delete(tempDirectory, true);
-                File.Delete(archivePath);
-
-                return key; // Возвращаем ключ архива
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Ошибка при сжатии и загрузке изображений для лота {BookId}", bookId);
-                return null;
+                bookInfo.IsImagesCompressed = true;
+                bookInfo.ImageArchiveUrl = archiveKeyOrPath;
+                _context.BooksInfo.Update(bookInfo);
+                await _context.SaveChangesAsync();
             }
         }
 
-        private async Task<string> SaveImagesLocallyAsync(int bookId, List<string> imageUrls, List<string> thumbnailUrls, bool isLessValuableLot)
+        /// <summary>
+        /// Создаёт локальный архив {bookId}.zip
+        ///   в котором файлы лежат в папках "images/" и "thumbnails/" 
+        /// </summary>
+        private async Task<string> CreateLocalArchiveWithFolders(int bookId, List<string> imageUrls, List<string> thumbnailUrls)
         {
-            string basePath = Path.Combine(_imageStorageOptions.LocalPathOfImages, bookId.ToString());
+            string tempDir = Path.Combine(Path.GetTempPath(), $"lot_{bookId}");
+            Directory.CreateDirectory(tempDir);
 
-            if (isLessValuableLot)
-            {
-                // Создаем временную директорию для хранения изображений
-                string tempDirectory = Path.Combine(Path.GetTempPath(), $"lot_{bookId}");
-                Directory.CreateDirectory(tempDirectory);
+            // Подпапки images/ и thumbnails/
+            var imagesDir = Path.Combine(tempDir, "images");
+            var thumbsDir = Path.Combine(tempDir, "thumbnails");
+            Directory.CreateDirectory(imagesDir);
+            Directory.CreateDirectory(thumbsDir);
 
-                // Список путей к скачанным изображениям
-                List<string> downloadedImagePaths = new List<string>();
+            // Скачиваем полноразмерные
+            await DownloadAllImagesAsync(imagesDir, imageUrls);
+            // Скачиваем миниатюры
+            await DownloadAllImagesAsync(thumbsDir, thumbnailUrls);
 
-                // Скачиваем изображения
-                foreach (var imageUrl in imageUrls)
-                {
-                    var filename = Path.GetFileName(new Uri(imageUrl).AbsolutePath);
-                    var filePath = Path.Combine(tempDirectory, filename);
+            // Создаём архив {bookId}.zip в LocalPathOfImages
+            Directory.CreateDirectory(_imageStorageOptions.LocalPathOfImages);
+            string archivePath = Path.Combine(_imageStorageOptions.LocalPathOfImages, $"{bookId}.zip");
+            if (File.Exists(archivePath)) File.Delete(archivePath);
 
-                    using var imageStream = await DownloadFileStreamWithRetryAsync(imageUrl);
-                    using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
-                    await imageStream.CopyToAsync(fileStream);
+            ZipFile.CreateFromDirectory(tempDir, archivePath, CompressionLevel.Optimal, false);
 
-                    downloadedImagePaths.Add(filePath);
-                }
+            // Удаляем tempDir
+            Directory.Delete(tempDir, true);
 
-                // Скачиваем миниатюры
-                foreach (var thumbnailUrl in thumbnailUrls)
-                {
-                    var filename = Path.GetFileName(new Uri(thumbnailUrl).AbsolutePath);
-                    var filePath = Path.Combine(tempDirectory, filename);
-
-                    using var imageStream = await DownloadFileStreamWithRetryAsync(thumbnailUrl);
-                    using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
-                    await imageStream.CopyToAsync(fileStream);
-
-                    downloadedImagePaths.Add(filePath);
-                }
-
-                // Сжимаем изображения в архив
-                Directory.CreateDirectory(basePath);
-                string archivePath = Path.Combine(basePath, $"images_{bookId}.zip");
-                ZipFile.CreateFromDirectory(tempDirectory, archivePath, CompressionLevel.Optimal, false);
-
-                _logger.LogInformation("Изображения для лота {BookId} сжаты и сохранены локально в архив {ArchivePath}", bookId, archivePath);
-
-                // Удаляем временные файлы
-                Directory.Delete(tempDirectory, true);
-
-                return archivePath; // Возвращаем путь к архиву
-            }
-            else
-            {
-                string imagesPath = Path.Combine(basePath, "images");
-                string thumbnailsPath = Path.Combine(basePath, "thumbnails");
-
-                Directory.CreateDirectory(imagesPath);
-                Directory.CreateDirectory(thumbnailsPath);
-
-                // Скачивание полноразмерных изображений
-                foreach (var imageUrl in imageUrls)
-                {
-                    await DownloadAndSaveImageAsync(imageUrl, imagesPath, bookId, "изображение");
-                }
-
-                // Скачивание миниатюр
-                foreach (var thumbnailUrl in thumbnailUrls)
-                {
-                    await DownloadAndSaveImageAsync(thumbnailUrl, thumbnailsPath, bookId, "миниатюра");
-                }
-
-                return null; // Нет архива, возвращаем null
-            }
+            _logger.LogInformation("Локальный архив с папками images/ и thumbnails/ создан: {ArchivePath}", archivePath);
+            return archivePath;
         }
 
-
-        private async Task UploadImagesToYandexAsync(int bookId, List<string> imageUrls, List<string> thumbnailUrls)
+        /// <summary>
+        /// Создаёт архив с images/ и thumbnails/, 
+        /// загружает в ObjectStorage в _compressed_images/bookId.zip
+        /// </summary>
+        private async Task<string> CreateObjectStorageArchiveWithFolders(int bookId, List<string> imageUrls, List<string> thumbnailUrls)
         {
-            // Загрузка полноразмерных изображений
-            foreach (var imageUrl in imageUrls)
-            {
-                await DownloadAndUploadImageAsync(imageUrl, $"{bookId}/images", bookId, "изображение");
-            }
+            string tempDir = Path.Combine(Path.GetTempPath(), $"lot_{bookId}");
+            Directory.CreateDirectory(tempDir);
 
-            // Загрузка миниатюр
-            foreach (var thumbnailUrl in thumbnailUrls)
-            {
-                await DownloadAndUploadImageAsync(thumbnailUrl, $"{bookId}/thumbnails", bookId, "миниатюра");
-            }
+            var imagesDir = Path.Combine(tempDir, "images");
+            var thumbsDir = Path.Combine(tempDir, "thumbnails");
+            Directory.CreateDirectory(imagesDir);
+            Directory.CreateDirectory(thumbsDir);
+
+            // Скачиваем
+            await DownloadAllImagesAsync(imagesDir, imageUrls);
+            await DownloadAllImagesAsync(thumbsDir, thumbnailUrls);
+
+            // Архивируем во временный zip
+            string zipPath = Path.Combine(Path.GetTempPath(), $"lot_{bookId}.zip");
+            if (File.Exists(zipPath)) File.Delete(zipPath);
+
+            ZipFile.CreateFromDirectory(tempDir, zipPath, CompressionLevel.Optimal, false);
+
+            // Загружаем
+            string objectKey = $"_compressed_images/{bookId}.zip";
+            using var archiveStream = new FileStream(zipPath, FileMode.Open, FileAccess.Read);
+            await _yandexStorageService.UploadCompressedImageArchiveAsync(objectKey, archiveStream);
+
+            // CleanUp
+            Directory.Delete(tempDir, true);
+            File.Delete(zipPath);
+
+            _logger.LogInformation("ObjectStorage архив (images/thumbnails) = {Key}", objectKey);
+            return objectKey;
         }
 
-        private async Task DownloadAndSaveImageAsync(string imageUrl, string savePath, int bookId, string imageType)
+        private async Task DownloadAllImagesAsync(string targetDir, List<string> urls)
         {
-            try
+            foreach (var url in urls)
             {
-                var filename = Path.GetFileName(new Uri(imageUrl).AbsolutePath);
-                var filePath = Path.Combine(savePath, filename);
+                var filename = Path.GetFileName(new Uri(url).AbsolutePath);
+                var filePath = Path.Combine(targetDir, filename);
 
-                using var imageStream = await DownloadFileStreamWithRetryAsync(imageUrl);
+                using var imageStream = await DownloadFileStreamWithRetryAsync(url);
                 using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
                 await imageStream.CopyToAsync(fileStream);
-
-                _logger.LogInformation("Сохранено {ImageType} '{FileName}' для книги с ID {BookId}", imageType, filename, bookId);
-            }
-            catch (Exception e)
-            {
-                _logger.LogError(e, "Ошибка при скачивании {ImageType} с {ImageUrl}", imageType, imageUrl);
             }
         }
 
-        private async Task DownloadAndUploadImageAsync(string imageUrl, string keyPrefix, int bookId, string imageType)
-        {
-            try
-            {
-                var filename = Path.GetFileName(new Uri(imageUrl).AbsolutePath);
-                var key = $"{keyPrefix}/{filename}";
-
-                using var imageStream = await DownloadFileStreamWithRetryAsync(imageUrl);
-
-                if (imageType == "изображение")
-                {
-                    await _yandexStorageService.UploadImageAsync(key, imageStream);
-                }
-                else
-                {
-                    await _yandexStorageService.UploadThumbnailAsync(key, imageStream);
-                }
-
-                _logger.LogInformation("Загружено {ImageType} '{FileName}' для книги с ID {BookId}", imageType, filename, bookId);
-            }
-            catch (Exception e)
-            {
-                _logger.LogError(e, "Ошибка при загрузке {ImageType} с {ImageUrl}", imageType, imageUrl);
-            }
-        }
-
-        // Кастомное исключение для передачи кода состояния
-        public class HttpStatusCodeException : Exception
-        {
-            public HttpStatusCode StatusCode { get; }
-
-            public HttpStatusCodeException(HttpStatusCode statusCode, string message) : base(message)
-            {
-                StatusCode = statusCode;
-            }
-        }
-
+        // Мелкий метод для скачивания (с ретраями)
         private async Task<Stream> DownloadFileStreamWithRetryAsync(string url)
         {
             int maxRetries = 3;
-            int delayMilliseconds = 1000; // Начинаем с 1 секунды
+            int delayMs = 1000;
+
             for (int attempt = 1; attempt <= maxRetries; attempt++)
             {
                 try
                 {
                     return await DownloadFileStreamAsync(url);
                 }
-                catch (HttpStatusCodeException ex) when (ex.StatusCode == HttpStatusCode.BadRequest)
+                catch (Exception ex) when (
+                    ex is HttpRequestException ||
+                    ex is TaskCanceledException ||
+                    ex is IOException ||
+                    ex is SocketException)
                 {
-                    _logger.LogError(ex, "Получен статус 400 Bad Request при запросе к {Url}. Повторная попытка не будет предпринята.", url);
-                    throw;
-                }
-                catch (Exception ex) when (ex is HttpRequestException || ex is TaskCanceledException || ex is IOException || ex is SocketException)
-                {
-                    _logger.LogWarning(ex, "Попытка {Attempt} из {MaxRetries}: ошибка при скачивании из {Url}", attempt, maxRetries, url);
-
-                    if (attempt == maxRetries)
-                    {
-                        _logger.LogError(ex, "Не удалось скачать файл после {MaxRetries} попыток из {Url}", maxRetries, url);
-                        throw;
-                    }
-
-                    _logger.LogInformation("Получение новых cookies и повторная попытка скачивания из {Url}", url);
-                    await InitializeCookiesAsync("https://meshok.net"); // Используем базовый URL
-
-                    // Добавляем задержку перед повторной попыткой
-                    await Task.Delay(delayMilliseconds);
-                    delayMilliseconds *= 2; // Экспоненциальная задержка
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Неожиданная ошибка при скачивании из {Url}", url);
-                    throw;
+                    if (attempt == maxRetries) throw;
+                    _logger.LogWarning(ex, "Ошибка скачивания {Url}, attempt={Attempt}, max={Max}", url, attempt, maxRetries);
+                    await InitializeCookiesAsync("https://meshok.net");
+                    await Task.Delay(delayMs);
+                    delayMs *= 2;
                 }
             }
-
-            throw new Exception($"Не удалось скачать файл из {url} после {maxRetries} попыток.");
+            throw new Exception($"Не удалось скачать {url} после {maxRetries} попыток");
         }
 
         private async Task<Stream> DownloadFileStreamAsync(string url)
@@ -511,28 +360,13 @@ namespace RareBooksService.Parser.Services
                 using var handler = new HttpClientHandler
                 {
                     CookieContainer = _cookieContainer,
-                    AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
-                    SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13
+                    AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
                 };
-
                 using var httpClient = new HttpClient(handler);
+                httpClient.DefaultRequestHeaders.Referrer = new Uri("https://meshok.net");
 
-                var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.Accept.Clear();
-                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("image/jpeg"));
-                request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-
-                // Устанавливаем Referer на базовый адрес
-                request.Headers.Referrer = new Uri("https://meshok.net");
-
-                var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    var message = $"Response status code does not indicate success: {(int)response.StatusCode} ({response.StatusCode}).";
-                    throw new HttpStatusCodeException(response.StatusCode, message);
-                }
-
+                var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+                response.EnsureSuccessStatusCode();
                 return await response.Content.ReadAsStreamAsync();
             }
             finally
@@ -541,9 +375,21 @@ namespace RareBooksService.Parser.Services
             }
         }
 
+        private async Task<RegularBaseCategory> GetOrCreateCategoryAsync(int categoryId, string categoryName)
+        {
+            var category = await _context.Categories.FirstOrDefaultAsync(c => c.CategoryId == categoryId);
+            if (category == null)
+            {
+                category = new RegularBaseCategory { CategoryId = categoryId, Name = categoryName };
+                _context.Categories.Add(category);
+                await _context.SaveChangesAsync();
+            }
+            return category;
+        }
+
         public void Dispose()
         {
             _semaphore?.Dispose();
-        }        
+        }
     }
 }

@@ -22,36 +22,36 @@ namespace RareBooksService.WebApi.Controllers
     public class BooksController : BaseController
     {
         private readonly IRegularBaseBooksRepository _booksRepository;
-        private readonly IWebHostEnvironment _environment;
-        private readonly IConfiguration _configuration;
         private readonly ISearchHistoryService _searchHistoryService;
-        private readonly IYandexStorageService _yandexStorageService;
+        private readonly IBookImagesService _bookImagesService;
         private readonly ILogger<BooksController> _logger;
+        private readonly IConfiguration _configuration;
+        private readonly IWebHostEnvironment _env;
 
         public BooksController(
             IRegularBaseBooksRepository booksRepository,
-            IWebHostEnvironment environment,
-            IConfiguration configuration,
-            UserManager<ApplicationUser> userManager,
             ISearchHistoryService searchHistoryService,
-            IYandexStorageService yandexStorageService,
-            ILogger<BooksController> logger) : base(userManager)
+            IBookImagesService bookImagesService,
+            UserManager<ApplicationUser> userManager,
+            ILogger<BooksController> logger,
+            IConfiguration configuration,
+            IWebHostEnvironment env
+        ) : base(userManager)
         {
             _booksRepository = booksRepository;
-            _environment = environment;
-            _configuration = configuration;
             _searchHistoryService = searchHistoryService;
-            _yandexStorageService = yandexStorageService;
+            _bookImagesService = bookImagesService;
             _logger = logger;
+            _configuration = configuration;
+            _env = env;
         }
 
         private async Task<bool> UserHasSubscriptionAsync()
         {
             var user = await GetCurrentUserAsync();
-            bool hasSubscription = user != null && user.HasSubscription;
-            _logger.LogInformation("Проверка подписки для пользователя {UserId}: {HasSubscription}", user?.Id, hasSubscription);
-            return hasSubscription;
+            return (user != null && user.HasSubscription);
         }
+
         private void ApplyNoSubscriptionRulesToSearchResults(List<BookSearchResultDto> books)
         {
             // Если нет подписки, скрываем цены, заменяем дату и т.п.
@@ -196,425 +196,80 @@ namespace RareBooksService.WebApi.Controllers
 
             return Ok(books);
         }
-        
+
         [HttpGet("{id}")]
         public async Task<ActionResult<BookDetailDto>> GetBookById(int id)
         {
-            _logger.LogInformation("Запрос получения книги по ID: {BookId}", id);
-
             var hasSubscription = await UserHasSubscriptionAsync();
             var book = await _booksRepository.GetBookByIdAsync(id);
 
             if (book == null)
-            {
-                _logger.LogWarning("Книга с ID {BookId} не найдена.", id);
                 return NotFound();
-            }
 
             if (!hasSubscription)
             {
-                // Очищаем данные, которые нельзя показывать без подписки:
-                book.FinalPrice = null; 
+                // скрываем часть данных
+                book.FinalPrice = null;
                 book.Price = 0;
                 book.EndDate = "Только для подписчиков";
                 book.ImageArchiveUrl = null;
-                book.IsImagesCompressed = false;                                                
+                book.IsImagesCompressed = false;
             }
 
-            _logger.LogInformation("Возвращение деталей книги с ID {BookId}", id);
             return Ok(book);
         }
-
 
         [HttpGet("{id}/images")]
         public async Task<ActionResult> GetBookImages(int id)
         {
-            _logger.LogInformation("Запрос получения изображений для книги с ID {BookId}", id);
-
+            _logger.LogInformation("Получение списка изображений книги {Id}", id);
             var hasSubscription = await UserHasSubscriptionAsync();
-            var book = await _booksRepository.GetBookByIdAsync(id);
 
-            if (book == null)
-            {
-                _logger.LogWarning("Книга с ID {BookId} не найдена.", id);
-                return NotFound();
-            }
-
-            if (!hasSubscription)
-            {
-                // Без подписки не возвращаем изображения вообще
-                return Ok(new { images = new List<string>(), thumbnails = new List<string>() });
-            }
-
+            // Определяем, используется ли локальное хранение
+            //bool useLocalFiles = _configuration.GetValue<bool>("TypeOfAccessImages:UseLocalFiles");
             bool useLocalFiles = bool.TryParse(_configuration["TypeOfAccessImages:UseLocalFiles"], out var useLocal) && useLocal;
-            string localPathOfImages = _configuration["TypeOfAccessImages:LocalPathOfImages"];
 
-            List<string> images = new List<string>();
-            List<string> thumbnails = new List<string>();
+            var book = await _booksRepository.GetBookByIdAsync(id);
+            if (book == null) return NotFound();
 
-            if (book.IsImagesCompressed)
-            {
-                _logger.LogInformation("Изображения для книги с ID {BookId} хранятся в сжатом виде.", id);
-
-                if (useLocalFiles)
-                {
-                    _logger.LogInformation("Используются локальные файлы для изображений.");
-
-                    string archivePath = book.ImageArchiveUrl;
-
-                    if (!System.IO.File.Exists(archivePath))
-                    {
-                        _logger.LogWarning("Архив изображений для книги с ID {BookId} не найден по пути {ArchivePath}.", id, archivePath);
-                        return NotFound();
-                    }
-
-                    // Получаем список файлов внутри архива
-                    using (var archive = ZipFile.OpenRead(archivePath))
-                    {
-                        foreach (var entry in archive.Entries)
-                        {
-                            if (!string.IsNullOrEmpty(entry.Name))
-                            {
-                                if (entry.FullName.StartsWith("thumbnails/"))
-                                {
-                                    thumbnails.Add(entry.Name);
-                                }
-                                else if (entry.FullName.StartsWith("images/"))
-                                {
-                                    images.Add(entry.Name);
-                                }
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    _logger.LogInformation("Используется облачное хранилище для изображений.");
-
-                    // Получаем архив из Yandex Object Storage
-                    var archiveStream = await _yandexStorageService.GetArchiveStreamAsync(book.ImageArchiveUrl);
-
-                    if (archiveStream == null)
-                    {
-                        _logger.LogWarning("Архив изображений для книги с ID {BookId} не найден в облачном хранилище.", id);
-                        return NotFound();
-                    }
-
-                    using (var archive = new ZipArchive(archiveStream, ZipArchiveMode.Read))
-                    {
-                        foreach (var entry in archive.Entries)
-                        {
-                            if (!string.IsNullOrEmpty(entry.Name))
-                            {
-                                if (entry.FullName.StartsWith("thumbnails/"))
-                                {
-                                    thumbnails.Add(entry.Name);
-                                }
-                                else if (entry.FullName.StartsWith("images/"))
-                                {
-                                    images.Add(entry.Name);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            else
-            {
-                if (useLocalFiles)
-                {
-                    _logger.LogInformation("Используются локальные файлы для изображений.");
-
-                    string basePath = Path.Combine(AppContext.BaseDirectory, "books_photos", id.ToString());
-                    if (!string.IsNullOrWhiteSpace(localPathOfImages))
-                        basePath = Path.Combine(localPathOfImages, id.ToString());
-
-                    var imagesPath = Path.Combine(basePath, "images");
-                    var thumbnailsPath = Path.Combine(basePath, "thumbnails");
-
-                    if (!Directory.Exists(imagesPath) && !Directory.Exists(thumbnailsPath))
-                    {
-                        _logger.LogWarning("Изображения и миниатюры для книги с ID {BookId} не найдены.", id);
-                        return NotFound();
-                    }
-
-                    images = Directory.Exists(imagesPath)
-                        ? Directory.GetFiles(imagesPath).Select(Path.GetFileName).ToList()
-                        : new List<string>();
-
-                    thumbnails = Directory.Exists(thumbnailsPath)
-                        ? Directory.GetFiles(thumbnailsPath).Select(Path.GetFileName).ToList()
-                        : new List<string>();
-                }
-                else
-                {
-                    _logger.LogInformation("Используется облачное хранилище для изображений.");
-
-                    images = await _yandexStorageService.GetImageKeysAsync(id);
-                    thumbnails = await _yandexStorageService.GetThumbnailKeysAsync(id);
-                }
-            }            
-
-            if (!hasSubscription)
-            {
-                _logger.LogInformation("У пользователя нет подписки. Ограничение доступа к изображениям.");
-                images = new List<string>();
-                thumbnails = thumbnails.Take(1).ToList();
-            }
-
-            _logger.LogInformation("Возвращение списка изображений и миниатюр для книги с ID {BookId}", id);
+            var (images, thumbnails) = await _bookImagesService.GetBookImagesAsync(book, hasSubscription, useLocalFiles);
             return Ok(new { images, thumbnails });
         }
 
         [HttpGet("{id}/images/{imageName}")]
         public async Task<ActionResult> GetImage(int id, string imageName)
         {
-            _logger.LogInformation("Запрос получения изображения '{ImageName}' для книги с ID {BookId}", imageName, id);
+            _logger.LogInformation("Запрос полноразмерного изображения '{imageName}' книги ID={Id}", imageName, id);
 
-            var hasSubscription = await UserHasSubscriptionAsync();
-            if (!hasSubscription)
-            {
-                _logger.LogWarning("Доступ запрещен: требуется подписка для просмотра полных изображений.");
-                return Forbid("Требуется подписка для просмотра полных изображений.");
-            }
+            bool hasSubscription = await UserHasSubscriptionAsync();
 
-            var book = await _booksRepository.GetBookByIdAsync(id);
-            if (book == null)
-            {
-                _logger.LogWarning("Книга с ID {BookId} не найдена.", id);
-                return NotFound();
-            }
-
+            //bool useLocalFiles = _configuration.GetValue<bool>("TypeOfAccessImages:UseLocalFiles");
             bool useLocalFiles = bool.TryParse(_configuration["TypeOfAccessImages:UseLocalFiles"], out var useLocal) && useLocal;
 
-            if (book.IsImagesCompressed)
-            {
-                _logger.LogInformation("Изображения для книги с ID {BookId} хранятся в сжатом виде.", id);
+            var book = await _booksRepository.GetBookByIdAsync(id);
+            if (book == null) return NotFound();
 
-                if (useLocalFiles)
-                {
-                    _logger.LogInformation("Используются локальные файлы для изображений.");
-
-                    string archivePath = book.ImageArchiveUrl;
-
-                    if (!System.IO.File.Exists(archivePath))
-                    {
-                        _logger.LogWarning("Архив изображений для книги с ID {BookId} не найден по пути {ArchivePath}.", id, archivePath);
-                        return NotFound();
-                    }
-
-                    using (var archive = ZipFile.OpenRead(archivePath))
-                    {
-                        var entry = archive.GetEntry($"images/{imageName}");
-                        if (entry == null)
-                        {
-                            _logger.LogWarning("Изображение '{ImageName}' не найдено в архиве для книги с ID {BookId}.", imageName, id);
-                            return NotFound();
-                        }
-
-                        using (var entryStream = entry.Open())
-                        {
-                            var memoryStream = new MemoryStream();
-                            await entryStream.CopyToAsync(memoryStream);
-                            memoryStream.Position = 0;
-                            _logger.LogInformation("Возвращение изображения '{ImageName}' для книги с ID {BookId}", imageName, id);
-                            return File(memoryStream, "image/jpeg");
-                        }
-                    }
-                }
-                else
-                {
-                    _logger.LogInformation("Используется облачное хранилище для изображений.");
-
-                    var archiveStream = await _yandexStorageService.GetArchiveStreamAsync(book.ImageArchiveUrl);
-
-                    if (archiveStream == null)
-                    {
-                        _logger.LogWarning("Архив изображений для книги с ID {BookId} не найден в облачном хранилище.", id);
-                        return NotFound();
-                    }
-
-                    using (var archive = new ZipArchive(archiveStream, ZipArchiveMode.Read))
-                    {
-                        var entry = archive.GetEntry($"images/{imageName}");
-                        if (entry == null)
-                        {
-                            _logger.LogWarning("Изображение '{ImageName}' не найдено в архиве для книги с ID {BookId}.", imageName, id);
-                            return NotFound();
-                        }
-
-                        using (var entryStream = entry.Open())
-                        {
-                            var memoryStream = new MemoryStream();
-                            await entryStream.CopyToAsync(memoryStream);
-                            memoryStream.Position = 0;
-                            _logger.LogInformation("Возвращение изображения '{ImageName}' для книги с ID {BookId}", imageName, id);
-                            return File(memoryStream, "image/jpeg");
-                        }
-                    }
-                }
-            }
-            else
-            {
-                if (useLocalFiles)
-                {
-                    string localPathOfImages = _configuration["TypeOfAccessImages:LocalPathOfImages"];
-                    _logger.LogInformation("Используются локальные файлы для изображений.");
-
-                    string basePath = Path.Combine(AppContext.BaseDirectory, "books_photos", id.ToString());
-                    if (!string.IsNullOrWhiteSpace(localPathOfImages))
-                        basePath = Path.Combine(localPathOfImages, id.ToString());
-
-                    var imagePath = Path.Combine(basePath, "images", imageName);
-
-                    if (!System.IO.File.Exists(imagePath))
-                    {
-                        _logger.LogWarning("Изображение '{ImageName}' для книги с ID {BookId} не найдено.", imageName, id);
-                        return NotFound();
-                    }
-
-                    var image = System.IO.File.OpenRead(imagePath);
-                    _logger.LogInformation("Возвращение изображения '{ImageName}' для книги с ID {BookId}", imageName, id);
-                    return File(image, "image/jpeg");
-                }
-                else
-                {
-                    _logger.LogInformation("Используется облачное хранилище для изображений.");
-
-                    var key = $"{id}/images/{imageName}";
-                    var imageStream = await _yandexStorageService.GetImageStreamAsync(key);
-                    if (imageStream == null)
-                    {
-                        _logger.LogWarning("Изображение '{ImageName}' для книги с ID {BookId} не найдено в облаке.", imageName, id);
-                        return NotFound();
-                    }
-
-                    _logger.LogInformation("Возвращение изображения '{ImageName}' для книги с ID {BookId}", imageName, id);
-                    return File(imageStream, "image/jpeg");
-                }
-            }            
+            var result = await _bookImagesService.GetImageAsync(book, imageName, hasSubscription, useLocalFiles);
+            if (result == null) return NotFound();
+            return result;
         }
 
         [HttpGet("{id}/thumbnails/{thumbnailName}")]
         public async Task<ActionResult> GetThumbnail(int id, string thumbnailName)
         {
-            _logger.LogInformation("Запрос получения миниатюры '{ThumbnailName}' для книги с ID {BookId}", thumbnailName, id);
+            _logger.LogInformation("Запрос миниатюры '{thumbnailName}' книги ID={Id}", thumbnailName, id);
 
-            var book = await _booksRepository.GetBookByIdAsync(id);
-            if (book == null)
-            {
-                _logger.LogWarning("Книга с ID {BookId} не найдена.", id);
-                return NotFound();
-            }
+            bool hasSubscription = await UserHasSubscriptionAsync();
 
+            //bool useLocalFiles = _configuration.GetValue<bool>("TypeOfAccessImages:UseLocalFiles");
             bool useLocalFiles = bool.TryParse(_configuration["TypeOfAccessImages:UseLocalFiles"], out var useLocal) && useLocal;
 
-            if (book.IsImagesCompressed)
-            {
-                _logger.LogInformation("Изображения для книги с ID {BookId} хранятся в сжатом виде.", id);
+            var book = await _booksRepository.GetBookByIdAsync(id);
+            if (book == null) return NotFound();
 
-                if (useLocalFiles)
-                {
-                    _logger.LogInformation("Используются локальные файлы для миниатюр.");
-
-                    string archivePath = book.ImageArchiveUrl;
-
-                    if (!System.IO.File.Exists(archivePath))
-                    {
-                        _logger.LogWarning("Архив изображений для книги с ID {BookId} не найден по пути {ArchivePath}.", id, archivePath);
-                        return NotFound();
-                    }
-
-                    using (var archive = ZipFile.OpenRead(archivePath))
-                    {
-                        var entry = archive.GetEntry($"thumbnails/{thumbnailName}");
-                        if (entry == null)
-                        {
-                            _logger.LogWarning("Миниатюра '{ThumbnailName}' не найдена в архиве для книги с ID {BookId}.", thumbnailName, id);
-                            return NotFound();
-                        }
-
-                        using (var entryStream = entry.Open())
-                        {
-                            var memoryStream = new MemoryStream();
-                            await entryStream.CopyToAsync(memoryStream);
-                            memoryStream.Position = 0;
-                            _logger.LogInformation("Возвращение миниатюры '{ThumbnailName}' для книги с ID {BookId}", thumbnailName, id);
-                            return File(memoryStream, "image/jpeg");
-                        }
-                    }
-                }
-                else
-                {
-                    _logger.LogInformation("Используется облачное хранилище для миниатюр.");
-
-                    var archiveStream = await _yandexStorageService.GetArchiveStreamAsync(book.ImageArchiveUrl);
-
-                    if (archiveStream == null)
-                    {
-                        _logger.LogWarning("Архив изображений для книги с ID {BookId} не найден в облачном хранилище.", id);
-                        return NotFound();
-                    }
-
-                    using (var archive = new ZipArchive(archiveStream, ZipArchiveMode.Read))
-                    {
-                        var entry = archive.GetEntry($"thumbnails/{thumbnailName}");
-                        if (entry == null)
-                        {
-                            _logger.LogWarning("Миниатюра '{ThumbnailName}' не найдена в архиве для книги с ID {BookId}.", thumbnailName, id);
-                            return NotFound();
-                        }
-
-                        using (var entryStream = entry.Open())
-                        {
-                            var memoryStream = new MemoryStream();
-                            await entryStream.CopyToAsync(memoryStream);
-                            memoryStream.Position = 0;
-                            _logger.LogInformation("Возвращение миниатюры '{ThumbnailName}' для книги с ID {BookId}", thumbnailName, id);
-                            return File(memoryStream, "image/jpeg");
-                        }
-                    }
-                }
-            }
-            else
-            {
-                if (useLocalFiles)
-                {
-                    string localPathOfImages = _configuration["TypeOfAccessImages:LocalPathOfImages"];
-                    _logger.LogInformation("Используются локальные файлы для миниатюр.");
-
-                    var basePath = Path.Combine(AppContext.BaseDirectory, "books_photos", id.ToString());
-                    if (!string.IsNullOrWhiteSpace(localPathOfImages))
-                        basePath = Path.Combine(localPathOfImages, id.ToString());
-
-                    var thumbnailPath = Path.Combine(basePath, "thumbnails", thumbnailName);
-
-                    if (!System.IO.File.Exists(thumbnailPath))
-                    {
-                        _logger.LogWarning("Миниатюра '{ThumbnailName}' для книги с ID {BookId} не найдена.", thumbnailName, id);
-                        return NotFound();
-                    }
-
-                    var thumbnail = System.IO.File.OpenRead(thumbnailPath);
-                    _logger.LogInformation("Возвращение миниатюры '{ThumbnailName}' для книги с ID {BookId}", thumbnailName, id);
-                    return File(thumbnail, "image/jpeg");
-                }
-                else
-                {
-                    _logger.LogInformation("Используется облачное хранилище для миниатюр.");
-
-                    var key = $"{id}/thumbnails/{thumbnailName}";
-                    var thumbnailStream = await _yandexStorageService.GetThumbnailStreamAsync(key);
-                    if (thumbnailStream == null)
-                    {
-                        _logger.LogWarning("Миниатюра '{ThumbnailName}' для книги с ID {BookId} не найдена в облаке.", thumbnailName, id);
-                        return NotFound();
-                    }
-
-                    _logger.LogInformation("Возвращение миниатюры '{ThumbnailName}' для книги с ID {BookId}", thumbnailName, id);
-                    return File(thumbnailStream, "image/jpeg");
-                }
-            }            
+            var result = await _bookImagesService.GetThumbnailAsync(book, thumbnailName, hasSubscription, useLocalFiles);
+            if (result == null) return NotFound();
+            return result;
         }
     }
 }

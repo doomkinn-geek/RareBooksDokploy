@@ -38,5 +38,13 @@ namespace RareBooksService.Common.Models.Parsing
         public int BidsCount { get; set; }
         public string SellerName { get; set; }
         public int PicsCount { get; set; }
+
+        //08.11.2024 - добавил поддержку малоценных лотов (советские до 1500) и сжатие изображений в object storage
+        public bool IsImagesCompressed { get; set; }
+        public string? ImageArchiveUrl { get; set; }
+
+        //22.01.2025 - т.к. малоценных лотов очень много, храним их без загрузки изображений
+        //изображения будем получать по тем ссылкам, что есть на мешке
+        public bool IsLessValuable { get; set; }
     }
 }

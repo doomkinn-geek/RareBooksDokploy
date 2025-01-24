@@ -363,7 +363,10 @@ namespace RareBooksService.Data
                     Type = b.Type,
                     SellerName = b.SellerName,
                     ImageArchiveUrl = b.ImageArchiveUrl,
-                    IsImagesCompressed = b.IsImagesCompressed
+                    IsImagesCompressed = b.IsImagesCompressed,
+                    IsLessValuable = b.IsLessValuable,
+                    ImageUrls = b.ImageUrls,
+                    ThumbnailUrls = b.ThumbnailUrls
                 })
                 .FirstOrDefaultAsync();
         }

@@ -99,6 +99,19 @@ namespace RareBooksService.Data.Parsing
                 .Property(e => e.YearPublished)
                 .HasConversion(yearPublishedConverter);
 
+            modelBuilder.Entity<ExtendedBookInfo>()
+                .Property(e => e.IsImagesCompressed)
+                .HasDefaultValue(false);
+
+            modelBuilder.Entity<ExtendedBookInfo>()
+                .Property(e => e.ImageArchiveUrl)
+                .HasDefaultValue(null);
+
+            modelBuilder.Entity<ExtendedBookInfo>()
+                .Property(e => e.IsLessValuable)
+                .HasDefaultValue(false);
+
+
         }
     }
 }

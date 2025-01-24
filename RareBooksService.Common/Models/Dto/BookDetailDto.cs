@@ -26,5 +26,12 @@ namespace RareBooksService.Common.Models.Dto
         //08.11.2024 - добавил поддержку малоценных лотов (советские до 1500) и сжатие изображений в object storage
         public bool IsImagesCompressed { get; set; } // Новое поле
         public string? ImageArchiveUrl { get; set; }  // Новое поле
+
+        //22.01.2025 - т.к. малоценных лотов очень много, храним их без загрузки изображений
+        //изображения будем получать по тем ссылкам, что есть на мешке
+        public bool IsLessValuable { get; set; }
+
+        public List<string> ImageUrls { get; set; } = new List<string>();
+        public List<string> ThumbnailUrls { get; set; } = new List<string>();
     }
 }

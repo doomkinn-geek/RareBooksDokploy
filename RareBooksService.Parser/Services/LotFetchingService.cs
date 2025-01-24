@@ -164,9 +164,11 @@ namespace RareBooksService.Parser.Services
 
             try
             {
+                int counter = 0;
                 foreach (int id in ids)
                 {
-                    _logger.LogInformation("Processing lot ID {LotId}", id);
+                    counter++;
+                    _logger.LogInformation($"Processing lot ID {id}. {counter} OF {ids.Count}");
                     await ProcessLotAsync(id, string.Empty, string.Empty);
                 }
             }
@@ -318,66 +320,97 @@ namespace RareBooksService.Parser.Services
 
 
 
-        private async Task ProcessLotAsync(int lotId, string nonStandardPricesFilePath = "", string nonStandardPricesSovietFilePath = "")
+        private async Task ProcessLotAsync(int lotId,
+                                            string nonStandardPricesFilePath = "",
+                                            string nonStandardPricesSovietFilePath = "")
         {
             OnProgressChanged(lotId);
-
-            //_logger.LogDebug("Processing lot ID {LotId}", lotId);
 
             var lotData = await _lotDataService.GetLotDataAsync(lotId);
             if (lotData == null || lotData.result == null)
             {
-                //_logger.LogWarning("Lot data is null or result is null for lot ID {LotId}", lotId);
+                // Нет данных
                 return;
             }
 
-            if (!SovietCategories.Contains(lotData.result.categoryId) && !InterestedCategories.Contains(lotData.result.categoryId))
-            {
-                //_logger.LogDebug("Lot ID {LotId} is not in interested categories.", lotId);
-                return;
-            }
-
+            // Если категория не относится ни к интересующим, ни к советским — пропускаем
             bool isInterestedCategory = InterestedCategories.Contains(lotData.result.categoryId);
             bool isSovietCategory = SovietCategories.Contains(lotData.result.categoryId);
+            if (!isInterestedCategory && !isSovietCategory)
+            {
+                return;
+            }
+
+            // Логика выбора:
+            // (A) startPrice >= 1  ИЛИ  (B) статус=2 и soldQuantity>0
+            bool meetsMainCondition =
+                (lotData.result.startPrice >= 1)
+                || (lotData.result.status == 2 && lotData.result.soldQuantity > 0);
+
+            if (!meetsMainCondition)
+            {
+                // Если не попадает ни под какое условие — пропускаем
+                // (при желании можно писать в файл)
+                return;
+            }
 
             try
             {
-                if ((lotData.result.startPrice == 1 || (lotData.result.status == 2 && lotData.result.soldQuantity > 0)) && isInterestedCategory)
+                // ----- Ветка "ИНТЕРЕСУЮЩИЕ ЛОТЫ" (InterestedCategories) ------
+                // Всё, что meetsMainCondition => сохраняем как «обычный»
+                if (isInterestedCategory)
                 {
-                    string infoMessage = $"{lotData.result.id} - Found a book '{lotData.result.title}' in interested category.";
-                    _logger.LogInformation(infoMessage);
-                    ProgressChanged?.Invoke(lotData.result.id, infoMessage);
+                    // (при желании — логика записи в файл nonStandardPricesFilePath, если хочется)
+                    _logger.LogInformation($"Lot {lotData.result.id}: Found an INTERESTED book '{lotData.result.title}'");
 
-                    await _lotDataHandler.SaveLotDataAsync(lotData.result, lotData.result.categoryId);
-
-                    await Task.Delay(500); // Replacing Thread.Sleep
+                    // Всё, что подходит под meetsMainCondition => не малоценное => скачиваем и архивируем
+                    // => передаём downloadImages = true, isLessValuableLot = false
+                    await _lotDataHandler.SaveLotDataAsync(
+                        lotData.result,
+                        lotData.result.categoryId,
+                        categoryName: "interested",
+                        downloadImages: true,
+                        isLessValuableLot: false
+                    );
                 }
-                else
+                // ----- Ветка "СОВЕТСКИЕ ЛОТЫ" (SovietCategories) -------------
+                else if (isSovietCategory)
                 {
-                    _logger.LogInformation("**** Found a book '{Title}' not starting from one unit.", lotData.result.title);
-                    if (nonStandardPricesFilePath.Trim().Length > 0)
+                    // Если цена < 1000 — считаем малоценным
+                    bool isLittleValue = (lotData.result.price < 1500);
+
+                    if (isLittleValue)
                     {
-                        WriteNonStandardPriceToFile(lotData.result.id, nonStandardPricesFilePath);
+                        // Пишем, если нужно, в nonStandardPricesSovietFilePath
+                        if (!string.IsNullOrWhiteSpace(nonStandardPricesSovietFilePath))
+                        {
+                            WriteNonStandardPriceToFile(lotData.result.id, nonStandardPricesSovietFilePath);
+                        }
+
+                        _logger.LogInformation($"Lot {lotData.result.id}: SOVIET book <1000 '{lotData.result.title}' (little-value).");
+
+                        // Сохраняем в БД, но без скачивания изображений
+                        await _lotDataHandler.SaveLotDataAsync(
+                            lotData.result,
+                            lotData.result.categoryId,
+                            categoryName: "unknown",
+                            downloadImages: false,
+                            isLessValuableLot: true
+                        );
                     }
-                }
-
-                if ((lotData.result.startPrice == 1 && lotData.result.price > 1500) && isSovietCategory)
-                {
-                    _logger.LogInformation("{LotId} - Found a SOVIET book '{Title}'", lotData.result.id, lotData.result.title);
-
-                    await _lotDataHandler.SaveLotDataAsync(lotData.result, lotData.result.categoryId);
-
-                    await Task.Delay(500); // Replacing Thread.Sleep
-                }
-                else
-                {
-                    _logger.LogInformation("**** Found a SOVIET book '{Title}' (other)", lotData.result.title);
-                    if (nonStandardPricesSovietFilePath.Trim().Length > 0)
+                    else
                     {
-                        WriteNonStandardPriceToFile(lotData.result.id, nonStandardPricesSovietFilePath);
+                        _logger.LogInformation($"Lot {lotData.result.id}: SOVIET book >=1000 '{lotData.result.title}'.");
+
+                        // Сохраняем как «обычный» (архивируем)
+                        await _lotDataHandler.SaveLotDataAsync(
+                            lotData.result,
+                            lotData.result.categoryId,
+                            categoryName: "unknown",
+                            downloadImages: true,
+                            isLessValuableLot: false
+                        );
                     }
-                    //await _lotDataHandler.SaveLotDataAsync(lotData.result, lotData.result.categoryId, "unknown",  true, true);
-                    //await Task.Delay(100); // Replacing Thread.Sleep
                 }
             }
             catch (Exception ex)
@@ -385,6 +418,7 @@ namespace RareBooksService.Parser.Services
                 _logger.LogError(ex, "Error processing lot ID {LotId}", lotId);
             }
         }
+
 
         private void WriteNonStandardPriceToFile(int lotId, string filePath)
         {
