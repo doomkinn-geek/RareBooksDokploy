@@ -231,6 +231,8 @@ namespace RareBooksService.Parser.Services
                 archiveKeyOrPath = await CreateObjectStorageArchiveWithFolders(bookId, imageUrls, thumbnailUrls);
             }
 
+            archiveKeyOrPath = $"_compressed_images/{bookId}.zip";
+
             if (!string.IsNullOrEmpty(archiveKeyOrPath))
             {
                 bookInfo.IsImagesCompressed = true;

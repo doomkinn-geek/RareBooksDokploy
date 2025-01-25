@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using RareBooksService.Data;
 using RareBooksService.Common.Models.FromMeshok;
+using System.Net;
 
 namespace RareBooksService.Parser.Services
 {
@@ -168,7 +169,7 @@ namespace RareBooksService.Parser.Services
                 foreach (int id in ids)
                 {
                     counter++;
-                    _logger.LogInformation($"Processing lot ID {id}. {counter} OF {ids.Count}");
+                    _logger.LogInformation($"*/*/*/*/*//*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/=========Processing lot ID {id}. {counter} OF {ids.Count}");
                     await ProcessLotAsync(id, string.Empty, string.Empty);
                 }
             }
@@ -325,6 +326,17 @@ namespace RareBooksService.Parser.Services
                                             string nonStandardPricesSovietFilePath = "")
         {
             OnProgressChanged(lotId);
+
+            var bookInDb = _context.BooksInfo
+                            .Where(b => b.Id == lotId)
+                            .FirstOrDefault();
+            if (bookInDb != null)
+            {
+                /*bookInDb.ImageArchiveUrl = $"_compressed_images/{lotId}.zip";
+                _context.BooksInfo.Update(bookInDb);
+                await _context.SaveChangesAsync();*/
+                return;
+            }
 
             var lotData = await _lotDataService.GetLotDataAsync(lotId);
             if (lotData == null || lotData.result == null)
