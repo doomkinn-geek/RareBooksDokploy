@@ -152,7 +152,7 @@ namespace RareBooksService.WebApi.Services
             {
                 // 0) FreeList с данными малозначимых книг:
 
-                if (!_cancellationRequested && !externalStoppingToken.IsCancellationRequested)
+                /*if (!_cancellationRequested && !externalStoppingToken.IsCancellationRequested)
                 {
                     _currentOperationName = "FetchFreeListData";
                     ResetProgress();
@@ -161,10 +161,10 @@ namespace RareBooksService.WebApi.Services
                         .Select(x => int.Parse(x))
                         .ToList();
                     await lotFetchingService.FetchFreeListData(idList);
-                }
+                }*/
 
                 // 1) FetchAllNewData
-                /*if (!_cancellationRequested && !externalStoppingToken.IsCancellationRequested)
+                if (!_cancellationRequested && !externalStoppingToken.IsCancellationRequested)
                 {
                     _currentOperationName = "FetchAllNewData";
                     ResetProgress();
@@ -188,7 +188,7 @@ namespace RareBooksService.WebApi.Services
                     ResetProgress();
                     _logger.LogInformation("Fetching sold fixed price lots...");
                     await lotFetchingService.FetchSoldFixedPriceLotsAsync(externalStoppingToken);
-                }*/
+                }
             }
             finally
             {
