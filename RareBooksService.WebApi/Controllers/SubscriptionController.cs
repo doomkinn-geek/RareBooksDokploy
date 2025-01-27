@@ -3,9 +3,11 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using RareBooksService.Common.Models;
+using RareBooksService.Data;
+using RareBooksService.WebApi.Services;
+using System;
 using System.IO;
 using System.Threading.Tasks;
-using Yandex.Checkout.V3;
 
 namespace RareBooksService.WebApi.Controllers
 {
@@ -15,65 +17,108 @@ namespace RareBooksService.WebApi.Controllers
     public class SubscriptionController : ControllerBase
     {
         private readonly UserManager<ApplicationUser> _userManager;
-        private readonly YandexKassaSettings _yandexKassaSettings;
-        private readonly Client _client;
+        private readonly IYandexPaymentService _paymentService;
+        private readonly ISubscriptionService _subscriptionService;
 
-        public SubscriptionController(UserManager<ApplicationUser> userManager, IOptions<YandexKassaSettings> yandexKassaSettings)
+        public SubscriptionController(
+            UserManager<ApplicationUser> userManager,
+            IYandexPaymentService paymentService,
+            ISubscriptionService subscriptionService)
         {
             _userManager = userManager;
-            _yandexKassaSettings = yandexKassaSettings.Value;
-            _client = new Client(_yandexKassaSettings.ShopId, _yandexKassaSettings.SecretKey);
+            _paymentService = paymentService;
+            _subscriptionService = subscriptionService;
         }
 
-        [HttpPost("create-payment")]
-        public async Task<IActionResult> CreatePayment()
+        /// <summary>
+        /// Получить список доступных планов
+        /// </summary>
+        [HttpGet("plans")]
+        [AllowAnonymous] // Если хотите отдавать список планов без авторизации
+        public async Task<IActionResult> GetPlans()
         {
-            var user = await _userManager.GetUserAsync(User);
-
-            var asyncClient = _client.MakeAsync();
-
-            var newPayment = new NewPayment
-            {
-                Amount = new Amount { Value = 1000.00m, Currency = "RUB" },
-                Confirmation = new Confirmation
-                {
-                    Type = ConfirmationType.Redirect,
-                    ReturnUrl = _yandexKassaSettings.ReturnUrl
-                },
-                Capture = true,
-                Description = "Подписка на Rare Books Service",
-                Metadata = new Dictionary<string, string>
-                {
-                    { "userId", user.Id }
-                }
-            };
-
-            var payment = await asyncClient.CreatePaymentAsync(newPayment);
-
-            return Ok(new { PaymentId = payment.Id, RedirectUrl = payment.Confirmation.ConfirmationUrl });
+            var plans = await _subscriptionService.GetActiveSubscriptionPlansAsync();
+            return Ok(plans);
         }
 
+        /// <summary>
+        /// Создаёт оплату. Пользователь выбирает какой-то planId и autoRenew, 
+        /// мы создаём Subscription (пока не активную) и создаём платёж в ЮKassa.
+        /// </summary>
+        [HttpPost("create-payment")]
+        public async Task<IActionResult> CreatePayment([FromBody] CreatePaymentRequest request)
+        {
+            // Model binding request:
+            //   {
+            //      "subscriptionPlanId": ...,
+            //      "autoRenew": true/false
+            //   }
+
+            if (request == null || request.SubscriptionPlanId <= 0)
+                return BadRequest("Не указан план подписки");
+
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null) return Unauthorized("Пользователь не найден");
+
+            // Получаем план
+            var plan = await _subscriptionService.GetPlanByIdAsync(request.SubscriptionPlanId);
+            if (plan == null)
+                return BadRequest("Невалидный или неактивный план подписки");
+
+            // Создаём запись Subscription в БД
+            var newSubscription = await _subscriptionService.CreateSubscriptionAsync(user, plan, request.AutoRenew);
+
+            // Создаём платёж в ЮKassa
+            var (paymentId, redirectUrl) = await _paymentService.CreatePaymentAsync(user, plan, request.AutoRenew);
+
+            // Запишем PaymentId в нашу Subscription
+            newSubscription.PaymentId = paymentId;
+            await _subscriptionService.ActivateSubscriptionAsync(null); // только если нужно сбросить старую, но НЕ активируем!
+            // Сохраним paymentId:
+            // (Можно добавить метод в сервис подписок, но для примера тут)
+            newSubscription.PaymentId = paymentId;
+            await (/*_db.SaveChangesAsync() или subscriptionService что-то вроде UpdateSubscriptionAsync(...)*/Task.CompletedTask);
+
+            // Возвращаем redirectUrl
+            return Ok(new { RedirectUrl = redirectUrl });
+        }
+
+        /// <summary>
+        /// Webhook endpoint, куда ЮKassa будет отправлять уведомления об оплате.
+        /// </summary>
         [HttpPost("webhook")]
-        [AllowAnonymous]
+        [AllowAnonymous] // ЮKassa не авторизуется вашим токеном
         public async Task<IActionResult> Webhook()
         {
-            var json = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync();
-            var notification = Client.ParseMessage(HttpContext.Request.Method, HttpContext.Request.ContentType, HttpContext.Request.Body);
+            var (paymentId, isSucceeded) = await _paymentService.ProcessWebhookAsync(HttpContext.Request);
 
-            if (notification is PaymentSucceededNotification paymentSucceededNotification)
+            if (!string.IsNullOrEmpty(paymentId) && isSucceeded)
             {
-                var payment = paymentSucceededNotification.Object;
-                var userId = payment.Metadata["userId"]; // Используйте метаданные для получения информации о пользователе
-
-                var user = await _userManager.FindByIdAsync(userId);
-                if (user != null)
-                {
-                    user.HasSubscription = true;
-                    await _userManager.UpdateAsync(user);
-                }
+                // Активация подписки:
+                await _subscriptionService.ActivateSubscriptionAsync(paymentId);
             }
 
-            return Ok();
+            return Ok(); // 200
         }
+
+        // Дополнительный метод: Получить подписки пользователя
+        [HttpGet("my-subscriptions")]
+        public async Task<IActionResult> GetMySubscriptions()
+        {
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null) return Unauthorized();
+
+            var subs = await _subscriptionService.GetUserSubscriptionsAsync(user.Id);
+            return Ok(subs);
+        }
+    }
+
+    /// <summary>
+    /// DTO для запроса на создание платежа
+    /// </summary>
+    public class CreatePaymentRequest
+    {
+        public int SubscriptionPlanId { get; set; }
+        public bool AutoRenew { get; set; }
     }
 }

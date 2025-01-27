@@ -81,11 +81,6 @@ export const registerUser = (userData) =>
 export const loginUser = (userData) =>
     axios.post(`${API_URL}/auth/login`, userData);
 
-export const createPayment = () =>
-    axios.post(`${API_URL}/subscription/create-payment`, {
-        headers: getAuthHeaders(),
-    });
-
 export const getUsers = () =>
     axios.get(`${API_URL}/admin/users`, {
         headers: getAuthHeaders(),
@@ -229,3 +224,14 @@ export const sendFeedback = async (text) => {
         { headers: getAuthHeaders() } // для Bearer-токена
     );
 };
+
+export function getSubscriptionPlans() {
+    return axios.get(`${API_URL}/subscription/plans`);
+}
+
+export function createPayment(subscriptionPlanId, autoRenew) {    
+    return axios.post(`${API_URL}/subscription/create-payment`,
+        { subscriptionPlanId, autoRenew },
+        { headers: { getAuthHeaders() } }
+    );
+}

@@ -11,20 +11,20 @@ import { API_URL } from '../api';
 import Cookies from 'js-cookie';
 
 const AdminPanel = () => {
-    // Вкладки: 'users' | 'export' | 'settings' | 'import' | 'bookupdate'
+    // Вкладки: 'users' | 'export' | 'settings' | 'import' | 'bookupdate' | 'subplans'
     const [currentTab, setCurrentTab] = useState('users');
 
-    // Состояния пользователей
+    // ----- Состояния пользователей
     const [users, setUsers] = useState([]);
     const [error, setError] = useState('');
 
-    // Состояния для Экспорта
+    // ----- Экспорт
     const [exportTaskId, setExportTaskId] = useState(null);
     const [progress, setProgress] = useState(null);
     const [isExporting, setIsExporting] = useState(false);
     const [intervalId, setIntervalId] = useState(null);
 
-    // Состояния для Настроек
+    // ----- Настройки
     const [yandexKassa, setYandexKassa] = useState({
         shopId: '',
         secretKey: '',
@@ -42,8 +42,6 @@ const AdminPanel = () => {
         serviceUrl: '',
         bucketName: ''
     });
-
-    // --- SMTP block ---
     const [smtp, setSmtp] = useState({
         host: '',
         port: '',
@@ -51,21 +49,19 @@ const AdminPanel = () => {
         pass: ''
     });
 
-    // Состояние сервиса обновления книг
+    // ----- Сервис обновления книг
     const [bookUpdateStatus, setBookUpdateStatus] = useState({
         isPaused: false,
         isRunningNow: false,
         lastRunTimeUtc: null,
         nextRunTimeUtc: null,
-
-        // Новые поля:
         currentOperationName: null,
         processedCount: 0,
         lastProcessedLotId: 0,
         lastProcessedLotTitle: ''
     });
 
-    // Состояния для Импорта
+    // ----- Импорт
     const [importTaskId, setImportTaskId] = useState(null);
     const [importFile, setImportFile] = useState(null);
     const [importUploadProgress, setImportUploadProgress] = useState(0);
@@ -74,9 +70,23 @@ const AdminPanel = () => {
     const [isImporting, setIsImporting] = useState(false);
     const [importPollIntervalId, setImportPollIntervalId] = useState(null);
 
-    const history = useNavigate();
+    // ===== Новая вкладка: планы подписки =====
+    const [subPlans, setSubPlans] = useState([]);
+    const [loadingPlans, setLoadingPlans] = useState(false);
 
-    // =========================== Загрузка пользователей ===========================
+    // Форма для нового или редактируемого плана
+    const [editMode, setEditMode] = useState(false); // false => создаём, true => редактируем
+    const [planForm, setPlanForm] = useState({
+        id: 0,
+        name: '',
+        price: 0,
+        monthlyRequestLimit: 0,
+        isActive: true
+    });
+
+    const navigate = useNavigate();
+
+    // ====================== Загрузка пользователей ======================
     useEffect(() => {
         const fetchUsers = async () => {
             try {
@@ -89,7 +99,7 @@ const AdminPanel = () => {
         fetchUsers();
     }, []);
 
-    // =========================== Загрузка настроек ===========================
+    // ====================== Загрузка настроек ======================
     useEffect(() => {
         const fetchSettings = async () => {
             try {
@@ -113,7 +123,6 @@ const AdminPanel = () => {
                     serviceUrl: data.yandexCloud?.ServiceUrl ?? '',
                     bucketName: data.yandexCloud?.BucketName ?? ''
                 });
-                // Берём smtp поля
                 setSmtp({
                     host: data.smtp?.Host ?? '',
                     port: data.smtp?.Port ?? '587',
@@ -127,7 +136,33 @@ const AdminPanel = () => {
         fetchSettings();
     }, []);
 
-    // =========================== Методы работы с пользователями ===========================
+    // ====================== Загрузка планов подписки (при переходе на вкладку subplans) ======================
+    useEffect(() => {
+        if (currentTab === 'subplans') {
+            loadSubscriptionPlans();
+        }
+        // eslint-disable-next-line
+    }, [currentTab]);
+
+    const loadSubscriptionPlans = async () => {
+        setLoadingPlans(true);
+        setError('');
+        try {
+            const token = Cookies.get('token');
+            // Допустим, у нас есть контроллер /api/subscriptionplans
+            const response = await axios.get(`${API_URL}/subscriptionplans`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setSubPlans(response.data);
+        } catch (err) {
+            console.error('Error fetching subscription plans:', err);
+            setError('Не удалось загрузить планы подписки.');
+        } finally {
+            setLoadingPlans(false);
+        }
+    };
+
+    // ====================== Методы работы с пользователями ======================
     const handleUpdateUserSubscription = async (userId, hasSubscription) => {
         if (isExporting || isImporting) return;
         try {
@@ -158,13 +193,13 @@ const AdminPanel = () => {
         if (isExporting || isImporting) return;
         try {
             await getUserById(userId);
-            history(`/user/${userId}`);
+            navigate(`/user/${userId}`);
         } catch (err) {
             console.error('Error fetching user details:', err);
         }
     };
 
-    // =========================== Экспорт ===========================
+    // ====================== Экспорт ======================
     const startExport = async () => {
         if (isExporting || isImporting) return;
         try {
@@ -252,7 +287,7 @@ const AdminPanel = () => {
         }
     };
 
-    // =========================== Сохранение настроек ===========================
+    // ====================== Сохранение настроек ======================
     const handleSaveSettings = async () => {
         try {
             const settingsDto = {
@@ -275,7 +310,6 @@ const AdminPanel = () => {
                     serviceUrl: yandexCloud.serviceUrl,
                     bucketName: yandexCloud.bucketName
                 },
-                // --- SMTP block ---
                 smtp: {
                     host: smtp.host,
                     port: smtp.port,
@@ -291,7 +325,7 @@ const AdminPanel = () => {
         }
     };
 
-    // =========================== Импорт SQLite ===========================
+    // ====================== Импорт ======================
     const initImportTask = async (fileSize) => {
         const res = await initImport(fileSize);
         setImportTaskId(res.importTaskId);
@@ -304,7 +338,7 @@ const AdminPanel = () => {
         while (offset < file.size) {
             const slice = file.slice(offset, offset + chunkSize);
             await uploadImportChunk(taskId, slice, () => {
-                // при желании можно отслеживать прогресс chunk'а
+                // можно отслеживать прогресс chunk'а
             });
             offset += chunkSize;
             const overallPct = Math.round((offset * 100) / file.size);
@@ -392,7 +426,7 @@ const AdminPanel = () => {
         }
     };
 
-    // =========================== Контроль сервиса обновления данных ===========================
+    // ====================== Обновление книг (meshok.net) ======================
     const fetchBookUpdateStatus = async () => {
         try {
             const token = Cookies.get('token');
@@ -435,27 +469,21 @@ const AdminPanel = () => {
             await axios.post(`${API_URL}/bookupdateservice/runNow`, {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            // После запуска — сразу обновляем статус:
             await fetchBookUpdateStatus();
         } catch (err) {
             console.error('Ошибка при запуске обновления:', err);
         }
     };
 
-    // =========================== Авто-обновление статуса сервиса обновления каждые 2 секунды ===========================
+    // Авто-обновление статуса
     useEffect(() => {
         let pollingId;
-
         if (currentTab === 'bookupdate') {
-            // 1) Сразу считываем статус:
             fetchBookUpdateStatus();
-            // 2) Каждые 2 секунды обновляем:
             pollingId = setInterval(() => {
                 fetchBookUpdateStatus();
             }, 2000);
         }
-
-        // При переключении вкладки или размонтировании — отменяем интервал
         return () => {
             if (pollingId) {
                 clearInterval(pollingId);
@@ -464,7 +492,55 @@ const AdminPanel = () => {
         // eslint-disable-next-line
     }, [currentTab]);
 
-    // =========================== Кнопки для вкладок (через <select>) ===========================
+    // ====================== Методы CRUD для планов подписки ======================
+    const handleCreateOrUpdatePlan = async () => {
+        setError('');
+        try {
+            const token = Cookies.get('token');
+            if (!editMode) {
+                // Создание нового
+                await axios.post(`${API_URL}/subscriptionplans`, planForm, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+            } else {
+                // Редактирование
+                await axios.put(`${API_URL}/subscriptionplans/${planForm.id}`, planForm, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+            }
+
+            // После сохранения — перезагрузить список
+            await loadSubscriptionPlans();
+            // Сброс формы:
+            setPlanForm({ id: 0, name: '', price: 0, monthlyRequestLimit: 0, isActive: true });
+            setEditMode(false);
+        } catch (err) {
+            console.error('Error creating/updating plan:', err);
+            setError('Не удалось сохранить план подписки.');
+        }
+    };
+
+    const handleEditPlan = (plan) => {
+        setPlanForm(plan);
+        setEditMode(true);
+    };
+
+    const handleDeletePlan = async (planId) => {
+        if (!window.confirm('Точно удалить этот план?')) return;
+        setError('');
+        try {
+            const token = Cookies.get('token');
+            await axios.delete(`${API_URL}/subscriptionplans/${planId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            loadSubscriptionPlans();
+        } catch (err) {
+            console.error('Error deleting plan:', err);
+            setError('Не удалось удалить план подписки.');
+        }
+    };
+
+    // ====================== Рендер кнопок для вкладок (select) ======================
     const renderTabButtons = (
         <div className="admin-tabs">
             <select
@@ -477,11 +553,13 @@ const AdminPanel = () => {
                 <option value="settings">Настройки</option>
                 <option value="import">Импорт данных</option>
                 <option value="bookupdate">Обновление книг</option>
+                {/* Новая вкладка: Планы подписки */}
+                <option value="subplans">Планы подписки</option>
             </select>
         </div>
     );
 
-    // =========================== Рендер основного контента ===========================
+    // ====================== Рендер контента по вкладкам ======================
     return (
         <div className="admin-panel-container">
             <h2 className="admin-title">Панель администратора</h2>
@@ -491,7 +569,7 @@ const AdminPanel = () => {
 
             <div className="admin-tab-content">
 
-                {/* ====================== Вкладка: Пользователи ====================== */}
+                {/* ============ Вкладка "users" ============ */}
                 {currentTab === 'users' && (
                     <div className="admin-section">
                         <h3 className="admin-section-title">Управление пользователями</h3>
@@ -538,7 +616,7 @@ const AdminPanel = () => {
                                                 >
                                                     {user.role === 'Admin'
                                                         ? 'Разжаловать в User'
-                                                        : 'Предоставить Admin'}
+                                                        : 'Назначить Admin'}
                                                 </button>
                                                 <button
                                                     onClick={() => handleViewDetails(user.id)}
@@ -554,7 +632,7 @@ const AdminPanel = () => {
                     </div>
                 )}
 
-                {/* ====================== Вкладка: Экспорт данных ====================== */}
+                {/* ============ Вкладка "export" ============ */}
                 {currentTab === 'export' && (
                     <div className="admin-section">
                         <h3 className="admin-section-title">Экспорт данных</h3>
@@ -600,7 +678,7 @@ const AdminPanel = () => {
                     </div>
                 )}
 
-                {/* ====================== Вкладка: Настройки ====================== */}
+                {/* ============ Вкладка "settings" ============ */}
                 {currentTab === 'settings' && (
                     <div className="admin-section">
                         <h3>Редактирование настроек (appsettings.json)</h3>
@@ -691,7 +769,10 @@ const AdminPanel = () => {
                                         type="text"
                                         value={yandexDisk.token}
                                         onChange={(e) =>
-                                            setYandexDisk({ ...yandexDisk, token: e.target.value })
+                                            setYandexDisk({
+                                                ...yandexDisk,
+                                                token: e.target.value
+                                            })
                                         }
                                     />
                                 </div>
@@ -810,13 +891,14 @@ const AdminPanel = () => {
                             </div>
                         </div>
 
-                        {/* --- SMTP block UI --- */}
+                        {/* SMTP */}
                         <div
                             style={{
                                 backgroundColor: '#f9f9f9',
                                 padding: 10,
                                 marginBottom: 10
-                            }}>
+                            }}
+                        >
                             <h4>SMTP</h4>
                             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                                 <div>
@@ -874,7 +956,7 @@ const AdminPanel = () => {
                     </div>
                 )}
 
-                {/* ====================== Вкладка: Импорт данных ====================== */}
+                {/* ============ Вкладка "import" ============ */}
                 {currentTab === 'import' && (
                     <div className="admin-section">
                         <h3 className="admin-section-title">Импорт данных из SQLite</h3>
@@ -931,10 +1013,12 @@ const AdminPanel = () => {
                     </div>
                 )}
 
-                {/* ====================== Вкладка: Обновление книг (meshok.net) ====================== */}
+                {/* ============ Вкладка "bookupdate" ============ */}
                 {currentTab === 'bookupdate' && (
                     <div className="admin-section">
-                        <h3 className="admin-section-title">Сервис обновления книг (meshok.net)</h3>
+                        <h3 className="admin-section-title">
+                            Сервис обновления книг (meshok.net)
+                        </h3>
 
                         <div style={{ marginBottom: '10px' }}>
                             <button onClick={fetchBookUpdateStatus} className="admin-button">
@@ -968,7 +1052,7 @@ const AdminPanel = () => {
                             <p>
                                 Последний обработанный лот (ID):{' '}
                                 {bookUpdateStatus.lastProcessedLotId}
-                            </p>                            
+                            </p>
                         </div>
 
                         <div style={{ marginTop: '10px' }}>
@@ -994,19 +1078,9 @@ const AdminPanel = () => {
                             )}
                         </div>
 
-                        {/* 
-                            Дополнительный блок для вывода объемного текста (лога или сообщений), 
-                            чтобы он не обрезался и был доступен для прокрутки.
-                            Допустим, вы используете bookUpdateStatus.progressMessage 
-                            для хранения длинного текста.
-                        */}
                         <div className="admin-log-container" style={{ marginTop: '20px' }}>
                             <h4>Подробная информация / логи:</h4>
                             <div>
-                                {/* 
-                                   Предположим, у вас есть поле bookUpdateStatus.progressMessage. 
-                                   Или вы можете заменить на то поле, где хранится полный текст/лог.
-                                */}
                                 {bookUpdateStatus.lastProcessedLotTitle
                                     ? bookUpdateStatus.lastProcessedLotTitle
                                     : 'Пока нет дополнительных сообщений.'}
@@ -1015,6 +1089,138 @@ const AdminPanel = () => {
                     </div>
                 )}
 
+                {/* ============ Вкладка "subplans" (новая) ============ */}
+                {currentTab === 'subplans' && (
+                    <div className="admin-section">
+                        <h3 className="admin-section-title">Управление планами подписки</h3>
+
+                        {/* Таблица планов */}
+                        {loadingPlans && <p>Загрузка...</p>}
+                        {!loadingPlans && (
+                            <table className="admin-table responsive-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Название</th>
+                                        <th>Цена (руб/мес)</th>
+                                        <th>Лимит запросов</th>
+                                        <th>Активен?</th>
+                                        <th>Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {subPlans.map((plan) => (
+                                        <tr key={plan.id}>
+                                            <td data-label="ID">{plan.id}</td>
+                                            <td data-label="Название">{plan.name}</td>
+                                            <td data-label="Цена">{plan.price}</td>
+                                            <td data-label="Лимит">{plan.monthlyRequestLimit}</td>
+                                            <td data-label="Активен?">
+                                                {plan.isActive ? 'Да' : 'Нет'}
+                                            </td>
+                                            <td data-label="Действия">
+                                                <button onClick={() => handleEditPlan(plan)}>
+                                                    Редактировать
+                                                </button>
+                                                &nbsp;
+                                                <button onClick={() => handleDeletePlan(plan.id)}>
+                                                    Удалить
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
+
+                        <hr style={{ margin: '20px 0' }} />
+
+                        {/* Форма создания/редактирования плана */}
+                        <h4>{editMode ? 'Редактировать план' : 'Создать новый план'}</h4>
+                        <div style={{ margin: '10px 0' }}>
+                            <label>
+                                Название:{' '}
+                                <input
+                                    type="text"
+                                    value={planForm.name}
+                                    onChange={(e) =>
+                                        setPlanForm({ ...planForm, name: e.target.value })
+                                    }
+                                />
+                            </label>
+                        </div>
+                        <div style={{ margin: '10px 0' }}>
+                            <label>
+                                Цена (руб/мес):{' '}
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    value={planForm.price}
+                                    onChange={(e) =>
+                                        setPlanForm({
+                                            ...planForm,
+                                            price: parseFloat(e.target.value || '0')
+                                        })
+                                    }
+                                />
+                            </label>
+                        </div>
+                        <div style={{ margin: '10px 0' }}>
+                            <label>
+                                Лимит запросов в месяц:{' '}
+                                <input
+                                    type="number"
+                                    value={planForm.monthlyRequestLimit}
+                                    onChange={(e) =>
+                                        setPlanForm({
+                                            ...planForm,
+                                            monthlyRequestLimit: parseInt(e.target.value || '0')
+                                        })
+                                    }
+                                />
+                            </label>
+                        </div>
+                        <div style={{ margin: '10px 0' }}>
+                            <label>
+                                Активен:{' '}
+                                <input
+                                    type="checkbox"
+                                    checked={planForm.isActive}
+                                    onChange={(e) =>
+                                        setPlanForm({
+                                            ...planForm,
+                                            isActive: e.target.checked
+                                        })
+                                    }
+                                />
+                            </label>
+                        </div>
+
+                        <div style={{ marginTop: '15px' }}>
+                            <button onClick={handleCreateOrUpdatePlan}>
+                                {editMode ? 'Сохранить изменения' : 'Создать'}
+                            </button>
+                            {editMode && (
+                                <button
+                                    style={{ marginLeft: 8 }}
+                                    onClick={() => {
+                                        // Отмена редактирования
+                                        setPlanForm({
+                                            id: 0,
+                                            name: '',
+                                            price: 0,
+                                            monthlyRequestLimit: 0,
+                                            isActive: true
+                                        });
+                                        setEditMode(false);
+                                    }}
+                                >
+                                    Отмена
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

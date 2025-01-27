@@ -1,24 +1,55 @@
-﻿//src/components/Subscription.jsx
-import React, { useState, useContext } from 'react';
-import { createPayment } from '../api';
+﻿import React, { useState, useContext, useEffect } from 'react';
 import { UserContext } from '../context/UserContext';
 import ErrorMessage from './ErrorMessage';
+import axios from 'axios';
+import { API_URL } from '../api';
+import Cookies from 'js-cookie';
 
 const SubscriptionPage = () => {
     const { user } = useContext(UserContext);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [plans, setPlans] = useState([]);
+    const [selectedPlanId, setSelectedPlanId] = useState(null);
+    const [autoRenew, setAutoRenew] = useState(false);
+
+    // Загружаем планы подписки
+    useEffect(() => {
+        fetchPlans();
+    }, []);
+
+    const fetchPlans = async () => {
+        try {
+            const response = await axios.get(`${API_URL}/subscription/plans`);
+            setPlans(response.data);
+        } catch (err) {
+            console.error(err);
+            setError('Не удалось загрузить планы подписки');
+        }
+    };
 
     const handleSubscribe = async () => {
         setError('');
+        if (!selectedPlanId) {
+            setError('Выберите план');
+            return;
+        }
         setLoading(true);
+
         try {
-            const response = await createPayment();
-            const { RedirectUrl } = response.data;
-            // Перенаправляем пользователя на страницу оплаты
-            window.location.href = RedirectUrl;
-        } catch (error) {
-            console.error('Subscription error:', error);
+            // Посылаем POST: /api/subscription/create-payment
+            // body: { subscriptionPlanId, autoRenew }
+            const token = Cookies.get('token');
+            const response = await axios.post(
+                `${API_URL}/subscription/create-payment`,
+                { subscriptionPlanId: selectedPlanId, autoRenew },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            // В ответе ожидаем: { redirectUrl: '...' }
+            const { redirectUrl } = response.data;
+            window.location.href = redirectUrl;
+        } catch (err) {
+            console.error('Subscription error:', err);
             setError('Не удалось создать платеж. Попробуйте позже.');
         } finally {
             setLoading(false);
@@ -34,6 +65,9 @@ const SubscriptionPage = () => {
         );
     }
 
+    // Если есть уже активная подписка, можем уведомить:
+    // (или запросить на бэкенд: /api/subscription/my-subscriptions и проверить последнюю)
+    // Для простоты — если user.HasSubscription === true
     if (user.hasSubscription) {
         return (
             <div className="container">
@@ -46,13 +80,44 @@ const SubscriptionPage = () => {
     return (
         <div className="container">
             <h2>Оформить подписку</h2>
-            <p>Стоимость подписки: </p>
-            <p>500 руб/месяц - 50 запросов в месяц</p>
-            <p>1000 руб/месяц - 200 запросов в месяц</p>
-            <p>1500 руб/месяц - 400 запросов в месяц</p>
-            <p>2000 руб/месяц - неограниченный доступ</p>
             {error && <ErrorMessage message={error} />}
-            {loading ? <p>Создание платежа...</p> : <button onClick={handleSubscribe}>Перейти к оплате</button>}
+            {loading && <p>Создание платежа...</p>}
+
+            <div style={{ margin: '20px 0' }}>
+                <h3>Выберите план:</h3>
+                {plans.length === 0 && <p>Нет доступных планов</p>}
+                <ul>
+                    {plans.map(plan => (
+                        <li key={plan.id} style={{ marginBottom: '10px' }}>
+                            <label>
+                                <input
+                                    type="radio"
+                                    name="subscriptionPlan"
+                                    value={plan.id}
+                                    checked={selectedPlanId === plan.id}
+                                    onChange={() => setSelectedPlanId(plan.id)}
+                                />
+                                {plan.name} — {plan.price} руб/мес, лимит: {plan.monthlyRequestLimit} запросов
+                            </label>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+
+            <div style={{ margin: '20px 0' }}>
+                <label>
+                    <input
+                        type="checkbox"
+                        checked={autoRenew}
+                        onChange={() => setAutoRenew(!autoRenew)}
+                    />
+                    Автоматически продлевать подписку
+                </label>
+            </div>
+
+            <button onClick={handleSubscribe} disabled={loading}>
+                Перейти к оплате
+            </button>
         </div>
     );
 };

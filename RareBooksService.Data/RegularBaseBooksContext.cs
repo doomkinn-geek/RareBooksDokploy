@@ -29,6 +29,7 @@ namespace RareBooksService.Data
         public DbSet<RegularBaseCategory> Categories { get; set; }
         public DbSet<UserSearchHistory> UserSearchHistories { get; set; }
         public DbSet<Subscription> Subscriptions { get; set; }
+        public DbSet<SubscriptionPlan> SubscriptionPlans { get; set; }
 
         public RegularBaseBooksContext(DbContextOptions<RegularBaseBooksContext> options) : base(options) { }
 
@@ -135,6 +136,31 @@ namespace RareBooksService.Data
             modelBuilder.Entity<RegularBaseBook>()
                 .Property(e => e.YearPublished)
                 .HasConversion(yearPublishedConverter);
+
+            // SubscriptionPlan
+            modelBuilder.Entity<SubscriptionPlan>(entity =>
+            {
+                entity.HasKey(p => p.Id);
+                entity.Property(p => p.Name).HasMaxLength(200).IsRequired();
+                entity.Property(p => p.Price).HasColumnType("decimal(18,2)");
+            });
+
+            // Subscription
+            modelBuilder.Entity<Subscription>(entity =>
+            {
+                entity.HasKey(s => s.Id);
+                // Связь с SubscriptionPlan
+                entity.HasOne(s => s.SubscriptionPlan)
+                      .WithMany() // Если у SubscriptionPlan нет списка подписок
+                      .HasForeignKey(s => s.SubscriptionPlanId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // Связь с ApplicationUser
+                entity.HasOne(s => s.User)
+                      .WithMany()
+                      .HasForeignKey(s => s.UserId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
 
         }
     }
