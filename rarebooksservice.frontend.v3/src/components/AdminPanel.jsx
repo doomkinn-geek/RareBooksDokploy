@@ -150,7 +150,7 @@ const AdminPanel = () => {
         try {
             const token = Cookies.get('token');
             // Допустим, у нас есть контроллер /api/subscriptionplans
-            const response = await axios.get(`${API_URL}/subscriptionplans`, {
+            const response = await axios.get(`${API_URL}/SubscriptionPlans`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setSubPlans(response.data);

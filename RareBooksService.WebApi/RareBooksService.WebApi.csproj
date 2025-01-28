@@ -15,10 +15,15 @@
 
   <ItemGroup>
     <None Remove="ARIALBD.TTF" />
+    <None Remove="books_extended.db" />
+    <None Remove="books_extended.db-shm" />
     <None Remove="InitialSetup\index.html" />
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="books_extended.db-shm">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Include="InitialSetup\index.html">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
@@ -31,9 +36,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="appsettings.json">
-      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-    </None>
+    <ApplicationDefinition Include="appsettings.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </ApplicationDefinition>
+    <ApplicationDefinition Include="books_extended.db">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </ApplicationDefinition>
   </ItemGroup>
 
   <ItemGroup>
@@ -65,12 +73,6 @@
     <ProjectReference Include="..\RareBooksService.Common\RareBooksService.Common.csproj" />
     <ProjectReference Include="..\RareBooksService.Data\RareBooksService.Data.csproj" />
     <ProjectReference Include="..\RareBooksService.Parser\RareBooksService.Parser.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Update="books_extended.db">
-      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-    </None>
   </ItemGroup>
 
 </Project>

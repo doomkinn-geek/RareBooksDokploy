@@ -14,16 +14,16 @@ namespace RareBooksService.WebApi.Controllers
     [Route("api/[controller]")]
     [ApiController]
     [Authorize]
-    public class SubscriptionController : ControllerBase
+    public class SubscriptionController : BaseController
     {
         private readonly UserManager<ApplicationUser> _userManager;
-        private readonly IYandexPaymentService _paymentService;
+        private readonly IYandexKassaPaymentService _paymentService;
         private readonly ISubscriptionService _subscriptionService;
 
         public SubscriptionController(
             UserManager<ApplicationUser> userManager,
-            IYandexPaymentService paymentService,
-            ISubscriptionService subscriptionService)
+            IYandexKassaPaymentService paymentService,
+            ISubscriptionService subscriptionService) : base(userManager) 
         {
             _userManager = userManager;
             _paymentService = paymentService;

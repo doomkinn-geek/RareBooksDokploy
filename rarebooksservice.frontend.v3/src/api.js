@@ -2,8 +2,8 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
-export const API_URL = '/api';
-//export const API_URL = 'https://localhost:7042/api';
+//export const API_URL = '/api';
+export const API_URL = 'https://localhost:7042/api';
 
 // ѕолучаем токен только из cookies
 const getAuthHeaders = () => {
@@ -223,7 +223,7 @@ export const sendFeedback = async (text) => {
         { text }, // тело запроса
         { headers: getAuthHeaders() } // дл€ Bearer-токена
     );
-};
+}
 
 export function getSubscriptionPlans() {
     return axios.get(`${API_URL}/subscription/plans`);
@@ -232,6 +232,6 @@ export function getSubscriptionPlans() {
 export function createPayment(subscriptionPlanId, autoRenew) {    
     return axios.post(`${API_URL}/subscription/create-payment`,
         { subscriptionPlanId, autoRenew },
-        { headers: { getAuthHeaders() } }
+        { headers: getAuthHeaders() }
     );
 }

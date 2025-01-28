@@ -26,7 +26,19 @@ namespace RareBooksService.WebApi
             logger.Debug("init main");
             try
             {
-                var builder = WebApplication.CreateBuilder(args);
+                var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+                {
+                    ContentRootPath = AppContext.BaseDirectory,
+                    Args = args
+                });
+
+                builder.Host.ConfigureAppConfiguration((hostingContext, config) =>
+                {
+                    // Сбрасываем базовый путь для конфигурации
+                    config.SetBasePath(AppContext.BaseDirectory);
+
+                    config.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);                   
+                });
 
                 // Убираем дефолтных провайдеров логов и подключаем NLog
                 builder.Logging.ClearProviders();
@@ -108,8 +120,8 @@ namespace RareBooksService.WebApi
                             ValidIssuer = builder.Configuration["Jwt:Issuer"],
                             ValidAudience = builder.Configuration["Jwt:Audience"],
                             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-                            RoleClaimType = "roles",
-                            NameClaimType = ClaimTypes.NameIdentifier
+                            NameClaimType = ClaimTypes.NameIdentifier,
+                            RoleClaimType = ClaimTypes.Role
                         };
                         options.Events = new JwtBearerEvents
                         {
@@ -163,10 +175,12 @@ namespace RareBooksService.WebApi
                 builder.Services.AddScoped<ILotFetchingService, LotFetchingService>();
                 builder.Services.AddScoped<IAuctionService, AuctionService>();
                 builder.Services.AddScoped<IEmailSenderService, SmtpEmailSenderService>();
+                builder.Services.AddScoped<ISubscriptionService, Services.SubscriptionService>();    
+                builder.Services.AddScoped<IYandexKassaPaymentService, YandexKassaPaymentService>();
 
                 // 11) Прочие singletons
                 builder.Services.AddSingleton<ICaptchaService, CaptchaService>();
-                builder.Services.AddSingleton<ISetupStateService, SetupStateService>();
+                builder.Services.AddSingleton<ISetupStateService, SetupStateService>();                
 
                 // 12) BookUpdateService – singleton + HostedService
                 builder.Services.AddSingleton<IBookUpdateService, BookUpdateService>();
@@ -219,9 +233,20 @@ namespace RareBooksService.WebApi
                 var app = builder.Build();
 
                 // Проверяем, нужно ли показывать InitialSetup
-                var setupService = app.Services.GetRequiredService<ISetupStateService>();
-                setupService.DetermineIfSetupNeeded();
+                ISetupStateService setupService;
+                
+                using(var scope = app.Services.CreateScope())
+                {
+                    setupService = scope.ServiceProvider.GetRequiredService<ISetupStateService>();
+                    setupService.DetermineIfSetupNeeded();
 
+                    if(!setupService.IsInitialSetupNeeded)
+                    {
+                        var dbContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
+                        dbContext.Database.Migrate();
+                    }
+                }                
+                
                 // Middleware: если IsInitialSetupNeeded == true – отдаём InitialSetup
                 app.Use(async (context, next) =>
                 

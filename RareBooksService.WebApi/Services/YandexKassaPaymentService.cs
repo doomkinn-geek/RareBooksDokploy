@@ -5,7 +5,7 @@ using Yandex.Checkout.V3;
 
 namespace RareBooksService.WebApi.Services
 {
-    public interface IYandexPaymentService
+    public interface IYandexKassaPaymentService
     {
         /// <summary>
         /// Создаёт платёж в ЮKassa для указанного пользователя и выбранного плана.
@@ -20,7 +20,7 @@ namespace RareBooksService.WebApi.Services
         Task<(string PaymentId, bool IsPaymentSucceeded)> ProcessWebhookAsync(HttpRequest request);
     }
 
-    public class YandexKassaPaymentService : IYandexPaymentService
+    public class YandexKassaPaymentService : IYandexKassaPaymentService
     {
         private readonly string _shopId;
         private readonly string _secretKey;

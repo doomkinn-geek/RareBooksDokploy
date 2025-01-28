@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Identity;
+using Npgsql;
 using RareBooksService.Common.Models;
 
 namespace RareBooksService.WebApi.Services
@@ -54,6 +55,14 @@ namespace RareBooksService.WebApi.Services
                 //    Если хотите, можно подгрузить IConfiguration и проверить, 
                 //    есть ли builder.Configuration["Jwt:Key"] != null/пусто, etc.
                 // ...
+            }
+            catch(AggregateException e)
+            {
+                //исключение из БД, возможно не была выполнена миграция
+                if (e.InnerException is PostgresException)
+                {
+                    _isSetupNeeded = false;
+                }
             }
             catch (Exception ex)
             {
