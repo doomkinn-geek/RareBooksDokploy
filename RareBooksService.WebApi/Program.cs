@@ -37,7 +37,10 @@ namespace RareBooksService.WebApi
                     // Сбрасываем базовый путь для конфигурации
                     config.SetBasePath(AppContext.BaseDirectory);
 
-                    config.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);                   
+                    if (System.IO.File.Exists(AppContext.BaseDirectory + "\\appsettings.json"))
+                    {
+                        config.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+                    }
                 });
 
                 // Убираем дефолтных провайдеров логов и подключаем NLog
