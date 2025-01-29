@@ -14,6 +14,7 @@ namespace RareBooksService.WebApi.Services
         Task<List<SubscriptionPlan>> GetActiveSubscriptionPlansAsync();
         Task<SubscriptionPlan> GetPlanByIdAsync(int planId);
         Task<List<Subscription>> GetUserSubscriptionsAsync(string userId);
+        Task UpdateSubscriptionAsync(Subscription subscription);
     }
 
     public class SubscriptionService : ISubscriptionService
@@ -33,36 +34,43 @@ namespace RareBooksService.WebApi.Services
         /// </summary>
         public async Task<Subscription> CreateSubscriptionAsync(ApplicationUser user, SubscriptionPlan plan, bool autoRenew)
         {
-            // Сначала деактивируем старую подписку, если нужна логика "одна активная"
-            // (или можно оставить, тогда у пользователя будут несколько исторических подписок)
-            var oldSubscriptions = await _db.Subscriptions
-                .Where(s => s.UserId == user.Id && s.IsActive)
-                .ToListAsync();
-            foreach (var sub in oldSubscriptions)
+            try
             {
-                sub.IsActive = false;
+                // Сначала деактивируем старую подписку, если нужна логика "одна активная"
+                // (или можно оставить, тогда у пользователя будут несколько исторических подписок)
+                var oldSubscriptions = await _db.Subscriptions
+                    .Where(s => s.UserId == user.Id && s.IsActive)
+                    .ToListAsync();
+                foreach (var sub in oldSubscriptions)
+                {
+                    sub.IsActive = false;
+                }
+
+                var newSub = new Subscription
+                {
+                    UserId = user.Id,
+                    SubscriptionPlanId = plan.Id,
+                    StartDate = DateTime.UtcNow,
+                    // Предположим, подписка на месяц:
+                    EndDate = DateTime.UtcNow.AddMonths(1),
+                    IsActive = false, // станет true после оплаты
+                    AutoRenew = autoRenew,
+                    PaymentId = null,
+                    PriceAtPurchase = plan.Price
+                };
+                _db.Subscriptions.Add(newSub);
+
+                // Если используете поле HasSubscription в ApplicationUser:
+                user.HasSubscription = false;
+                // (до фактической оплаты, позже включим true, когда оплата пройдёт)
+
+                await _db.SaveChangesAsync();
+                return newSub;
             }
-
-            var newSub = new Subscription
+            catch(Exception e)
             {
-                UserId = user.Id,
-                SubscriptionPlanId = plan.Id,
-                StartDate = DateTime.UtcNow,
-                // Предположим, подписка на месяц:
-                EndDate = DateTime.UtcNow.AddMonths(1),
-                IsActive = false, // станет true после оплаты
-                AutoRenew = autoRenew,
-                PaymentId = null,
-                PriceAtPurchase = plan.Price
-            };
-            _db.Subscriptions.Add(newSub);
-
-            // Если используете поле HasSubscription в ApplicationUser:
-            user.HasSubscription = false;
-            // (до фактической оплаты, позже включим true, когда оплата пройдёт)
-
-            await _db.SaveChangesAsync();
-            return newSub;
+                return null;
+            }
         }
 
         /// <summary>
@@ -104,5 +112,12 @@ namespace RareBooksService.WebApi.Services
                 .OrderByDescending(s => s.StartDate)
                 .ToListAsync();
         }
+        public async Task UpdateSubscriptionAsync(Subscription subscription)
+        {            
+            _db.Subscriptions.Update(subscription);
+
+            await _db.SaveChangesAsync();
+        }
+
     }
 }

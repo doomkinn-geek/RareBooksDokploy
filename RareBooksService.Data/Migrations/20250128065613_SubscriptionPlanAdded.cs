@@ -22,7 +22,7 @@ namespace RareBooksService.Data.Migrations
                 name: "PaymentId",
                 table: "Subscriptions",
                 type: "text",
-                nullable: false,
+                nullable: true,
                 defaultValue: "");
 
             migrationBuilder.AddColumn<decimal>(

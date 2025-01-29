@@ -42,7 +42,7 @@
         /// <summary>
         /// Идентификатор платежа в ЮKassa (для удобства можем хранить)
         /// </summary>
-        public string PaymentId { get; set; }
+        public string? PaymentId { get; set; }
 
         /// <summary>
         /// Сумма, по которой пользователь оформил подписку (фиксируем, чтобы

@@ -7,6 +7,7 @@ using RareBooksService.Data;
 using RareBooksService.WebApi.Services;
 using System;
 using System.IO;
+using System.Security.Claims;
 using System.Threading.Tasks;
 
 namespace RareBooksService.WebApi.Controllers
@@ -48,40 +49,38 @@ namespace RareBooksService.WebApi.Controllers
         [HttpPost("create-payment")]
         public async Task<IActionResult> CreatePayment([FromBody] CreatePaymentRequest request)
         {
-            // Model binding request:
-            //   {
-            //      "subscriptionPlanId": ...,
-            //      "autoRenew": true/false
-            //   }
-
             if (request == null || request.SubscriptionPlanId <= 0)
                 return BadRequest("Не указан план подписки");
 
-            var user = await _userManager.GetUserAsync(User);
-            if (user == null) return Unauthorized("Пользователь не найден");
+            // 1) Считываем userId из ClaimTypes.NameIdentifier
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized("Не удалось определить идентификатор пользователя из JWT");
 
-            // Получаем план
+            // 2) Ищем пользователя в бД
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+                return Unauthorized("Пользователь в базе не найден");
+
+            // 3) Получаем план
             var plan = await _subscriptionService.GetPlanByIdAsync(request.SubscriptionPlanId);
             if (plan == null)
                 return BadRequest("Невалидный или неактивный план подписки");
 
-            // Создаём запись Subscription в БД
+            // 4) Создаём запись Subscription в БД
             var newSubscription = await _subscriptionService.CreateSubscriptionAsync(user, plan, request.AutoRenew);
 
-            // Создаём платёж в ЮKassa
+            // 5) Создаём платёж в ЮKassa
             var (paymentId, redirectUrl) = await _paymentService.CreatePaymentAsync(user, plan, request.AutoRenew);
 
-            // Запишем PaymentId в нашу Subscription
+            // 6) Запишем PaymentId в нашу Subscription
             newSubscription.PaymentId = paymentId;
-            await _subscriptionService.ActivateSubscriptionAsync(null); // только если нужно сбросить старую, но НЕ активируем!
-            // Сохраним paymentId:
-            // (Можно добавить метод в сервис подписок, но для примера тут)
-            newSubscription.PaymentId = paymentId;
-            await (/*_db.SaveChangesAsync() или subscriptionService что-то вроде UpdateSubscriptionAsync(...)*/Task.CompletedTask);
+            await _subscriptionService.UpdateSubscriptionAsync(newSubscription);
 
-            // Возвращаем redirectUrl
+            // 7) Возвращаем redirectUrl
             return Ok(new { RedirectUrl = redirectUrl });
         }
+
 
         /// <summary>
         /// Webhook endpoint, куда ЮKassa будет отправлять уведомления об оплате.

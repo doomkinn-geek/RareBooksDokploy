@@ -16,7 +16,7 @@ namespace RareBooksService.WebApi.Controllers
 
         protected async Task<ApplicationUser> GetCurrentUserAsync()
         {
-            var userId = User?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Sid)?.Value;
+            var userId = User?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId))
             {
                 Console.WriteLine("User ID is missing in the token.");

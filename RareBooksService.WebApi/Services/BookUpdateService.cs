@@ -157,7 +157,7 @@ namespace RareBooksService.WebApi.Services
                     _currentOperationName = "FetchFreeListData";
                     ResetProgress();
 
-                    List<int> idList = File.ReadAllLines("d:\\temp\\books\\extendedNonStandardPricesSoviet_Group_x.txt")
+                    List<int> idList = File.ReadAllLines("d:\\temp\\books\\all.txt")
                         .Select(x => int.Parse(x))
                         .ToList();
                     await lotFetchingService.FetchFreeListData(idList);
