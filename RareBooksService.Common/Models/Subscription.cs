@@ -49,5 +49,7 @@
         /// в будущем не зависеть от изменения цены в планах).
         /// </summary>
         public decimal PriceAtPurchase { get; set; }
+        //сколько запросов уже израсходовано в текущем периоде
+        public int UsedRequestsThisPeriod { get; set; }
     }
 }

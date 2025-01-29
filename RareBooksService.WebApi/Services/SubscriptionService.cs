@@ -15,6 +15,7 @@ namespace RareBooksService.WebApi.Services
         Task<SubscriptionPlan> GetPlanByIdAsync(int planId);
         Task<List<Subscription>> GetUserSubscriptionsAsync(string userId);
         Task UpdateSubscriptionAsync(Subscription subscription);
+        Task<Subscription> GetActiveSubscriptionForUser(string userId);
     }
 
     public class SubscriptionService : ISubscriptionService
@@ -87,6 +88,7 @@ namespace RareBooksService.WebApi.Services
                 return;
 
             subscription.IsActive = true;
+            subscription.UsedRequestsThisPeriod = 0; // обнуляем счётчик запросов
             // Если хотим текущую подписку держать в user:
             subscription.User.HasSubscription = true;
             subscription.User.CurrentSubscriptionId = subscription.Id;
@@ -118,6 +120,18 @@ namespace RareBooksService.WebApi.Services
 
             await _db.SaveChangesAsync();
         }
+        public async Task<Subscription> GetActiveSubscriptionForUser(string userId)
+        {
+            // возвращаем активную подписку, если EndDate > Now и IsActive = true
+            var now = DateTime.UtcNow;
+            var sub = await _db.Subscriptions
+                .Include(s => s.SubscriptionPlan)
+                .Where(s => s.UserId == userId && s.IsActive && s.EndDate > now)
+                .OrderByDescending(s => s.StartDate)
+                .FirstOrDefaultAsync();
+            return sub;
+        }
+
 
     }
 }
