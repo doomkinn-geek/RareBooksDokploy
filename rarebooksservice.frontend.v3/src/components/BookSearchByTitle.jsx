@@ -1,4 +1,5 @@
 ﻿// src/components/BookSearchByTitle.jsx
+
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { searchBooksByTitle } from '../api';
@@ -18,8 +19,12 @@ const BookSearchByTitle = () => {
     const [books, setBooks] = useState([]);
     const [currentPage, setCurrentPage] = useState(initialPage);
     const [totalPages, setTotalPages] = useState(1);
+
     const [errorMessage, setErrorMessage] = useState('');
     const [loading, setLoading] = useState(false);
+
+    // Новое: храним, сколько осталось запросов
+    const [remainingRequests, setRemainingRequests] = useState(null);
 
     useEffect(() => {
         const fetchBooks = async (page = 1) => {
@@ -27,13 +32,20 @@ const BookSearchByTitle = () => {
             setErrorMessage('');
             try {
                 const response = await searchBooksByTitle(title, exactPhrase, page);
+
+                // Сервер возвращает: { items, totalPages, remainingRequests }
                 setBooks(response.data.items);
                 setTotalPages(response.data.totalPages);
-                setCurrentPage(page);
+
+                // remainingRequests может быть числом или null
+                if (typeof response.data.remainingRequests !== 'undefined') {
+                    setRemainingRequests(response.data.remainingRequests);
+                }
 
                 if (response.data.items.length === 0) {
                     setErrorMessage('Ничего не найдено.');
                 }
+                // ...
             } catch (error) {
                 console.error('Ошибка поиска книг по названию:', error);
                 setErrorMessage('Произошла ошибка при поиске книг. Попробуйте позже.');
@@ -45,7 +57,6 @@ const BookSearchByTitle = () => {
         fetchBooks(currentPage);
     }, [title, exactPhrase, currentPage]);
 
-    // При изменении страницы или флага exactPhrase меняем URL
     useEffect(() => {
         const newQuery = new URLSearchParams();
         newQuery.set('exactPhrase', exactPhrase);
@@ -55,24 +66,22 @@ const BookSearchByTitle = () => {
 
     return (
         <div className="container">
-            {/* Можно маленький блок вместо громоздкого header */}
             <Box sx={{ mb: 2 }}>
-                <Typography
-                    variant="h5"
-                    sx={{
-                        fontWeight: 'bold',
-                        marginTop: '10px'
-                    }}
-                >
+                <Typography variant="h5" sx={{ fontWeight: 'bold', marginTop: '10px' }}>
                     Книги по названию: {title}
                 </Typography>
             </Box>
 
-            {/* Сообщение об ошибке или отсутствии результатов */}
             <ErrorMessage message={errorMessage} />
             {loading && <Typography variant="h6">Загрузка...</Typography>}
 
-            {/* Список книг (если есть) */}
+            {/* Отображаем, сколько осталось запросов, если сервер прислал remainingRequests */}
+            {!loading && (remainingRequests !== null) && (
+                <Typography variant="body1" sx={{ color: '#666', marginBottom: '8px' }}>
+                    Осталось запросов в этом месяце: {remainingRequests === null ? 'безлимит' : remainingRequests}
+                </Typography>
+            )}
+
             {!loading && books.length > 0 && (
                 <BookList
                     books={books}
@@ -80,7 +89,7 @@ const BookSearchByTitle = () => {
                     currentPage={currentPage}
                     setCurrentPage={setCurrentPage}
                 />
-            )}            
+            )}
         </div>
     );
 };

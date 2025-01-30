@@ -6,11 +6,15 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace RareBooksService.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class SubscriptionPlanAdded : Migration
+    public partial class SubscriptionChanged : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropIndex(
+                name: "IX_Subscriptions_UserId",
+                table: "Subscriptions");
+
             migrationBuilder.AddColumn<bool>(
                 name: "AutoRenew",
                 table: "Subscriptions",
@@ -22,8 +26,7 @@ namespace RareBooksService.Data.Migrations
                 name: "PaymentId",
                 table: "Subscriptions",
                 type: "text",
-                nullable: true,
-                defaultValue: "");
+                nullable: true);
 
             migrationBuilder.AddColumn<decimal>(
                 name: "PriceAtPurchase",
@@ -34,6 +37,13 @@ namespace RareBooksService.Data.Migrations
 
             migrationBuilder.AddColumn<int>(
                 name: "SubscriptionPlanId",
+                table: "Subscriptions",
+                type: "integer",
+                nullable: false,
+                defaultValue: 0);
+
+            migrationBuilder.AddColumn<int>(
+                name: "UsedRequestsThisPeriod",
                 table: "Subscriptions",
                 type: "integer",
                 nullable: false,
@@ -67,16 +77,10 @@ namespace RareBooksService.Data.Migrations
                 column: "SubscriptionPlanId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_AspNetUsers_CurrentSubscriptionId",
-                table: "AspNetUsers",
-                column: "CurrentSubscriptionId");
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_AspNetUsers_Subscriptions_CurrentSubscriptionId",
-                table: "AspNetUsers",
-                column: "CurrentSubscriptionId",
-                principalTable: "Subscriptions",
-                principalColumn: "Id");
+                name: "IX_Subscriptions_UserId",
+                table: "Subscriptions",
+                column: "UserId",
+                unique: true);
 
             migrationBuilder.AddForeignKey(
                 name: "FK_Subscriptions_SubscriptionPlans_SubscriptionPlanId",
@@ -91,10 +95,6 @@ namespace RareBooksService.Data.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropForeignKey(
-                name: "FK_AspNetUsers_Subscriptions_CurrentSubscriptionId",
-                table: "AspNetUsers");
-
-            migrationBuilder.DropForeignKey(
                 name: "FK_Subscriptions_SubscriptionPlans_SubscriptionPlanId",
                 table: "Subscriptions");
 
@@ -106,8 +106,8 @@ namespace RareBooksService.Data.Migrations
                 table: "Subscriptions");
 
             migrationBuilder.DropIndex(
-                name: "IX_AspNetUsers_CurrentSubscriptionId",
-                table: "AspNetUsers");
+                name: "IX_Subscriptions_UserId",
+                table: "Subscriptions");
 
             migrationBuilder.DropColumn(
                 name: "AutoRenew",
@@ -126,8 +126,17 @@ namespace RareBooksService.Data.Migrations
                 table: "Subscriptions");
 
             migrationBuilder.DropColumn(
+                name: "UsedRequestsThisPeriod",
+                table: "Subscriptions");
+
+            migrationBuilder.DropColumn(
                 name: "CurrentSubscriptionId",
                 table: "AspNetUsers");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Subscriptions_UserId",
+                table: "Subscriptions",
+                column: "UserId");
         }
     }
 }

@@ -11,24 +11,37 @@ const SearchBooksByPriceRange = () => {
     const location = useLocation();
     const navigate = useNavigate();
 
+    // Извлекаем page из query-параметров URL
     const query = new URLSearchParams(location.search);
     const initialPage = parseInt(query.get('page'), 10) || 1;
 
+    // Состояния
     const [books, setBooks] = useState([]);
     const [currentPage, setCurrentPage] = useState(initialPage);
     const [totalPages, setTotalPages] = useState(1);
+
     const [errorMessage, setErrorMessage] = useState('');
     const [loading, setLoading] = useState(false);
 
+    // Добавляем состояние, чтобы хранить остаток доступных запросов
+    const [remainingRequests, setRemainingRequests] = useState(null);
+
     useEffect(() => {
+        // Функция загрузки книг
         const fetchBooks = async (page = 1) => {
             setLoading(true);
             setErrorMessage('');
             try {
+                // Вызываем API — возвращает { items, totalPages, remainingRequests }
                 const response = await searchBooksByPriceRange(minPrice, maxPrice, page);
+
                 setBooks(response.data.items);
                 setTotalPages(response.data.totalPages);
-                setCurrentPage(page);
+
+                // Если бэкенд прислал remainingRequests, сохраняем его
+                if (typeof response.data.remainingRequests !== 'undefined') {
+                    setRemainingRequests(response.data.remainingRequests);
+                }
 
                 if (response.data.items.length === 0) {
                     setErrorMessage('Ничего не найдено.');
@@ -41,10 +54,11 @@ const SearchBooksByPriceRange = () => {
             }
         };
 
+        // Загружаем книги на тек. странице
         fetchBooks(currentPage);
     }, [minPrice, maxPrice, currentPage]);
 
-    // При изменении currentPage обновляем URL
+    // При изменении currentPage обновляем query-параметр "page"
     useEffect(() => {
         const newQuery = new URLSearchParams();
         newQuery.set('page', currentPage);
@@ -74,6 +88,15 @@ const SearchBooksByPriceRange = () => {
                     </Typography>
                 )}
 
+                {/* Если сервер вернул remainingRequests, отображаем пользователю */}
+                {!loading && (remainingRequests !== null) && (
+                    <Typography variant="body1" sx={{ color: '#666', marginBottom: '8px' }}>
+                        Осталось запросов в этом месяце:{' '}
+                        {remainingRequests === null ? 'безлимит' : remainingRequests}
+                    </Typography>
+                )}
+
+                {/* Список книг, если есть */}
                 {!loading && books.length > 0 && (
                     <BookList
                         books={books}

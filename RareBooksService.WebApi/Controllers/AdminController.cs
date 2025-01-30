@@ -16,17 +16,20 @@ namespace RareBooksService.WebApi.Controllers
         private readonly IExportService _exportService;
         private readonly IUserService _userService;
         private readonly ILogger<AdminController> _logger;
+        private readonly ISubscriptionService _subscriptionService;
 
         public AdminController(
             IUserService userService,
             UserManager<ApplicationUser> userManager,
             ILogger<AdminController> logger,
-            IExportService exportService)
+            IExportService exportService,
+            ISubscriptionService subscriptionService)
             : base(userManager)
         {
             _userService = userService;
             _logger = logger;
             _exportService = exportService;
+            _subscriptionService = subscriptionService;
         }
 
         [HttpPost("export-data")]
@@ -188,5 +191,50 @@ namespace RareBooksService.WebApi.Controllers
             _logger.LogError("Не удалось назначить роль '{Role}' пользователю с ID {UserId}", role, userId);
             return BadRequest("Не удалось назначить роль.");
         }
+        [HttpPost("user/{userId}/assign-subscription-plan")]
+        public async Task<IActionResult> AssignSubscriptionPlan(string userId, [FromBody] AssignSubscriptionPlanRequest request)
+        {
+            _logger.LogInformation("Запрос на назначение плана подписки пользователю {UserId}: {PlanId}, autoRenew={AutoRenew}",
+                userId, request.PlanId, request.AutoRenew);
+
+            var currentUser = await GetCurrentUserAsync();
+            if (!IsUserAdmin(currentUser))
+            {
+                _logger.LogWarning("Доступ запрещен: текущий пользователь не является администратором.");
+                return Forbid("Назначение подписки может выполнять только администратор");
+            }
+
+            // План может быть 0 => означает «отключить подписку»
+            // Или > 0 => означает задать конкретный план (включить или заменить).
+
+            bool success;
+            if (request.PlanId == 0)
+            {
+                // Сброс/отключение подписки
+                success = await _subscriptionService.DisableSubscriptionAsync(userId);
+            }
+            else
+            {
+                // Назначаем/обновляем подписку
+                success = await _subscriptionService.AssignSubscriptionPlanAsync(userId, request.PlanId, request.AutoRenew);
+            }
+
+            if (!success)
+            {
+                _logger.LogError("Не удалось изменить подписку пользователю {UserId}", userId);
+                return BadRequest("Не удалось изменить подписку.");
+            }
+
+            _logger.LogInformation("Подписка пользователя {UserId} успешно изменена (Plan={PlanId}, autoRenew={AutoRenew})",
+                userId, request.PlanId, request.AutoRenew);
+
+            return Ok();
+        }
+    }
+
+    public class AssignSubscriptionPlanRequest
+    {
+        public int PlanId { get; set; } // 0 = отключить
+        public bool AutoRenew { get; set; }
     }
 }

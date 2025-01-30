@@ -143,25 +143,19 @@ namespace RareBooksService.Data
                 entity.HasKey(p => p.Id);
                 entity.Property(p => p.Name).HasMaxLength(200).IsRequired();
                 entity.Property(p => p.Price).HasColumnType("decimal(18,2)");
-            });
+            });            
 
-            // Subscription
-            modelBuilder.Entity<Subscription>(entity =>
-            {
-                entity.HasKey(s => s.Id);
-                // Связь с SubscriptionPlan
-                entity.HasOne(s => s.SubscriptionPlan)
-                      .WithMany() // Если у SubscriptionPlan нет списка подписок
-                      .HasForeignKey(s => s.SubscriptionPlanId)
-                      .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<ApplicationUser>()
+                .HasOne(u => u.CurrentSubscription)
+                .WithOne(s => s.User) // Subscription тоже должно иметь public ApplicationUser User { get; set; }
+                .HasForeignKey<ApplicationUser>(u => u.CurrentSubscriptionId)
+                .OnDelete(DeleteBehavior.Restrict);
 
-                // Связь с ApplicationUser
-                entity.HasOne(s => s.User)
-                      .WithMany()
-                      .HasForeignKey(s => s.UserId)
-                      .OnDelete(DeleteBehavior.Cascade);
-            });
-
+            modelBuilder.Entity<Subscription>()
+                .HasOne(s => s.User)
+                .WithOne(u => u.CurrentSubscription)
+                .HasForeignKey<Subscription>(s => s.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         }
     }
 }

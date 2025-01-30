@@ -84,6 +84,13 @@ const AdminPanel = () => {
         isActive: true
     });
 
+    // --- Модалка для назначения плана ---
+    const [showSubModal, setShowSubModal] = useState(false);
+    const [selectedUserForSub, setSelectedUserForSub] = useState(null);
+    const [selectedPlanForSub, setSelectedPlanForSub] = useState(0);
+    const [autoRenewForSub, setAutoRenewForSub] = useState(false);
+
+
     const navigate = useNavigate();
 
     // ====================== Загрузка пользователей ======================
@@ -161,6 +168,41 @@ const AdminPanel = () => {
             setLoadingPlans(false);
         }
     };
+
+    // Открываем модалку
+    function openSubscriptionModal(user) {
+        setSelectedUserForSub(user);
+        const activePlanId = user.currentSubscription?.subscriptionPlanId || 0;
+        setSelectedPlanForSub(activePlanId);
+        setAutoRenewForSub(user.currentSubscription?.autoRenew || false);
+        setShowSubModal(true);
+    }
+
+    async function handleAssignSubscriptionPlan() {
+        try {
+            const token = Cookies.get('token');
+            const userId = selectedUserForSub.id;
+
+            const requestBody = {
+                planId: Number(selectedPlanForSub),
+                autoRenew: autoRenewForSub
+            };
+
+            await axios.post(`${API_URL}/admin/user/${userId}/assign-subscription-plan`,
+                requestBody,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            alert('Подписка обновлена');
+            setShowSubModal(false);
+
+            // Обновим список пользователей, чтобы увидеть новые данные
+            loadUsers();
+        } catch (err) {
+            console.error('Ошибка при назначении плана подписки:', err);
+            alert('Ошибка при назначении плана');
+        }
+    }
 
     // ====================== Методы работы с пользователями ======================
     const handleUpdateUserSubscription = async (userId, hasSubscription) => {
@@ -587,11 +629,16 @@ const AdminPanel = () => {
                                     <tr key={user.id}>
                                         <td data-label="Email">{user.email}</td>
                                         <td data-label="Роль">{user.role}</td>
-                                        <td data-label="Подписка">
-                                            {user.hasSubscription ? 'Да' : 'Нет'}
-                                        </td>
+                                        <td>
+                                            {user.currentSubscription
+                                                ? user.currentSubscription.subscriptionPlan?.name
+                                                : 'Нет'}
+                                        </td>                                        
                                         <td data-label="Действия">
                                             <div className="actions-container">
+                                                <button onClick={() => openSubscriptionModal(user)}>
+                                                    Изменить подписку
+                                                </button>
                                                 <button
                                                     onClick={() =>
                                                         handleUpdateUserSubscription(
@@ -1218,6 +1265,49 @@ const AdminPanel = () => {
                                     Отмена
                                 </button>
                             )}
+                        </div>
+                    </div>
+                )}
+                {/* Модалка назначения плана */}
+                {showSubModal && (
+                    <div className="modal-overlay">
+                        <div className="modal">
+                            <h3>
+                                Изменить подписку пользователя {selectedUserForSub?.email}
+                            </h3>
+
+                            <label>План подписки:</label>
+                            <select
+                                value={selectedPlanForSub}
+                                onChange={(e) => setSelectedPlanForSub(e.target.value)}
+                            >
+                                <option value={0}> -- Отключить подписку -- </option>
+                                {subPlans.map(plan => (
+                                    <option key={plan.id} value={plan.id}>
+                                        {plan.name} (лимит {plan.monthlyRequestLimit})
+                                    </option>
+                                ))}
+                            </select>
+
+                            <div style={{ marginTop: 8 }}>
+                                <label>
+                                    <input
+                                        type="checkbox"
+                                        checked={autoRenewForSub}
+                                        onChange={(e) => setAutoRenewForSub(e.target.checked)}
+                                    />
+                                    Автопродление
+                                </label>
+                            </div>
+
+                            <div style={{ marginTop: 16 }}>
+                                <button onClick={handleAssignSubscriptionPlan}>
+                                    Сохранить
+                                </button>
+                                <button onClick={() => setShowSubModal(false)} style={{ marginLeft: 8 }}>
+                                    Отмена
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}

@@ -12,8 +12,8 @@ using RareBooksService.Data;
 namespace RareBooksService.Data.Migrations
 {
     [DbContext(typeof(RegularBaseBooksContext))]
-    [Migration("20250128065613_SubscriptionPlanAdded")]
-    partial class SubscriptionPlanAdded
+    [Migration("20250130130536_SubscriptionChanged")]
+    partial class SubscriptionChanged
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -221,8 +221,6 @@ namespace RareBooksService.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CurrentSubscriptionId");
-
                     b.HasIndex("NormalizedEmail")
                         .HasDatabaseName("EmailIndex");
 
@@ -375,7 +373,6 @@ namespace RareBooksService.Data.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<string>("PaymentId")
-                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<decimal>("PriceAtPurchase")
@@ -387,6 +384,9 @@ namespace RareBooksService.Data.Migrations
                     b.Property<int>("SubscriptionPlanId")
                         .HasColumnType("integer");
 
+                    b.Property<int>("UsedRequestsThisPeriod")
+                        .HasColumnType("integer");
+
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasColumnType("text");
@@ -395,7 +395,8 @@ namespace RareBooksService.Data.Migrations
 
                     b.HasIndex("SubscriptionPlanId");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .IsUnique();
 
                     b.ToTable("Subscriptions");
                 });
@@ -508,15 +509,6 @@ namespace RareBooksService.Data.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("RareBooksService.Common.Models.ApplicationUser", b =>
-                {
-                    b.HasOne("RareBooksService.Common.Models.Subscription", "CurrentSubscription")
-                        .WithMany()
-                        .HasForeignKey("CurrentSubscriptionId");
-
-                    b.Navigation("CurrentSubscription");
-                });
-
             modelBuilder.Entity("RareBooksService.Common.Models.RegularBaseBook", b =>
                 {
                     b.HasOne("RareBooksService.Common.Models.RegularBaseCategory", "Category")
@@ -537,8 +529,8 @@ namespace RareBooksService.Data.Migrations
                         .IsRequired();
 
                     b.HasOne("RareBooksService.Common.Models.ApplicationUser", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
+                        .WithOne("CurrentSubscription")
+                        .HasForeignKey("RareBooksService.Common.Models.Subscription", "UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -560,6 +552,9 @@ namespace RareBooksService.Data.Migrations
 
             modelBuilder.Entity("RareBooksService.Common.Models.ApplicationUser", b =>
                 {
+                    b.Navigation("CurrentSubscription")
+                        .IsRequired();
+
                     b.Navigation("SearchHistory");
                 });
 

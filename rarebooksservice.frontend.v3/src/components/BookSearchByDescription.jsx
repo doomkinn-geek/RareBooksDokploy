@@ -1,5 +1,4 @@
-﻿// src/components/BookSearchByDescription.jsx
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { searchBooksByDescription } from '../api';
 import BookList from './BookList.jsx';
@@ -18,8 +17,12 @@ const BookSearchByDescription = () => {
     const [books, setBooks] = useState([]);
     const [currentPage, setCurrentPage] = useState(initialPage);
     const [totalPages, setTotalPages] = useState(1);
+
     const [errorMessage, setErrorMessage] = useState('');
     const [loading, setLoading] = useState(false);
+
+    // Новое:
+    const [remainingRequests, setRemainingRequests] = useState(null);
 
     useEffect(() => {
         const fetchBooks = async (page = 1) => {
@@ -27,9 +30,14 @@ const BookSearchByDescription = () => {
             setErrorMessage('');
             try {
                 const response = await searchBooksByDescription(description, exactPhrase, page);
+                // response.data => { items, totalPages, remainingRequests }
+
                 setBooks(response.data.items);
                 setTotalPages(response.data.totalPages);
-                setCurrentPage(page);
+
+                if (typeof response.data.remainingRequests !== 'undefined') {
+                    setRemainingRequests(response.data.remainingRequests);
+                }
 
                 if (response.data.items.length === 0) {
                     setErrorMessage('Ничего не найдено.');
@@ -45,7 +53,6 @@ const BookSearchByDescription = () => {
         fetchBooks(currentPage);
     }, [description, exactPhrase, currentPage]);
 
-    // При изменении страницы или флага exactPhrase обновляем URL
     useEffect(() => {
         const newQuery = new URLSearchParams();
         newQuery.set('exactPhrase', exactPhrase);
@@ -55,33 +62,29 @@ const BookSearchByDescription = () => {
 
     return (
         <div className="container">
-            <header className="header">
-                <h1>
-                    <Link to="/" style={{ color: '#fff', textDecoration: 'none' }}>
-                        Rare Books Service
-                    </Link>
-                </h1>
-            </header>
+            <Typography variant="h4">
+                Книги с описанием: {description}
+            </Typography>
 
-            <Box>
-                <Typography variant="h4">
-                    Книги с описанием: {description}
+            <ErrorMessage message={errorMessage} />
+
+            {loading && <Typography variant="h6">Загрузка...</Typography>}
+
+            {/* Выводим остаток запросов */}
+            {!loading && (remainingRequests !== null) && (
+                <Typography variant="body1" sx={{ color: '#666', marginBottom: '8px' }}>
+                    Осталось запросов: {remainingRequests === null ? 'безлимит' : remainingRequests}
                 </Typography>
+            )}
 
-                <ErrorMessage message={errorMessage} />
-
-                {loading && <Typography variant="h6">Загрузка...</Typography>}
-
-
-                {!loading && books.length > 0 && (
-                    <BookList
-                        books={books}
-                        totalPages={totalPages}
-                        currentPage={currentPage}
-                        setCurrentPage={setCurrentPage}
-                    />
-                )}
-            </Box>            
+            {!loading && books.length > 0 && (
+                <BookList
+                    books={books}
+                    totalPages={totalPages}
+                    currentPage={currentPage}
+                    setCurrentPage={setCurrentPage}
+                />
+            )}
         </div>
     );
 };
