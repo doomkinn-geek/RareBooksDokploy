@@ -469,10 +469,34 @@ button, input {
     */
 }
 
-/* На десктопе .actions-container кнопки в строку */
-.actions-container button {
-    margin-right: 6px;
+/* Контейнер для кнопок действий */
+.actions-container {
+    display: flex;
+    flex-direction: column; /* Кнопки в столбик */
+    gap: 6px; /* Отступ между кнопками */
+    align-items: stretch; /* Чтобы кнопки растягивались на всю ширину */
 }
+
+    /* Сами кнопки внутри .actions-container */
+    .actions-container button {
+        width: 100%; /* Растягиваем кнопки на всю ширину */
+        white-space: nowrap; /* Чтобы текст не переносился */
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+@media (max-width: 768px) {
+    .actions-container {
+        flex-direction: column;
+        gap: 4px; /* Уменьшаем отступ */
+    }
+
+        .actions-container button {
+            font-size: 14px; /* Делаем шрифт меньше для компактности */
+            padding: 8px; /* Уменьшаем отступ внутри кнопки */
+        }
+}
+
 
 /* =============================
    8) МЕДИАЗАПРОСЫ (до 768px)

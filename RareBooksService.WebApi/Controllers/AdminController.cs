@@ -67,7 +67,7 @@ namespace RareBooksService.WebApi.Controllers
         }
 
         [HttpGet("users")]
-        public async Task<ActionResult<IEnumerable<ApplicationUser>>> GetUsers()
+        public async Task<ActionResult<IEnumerable<UserDto>>> GetUsers()
         {
             _logger.LogInformation("Запрос на получение списка пользователей.");
 
@@ -78,11 +78,39 @@ namespace RareBooksService.WebApi.Controllers
                 return Forbid("Просматривать список пользователей может только администратор");
             }
 
-            var users = await _userService.GetAllUsersAsync();
+            var users = await _userService.GetAllUsersWithSubscriptionsAsync();
 
             _logger.LogInformation("Список пользователей успешно получен. Количество пользователей: {UserCount}", users.Count());
-            return Ok(users);
+
+            // Преобразуем пользователей в DTO, чтобы убрать циклические зависимости и лишние данные
+            var userDtos = users.Select(user => new UserDto
+            {
+                Id = user.Id,
+                Email = user.Email,
+                Role = user.Role,
+                HasSubscription = user.HasSubscription,
+                CurrentSubscription = user.CurrentSubscription != null ? new SubscriptionDto
+                {
+                    Id = user.CurrentSubscription.Id,
+                    SubscriptionPlanId = user.CurrentSubscription.SubscriptionPlanId,
+                    AutoRenew = user.CurrentSubscription.AutoRenew,
+                    IsActive = user.CurrentSubscription.IsActive,
+                    StartDate = user.CurrentSubscription.StartDate,
+                    EndDate = user.CurrentSubscription.EndDate,
+                    SubscriptionPlan = user.CurrentSubscription.SubscriptionPlan != null ? new SubscriptionPlanDto
+                    {
+                        Id = user.CurrentSubscription.SubscriptionPlan.Id,
+                        Name = user.CurrentSubscription.SubscriptionPlan.Name,
+                        Price = user.CurrentSubscription.SubscriptionPlan.Price,
+                        MonthlyRequestLimit = user.CurrentSubscription.SubscriptionPlan.MonthlyRequestLimit,
+                        IsActive = user.CurrentSubscription.SubscriptionPlan.IsActive
+                    } : null
+                } : null
+            }).ToList();
+
+            return Ok(userDtos);
         }
+
 
         [HttpGet("user/{userId}")]
         public async Task<ActionResult<ApplicationUser>> GetUser(string userId)

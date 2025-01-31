@@ -189,21 +189,42 @@ namespace RareBooksService.WebApi.Services
 
         public async Task<bool> DisableSubscriptionAsync(string userId)
         {
+            // 1. Найдём пользователя
             var user = await _userManager.FindByIdAsync(userId);
             if (user == null) return false;
 
-            var activeSubs = await _db.Subscriptions
+            // 2. Если у него есть текущее поле CurrentSubscriptionId, 
+            //    попробуем найти соответствующую запись в Subscriptions.
+            var currentSubId = user.CurrentSubscriptionId;
+            if (currentSubId.HasValue)
+            {
+                var currentSub = await _db.Subscriptions
+                    .FirstOrDefaultAsync(s => s.Id == currentSubId.Value);
+
+                if (currentSub != null)
+                {
+                    // Ставим IsActive = false
+                    currentSub.IsActive = false;
+                }
+            }
+
+            // 3. На случай если где-то остались другие активные подписки (с IsActive = true),
+            //    тоже их отключим.
+            var allActiveSubs = await _db.Subscriptions
                 .Where(s => s.UserId == userId && s.IsActive)
                 .ToListAsync();
-            foreach (var s in activeSubs) s.IsActive = false;
+            foreach (var sub in allActiveSubs)
+            {
+                sub.IsActive = false;
+            }
 
+            // 4. У самого пользователя обнуляем поля
             user.HasSubscription = false;
             user.CurrentSubscriptionId = null;
+
+            // 5. Сохраняем изменения
             await _db.SaveChangesAsync();
             return true;
         }
-
-
-
     }
 }

@@ -93,17 +93,21 @@ const AdminPanel = () => {
 
     const navigate = useNavigate();
 
-    // ====================== Загрузка пользователей ======================
     useEffect(() => {
-        const fetchUsers = async () => {
-            try {
-                const response = await getUsers();
-                setUsers(response.data);
-            } catch (err) {
-                console.error('Error fetching users:', err);
-            }
-        };
-        fetchUsers();
+        loadSubscriptionPlans(); // Загрузим планы при первом рендере
+    }, []);
+    // ====================== Загрузка пользователей ======================
+    // Вынесем эту функцию наружу
+    const loadUsers = async () => {
+        try {
+            const response = await getUsers();
+            setUsers(response.data);
+        } catch (err) {
+            console.error('Error fetching users:', err);
+        }
+    };
+    useEffect(() => {
+        loadUsers();
     }, []);
 
     // ====================== Загрузка настроек ======================
@@ -620,61 +624,52 @@ const AdminPanel = () => {
                                 <tr>
                                     <th>Email</th>
                                     <th>Роль</th>
-                                    <th>Подписка</th>
+                                    <th>Активна?</th>
+                                    <th>План</th>
+                                    <th>Автопродление</th>
+                                    <th>Лимит запросов</th>
                                     <th>Действия</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {users.map((user) => (
-                                    <tr key={user.id}>
-                                        <td data-label="Email">{user.email}</td>
-                                        <td data-label="Роль">{user.role}</td>
-                                        <td>
-                                            {user.currentSubscription
-                                                ? user.currentSubscription.subscriptionPlan?.name
-                                                : 'Нет'}
-                                        </td>                                        
-                                        <td data-label="Действия">
-                                            <div className="actions-container">
-                                                <button onClick={() => openSubscriptionModal(user)}>
-                                                    Изменить подписку
-                                                </button>
-                                                <button
-                                                    onClick={() =>
-                                                        handleUpdateUserSubscription(
-                                                            user.id,
-                                                            !user.hasSubscription
-                                                        )
-                                                    }
-                                                >
-                                                    {user.hasSubscription
-                                                        ? 'Отменить подписку'
-                                                        : 'Подключить подписку'}
-                                                </button>
-                                                <button
-                                                    onClick={() =>
-                                                        handleUpdateUserRole(
-                                                            user.id,
-                                                            user.role === 'Admin'
-                                                                ? 'User'
-                                                                : 'Admin'
-                                                        )
-                                                    }
-                                                >
-                                                    {user.role === 'Admin'
-                                                        ? 'Разжаловать в User'
-                                                        : 'Назначить Admin'}
-                                                </button>
-                                                <button
-                                                    onClick={() => handleViewDetails(user.id)}
-                                                >
-                                                    Просмотр
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                                {users.map((user) => {
+                                    const sub = user.currentSubscription;
+                                    return (
+                                        <tr key={user.id}>
+                                            <td data-label="Email">{user.email}</td>
+                                            <td data-label="Роль">{user.role}</td>
+
+                                            {/* Активна ли? */}
+                                            <td data-label="Активна?">{sub ? 'Да' : 'Нет'}</td>
+                                            <td data-label="План">{sub?.subscriptionPlan?.name || '-'}</td>
+                                            <td data-label="Автопродление">{sub?.autoRenew ? 'Да' : 'Нет'}</td>
+                                            <td data-label="Лимит запросов">{sub?.subscriptionPlan?.monthlyRequestLimit ?? '-'}</td>
+
+                                            <td data-label="Действия">
+                                                <div className="actions-container">
+                                                    {/* Кнопка модалки */}
+                                                    <button onClick={() => openSubscriptionModal(user)}>
+                                                        Изменить подписку
+                                                    </button>
+
+                                                    {/* Пример: кнопка смены роли */}
+                                                    <button onClick={() => handleUpdateUserRole(user.id,
+                                                        user.role === 'Admin' ? 'User' : 'Admin')}>
+                                                        {user.role === 'Admin' ? 'Разжаловать в User' : 'Назначить Admin'}
+                                                    </button>
+
+                                                    {/* Пример: кнопка "подробнее" */}
+                                                    <button onClick={() => handleViewDetails(user.id)}>
+                                                        Просмотр
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+
                             </tbody>
+
                         </table>
                     </div>
                 )}

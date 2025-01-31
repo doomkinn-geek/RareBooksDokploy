@@ -65,5 +65,13 @@ namespace RareBooksService.Data.Services
             }
             return false;
         }
+        public async Task<List<ApplicationUser>> GetAllUsersWithSubscriptionsAsync()
+        {
+            return await _context.Users
+                .Include(u => u.CurrentSubscription) // Загружаем подписку пользователя
+                .ThenInclude(s => s.SubscriptionPlan) // Загружаем план подписки
+                .ToListAsync();
+        }
+
     }
 }

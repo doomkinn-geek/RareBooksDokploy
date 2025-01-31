@@ -15,5 +15,6 @@ namespace RareBooksService.Data.Interfaces
         Task AddSearchHistoryAsync(UserSearchHistory history);
         Task<bool> UpdateUserSubscriptionAsync(string userId, bool hasSubscription);
         Task<bool> AssignRoleAsync(string userId, string role);
+        Task<List<ApplicationUser>> GetAllUsersWithSubscriptionsAsync();
     }
 }
