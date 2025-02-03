@@ -2,7 +2,6 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using RareBooksService.Data;
@@ -11,12 +10,10 @@ using RareBooksService.Data;
 
 namespace RareBooksService.Data.Migrations
 {
-    [DbContext(typeof(RegularBaseBooksContext))]
-    [Migration("20240717134919_InitialCreate")]
-    partial class InitialCreate
+    [DbContext(typeof(BooksDbContext))]
+    partial class BooksDbContextModelSnapshot : ModelSnapshot
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -56,9 +53,18 @@ namespace RareBooksService.Data.Migrations
                     b.Property<double?>("FinalPrice")
                         .HasColumnType("double precision");
 
+                    b.Property<string>("ImageArchiveUrl")
+                        .HasColumnType("text");
+
                     b.Property<string>("ImageUrls")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<bool>("IsImagesCompressed")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsLessValuable")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsMonitored")
                         .HasColumnType("boolean");

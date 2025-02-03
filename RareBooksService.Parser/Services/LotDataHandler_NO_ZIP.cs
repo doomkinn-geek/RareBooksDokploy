@@ -28,7 +28,7 @@ namespace RareBooksService.Parser.Services.bak
 
     public class LotDataHandler : ILotDataHandler, IDisposable
     {
-        private readonly RegularBaseBooksContext _context;
+        private readonly BooksDbContext _context;
         private readonly IMapper _mapper;
         private readonly ILotDataWebService _lotDataService;
         private readonly IYandexStorageService _yandexStorageService;
@@ -47,7 +47,7 @@ namespace RareBooksService.Parser.Services.bak
         }
 
         public LotDataHandler(
-            RegularBaseBooksContext context,
+            BooksDbContext context,
             IMapper mapper,
             ILotDataWebService lotDataService,
             IYandexStorageService yandexStorageService,

@@ -123,7 +123,7 @@ namespace RareBooksService.WebApi.Services
                 using var sourceContext = new ExtendedBooksContext(sqliteOptions);
 
                 using var scope = _scopeFactory.CreateScope();
-                var pgContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
+                var pgContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
 
                 // 2) Частями очищаем таблицу BooksInfo
                 // Вместо:  var allBooks = pgContext.BooksInfo.ToList();

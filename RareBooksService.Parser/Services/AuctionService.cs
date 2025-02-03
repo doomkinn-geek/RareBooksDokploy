@@ -19,11 +19,11 @@ namespace RareBooksService.Parser.Services
     {        
         private readonly ILotDataWebService _lotDataService;
         private readonly ILogger<AuctionService> _logger;
-        private readonly RegularBaseBooksContext _context;
+        private readonly BooksDbContext _context;
 
         public AuctionService(ILotDataWebService lotDataService, 
             ILogger<AuctionService> logger,
-            RegularBaseBooksContext context)
+            BooksDbContext context)
         {
             _lotDataService = lotDataService;
             _logger = logger;

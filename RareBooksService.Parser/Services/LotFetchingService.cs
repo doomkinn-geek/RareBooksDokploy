@@ -23,11 +23,11 @@ namespace RareBooksService.Parser.Services
         private readonly ILotDataHandler _lotDataHandler;
         private readonly IMapper _mapper;
         private readonly ILogger<LotFetchingService> _logger;
-        private readonly RegularBaseBooksContext _context;
+        private readonly BooksDbContext _context;
 
         private static readonly string LastProcessedFixedPriceIdFilePath = "lastProcessedFixedPriceId.txt";
         private static readonly string LastProcessedIdFilePath = "lastProcessedId.txt";
-        private static readonly List<int> InterestedCategories = new List<int> { 13870, 13871, 13872, 13873 };
+        private static readonly List<int> InterestedCategories = new List<int> { 13870, 13871, 13872, 13873, 1847 };
         private static readonly List<int> SovietCategories = new List<int> { 13874, 13875, 13876 };
 
         public delegate void ProgressChangedHandler(int currentLotId, string? currentTitle);
@@ -40,7 +40,7 @@ namespace RareBooksService.Parser.Services
             ILotDataHandler lotDataHandler,
             IMapper mapper,
             ILogger<LotFetchingService> logger,
-            RegularBaseBooksContext context)
+            BooksDbContext context)
         {
             _lotDataService = lotDataService;
             _lotDataHandler = lotDataHandler;
@@ -162,6 +162,25 @@ namespace RareBooksService.Parser.Services
         public async Task FetchFreeListData(List<int> ids)
         {
             _logger.LogInformation("Starting FetchFreeListData with {IdCount} IDs.", ids.Count);
+
+            /*List<int> wrongData = _context.BooksInfo.
+                Where(x => x.SoldQuantity == 0 && x.Type == "fixedPrice")
+                .Select(x => x.Id).ToList();
+
+            using (StreamWriter w = new StreamWriter("wrong_data_lots.txt", false, System.Text.Encoding.UTF8))
+            {
+                foreach (int i in wrongData)
+                {                
+                    w.WriteLine($"{i}.zip");
+                }
+            }
+
+            var booksToDelete = _context.BooksInfo
+                .Where(x => wrongData.Contains(x.Id))
+                .ToList();
+
+            _context.BooksInfo.RemoveRange(booksToDelete);
+            await _context.SaveChangesAsync();*/
 
             try
             {
@@ -356,7 +375,7 @@ namespace RareBooksService.Parser.Services
             // Логика выбора:
             // (A) startPrice >= 1  ИЛИ  (B) статус=2 и soldQuantity>0
             bool meetsMainCondition =
-                (lotData.result.startPrice >= 1)
+                (lotData.result.startPrice == 1)
                 || (lotData.result.status == 2 && lotData.result.soldQuantity > 0);
 
             if (!meetsMainCondition)

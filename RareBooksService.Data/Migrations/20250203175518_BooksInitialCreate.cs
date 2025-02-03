@@ -7,7 +7,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace RareBooksService.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class BooksInitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -54,7 +54,10 @@ namespace RareBooksService.Data.Migrations
                     SoldQuantity = table.Column<int>(type: "integer", nullable: false),
                     BidsCount = table.Column<int>(type: "integer", nullable: false),
                     SellerName = table.Column<string>(type: "text", nullable: false),
-                    PicsCount = table.Column<int>(type: "integer", nullable: false)
+                    PicsCount = table.Column<int>(type: "integer", nullable: false),
+                    IsImagesCompressed = table.Column<bool>(type: "boolean", nullable: false),
+                    ImageArchiveUrl = table.Column<string>(type: "text", nullable: true),
+                    IsLessValuable = table.Column<bool>(type: "boolean", nullable: false)
                 },
                 constraints: table =>
                 {

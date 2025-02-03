@@ -2,21 +2,18 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using RareBooksService.Data;
 
 #nullable disable
 
-namespace RareBooksService.Data.Migrations
+namespace RareBooksService.Data.Migrations.UsersDb
 {
-    [DbContext(typeof(RegularBaseBooksContext))]
-    [Migration("20240725074747_AddSubscriptionAndHistory")]
-    partial class AddSubscriptionAndHistory
+    [DbContext(typeof(UsersDbContext))]
+    partial class UsersDbContextModelSnapshot : ModelSnapshot
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -228,121 +225,6 @@ namespace RareBooksService.Data.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
-            modelBuilder.Entity("RareBooksService.Common.Models.RegularBaseBook", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("BeginDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("BidsCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("CategoryId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("City")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("EndDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<double?>("FinalPrice")
-                        .HasColumnType("double precision");
-
-                    b.Property<string>("ImageUrls")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsMonitored")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("NormalizedDescription")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("NormalizedTitle")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("PicsCount")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("PicsRatio")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<double>("Price")
-                        .HasColumnType("double precision");
-
-                    b.Property<string>("SellerName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("SoldQuantity")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("StartPrice")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Tags")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ThumbnailUrls")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int?>("YearPublished")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CategoryId");
-
-                    b.ToTable("BooksInfo");
-                });
-
-            modelBuilder.Entity("RareBooksService.Common.Models.RegularBaseCategory", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CategoryId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Categories");
-                });
-
             modelBuilder.Entity("RareBooksService.Common.Models.Subscription", b =>
                 {
                     b.Property<int>("Id")
@@ -351,14 +233,29 @@ namespace RareBooksService.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("AutoRenew")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("EndDate")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("PaymentId")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("PriceAtPurchase")
+                        .HasColumnType("numeric");
+
                     b.Property<DateTime>("StartDate")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SubscriptionPlanId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UsedRequestsThisPeriod")
+                        .HasColumnType("integer");
 
                     b.Property<string>("UserId")
                         .IsRequired()
@@ -366,9 +263,38 @@ namespace RareBooksService.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("SubscriptionPlanId");
+
                     b.HasIndex("UserId");
 
                     b.ToTable("Subscriptions");
+                });
+
+            modelBuilder.Entity("RareBooksService.Common.Models.SubscriptionPlan", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("MonthlyRequestLimit")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("Price")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SubscriptionPlans");
                 });
 
             modelBuilder.Entity("RareBooksService.Common.Models.UserSearchHistory", b =>
@@ -452,24 +378,21 @@ namespace RareBooksService.Data.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("RareBooksService.Common.Models.RegularBaseBook", b =>
+            modelBuilder.Entity("RareBooksService.Common.Models.Subscription", b =>
                 {
-                    b.HasOne("RareBooksService.Common.Models.RegularBaseCategory", "Category")
-                        .WithMany("Books")
-                        .HasForeignKey("CategoryId")
+                    b.HasOne("RareBooksService.Common.Models.SubscriptionPlan", "SubscriptionPlan")
+                        .WithMany()
+                        .HasForeignKey("SubscriptionPlanId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Category");
-                });
-
-            modelBuilder.Entity("RareBooksService.Common.Models.Subscription", b =>
-                {
                     b.HasOne("RareBooksService.Common.Models.ApplicationUser", "User")
-                        .WithMany()
+                        .WithMany("Subscriptions")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("SubscriptionPlan");
 
                     b.Navigation("User");
                 });
@@ -488,11 +411,8 @@ namespace RareBooksService.Data.Migrations
             modelBuilder.Entity("RareBooksService.Common.Models.ApplicationUser", b =>
                 {
                     b.Navigation("SearchHistory");
-                });
 
-            modelBuilder.Entity("RareBooksService.Common.Models.RegularBaseCategory", b =>
-                {
-                    b.Navigation("Books");
+                    b.Navigation("Subscriptions");
                 });
 #pragma warning restore 612, 618
         }

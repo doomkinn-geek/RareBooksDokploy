@@ -62,7 +62,9 @@ namespace RareBooksService.WebApi.Services
                 if (e.InnerException is PostgresException)
                 {
                     _isSetupNeeded = false;
+                    return;
                 }
+                _isSetupNeeded = true;
             }
             catch (Exception ex)
             {

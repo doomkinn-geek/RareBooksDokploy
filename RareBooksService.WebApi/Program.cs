@@ -52,16 +52,20 @@ namespace RareBooksService.WebApi
 
                 // 2) Настройка DbContext
                 builder.Services.AddSingleton<NullToZeroMaterializationInterceptor>();
-                builder.Services.AddDbContext<RegularBaseBooksContext>((serviceProvider, options) =>
+                builder.Services.AddDbContext<BooksDbContext>((serviceProvider, options) =>
                 {
                     var interceptor = serviceProvider.GetRequiredService<NullToZeroMaterializationInterceptor>();
-                    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"));
+                    options.UseNpgsql(builder.Configuration.GetConnectionString("BooksDb"));
                     options.AddInterceptors(interceptor);
+                });
+                builder.Services.AddDbContext<UsersDbContext>(options =>
+                {
+                    options.UseNpgsql(builder.Configuration.GetConnectionString("UsersDb"));
                 });
 
                 // 3) Identity
                 builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
-                    .AddEntityFrameworkStores<RegularBaseBooksContext>()
+                    .AddEntityFrameworkStores<UsersDbContext>()
                     .AddDefaultTokenProviders();
 
                 // 4) Если у вас есть отдельные настройки YandexKassa, TypeOfAccessImages – ок
@@ -246,7 +250,7 @@ namespace RareBooksService.WebApi
 
                     if(!setupService.IsInitialSetupNeeded)
                     {
-                        var dbContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
+                        var dbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
                         dbContext.Database.Migrate();
                     }
                 }                

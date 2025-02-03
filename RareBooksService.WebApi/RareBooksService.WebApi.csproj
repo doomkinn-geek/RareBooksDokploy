@@ -16,14 +16,10 @@
   <ItemGroup>
     <None Remove="ARIALBD.TTF" />
     <None Remove="books_extended.db" />
-    <None Remove="books_extended.db-shm" />
     <None Remove="InitialSetup\index.html" />
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="books_extended.db-shm">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
     <Content Include="InitialSetup\index.html">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>

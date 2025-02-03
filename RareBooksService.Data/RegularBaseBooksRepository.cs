@@ -10,10 +10,11 @@ namespace RareBooksService.Data
 {
     public class RegularBaseBooksRepository : IRegularBaseBooksRepository
     {
-        private readonly RegularBaseBooksContext _context;
+        private readonly BooksDbContext _context;
+        private readonly UsersDbContext _usersContext;
         private readonly Dictionary<string, IStemmer> _stemmers;
 
-        public RegularBaseBooksRepository(RegularBaseBooksContext context)
+        public RegularBaseBooksRepository(BooksDbContext context, UsersDbContext usersContext)
         {
             _context = context;
 
@@ -26,6 +27,7 @@ namespace RareBooksService.Data
                 { "ita", new ItalianStemmer() },
                 { "fin", new FinnishStemmer() }
             };
+            _usersContext = usersContext;
         }
 
         // ------------------ НОВЫЙ ПОМОГАЮЩИЙ МЕТОД ------------------
@@ -406,8 +408,8 @@ namespace RareBooksService.Data
                     SearchType = searchType
                 };
 
-                _context.UserSearchHistories.Add(searchHistory);
-                await _context.SaveChangesAsync();
+                _usersContext.UserSearchHistories.Add(searchHistory);
+                await _usersContext.SaveChangesAsync();
             }
             catch (Exception ex)
             {

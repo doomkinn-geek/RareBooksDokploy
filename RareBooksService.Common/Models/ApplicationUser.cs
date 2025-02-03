@@ -5,15 +5,26 @@ namespace RareBooksService.Common.Models
 {
     public class ApplicationUser : IdentityUser
     {
-        // Оставляем, если хотите
         public bool HasSubscription { get; set; }
 
-        public List<UserSearchHistory> SearchHistory { get; set; } = new List<UserSearchHistory>();
+        public List<UserSearchHistory> SearchHistory { get; set; }
+            = new List<UserSearchHistory>();
 
-        public string Role { get; set; } = "User"; // Default role
+        public string Role { get; set; } = "User";
 
-        // Можно добавить ссылку на текущую активную подписку (опционально)
-        public int? CurrentSubscriptionId { get; set; }
-        public Subscription CurrentSubscription { get; set; }
+        // Множество подписок пользователя (история). 
+        // Связь (1 ко многим) — но нам нужно уметь быстро найти активную.
+        public List<Subscription> Subscriptions { get; set; }
+            = new List<Subscription>();
+
+        // Можно сделать вычислимое свойство
+        public Subscription? CurrentSubscription
+        {
+            get
+            {
+                // Возвращаем ту, у которой IsActive == true
+                return Subscriptions?.FirstOrDefault(s => s.IsActive);
+            }
+        }
     }
 }

@@ -1,72 +1,68 @@
-п»їversion: '3.8'
+version: '3.8'
 
 services:
-  db_books:
+  # PostgreSQL
+  db:
     image: postgres:15
-    container_name: rarebooks_books_db
+    container_name: rarebooks_db
     restart: always
     environment:
-      - POSTGRES_DB=RareBooks_Books
+      - POSTGRES_DB=RareBooks
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=123456
     ports:
-      - "5433:5432"        # РЅР° С…РѕСЃС‚Рµ 5433, РІРЅСѓС‚СЂРё РєРѕРЅС‚РµР№РЅРµСЂР° 5432
+      - "5432:5432"
     volumes:
-      - db_books_data:/var/lib/postgresql/data
+      - db_data:/var/lib/postgresql/data
 
-  db_users:
-    image: postgres:15
-    container_name: rarebooks_users_db
-    restart: always
-    environment:
-      - POSTGRES_DB=RareBooks_Users
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=123456
-    ports:
-      - "5434:5432"
-    volumes:
-      - db_users_data:/var/lib/postgresql/data
-
+  # Backend (ASP.NET Core WebApi)
   backend:
     build:
       context: .
       dockerfile: RareBooksService.WebApi/Dockerfile
     container_name: rarebooks_backend
     depends_on:
-      - db_books
-      - db_users
+      - db
+    # УБИРАЕМ прямой проброс "7000:80", чтобы бэкенд не был доступен напрямую
+    # ports:
+    #   - "7000:80"
     environment:
-      - ConnectionStrings__BooksDb=Host=db_books;Port=5432;Database=RareBooks_Books;Username=postgres;Password=123456
-      - ConnectionStrings__UsersDb=Host=db_users;Port=5432;Database=RareBooks_Users;Username=postgres;Password=123456
+      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=RareBooks;Username=postgres;Password=123456
       - ASPNETCORE_URLS=http://+:80
     restart: always
 
+  # Frontend (React + nginx)
   frontend:
     build:
       context: ./rarebooksservice.frontend.v3
       dockerfile: Dockerfile
     container_name: rarebooks_frontend
+    # УБИРАЕМ прямой проброс "3000:80", чтобы фронт не торчал напрямую
+    # ports:
+    #   - "3000:80"
     depends_on:
       - backend
     environment:
+      # Для локальной разработки можно оставить, например:
+      # VITE_API_URL указывает на http://backend:80/api
       - VITE_API_URL=http://backend:80/api
     restart: always
 
+  # Proxy (Nginx) - слушает 80 на хосте, проксирует / -> frontend, /api -> backend
   proxy:
     image: nginx:latest
     container_name: nginx_container
     ports:
       - 80:80
-      - 443:443
+      - 443:443  # добавляем проброс HTTPS
     volumes:
       #- ./nginx/nginx_dev.conf:/etc/nginx/nginx.conf
       - ./nginx/nginx_prod.conf:/etc/nginx/nginx.conf
       - /home/docker/ssl/rare-books.ru:/etc/ssl/rare-books.ru:ro
+    #network_mode: host
     depends_on:
       - frontend
       - backend
     restart: always
-
 volumes:
-  db_books_data:
-  db_users_data:
+  db_data:

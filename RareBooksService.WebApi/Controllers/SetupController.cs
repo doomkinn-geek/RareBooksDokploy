@@ -36,7 +36,10 @@ namespace RareBooksService.WebApi.Controllers
         {
             public string AdminEmail { get; set; }
             public string AdminPassword { get; set; }
-            public string ConnectionString { get; set; }
+
+            // Две строки подключения — для книг и для пользователей
+            public string BooksConnectionString { get; set; }
+            public string UsersConnectionString { get; set; }
 
             // JWT
             public string JwtKey { get; set; }
@@ -94,22 +97,30 @@ namespace RareBooksService.WebApi.Controllers
                 });
             }
 
-            // 1) Сохраняем настройки
+            // 1) Сохраняем настройки (обе строки подключения, JWT и т.д.)
             var err = await SaveSettingsToAppSettings(dto);
             if (!string.IsNullOrEmpty(err))
             {
                 return BadRequest(new { success = false, message = $"SaveSettings error: {err}" });
             }
 
-            // 2) Миграция
-            err = await RunMigrations(dto.ConnectionString);
+            // 2) Мигрируем обе базы:
+            //    - BooksDbContext
+            //    - UsersDbContext
+            err = await RunMigrationsForBooksDb(dto.BooksConnectionString);
             if (!string.IsNullOrEmpty(err))
             {
-                return BadRequest(new { success = false, message = $"RunMigrations error: {err}" });
+                return BadRequest(new { success = false, message = $"RunMigrations(BooksDb) error: {err}" });
             }
 
-            // 3) Создаём администратора
-            err = await CreateAdmin(dto.AdminEmail, dto.AdminPassword, dto.ConnectionString);
+            err = await RunMigrationsForUsersDb(dto.UsersConnectionString);
+            if (!string.IsNullOrEmpty(err))
+            {
+                return BadRequest(new { success = false, message = $"RunMigrations(UsersDb) error: {err}" });
+            }
+
+            // 3) Создаём администратора (в UsersDb)
+            err = await CreateAdmin(dto.AdminEmail, dto.AdminPassword, dto.UsersConnectionString);
             if (!string.IsNullOrEmpty(err))
             {
                 return BadRequest(new { success = false, message = $"CreateAdmin error: {err}" });
@@ -118,10 +129,10 @@ namespace RareBooksService.WebApi.Controllers
             // Обновляем признак «система настроена»
             _setupStateService.DetermineIfSetupNeeded();
 
-            // 4) Перезапуск
+            // 4) Перезапуск (по желанию)
             //ForceRestart();
 
-            return Ok(new { success = true, message = "Initialization in progress. The server will restart now." });
+            return Ok(new { success = true, message = "Initialization complete. The server will restart now." });
         }
 
         /// <summary>Запись в appsettings.json</summary>
@@ -129,10 +140,10 @@ namespace RareBooksService.WebApi.Controllers
         {
             try
             {
-                //var appSettingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
                 var appSettingsPath = Path.Combine(_env.ContentRootPath, "appsettings.json");
                 if (!System.IO.File.Exists(appSettingsPath))
                 {
+                    // Если файла нет, создаём пустой
                     using var _ = System.IO.File.CreateText(appSettingsPath);
                 }
 
@@ -140,14 +151,20 @@ namespace RareBooksService.WebApi.Controllers
                 if (string.IsNullOrWhiteSpace(oldJson))
                 {
                     // Создаём заготовку
-                    oldJson = "{\"ConnectionStrings\": {}, \"Jwt\": {}, \"YandexCloud\": {}, \"TypeOfAccessImages\": {}, \"YandexDisk\": {}}";
+                    oldJson = @"{ 
+  ""ConnectionStrings"": {}, 
+  ""Jwt"": {}, 
+  ""YandexCloud"": {}, 
+  ""TypeOfAccessImages"": {}, 
+  ""YandexDisk"": {}
+}";
                 }
 
-                // 1) Десериализация
+                // 1) Десериализация текущего JSON
                 var dict = JsonSerializer.Deserialize<Dictionary<string, object>>(oldJson)
                            ?? new Dictionary<string, object>();
 
-                // 2) ConnectionStrings
+                // 2) Блок "ConnectionStrings"
                 if (!dict.ContainsKey("ConnectionStrings"))
                     dict["ConnectionStrings"] = new Dictionary<string, string>();
 
@@ -156,10 +173,12 @@ namespace RareBooksService.WebApi.Controllers
                     ? JsonSerializer.Deserialize<Dictionary<string, string>>(je.GetRawText()) ?? new Dictionary<string, string>()
                     : cstrObj as Dictionary<string, string> ?? new Dictionary<string, string>();
 
-                cstrDict["DefaultConnection"] = dto.ConnectionString;
+                // Записываем обе строки подключения
+                cstrDict["BooksDb"] = dto.BooksConnectionString;
+                cstrDict["UsersDb"] = dto.UsersConnectionString;
                 dict["ConnectionStrings"] = cstrDict;
 
-                // 3) Jwt
+                // 3) Блок "Jwt"
                 var jwtDict = new Dictionary<string, string>
                 {
                     ["Key"] = dto.JwtKey ?? "",
@@ -168,7 +187,7 @@ namespace RareBooksService.WebApi.Controllers
                 };
                 dict["Jwt"] = jwtDict;
 
-                // 4) YandexDisk (при желании)
+                // 4) YandexDisk
                 if (!dict.ContainsKey("YandexDisk"))
                     dict["YandexDisk"] = new Dictionary<string, string>();
 
@@ -177,7 +196,6 @@ namespace RareBooksService.WebApi.Controllers
                     ? JsonSerializer.Deserialize<Dictionary<string, string>>(yde.GetRawText()) ?? new Dictionary<string, string>()
                     : ydObj as Dictionary<string, string> ?? new Dictionary<string, string>();
 
-                // Заполним
                 ydDict["Token"] = dto.YandexDiskToken ?? "";
                 dict["YandexDisk"] = ydDict;
 
@@ -221,14 +239,15 @@ namespace RareBooksService.WebApi.Controllers
             }
         }
 
-        private async Task<string> RunMigrations(string connectionString)
+        /// <summary>Выполняем миграцию для BooksDbContext</summary>
+        private async Task<string> RunMigrationsForBooksDb(string connectionString)
         {
             try
             {
-                var optionsBuilder = new DbContextOptionsBuilder<RegularBaseBooksContext>();
+                var optionsBuilder = new DbContextOptionsBuilder<BooksDbContext>();
                 optionsBuilder.UseNpgsql(connectionString);
 
-                using var ctx = new RegularBaseBooksContext(optionsBuilder.Options);
+                using var ctx = new BooksDbContext(optionsBuilder.Options);
                 await ctx.Database.MigrateAsync();
                 return "";
             }
@@ -238,20 +257,46 @@ namespace RareBooksService.WebApi.Controllers
             }
         }
 
-        private async Task<string> CreateAdmin(string email, string password, string newConnectionString)
+        /// <summary>Выполняем миграцию для UsersDbContext</summary>
+        private async Task<string> RunMigrationsForUsersDb(string connectionString)
+        {
+            try
+            {
+                var optionsBuilder = new DbContextOptionsBuilder<UsersDbContext>();
+                optionsBuilder.UseNpgsql(connectionString);
+
+                using var ctx = new UsersDbContext(optionsBuilder.Options);
+                await ctx.Database.MigrateAsync();
+                return "";
+            }
+            catch (Exception ex)
+            {
+                return ex.Message;
+            }
+        }
+
+        /// <summary>
+        /// Создаём администратора в UsersDbContext, т.к. именно там хранятся Identity‑таблицы.
+        /// </summary>
+        private async Task<string> CreateAdmin(string email, string password, string usersConnectionString)
         {
             try
             {
                 var services = new ServiceCollection();
                 services.AddLogging();
-                services.AddDbContext<RegularBaseBooksContext>(options =>
+
+                // Регистрируем UsersDbContext
+                services.AddDbContext<UsersDbContext>(options =>
                 {
-                    options.UseNpgsql(newConnectionString);
+                    options.UseNpgsql(usersConnectionString);
                 });
+
+                // Регистрируем Identity на основе UsersDbContext
                 services.AddIdentity<ApplicationUser, IdentityRole>()
-                        .AddEntityFrameworkStores<RegularBaseBooksContext>()
+                        .AddEntityFrameworkStores<UsersDbContext>()
                         .AddDefaultTokenProviders();
 
+                // Параметры валидации пароля (упрощённые)
                 services.Configure<IdentityOptions>(options =>
                 {
                     options.Password.RequireDigit = false;
@@ -269,11 +314,13 @@ namespace RareBooksService.WebApi.Controllers
                 var roleManager = scopedServices.GetRequiredService<RoleManager<IdentityRole>>();
                 var userManager = scopedServices.GetRequiredService<UserManager<ApplicationUser>>();
 
+                // Убедимся, что роль "Admin" создана
                 if (!await roleManager.RoleExistsAsync("Admin"))
                 {
                     await roleManager.CreateAsync(new IdentityRole("Admin"));
                 }
 
+                // Ищем, есть ли уже такой пользователь
                 var existing = await userManager.FindByEmailAsync(email);
                 if (existing == null)
                 {
@@ -281,8 +328,9 @@ namespace RareBooksService.WebApi.Controllers
                     {
                         UserName = email,
                         Email = email,
-                        HasSubscription = true,
-                        EmailConfirmed = true
+                        EmailConfirmed = true,
+                        HasSubscription = false,
+                        Role = "Admin" // для удобства
                     };
                     var result = await userManager.CreateAsync(adminUser, password);
                     if (!result.Succeeded)
@@ -291,6 +339,8 @@ namespace RareBooksService.WebApi.Controllers
                         return $"Failed to create admin user: {errors}";
                     }
                     await userManager.AddToRoleAsync(adminUser, "Admin");
+
+                    // Дополнительно можно явно сохранить user.Role = "Admin"
                     adminUser.Role = "Admin";
                     await userManager.UpdateAsync(adminUser);
                 }

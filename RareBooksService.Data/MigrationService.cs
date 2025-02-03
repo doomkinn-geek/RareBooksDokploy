@@ -11,15 +11,15 @@ namespace RareBooksService.Data
 {
     public class MigrationService
     {
-        private readonly DbContextOptions<RegularBaseBooksContext> _options;
+        private readonly DbContextOptions<BooksDbContext> _options;
 
         public MigrationService()
         {
-            var optionsBuilder = new DbContextOptionsBuilder<RegularBaseBooksContext>();
+            var optionsBuilder = new DbContextOptionsBuilder<BooksDbContext>();
             optionsBuilder.UseNpgsql("Host=localhost;Database=RareBooks;Username=postgres;Password=123456");
             _options = optionsBuilder.Options;
         }
-        public MigrationService(DbContextOptions<RegularBaseBooksContext> options)
+        public MigrationService(DbContextOptions<BooksDbContext> options)
         {
             _options = options;
         }
@@ -29,7 +29,7 @@ namespace RareBooksService.Data
             try
             {
                 using (var sourceContext = new ExtendedBooksContext())
-                using (var targetContext = new RegularBaseBooksContext(_options))
+                using (var targetContext = new BooksDbContext(_options))
                 {
                     targetContext.Database.Migrate();
 

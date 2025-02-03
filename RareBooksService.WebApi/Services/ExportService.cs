@@ -66,7 +66,7 @@ namespace RareBooksService.WebApi.Services
             {
                 _progress[taskId] = 0;
                 using var scope = _scopeFactory.CreateScope();
-                var regularContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
+                var regularContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
 
                 int totalBooks = await regularContext.BooksInfo.CountAsync(token);    
                 //int totalBooks = 10000;
