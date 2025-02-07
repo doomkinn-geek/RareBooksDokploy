@@ -127,7 +127,7 @@ namespace RareBooksService.WebApi.Services
                 // 2) Создаём PostgreSQL-контекст на очистку таблиц (только раз)
                 using (var scope = _scopeFactory.CreateScope())
                 {
-                    var pgContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
+                    var pgContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
                     // Очистка BooksInfo (чанками):
                     while (true)
                     {
@@ -155,7 +155,7 @@ namespace RareBooksService.WebApi.Services
                 // Сохраняем в PostgreSQL:
                 using (var scope = _scopeFactory.CreateScope())
                 {
-                    var pgContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
+                    var pgContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
                     // Создаём новые RegularBaseCategory
                     foreach (var cat in categories)
                     {
@@ -173,7 +173,7 @@ namespace RareBooksService.WebApi.Services
                 Dictionary<int, int> catMap;
                 using (var scope = _scopeFactory.CreateScope())
                 {
-                    var pgContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
+                    var pgContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
                     catMap = await pgContext.Categories
                         .ToDictionaryAsync(c => c.CategoryId, c => c.Id);
                 }
