@@ -1,12 +1,11 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
 using RareBooksService.Common.Models;
+using RareBooksService.Common.Models.Dto;
 using RareBooksService.Data;
 using RareBooksService.WebApi.Services;
-using System;
-using System.IO;
 using System.Security.Claims;
 using System.Threading.Tasks;
 
@@ -14,37 +13,38 @@ namespace RareBooksService.WebApi.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize]
+    [Authorize] // <-- Не забудьте, если нужно
     public class SubscriptionController : BaseController
     {
-        private readonly UserManager<ApplicationUser> _userManager;
+        private readonly UsersDbContext _context; // <-- добавлено
         private readonly IYandexKassaPaymentService _paymentService;
         private readonly ISubscriptionService _subscriptionService;
 
         public SubscriptionController(
             UserManager<ApplicationUser> userManager,
+            UsersDbContext context,
             IYandexKassaPaymentService paymentService,
-            ISubscriptionService subscriptionService) : base(userManager) 
+            ISubscriptionService subscriptionService) : base(userManager)
         {
-            _userManager = userManager;
+            _context = context;
             _paymentService = paymentService;
             _subscriptionService = subscriptionService;
         }
 
         /// <summary>
-        /// Получить список доступных планов
+        /// Получить список доступных планов (DTO)
         /// </summary>
         [HttpGet("plans")]
-        [AllowAnonymous] // Если хотите отдавать список планов без авторизации
+        [AllowAnonymous]
         public async Task<IActionResult> GetPlans()
         {
-            var plans = await _subscriptionService.GetActiveSubscriptionPlansAsync();
-            return Ok(plans);
+            var planDtos = await _subscriptionService.GetActiveSubscriptionPlansAsync();
+            return Ok(planDtos);
         }
 
         /// <summary>
-        /// Создаёт оплату. Пользователь выбирает какой-то planId и autoRenew, 
-        /// мы создаём Subscription (пока не активную) и создаём платёж в ЮKassa.
+        /// Создаёт оплату. Пользователь выбирает planId, autoRenew. 
+        /// Создаем Subscription (не активную) + платёж в ЮKassa.
         /// </summary>
         [HttpPost("create-payment")]
         public async Task<IActionResult> CreatePayment([FromBody] CreatePaymentRequest request)
@@ -52,69 +52,64 @@ namespace RareBooksService.WebApi.Controllers
             if (request == null || request.SubscriptionPlanId <= 0)
                 return BadRequest("Не указан план подписки");
 
-            // 1) Считываем userId из ClaimTypes.NameIdentifier
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrEmpty(userId))
-                return Unauthorized("Не удалось определить идентификатор пользователя из JWT");
+                return Unauthorized("Не удалось определить идентификатор пользователя");
 
-            // 2) Ищем пользователя в бД
             var user = await _userManager.FindByIdAsync(userId);
             if (user == null)
                 return Unauthorized("Пользователь в базе не найден");
 
-            // 3) Получаем план
-            var plan = await _subscriptionService.GetPlanByIdAsync(request.SubscriptionPlanId);
-            if (plan == null)
+            // Получаем EF-план
+            var planEntity = await _context.SubscriptionPlans
+                .FirstOrDefaultAsync(p => p.Id == request.SubscriptionPlanId && p.IsActive);
+            if (planEntity == null)
                 return BadRequest("Невалидный или неактивный план подписки");
 
-            // 4) Создаём запись Subscription в БД
-            var newSubscription = await _subscriptionService.CreateSubscriptionAsync(user, plan, request.AutoRenew);
+            // 1) Создаём новую подписку (DTO)
+            var newSubDto = await _subscriptionService.CreateSubscriptionAsync(user, planEntity, request.AutoRenew);
 
-            // 5) Создаём платёж в ЮKassa
-            var (paymentId, redirectUrl) = await _paymentService.CreatePaymentAsync(user, plan, request.AutoRenew);
+            // 2) Создаём платёж
+            var (paymentId, redirectUrl) = await _paymentService.CreatePaymentAsync(user, planEntity, request.AutoRenew);
 
-            // 6) Запишем PaymentId в нашу Subscription
-            newSubscription.PaymentId = paymentId;
-            await _subscriptionService.UpdateSubscriptionAsync(newSubscription);
+            // 3) Запишем PaymentId
+            newSubDto.PaymentId = paymentId;
+            await _subscriptionService.UpdateSubscriptionAsync(newSubDto);
 
-            // 7) Возвращаем redirectUrl
+            // 4) Возвращаем redirectUrl
             return Ok(new { RedirectUrl = redirectUrl });
         }
 
-
         /// <summary>
-        /// Webhook endpoint, куда ЮKassa будет отправлять уведомления об оплате.
+        /// Webhook от ЮKassa
         /// </summary>
         [HttpPost("webhook")]
-        [AllowAnonymous] // ЮKassa не авторизуется вашим токеном
+        [AllowAnonymous]
         public async Task<IActionResult> Webhook()
         {
             var (paymentId, isSucceeded) = await _paymentService.ProcessWebhookAsync(HttpContext.Request);
-
             if (!string.IsNullOrEmpty(paymentId) && isSucceeded)
             {
-                // Активация подписки:
                 await _subscriptionService.ActivateSubscriptionAsync(paymentId);
             }
-
-            return Ok(); // 200
+            return Ok();
         }
 
-        // Дополнительный метод: Получить подписки пользователя
+        /// <summary>
+        /// Вернуть DTO всех подписок текущего пользователя
+        /// </summary>
         [HttpGet("my-subscriptions")]
         public async Task<IActionResult> GetMySubscriptions()
         {
             var user = await _userManager.GetUserAsync(User);
-            if (user == null) return Unauthorized();
+            if (user == null)
+                return Unauthorized();
 
-            var subs = await _subscriptionService.GetUserSubscriptionsAsync(user.Id);
-            return Ok(subs);
+            var subsDto = await _subscriptionService.GetUserSubscriptionsAsync(user.Id);
+            return Ok(subsDto);
         }
     }
 
-    /// <summary>
-    /// DTO для запроса на создание платежа
-    /// </summary>
     public class CreatePaymentRequest
     {
         public int SubscriptionPlanId { get; set; }

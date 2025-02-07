@@ -2,8 +2,8 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
-export const API_URL = '/api';
-//export const API_URL = 'https://localhost:7042/api';
+//export const API_URL = '/api';
+export const API_URL = 'https://localhost:7042/api';
 
 // Получаем токен только из cookies
 const getAuthHeaders = () => {

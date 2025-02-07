@@ -1,19 +1,23 @@
 ﻿using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using RareBooksService.Common.Models;
+using RareBooksService.Common.Models.Dto;
+using RareBooksService.Common.Models.Dto.RareBooksService.Common.Models.Dto;
 using RareBooksService.Data;
 
 namespace RareBooksService.WebApi.Services
 {
     public interface ISubscriptionService
     {
-        Task<Subscription> CreateSubscriptionAsync(ApplicationUser user, SubscriptionPlan plan, bool autoRenew);
+        Task<SubscriptionDto> CreateSubscriptionAsync(ApplicationUser user, SubscriptionPlan plan, bool autoRenew);
         Task ActivateSubscriptionAsync(string paymentId);
-        Task<List<SubscriptionPlan>> GetActiveSubscriptionPlansAsync();
-        Task<SubscriptionPlan> GetPlanByIdAsync(int planId);
-        Task<List<Subscription>> GetUserSubscriptionsAsync(string userId);
-        Task UpdateSubscriptionAsync(Subscription subscription);
-        Task<Subscription> GetActiveSubscriptionForUser(string userId);
+        Task<List<SubscriptionPlanDto>> GetActiveSubscriptionPlansAsync();
+        Task<SubscriptionPlanDto?> GetPlanByIdAsync(int planId);
+
+        Task<List<SubscriptionDto>> GetUserSubscriptionsAsync(string userId);
+        Task UpdateSubscriptionAsync(SubscriptionDto subscriptionDto);
+        Task<SubscriptionDto?> GetActiveSubscriptionForUser(string userId);
+
         Task<bool> AssignSubscriptionPlanAsync(string userId, int planId, bool autoRenew);
         Task<bool> DisableSubscriptionAsync(string userId);
     }
@@ -29,114 +33,103 @@ namespace RareBooksService.WebApi.Services
             _userManager = userManager;
         }
 
-        /// <summary>
-        /// Создаёт запись в таблице Subscriptions со статусом "не активна" (IsActive = false).
-        /// Возвращаем Subscription, чтобы позднее при успешной оплате её активировать.
-        /// При этом «старые» активные подписки отключаются (IsActive=false), если вам нужно
-        /// строгое правило "только одна подписка".
-        /// </summary>
-        public async Task<Subscription> CreateSubscriptionAsync(ApplicationUser user, SubscriptionPlan plan, bool autoRenew)
+        public async Task<SubscriptionDto> CreateSubscriptionAsync(ApplicationUser user, SubscriptionPlan plan, bool autoRenew)
         {
-            // Выключаем все предыдущие подписки, если нужно правило «только одна активная»
-            var oldSubscriptions = await _db.Subscriptions
+            // Отключаем старые активные
+            var oldSubs = await _db.Subscriptions
                 .Where(s => s.UserId == user.Id && s.IsActive)
                 .ToListAsync();
-            foreach (var sub in oldSubscriptions)
-            {
-                sub.IsActive = false;
-            }
+            foreach (var old in oldSubs)
+                old.IsActive = false;
 
-            // Создаём новую подписку со статусом "ещё не активна"
+            // Создаём новую
             var newSub = new Subscription
             {
                 UserId = user.Id,
                 SubscriptionPlanId = plan.Id,
                 StartDate = DateTime.UtcNow,
-                EndDate = DateTime.UtcNow.AddMonths(1), // пример: срок = 1 месяц
-                IsActive = false,  // активируем только после оплаты
+                EndDate = DateTime.UtcNow.AddMonths(1),
+                IsActive = false,
                 AutoRenew = autoRenew,
-                PaymentId = null,  // платёж создадим и запишем позднее
+                PaymentId = null,
                 PriceAtPurchase = plan.Price
             };
             _db.Subscriptions.Add(newSub);
 
-            // Пока оплата не прошла — user.HasSubscription = false
+            // user.HasSubscription = false (до оплаты)
             user.HasSubscription = false;
-
             await _db.SaveChangesAsync();
 
-            return newSub;
+            return ToDto(newSub, plan);
         }
 
-        /// <summary>
-        /// Активация подписки с указанным paymentId. Ставим IsActive = true,
-        /// обнуляем счётчик запросов (UsedRequestsThisPeriod = 0).
-        /// Также у пользователя ставим HasSubscription = true.
-        /// </summary>
         public async Task ActivateSubscriptionAsync(string paymentId)
         {
-            var subscription = await _db.Subscriptions
+            var sub = await _db.Subscriptions
                 .Include(s => s.User)
                 .FirstOrDefaultAsync(s => s.PaymentId == paymentId);
+            if (sub == null) return;
 
-            if (subscription == null)
-                return;
+            sub.IsActive = true;
+            sub.UsedRequestsThisPeriod = 0;
+            sub.User.HasSubscription = true;
 
-            // Активируем
-            subscription.IsActive = true;
-            subscription.UsedRequestsThisPeriod = 0;
-            subscription.User.HasSubscription = true;
-
-            // При необходимости отключаем другие подписки (если есть ещё IsActive=true)
-            var sameUserActiveSubs = await _db.Subscriptions
-                .Where(s => s.UserId == subscription.UserId
-                            && s.Id != subscription.Id
-                            && s.IsActive)
+            // Отключаем все остальные
+            var sameUserActive = await _db.Subscriptions
+                .Where(s => s.UserId == sub.UserId && s.Id != sub.Id && s.IsActive)
                 .ToListAsync();
-            foreach (var old in sameUserActiveSubs)
-            {
+            foreach (var old in sameUserActive)
                 old.IsActive = false;
-            }
 
             await _db.SaveChangesAsync();
         }
 
-        /// <summary>
-        /// Возвращает список доступных (IsActive=true) планов подписки.
-        /// </summary>
-        public async Task<List<SubscriptionPlan>> GetActiveSubscriptionPlansAsync()
+        public async Task<List<SubscriptionPlanDto>> GetActiveSubscriptionPlansAsync()
         {
-            return await _db.SubscriptionPlans
+            var plans = await _db.SubscriptionPlans
                 .Where(p => p.IsActive)
                 .ToListAsync();
+            return plans.Select(ToDto).ToList();
         }
 
-        public async Task<SubscriptionPlan> GetPlanByIdAsync(int planId)
+        public async Task<SubscriptionPlanDto?> GetPlanByIdAsync(int planId)
         {
-            return await _db.SubscriptionPlans
-                .FirstOrDefaultAsync(x => x.Id == planId && x.IsActive);
+            var plan = await _db.SubscriptionPlans
+                .Where(p => p.IsActive && p.Id == planId)
+                .FirstOrDefaultAsync();
+            return plan == null ? null : ToDto(plan);
         }
 
-        public async Task<List<Subscription>> GetUserSubscriptionsAsync(string userId)
+        public async Task<List<SubscriptionDto>> GetUserSubscriptionsAsync(string userId)
         {
-            return await _db.Subscriptions
+            var subs = await _db.Subscriptions
                 .Include(s => s.SubscriptionPlan)
                 .Where(s => s.UserId == userId)
                 .OrderByDescending(s => s.StartDate)
                 .ToListAsync();
+
+            return subs.Select(s => ToDto(s, s.SubscriptionPlan)).ToList();
         }
 
-        public async Task UpdateSubscriptionAsync(Subscription subscription)
+        public async Task UpdateSubscriptionAsync(SubscriptionDto dto)
         {
-            _db.Subscriptions.Update(subscription);
+            var entity = await _db.Subscriptions
+                .FirstOrDefaultAsync(s => s.Id == dto.Id);
+            if (entity == null) return;
+
+            entity.SubscriptionPlanId = dto.SubscriptionPlanId;
+            entity.AutoRenew = dto.AutoRenew;
+            entity.IsActive = dto.IsActive;
+            entity.StartDate = dto.StartDate;
+            entity.EndDate = dto.EndDate;
+            entity.PaymentId = dto.PaymentId;
+            // PriceAtPurchase ? (при желании)
+
+            _db.Subscriptions.Update(entity);
             await _db.SaveChangesAsync();
         }
 
-        /// <summary>
-        /// Получаем действующую подписку пользователя (IsActive=true, EndDate>Now) 
-        /// или null, если её нет.
-        /// </summary>
-        public async Task<Subscription> GetActiveSubscriptionForUser(string userId)
+        public async Task<SubscriptionDto?> GetActiveSubscriptionForUser(string userId)
         {
             var now = DateTime.UtcNow;
             var sub = await _db.Subscriptions
@@ -144,39 +137,28 @@ namespace RareBooksService.WebApi.Services
                 .Where(s => s.UserId == userId && s.IsActive && s.EndDate > now)
                 .OrderByDescending(s => s.StartDate)
                 .FirstOrDefaultAsync();
+            if (sub == null) return null;
 
-            return sub;
+            return ToDto(sub, sub.SubscriptionPlan);
         }
 
-        /// <summary>
-        /// Выделенный метод для ручного «назначения плана» (без оплаты),
-        /// отключающий старую подписку и создающий новую с IsActive=true.
-        /// </summary>
         public async Task<bool> AssignSubscriptionPlanAsync(string userId, int planId, bool autoRenew)
         {
             var user = await _db.Users
                 .Include(u => u.Subscriptions)
                 .FirstOrDefaultAsync(u => u.Id == userId);
-            if (user == null)
-                return false;
+            if (user == null) return false;
 
-            // Выключаем старую активную
-            var oldActive = user.Subscriptions
-                .Where(s => s.IsActive)
-                .ToList();
-            foreach (var oldSub in oldActive)
-            {
-                oldSub.IsActive = false;
-            }
-
-            // Проверяем план
             var plan = await _db.SubscriptionPlans.FindAsync(planId);
             if (plan == null || !plan.IsActive)
-            {
-                return false; // не можем назначить неактивный или несуществующий план
-            }
+                return false;
 
-            // Создаём новую подписку (сразу активную)
+            // Отключаем старые
+            var oldActive = user.Subscriptions.Where(s => s.IsActive).ToList();
+            foreach (var oldSub in oldActive)
+                oldSub.IsActive = false;
+
+            // Создаём новую
             var newSub = new Subscription
             {
                 UserId = user.Id,
@@ -189,38 +171,58 @@ namespace RareBooksService.WebApi.Services
             };
             _db.Subscriptions.Add(newSub);
 
-            // Ставим флаг
             user.HasSubscription = true;
 
             await _db.SaveChangesAsync();
             return true;
         }
 
-        /// <summary>
-        /// Отлючает все активные подписки пользователя (IsActive=false)
-        /// и ставит HasSubscription = false.
-        /// </summary>
         public async Task<bool> DisableSubscriptionAsync(string userId)
         {
-            // 1. Найдём пользователя
             var user = await _userManager.FindByIdAsync(userId);
-            if (user == null)
-                return false;
+            if (user == null) return false;
 
-            // 2. Ищем все активные подписки (IsActive=true) и отключаем
             var activeSubs = await _db.Subscriptions
                 .Where(s => s.UserId == userId && s.IsActive)
                 .ToListAsync();
-
             foreach (var sub in activeSubs)
-            {
                 sub.IsActive = false;
-            }
 
             user.HasSubscription = false;
-
             await _db.SaveChangesAsync();
+
             return true;
+        }
+
+        // ---------------------------
+        // PRIVATE MAPPERS
+        // ---------------------------
+        private SubscriptionDto ToDto(Subscription sub, SubscriptionPlan? planEntity)
+        {
+            return new SubscriptionDto
+            {
+                Id = sub.Id,
+                SubscriptionPlanId = sub.SubscriptionPlanId,
+                AutoRenew = sub.AutoRenew,
+                IsActive = sub.IsActive,
+                StartDate = sub.StartDate,
+                EndDate = sub.EndDate,
+                PaymentId = sub.PaymentId,
+                PriceAtPurchase = sub.PriceAtPurchase,
+                SubscriptionPlan = planEntity == null ? null : ToDto(planEntity)
+            };
+        }
+
+        private SubscriptionPlanDto ToDto(SubscriptionPlan plan)
+        {
+            return new SubscriptionPlanDto
+            {
+                Id = plan.Id,
+                Name = plan.Name,
+                Price = plan.Price,
+                MonthlyRequestLimit = plan.MonthlyRequestLimit,
+                IsActive = plan.IsActive
+            };
         }
     }
 }

@@ -1,4 +1,4 @@
-// src/components/SubscriptionSuccess.jsx
+п»ї// src/components/SubscriptionSuccess.jsx
 import React, { useState, useEffect } from 'react';
 import { API_URL } from '../api';
 import axios from 'axios';
@@ -10,8 +10,8 @@ const SubscriptionSuccess = () => {
     const [checking, setChecking] = useState(true);
     const [success, setSuccess] = useState(false);
 
-    // При загрузке компонента сделаем запрос на сервер, чтобы уточнить, 
-    // активна ли подписка.
+    // РџСЂРё Р·Р°РіСЂСѓР·РєРµ РєРѕРјРїРѕРЅРµРЅС‚Р° СЃРґРµР»Р°РµРј Р·Р°РїСЂРѕСЃ РЅР° СЃРµСЂРІРµСЂ, С‡С‚РѕР±С‹ СѓС‚РѕС‡РЅРёС‚СЊ, 
+    // Р°РєС‚РёРІРЅР° Р»Рё РїРѕРґРїРёСЃРєР°.
     useEffect(() => {
         checkSubscriptionStatus();
     }, []);
@@ -22,38 +22,38 @@ const SubscriptionSuccess = () => {
         try {
             const token = Cookies.get('token');
             if (!token) {
-                setError('Вы не авторизованы');
+                setError('Р’С‹ РЅРµ Р°РІС‚РѕСЂРёР·РѕРІР°РЅС‹');
                 setChecking(false);
                 return;
             }
-            // Запрашиваем /api/subscription/my-subscriptions
+            // Р—Р°РїСЂР°С€РёРІР°РµРј /api/subscription/my-subscriptions
             const response = await axios.get(`${API_URL}/subscription/my-subscriptions`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const subs = response.data;
-            // если среди подписок есть IsActive=true и EndDate > Now - значит успех
+            // РµСЃР»Рё СЃСЂРµРґРё РїРѕРґРїРёСЃРѕРє РµСЃС‚СЊ IsActive=true Рё EndDate > Now - Р·РЅР°С‡РёС‚ СѓСЃРїРµС…
             const activeSub = subs.find((s) => s.isActive);
             if (activeSub) {
                 setSuccess(true);
             } else {
-                setError('Подписка пока не активирована. Подождите немного или обратитесь в поддержку.');
+                setError('РџРѕРґРїРёСЃРєР° РїРѕРєР° РЅРµ Р°РєС‚РёРІРёСЂРѕРІР°РЅР°. РџРѕРґРѕР¶РґРёС‚Рµ РЅРµРјРЅРѕРіРѕ РёР»Рё РѕР±СЂР°С‚РёС‚РµСЃСЊ РІ РїРѕРґРґРµСЂР¶РєСѓ.');
             }
         } catch (err) {
             console.error('Check subscription error:', err);
-            setError('Ошибка при проверке подписки.');
+            setError('РћС€РёР±РєР° РїСЂРё РїСЂРѕРІРµСЂРєРµ РїРѕРґРїРёСЃРєРё.');
         } finally {
             setChecking(false);
         }
     };
 
     if (checking) {
-        return <div className="container">Проверяем статус подписки...</div>;
+        return <div className="container">РџСЂРѕРІРµСЂСЏРµРј СЃС‚Р°С‚СѓСЃ РїРѕРґРїРёСЃРєРё...</div>;
     }
 
     if (error) {
         return (
             <div className="container">
-                <h2>Результат оплаты</h2>
+                <h2>Р РµР·СѓР»СЊС‚Р°С‚ РѕРїР»Р°С‚С‹</h2>
                 <ErrorMessage message={error} />
             </div>
         );
@@ -62,16 +62,16 @@ const SubscriptionSuccess = () => {
     if (success) {
         return (
             <div className="container">
-                <h2>Оплата успешно выполнена!</h2>
-                <p>Ваша подписка активна. Благодарим за использование Rare Books Service.</p>
+                <h2>РћРїР»Р°С‚Р° СѓСЃРїРµС€РЅРѕ РІС‹РїРѕР»РЅРµРЅР°!</h2>
+                <p>Р’Р°С€Р° РїРѕРґРїРёСЃРєР° Р°РєС‚РёРІРЅР°. Р‘Р»Р°РіРѕРґР°СЂРёРј Р·Р° РёСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ Rare Books Service.</p>
             </div>
         );
     }
 
     return (
         <div className="container">
-            <h2>Оплата завершена</h2>
-            <p>Подписка пока не активна. Пожалуйста, обновите страницу позже или свяжитесь с поддержкой.</p>
+            <h2>РћРїР»Р°С‚Р° Р·Р°РІРµСЂС€РµРЅР°</h2>
+            <p>РџРѕРґРїРёСЃРєР° РїРѕРєР° РЅРµ Р°РєС‚РёРІРЅР°. РџРѕР¶Р°Р»СѓР№СЃС‚Р°, РѕР±РЅРѕРІРёС‚Рµ СЃС‚СЂР°РЅРёС†Сѓ РїРѕР·Р¶Рµ РёР»Рё СЃРІСЏР¶РёС‚РµСЃСЊ СЃ РїРѕРґРґРµСЂР¶РєРѕР№.</p>
         </div>
     );
 };

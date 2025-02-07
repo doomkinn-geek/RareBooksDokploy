@@ -102,6 +102,7 @@ namespace RareBooksService.WebApi
 
 
                 builder.Services.Configure<YandexCloudSettings>(builder.Configuration.GetSection("YandexCloud"));
+                builder.Services.Configure<YandexKassaSettings>(builder.Configuration.GetSection("YandexKassa"));
                 //                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
                 // Так мы гарантируем, что при обращении к IOptions<YandexCloudSettings> будут значения из appsettings.json
 
@@ -160,6 +161,7 @@ namespace RareBooksService.WebApi
                 builder.Services.AddScoped<IImportService, ImportService>();
                 builder.Services.AddScoped<IExportService, ExportService>();
                 builder.Services.AddScoped<IBookImagesService, BookImagesService>();
+                //builder.Services.AddScoped<ISearchSignatureStore, RedisSearchSignatureStore>();
                 builder.Services.AddScoped<MigrationService>();
 
                 // 8) Регистрируем YandexStorageService теперь ТОЛЬКО через AddScoped<IYandexStorageService, YandexStorageService>()
@@ -242,19 +244,23 @@ namespace RareBooksService.WebApi
 
                 // Проверяем, нужно ли показывать InitialSetup
                 ISetupStateService setupService;
-                
-                using(var scope = app.Services.CreateScope())
+
+                using (var scope = app.Services.CreateScope())
                 {
                     setupService = scope.ServiceProvider.GetRequiredService<ISetupStateService>();
                     setupService.DetermineIfSetupNeeded();
 
-                    if(!setupService.IsInitialSetupNeeded)
+                    // 1) Если система НЕ требует initial setup -> просто мигрируем базы
+                    if (!setupService.IsInitialSetupNeeded)
                     {
-                        var dbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
-                        dbContext.Database.Migrate();
+                        var booksDb = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+                        booksDb.Database.Migrate();
+
+                        var usersDb = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
+                        usersDb.Database.Migrate();
                     }
-                }                
-                
+                }
+
                 // Middleware: если IsInitialSetupNeeded == true – отдаём InitialSetup
                 app.Use(async (context, next) =>
                 

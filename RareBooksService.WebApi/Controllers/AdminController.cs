@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using RareBooksService.Common.Models;
 using RareBooksService.Common.Models.Dto;
+using RareBooksService.Common.Models.Dto.RareBooksService.Common.Models.Dto;
 using RareBooksService.Data.Interfaces;
 using RareBooksService.WebApi.Services;
 

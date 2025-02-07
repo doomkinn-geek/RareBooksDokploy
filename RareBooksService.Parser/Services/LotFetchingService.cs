@@ -92,6 +92,7 @@ namespace RareBooksService.Parser.Services
             string nonStandardPricesFilePath = $"extendedNonStandardPrices_Group_NEW.txt";
             string nonStandardPricesSovietFilePath = $"extendedNonStandardPricesSoviet_Group_NEW.txt";
 
+            int counter = 0;
             while (true)
             {
                 // сначала проверка внешняя (через token) или внутренняя:
@@ -103,7 +104,8 @@ namespace RareBooksService.Parser.Services
                 try
                 {
                     await ProcessLotAsync(currentId++, nonStandardPricesFilePath, nonStandardPricesSovietFilePath);
-                    await Task.Delay(25); // Replacing Thread.Sleep
+                    Console.Title = $"{counter++} of {lastIdInDB - lastProcessedId}";
+                    //await Task.Delay(25); // Replacing Thread.Sleep
 
                     if (currentId >= lastIdInDB)
                     {                    
@@ -344,7 +346,7 @@ namespace RareBooksService.Parser.Services
                                             string nonStandardPricesFilePath = "",
                                             string nonStandardPricesSovietFilePath = "")
         {
-            OnProgressChanged(lotId);
+            //OnProgressChanged(lotId);
 
             var bookInDb = _context.BooksInfo
                             .Where(b => b.Id == lotId)
@@ -418,7 +420,7 @@ namespace RareBooksService.Parser.Services
                             WriteNonStandardPriceToFile(lotData.result.id, nonStandardPricesSovietFilePath);
                         }
 
-                        _logger.LogInformation($"Lot {lotData.result.id}: SOVIET book <1000 '{lotData.result.title}' (little-value).");
+                        _logger.LogInformation($"Lot {lotData.result.id}: SOVIET book < 1500 '{lotData.result.title}' (little-value).");
 
                         // Сохраняем в БД, но без скачивания изображений
                         await _lotDataHandler.SaveLotDataAsync(
@@ -431,7 +433,7 @@ namespace RareBooksService.Parser.Services
                     }
                     else
                     {
-                        _logger.LogInformation($"Lot {lotData.result.id}: SOVIET book >=1000 '{lotData.result.title}'.");
+                        _logger.LogInformation($"Lot {lotData.result.id}: SOVIET book >= 1500 '{lotData.result.title}'.");
 
                         // Сохраняем как «обычный» (архивируем)
                         await _lotDataHandler.SaveLotDataAsync(

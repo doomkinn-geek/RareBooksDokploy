@@ -152,12 +152,12 @@ namespace RareBooksService.WebApi.Controllers
                 {
                     // Создаём заготовку
                     oldJson = @"{ 
-  ""ConnectionStrings"": {}, 
-  ""Jwt"": {}, 
-  ""YandexCloud"": {}, 
-  ""TypeOfAccessImages"": {}, 
-  ""YandexDisk"": {}
-}";
+                      ""ConnectionStrings"": {}, 
+                      ""Jwt"": {}, 
+                      ""YandexCloud"": {}, 
+                      ""TypeOfAccessImages"": {}, 
+                      ""YandexDisk"": {}
+                    }";
                 }
 
                 // 1) Десериализация текущего JSON

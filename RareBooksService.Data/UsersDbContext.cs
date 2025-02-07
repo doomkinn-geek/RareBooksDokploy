@@ -9,6 +9,7 @@ namespace RareBooksService.Data
         public DbSet<UserSearchHistory> UserSearchHistories { get; set; }
         public DbSet<Subscription> Subscriptions { get; set; }
         public DbSet<SubscriptionPlan> SubscriptionPlans { get; set; }
+        public DbSet<UserSearchState> UserSearchStates { get; set; }
 
         public UsersDbContext(DbContextOptions<UsersDbContext> options)
             : base(options)
@@ -44,6 +45,10 @@ namespace RareBooksService.Data
                 entity.Property(p => p.Name).HasMaxLength(200).IsRequired();
                 entity.Property(p => p.Price).HasColumnType("decimal(18,2)");
             });
+
+            modelBuilder.Entity<UserSearchState>()
+               .HasIndex(s => new { s.UserId, s.SearchType })
+               .IsUnique();
         }
     }
 }

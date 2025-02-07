@@ -60,16 +60,33 @@ namespace RareBooksService.Parser.Services
             }
         }
 
+        //private void ConfigureDefaultHeaders()
+        //{
+        //    _httpClient.DefaultRequestHeaders.Clear();
+        //    // Указываем реальный User-Agent, похожий на запрос браузера
+        //    _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36");
+        //    _httpClient.DefaultRequestHeaders.Add("Accept", "application/json, text/plain, */*");
+        //    // Добавляем Referer и Accept-Language
+        //    _httpClient.DefaultRequestHeaders.Add("Referer", "https://meshok.net/");
+        //    _httpClient.DefaultRequestHeaders.Add("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
+        //}
+
         private void ConfigureDefaultHeaders()
         {
             _httpClient.DefaultRequestHeaders.Clear();
-            // Указываем реальный User-Agent, похожий на запрос браузера
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36");
+            // Указываем, что клиент – это кастомное приложение, например мобильное приложение
+            _httpClient.DefaultRequestHeaders.Add("User-Agent", "MyCustomClient/1.0 (Android 10; Mobile; rv:79.0)");
+            // Принимаемые типы данных
             _httpClient.DefaultRequestHeaders.Add("Accept", "application/json, text/plain, */*");
-            // Добавляем Referer и Accept-Language
-            _httpClient.DefaultRequestHeaders.Add("Referer", "https://meshok.net/");
-            _httpClient.DefaultRequestHeaders.Add("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
+            // Заголовок, который часто используется для обозначения запросов из мобильных приложений или API-клиентов
+            _httpClient.DefaultRequestHeaders.Add("X-Requested-With", "MyCustomClient");
+            // Дополнительный кастомный заголовок для идентификации вашего приложения (если требуется)
+            _httpClient.DefaultRequestHeaders.Add("X-Custom-Client", "MyCustomApp");
+            // Указываем предпочтительный язык
+            _httpClient.DefaultRequestHeaders.Add("Accept-Language", "en-US,en;q=0.5");
         }
+
+
 
         public async Task FetchInitialCookies()
         {

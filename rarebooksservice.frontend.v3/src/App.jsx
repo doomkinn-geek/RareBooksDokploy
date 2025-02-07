@@ -6,6 +6,7 @@ import Home from './components/Home';
 import Login from './components/Login';
 import Register from './components/Register';
 import SubscriptionPage from './components/SubscriptionPage';
+import SubscriptionSuccess from './components/SubscriptionSuccess'; // <-- добавлено
 import AdminPanel from './components/AdminPanel';
 import UserDetailsPage from './components/UserDetailsPage';
 import PrivateRoute from './components/PrivateRoute';
@@ -56,6 +57,7 @@ const App = () => {
                         <Route path="/register" element={<Register />} />
                         <Route path="/terms" element={<TermsOfService />} />
                         <Route path="/contacts" element={<Contacts />} />
+                        <Route path="/subscription-success" element={<SubscriptionSuccess />} />
                     </Routes>
 
                     <footer className="footer">

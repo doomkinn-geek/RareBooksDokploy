@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using RareBooksService.Common.Models;
 using RareBooksService.Common.Models.Dto;
 using System.Text.Json;
@@ -27,16 +28,14 @@ namespace RareBooksService.WebApi.Controllers
             _logger = logger;
             _configuration = configuration;
             _env = env;
-            // Путь к appsettings.json в корне проекта:
-            // Обычно это то же место, где запускается приложение.
-            //_appSettingsPath = Path.Combine(env.ContentRootPath, "appsettings.json");
+            // Путь к appsettings.json:
             _appSettingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
         }
 
         // GET: api/AdminSettings
-        // Возвращает нужные секции конфигурации (YandexKassa, YandexDisk, TypeOfAccessImages)
+        // Возвращает нужные секции конфигурации (YandexKassa, YandexDisk, TypeOfAccessImages, и т.д.)
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<SettingsDto>>> GetSettings()        
+        public async Task<ActionResult> GetSettings()
         {
             try
             {
@@ -44,37 +43,38 @@ namespace RareBooksService.WebApi.Controllers
                 if (!IsUserAdmin(currentUser))
                 {
                     _logger.LogWarning("Доступ запрещен: текущий пользователь не является администратором.");
-                    return Forbid("Обновлять информацию о подписке может только администратор");
+                    return Forbid("Изменять настройки может только администратор");
                 }
-                // Считываем файл appsettings.json как текст
+
+                if (!System.IO.File.Exists(_appSettingsPath))
+                {
+                    return NotFound("appsettings.json not found");
+                }
+
+                // Считываем файл appsettings.json
                 var jsonString = System.IO.File.ReadAllText(_appSettingsPath);
 
-                // Парсим JSON в JsonObject, чтобы можно было вытянуть/изменить нужные поля
                 var rootNode = JsonNode.Parse(jsonString)?.AsObject();
                 if (rootNode == null)
                 {
                     return BadRequest("Could not parse appsettings.json");
                 }
 
-                // Собираем нужные объекты настроек
-                // Например:
+                // Собираем нужные объекты (пример)
                 var yandexKassaNode = rootNode["YandexKassa"]?.AsObject();
                 var yandexDiskNode = rootNode["YandexDisk"]?.AsObject();
                 var typeOfAccessImagesNode = rootNode["TypeOfAccessImages"]?.AsObject();
                 var yandexCloudNode = rootNode["YandexCloud"]?.AsObject();
-
-                // Получаем из appsettings.json секцию "Smtp"
                 var smtpNode = rootNode["Smtp"]?.AsObject();
 
-                // Затем возвращаем в результате:
                 return Ok(new
                 {
                     YandexKassa = yandexKassaNode,
                     YandexDisk = yandexDiskNode,
                     TypeOfAccessImages = typeOfAccessImagesNode,
                     YandexCloud = yandexCloudNode,
-                    Smtp = smtpNode  
-                });                
+                    Smtp = smtpNode
+                });
             }
             catch (Exception ex)
             {
@@ -85,6 +85,7 @@ namespace RareBooksService.WebApi.Controllers
 
         // POST: api/AdminSettings
         // Принимает обновлённые настройки и перезаписывает их в appsettings.json
+        // Затем вызывает Reload() конфигурации (при необходимости).
         [HttpPost]
         public async Task<IActionResult> UpdateSettings([FromBody] SettingsDto dto)
         {
@@ -94,8 +95,14 @@ namespace RareBooksService.WebApi.Controllers
                 if (!IsUserAdmin(currentUser))
                 {
                     _logger.LogWarning("Доступ запрещен: текущий пользователь не является администратором.");
-                    return Forbid("Обновлять информацию о подписке может только администратор");
+                    return Forbid("Обновлять настройки может только администратор");
                 }
+
+                if (!System.IO.File.Exists(_appSettingsPath))
+                {
+                    return NotFound("appsettings.json not found");
+                }
+
                 // Считываем оригинальный файл
                 var jsonString = System.IO.File.ReadAllText(_appSettingsPath);
                 var rootNode = JsonNode.Parse(jsonString)?.AsObject();
@@ -132,15 +139,18 @@ namespace RareBooksService.WebApi.Controllers
                     rootNode["TypeOfAccessImages"] = taNode;
                 }
 
-                if(dto.YandexCloud != null)
+                // Обновляем YandexCloud
+                if (dto.YandexCloud != null)
                 {
                     var ycNode = rootNode["YandexCloud"] as JsonObject ?? new JsonObject();
                     ycNode["AccessKey"] = dto.YandexCloud.AccessKey;
                     ycNode["SecretKey"] = dto.YandexCloud.SecretKey;
                     ycNode["ServiceUrl"] = dto.YandexCloud.ServiceUrl;
                     ycNode["BucketName"] = dto.YandexCloud.BucketName;
+                    rootNode["YandexCloud"] = ycNode;
                 }
 
+                // Обновляем Smtp
                 if (dto.Smtp != null)
                 {
                     var smtpNode = rootNode["Smtp"] as JsonObject ?? new JsonObject();
@@ -148,14 +158,19 @@ namespace RareBooksService.WebApi.Controllers
                     smtpNode["Port"] = dto.Smtp.Port;
                     smtpNode["User"] = dto.Smtp.User;
                     smtpNode["Pass"] = dto.Smtp.Pass;
-
                     rootNode["Smtp"] = smtpNode;
                 }
 
-                // Записываем обратно в файл
-                // Важно: убедитесь, что у приложения есть права на перезапись appsettings.json
+                // Записываем обновлённый JSON обратно в файл
                 var updatedJson = rootNode.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
                 System.IO.File.WriteAllText(_appSettingsPath, updatedJson);
+
+                // Если хотим сразу подхватить новые настройки:
+                // Приводим _configuration к IConfigurationRoot и вызываем Reload().
+                if (_configuration is IConfigurationRoot configRoot)
+                {
+                    configRoot.Reload();
+                }
 
                 return Ok(new { message = "Settings updated successfully" });
             }
