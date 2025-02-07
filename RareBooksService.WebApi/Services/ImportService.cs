@@ -248,7 +248,7 @@ namespace RareBooksService.WebApi.Services
                     // 5) Сохраняем чанк отдельным контекстом, чтобы сразу освободить память
                     using (var scope = _scopeFactory.CreateScope())
                     {
-                        var pgContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
+                        var pgContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
 
                         // Отключаем автопроверку изменений
                         pgContext.ChangeTracker.AutoDetectChangesEnabled = false;
