@@ -115,6 +115,212 @@ namespace RareBooksService.WebApi.Services
         {
             try
             {
+                // 1) Готовим контекст для чтения из SQLite
+                var sqliteOptions = new DbContextOptionsBuilder<ExtendedBooksContext>()
+                    .UseSqlite($"Filename={taskInfo.TempFilePath}")
+                    .Options;
+                using var sourceContext = new ExtendedBooksContext(sqliteOptions);
+
+                // ВАЖНО: AsNoTracking, чтобы EF не вел трекинг
+                var totalBooks = await sourceContext.BooksInfo.AsNoTracking().CountAsync();
+
+                // 2) Создаём PostgreSQL-контекст на очистку таблиц (только раз)
+                using (var scope = _scopeFactory.CreateScope())
+                {
+                    var pgContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
+                    // Очистка BooksInfo (чанками):
+                    while (true)
+                    {
+                        var chunk = pgContext.BooksInfo
+                            .Take(1000)
+                            .ToList(); // тут можно и 5000 — эти записи без сложных связей
+                        if (chunk.Count == 0) break;
+
+                        pgContext.BooksInfo.RemoveRange(chunk);
+                        await pgContext.SaveChangesAsync();
+                    }
+
+                    // Очистка Categories
+                    var allCats = pgContext.Categories.ToList();
+                    pgContext.Categories.RemoveRange(allCats);
+                    await pgContext.SaveChangesAsync();
+                }
+
+                // 3) Перенос категорий (их немного, можно за один раз)
+                var categories = await sourceContext.Categories
+                    .AsNoTracking() // тоже не трекаем
+                    .ToListAsync();
+                int catCount = categories.Count;
+
+                // Сохраняем в PostgreSQL:
+                using (var scope = _scopeFactory.CreateScope())
+                {
+                    var pgContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
+                    // Создаём новые RegularBaseCategory
+                    foreach (var cat in categories)
+                    {
+                        var newCat = new RegularBaseCategory
+                        {
+                            CategoryId = cat.CategoryId,
+                            Name = cat.Name
+                        };
+                        pgContext.Categories.Add(newCat);
+                    }
+                    await pgContext.SaveChangesAsync();
+                }
+
+                // Словарь meshokId -> реальный PK
+                Dictionary<int, int> catMap;
+                using (var scope = _scopeFactory.CreateScope())
+                {
+                    var pgContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
+                    catMap = await pgContext.Categories
+                        .ToDictionaryAsync(c => c.CategoryId, c => c.Id);
+                }
+
+                // 4) Перенос книг — читаем чанками из SQLite (AsNoTracking)
+                int pageSize = 200;      // уменьшили для экономии памяти
+                int pageIndex = 0;
+                int processed = 0;
+
+                while (true)
+                {
+                    // Читаем кусок
+                    var chunk = await sourceContext.BooksInfo
+                        .AsNoTracking()
+                        .OrderBy(b => b.Id)
+                        .Skip(pageIndex * pageSize)
+                        .Take(pageSize)
+                        .Include(b => b.Category)  // нужно, чтобы взять bk.Category.CategoryId
+                        .ToListAsync();
+
+                    if (chunk.Count == 0)
+                        break; // больше данных нет
+
+                    // Формируем список RegularBaseBook для вставки
+                    var listForContext = new List<RegularBaseBook>();
+                    foreach (var bk in chunk)
+                    {
+                        if (!catMap.TryGetValue(bk.Category.CategoryId, out var realCatId))
+                        {
+                            // если не нашли — можно, например, пропустить
+                            continue;
+                        }                        
+                        var newBook = new RegularBaseBook
+                        {
+                            Id = bk.Id,
+                            Title = bk.Title,
+                            NormalizedTitle = bk.Title.ToLower(),
+                            Description = bk.Description,
+                            NormalizedDescription = bk.Description.ToLower(),
+                            BeginDate = DateTime.SpecifyKind(bk.BeginDate, DateTimeKind.Utc),
+                            EndDate = DateTime.SpecifyKind(bk.EndDate, DateTimeKind.Utc),
+                            ImageUrls = bk.ImageUrls,
+                            ThumbnailUrls = bk.ThumbnailUrls,
+                            Price = bk.Price,
+                            City = bk.City,
+                            IsMonitored = bk.IsMonitored,
+                            FinalPrice = bk.FinalPrice,
+                            YearPublished = bk.YearPublished,
+                            CategoryId = realCatId,
+                            Tags = bk.Tags,
+                            PicsRatio = bk.PicsRatio,
+                            Status = bk.Status,
+                            StartPrice = bk.StartPrice,
+                            Type = bk.Type,
+                            SoldQuantity = bk.SoldQuantity,
+                            BidsCount = bk.BidsCount,
+                            SellerName = bk.SellerName,
+                            PicsCount = bk.PicsCount,
+
+                            //08.11.2024 - добавил поддержку малоценных лотов (советские до 1500) и сжатие изображений в object storage
+                            IsImagesCompressed = bk.IsImagesCompressed,
+                            ImageArchiveUrl = bk.ImageArchiveUrl,
+
+                            //22.01.2025 - т.к. малоценных лотов очень много, храним их без загрузки изображений
+                            //изображения будем получать по тем ссылкам, что есть на мешке
+                            IsLessValuable = bk.IsLessValuable
+                        };
+
+                        listForContext.Add(newBook);
+                    }
+
+                    // 5) Сохраняем чанк отдельным контекстом, чтобы сразу освободить память
+                    using (var scope = _scopeFactory.CreateScope())
+                    {
+                        var pgContext = scope.ServiceProvider.GetRequiredService<RegularBaseBooksContext>();
+
+                        // Отключаем автопроверку изменений
+                        pgContext.ChangeTracker.AutoDetectChangesEnabled = false;
+
+                        pgContext.BooksInfo.AddRange(listForContext);
+
+                        try
+                        {
+                            await pgContext.SaveChangesAsync();
+                            processed += listForContext.Count;
+                        }
+                        catch (DbUpdateException ex)
+                        {
+                            // Если PK конфликт — обрабатываем поштучно
+                            if (IsDuplicateKeyException(ex))
+                            {
+                                pgContext.ChangeTracker.Clear();
+
+                                int subcount = 0;
+                                foreach (var bk2 in listForContext)
+                                {
+                                    pgContext.BooksInfo.Add(bk2);
+                                    try
+                                    {
+                                        await pgContext.SaveChangesAsync();
+                                        subcount++;
+                                    }
+                                    catch (DbUpdateException ex2)
+                                    {
+                                        if (IsDuplicateKeyException(ex2))
+                                        {
+                                            // пропускаем запись
+                                            pgContext.ChangeTracker.Clear();
+                                        }
+                                        else
+                                        {
+                                            throw;
+                                        }
+                                    }
+                                }
+                                processed += subcount;
+                            }
+                            else
+                            {
+                                throw;
+                            }
+                        }
+                    }
+
+                    // Обновляем прогресс
+                    taskInfo.ImportProgress = (double)processed / totalBooks * 100.0;
+
+                    pageIndex++;
+                }
+
+                // Завершение
+                taskInfo.ImportProgress = 100.0;
+                taskInfo.IsCompleted = true;
+                taskInfo.Message = $"Imported {processed} books (total), {catCount} categories.";
+            }
+            catch (Exception ex)
+            {
+                taskInfo.IsCancelledOrError = true;
+                taskInfo.Message = $"Error: {ex.Message}. {ex.InnerException?.Message}";
+            }
+        }
+
+
+        /*private async Task ImportInBackgroundAsync(ImportTaskInfo taskInfo)
+        {
+            try
+            {
                 // 1) Настраиваем подключения
                 var sqliteOptions = new DbContextOptionsBuilder<ExtendedBooksContext>()
                     .UseSqlite($"Filename={taskInfo.TempFilePath}")
@@ -310,7 +516,7 @@ namespace RareBooksService.WebApi.Services
                 taskInfo.IsCancelledOrError = true;
                 taskInfo.Message = $"Error: {ex.Message}. {ex.InnerException?.Message}";
             }
-        }
+        }*/
 
         private bool IsDuplicateKeyException(DbUpdateException ex)
         {
