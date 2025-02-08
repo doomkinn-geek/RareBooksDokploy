@@ -123,6 +123,7 @@ namespace RareBooksService.WebApi.Services
             entity.StartDate = dto.StartDate;
             entity.EndDate = dto.EndDate;
             entity.PaymentId = dto.PaymentId;
+            entity.UsedRequestsThisPeriod = dto.UsedRequestsThisPeriod;
             // PriceAtPurchase ? (при желании)
 
             _db.Subscriptions.Update(entity);
@@ -209,6 +210,7 @@ namespace RareBooksService.WebApi.Services
                 EndDate = sub.EndDate,
                 PaymentId = sub.PaymentId,
                 PriceAtPurchase = sub.PriceAtPurchase,
+                UsedRequestsThisPeriod = sub.UsedRequestsThisPeriod,
                 SubscriptionPlan = planEntity == null ? null : ToDto(planEntity)
             };
         }
