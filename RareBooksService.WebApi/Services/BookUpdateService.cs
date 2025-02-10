@@ -157,7 +157,7 @@ namespace RareBooksService.WebApi.Services
                     _currentOperationName = "FetchFreeListData";
                     ResetProgress();
 
-                    List<int> idList = File.ReadAllLines("d:\\temp\\books\\all.txt")
+                    List<int> idList = File.ReadAllLines("d:\\temp\\books\\wrong_id.txt")
                         .Select(x => int.Parse(x))
                         .ToList();
                     await lotFetchingService.FetchFreeListData(idList);

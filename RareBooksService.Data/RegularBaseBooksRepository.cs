@@ -17,6 +17,7 @@ namespace RareBooksService.Data
         public RegularBaseBooksRepository(BooksDbContext context, UsersDbContext usersContext)
         {
             _context = context;
+            _usersContext = usersContext;
 
             _stemmers = new Dictionary<string, IStemmer>
             {
@@ -27,30 +28,27 @@ namespace RareBooksService.Data
                 { "ita", new ItalianStemmer() },
                 { "fin", new FinnishStemmer() }
             };
-            _usersContext = usersContext;
         }
 
-        // ------------------ НОВЫЙ ПОМОГАЮЩИЙ МЕТОД ------------------
+        // ------------------ ПОМОГАЮЩИЙ МЕТОД: извлечение имени файла --------------
         private static string? ExtractImageName(string? fullUrl)
         {
             if (string.IsNullOrWhiteSpace(fullUrl))
                 return null;
 
-            // Отсекаем всё до последнего слэша
             int lastSlash = fullUrl.LastIndexOf('/');
             var fileName = (lastSlash >= 0)
                 ? fullUrl.Substring(lastSlash + 1)
                 : fullUrl;
 
-            // Убираем query‑параметры, если есть '?'
             int qPos = fileName.IndexOf('?');
             if (qPos >= 0)
                 fileName = fileName.Substring(0, qPos);
 
             return fileName;
         }
-        // ----------------------------------------------------------
 
+        // ------------------- ПОМОГАЮЩИЙ МЕТОД: детект языка + стемминг -----------
         private string PreprocessText(string text, out string detectedLanguage)
         {
             detectedLanguage = DetectLanguage(text);
@@ -73,18 +71,80 @@ namespace RareBooksService.Data
         {
             LanguageDetector detector = new LanguageDetector();
             detector.AddAllLanguages();
-            string res = detector.Detect(text);
-            return res;
+            return detector.Detect(text);
         }
 
-        public async Task<PagedResultDto<BookSearchResultDto>> GetBooksByTitleAsync(string title, int page, int pageSize, bool exactPhrase = false)
+        // -------------------- ГЛАВНЫЙ ОПТИМИЗИРОВАННЫЙ МЕТОД --------------------
+        /// <summary>
+        /// Общая логика постраничного вывода, 
+        /// которая вызывается во всех GetBooksByXXX методах.
+        /// </summary>
+        private async Task<PagedResultDto<BookSearchResultDto>> BuildPagedBookResult(
+            IQueryable<RegularBaseBook> baseQuery,
+            int page,
+            int pageSize)
         {
-            string detectedLanguage;
+            //baseQuery = baseQuery.Where(x => x.SoldQuantity > 0);
+            // Считаем общее кол-во
+            var totalItems = await baseQuery.CountAsync();
+            var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
+
+            // Выбираем нужные данные
+            var rawData = await baseQuery
+                // дополнительно фильтруем: SoldQuantity>0 (как в вашем коде)
+                //.Where(b => b.SoldQuantity > 0)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(b => new
+                {
+                    b.Id,
+                    b.Title,
+                    b.Price,
+                    b.SellerName,
+                    b.EndDate,
+                    b.Type,
+                    b.ImageUrls
+                })
+                .ToListAsync();
+
+            // Сформируем результирующие DTO
+            var books = rawData.Select(b => new BookSearchResultDto
+            {
+                Id = b.Id,
+                Title = b.Title,
+                Price = b.Price,
+                SellerName = b.SellerName,
+                Date = b.EndDate.ToShortDateString(),
+                Type = b.Type,
+                FirstImageName = b.ImageUrls
+                    .Select(url => ExtractImageName(url))
+                    .FirstOrDefault()
+            })
+            .ToList();
+
+            return new PagedResultDto<BookSearchResultDto>
+            {
+                Items = books,
+                TotalPages = totalPages
+            };
+        }
+
+        // -------------------------- REAL METHODS -----------------------------
+
+        public async Task<PagedResultDto<BookSearchResultDto>> GetBooksByTitleAsync(
+            string title, int page, int pageSize, bool exactPhrase = false)
+        {
             string processedTitle;
-            if (!exactPhrase)
-                processedTitle = PreprocessText(title.ToLower(), out detectedLanguage);
-            else
+            if (exactPhrase)
+            {
                 processedTitle = title.ToLower();
+            }
+            else
+            {
+                // стемминг
+                string detectedLanguage;
+                processedTitle = PreprocessText(title.ToLower(), out detectedLanguage);
+            }
 
             var searchWords = processedTitle.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
@@ -96,60 +156,28 @@ namespace RareBooksService.Data
                 query = query.Where(b => EF.Functions.Like(b.NormalizedTitle, $"%{word}%"));
             }
 
+            // Сортируем
             query = query.OrderBy(b => b.EndDate);
 
-            var totalItems = await query.CountAsync();
-            var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
-
-            // ------ Шаг 1: выбираем "сырой" набор данных в анонимный объект ------
-            var rawData = await query
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .Select(b => new
-                {
-                    b.Id,
-                    b.Title,
-                    b.Price,
-                    b.SellerName,
-                    b.EndDate,
-                    b.Type,
-                    //b.ThumbnailUrls
-                    b.ImageUrls
-                })
-                .ToListAsync();
-
-            // ------ Шаг 2: на стороне клиента формируем нужный DTO ------
-            var books = rawData.Select(b => new BookSearchResultDto
-            {
-                Id = b.Id,
-                Title = b.Title,
-                Price = b.Price,
-                SellerName = b.SellerName,
-                Date = b.EndDate.ToShortDateString(),
-                Type = b.Type,
-                FirstImageName = b.ImageUrls
-                    .Select(url => ExtractImageName(url))
-                    .FirstOrDefault()
-            })
-            .ToList();
-
-            return new PagedResultDto<BookSearchResultDto>
-            {
-                Items = books,
-                TotalPages = totalPages
-            };
+            // Вызываем общий метод
+            return await BuildPagedBookResult(query, page, pageSize);
         }
 
-        public async Task<PagedResultDto<BookSearchResultDto>> GetBooksByDescriptionAsync(string description, int page, int pageSize, bool exactPhrase = false)
+        public async Task<PagedResultDto<BookSearchResultDto>> GetBooksByDescriptionAsync(
+            string description, int page, int pageSize, bool exactPhrase = false)
         {
-            string detectedLanguage;
-            string processedDescription;
-            if (!exactPhrase)
-                processedDescription = PreprocessText(description.ToLower(), out detectedLanguage);
+            string processedDesc;
+            if (exactPhrase)
+            {
+                processedDesc = description.ToLower();
+            }
             else
-                processedDescription = description.ToLower();
+            {
+                string detectedLanguage;
+                processedDesc = PreprocessText(description.ToLower(), out detectedLanguage);
+            }
 
-            var searchWords = processedDescription.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var searchWords = processedDesc.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
             var query = _context.BooksInfo.AsQueryable();
 
@@ -161,216 +189,73 @@ namespace RareBooksService.Data
 
             query = query.OrderBy(b => b.EndDate);
 
-            var totalItems = await query.CountAsync();
-            var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
-
-            // ------ Шаг 1: выбираем "сырой" набор данных ------
-            var rawData = await query
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .Select(b => new
-                {
-                    b.Id,
-                    b.Title,
-                    b.Price,
-                    b.SellerName,
-                    b.EndDate,
-                    b.Type,
-                    //b.ThumbnailUrls
-                    b.ImageUrls
-                })
-                .ToListAsync();
-
-            // ------ Шаг 2: формируем DTO ------
-            var books = rawData.Select(b => new BookSearchResultDto
-            {
-                Id = b.Id,
-                Title = b.Title,
-                Price = b.Price,
-                SellerName = b.SellerName,
-                Date = b.EndDate.ToShortDateString(),
-                Type = b.Type,
-                FirstImageName = b.ImageUrls
-                    .Select(url => ExtractImageName(url))
-                    .FirstOrDefault()
-            })
-            .ToList();
-
-            return new PagedResultDto<BookSearchResultDto>
-            {
-                Items = books,
-                TotalPages = totalPages
-            };
+            return await BuildPagedBookResult(query, page, pageSize);
         }
 
-        public async Task<PagedResultDto<BookSearchResultDto>> GetBooksByCategoryAsync(int categoryId, int page, int pageSize)
+        public async Task<PagedResultDto<BookSearchResultDto>> GetBooksByCategoryAsync(
+            int categoryId, int page, int pageSize)
         {
-            var query = _context.BooksInfo.Where(b => b.CategoryId == categoryId)
-                                          .OrderBy(b => b.EndDate);
+            var query = _context.BooksInfo
+                .Where(b => b.CategoryId == categoryId)
+                .OrderBy(b => b.EndDate);
 
-            var totalItems = await query.CountAsync();
-            var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
-
-            // ------ Шаг 1: выбираем "сырой" набор ------
-            var rawData = await query
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .Select(b => new
-                {
-                    b.Id,
-                    b.Title,
-                    b.Price,
-                    b.SellerName,
-                    b.EndDate,
-                    b.Type,
-                    //b.ThumbnailUrls
-                    b.ImageUrls
-                })
-                .ToListAsync();
-
-            // ------ Шаг 2: формируем DTO ------
-            var books = rawData.Select(b => new BookSearchResultDto
-            {
-                Id = b.Id,
-                Title = b.Title,
-                Price = b.Price,
-                SellerName = b.SellerName,
-                Date = b.EndDate.ToShortDateString(),
-                Type = b.Type,
-                FirstImageName = b.ImageUrls
-                    .Select(url => ExtractImageName(url))
-                    .FirstOrDefault()
-            })
-            .ToList();
-
-            return new PagedResultDto<BookSearchResultDto>
-            {
-                Items = books,
-                TotalPages = totalPages
-            };
+            return await BuildPagedBookResult(query, page, pageSize);
         }
 
-        public async Task<PagedResultDto<BookSearchResultDto>> GetBooksByPriceRangeAsync(double minPrice, double maxPrice, int page, int pageSize)
+        public async Task<PagedResultDto<BookSearchResultDto>> GetBooksByPriceRangeAsync(
+            double minPrice, double maxPrice, int page, int pageSize)
         {
             var query = _context.BooksInfo
                 .Where(b => b.Price >= minPrice && b.Price <= maxPrice)
                 .OrderBy(b => b.Price);
 
-            var totalItems = await query.CountAsync();
-            var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
-
-            // ------ Шаг 1: выбираем "сырой" набор ------
-            var rawData = await query
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .Select(b => new
-                {
-                    b.Id,
-                    b.Title,
-                    b.Price,
-                    b.SellerName,
-                    b.EndDate,
-                    b.Type,
-                    b.ImageUrls
-                })
-                .ToListAsync();
-
-            // ------ Шаг 2: формируем DTO ------
-            var books = rawData.Select(b => new BookSearchResultDto
-            {
-                Id = b.Id,
-                Title = b.Title,
-                Price = b.Price,
-                SellerName = b.SellerName,
-                Date = b.EndDate.ToShortDateString(),
-                Type = b.Type,
-                FirstImageName = b.ImageUrls
-                    .Select(url => ExtractImageName(url))
-                    .FirstOrDefault()
-            })
-            .ToList();
-
-            return new PagedResultDto<BookSearchResultDto>
-            {
-                Items = books,
-                TotalPages = totalPages
-            };
+            return await BuildPagedBookResult(query, page, pageSize);
         }
 
-        public async Task<PagedResultDto<BookSearchResultDto>> GetBooksBySellerAsync(string sellerName, int page, int pageSize)
+        public async Task<PagedResultDto<BookSearchResultDto>> GetBooksBySellerAsync(
+            string sellerName, int page, int pageSize)
         {
             var query = _context.BooksInfo
                 .Where(b => b.SellerName == sellerName)
                 .OrderBy(b => b.EndDate);
 
-            var totalItems = await query.CountAsync();
-            var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
-
-            // ------ Шаг 1: выбираем "сырой" набор ------
-            var rawData = await query
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .Select(b => new
-                {
-                    b.Id,
-                    b.Title,
-                    b.Price,
-                    b.SellerName,
-                    b.EndDate,
-                    b.Type,
-                    b.ImageUrls
-                })
-                .ToListAsync();
-
-            // ------ Шаг 2: формируем DTO ------
-            var books = rawData.Select(b => new BookSearchResultDto
-            {
-                Id = b.Id,
-                Title = b.Title,
-                Price = b.Price,
-                SellerName = b.SellerName,
-                Date = b.EndDate.ToShortDateString(),
-                Type = b.Type,
-                FirstImageName = b.ImageUrls
-                    .Select(url => ExtractImageName(url))
-                    .FirstOrDefault()
-            })
-            .ToList();
-
-            return new PagedResultDto<BookSearchResultDto>
-            {
-                Items = books,
-                TotalPages = totalPages
-            };
+            return await BuildPagedBookResult(query, page, pageSize);
         }
 
         public async Task<BookDetailDto> GetBookByIdAsync(int id)
         {
-            return await _context.BooksInfo
-                .Where(b => b.Id == id)
-                .Select(b => new BookDetailDto
-                {
-                    Id = b.Id,
-                    Title = b.Title,
-                    Description = b.Description,
-                    BeginDate = b.BeginDate,
-                    EndDate = b.EndDate.ToShortDateString(),
-                    Price = b.Price,
-                    City = b.City,
-                    FinalPrice = b.FinalPrice,
-                    YearPublished = b.YearPublished,
-                    Tags = b.Tags,
-                    CategoryName = b.Category.Name,
-                    Status = b.Status,
-                    Type = b.Type,
-                    SellerName = b.SellerName,
-                    ImageArchiveUrl = b.ImageArchiveUrl,
-                    IsImagesCompressed = b.IsImagesCompressed,
-                    IsLessValuable = b.IsLessValuable,
-                    ImageUrls = b.ImageUrls,
-                    ThumbnailUrls = b.ThumbnailUrls
-                })
-                .FirstOrDefaultAsync();
+            try
+            {
+                return await _context.BooksInfo
+                    .Where(b => b.Id == id)
+                    .Select(b => new BookDetailDto
+                    {
+                        Id = b.Id,
+                        Title = b.Title,
+                        Description = b.Description,
+                        BeginDate = b.BeginDate,
+                        EndDate = b.EndDate.ToShortDateString(),
+                        Price = b.Price,
+                        City = b.City,
+                        FinalPrice = b.FinalPrice,
+                        YearPublished = b.YearPublished,
+                        Tags = b.Tags,
+                        CategoryName = b.Category.Name,
+                        Status = b.Status,
+                        Type = b.Type,
+                        SellerName = b.SellerName,
+                        ImageArchiveUrl = b.ImageArchiveUrl,
+                        IsImagesCompressed = b.IsImagesCompressed,
+                        IsLessValuable = b.IsLessValuable,
+                        ImageUrls = b.ImageUrls,
+                        ThumbnailUrls = b.ThumbnailUrls
+                    })
+                    .FirstOrDefaultAsync();
+            }
+            catch(Exception e)
+            {
+                return new BookDetailDto();
+            }
         }
 
         public async Task<List<CategoryDto>> GetCategoriesAsync()
@@ -396,6 +281,7 @@ namespace RareBooksService.Data
                 .FirstOrDefaultAsync();
         }
 
+        // Сохраняем историю поиска в UsersDbContext (из параметра usersContext)
         public async Task SaveSearchHistoryAsync(string userId, string query, string searchType)
         {
             try
@@ -413,7 +299,7 @@ namespace RareBooksService.Data
             }
             catch (Exception ex)
             {
-                // Логируем, игнорируем или пробрасываем выше по необходимости
+                // Логируем или игнорируем
             }
         }
     }

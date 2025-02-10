@@ -27,7 +27,7 @@ namespace RareBooksService.Parser.Services
 
         private static readonly string LastProcessedFixedPriceIdFilePath = "lastProcessedFixedPriceId.txt";
         private static readonly string LastProcessedIdFilePath = "lastProcessedId.txt";
-        private static readonly List<int> InterestedCategories = new List<int> { 13870, 13871, 13872, 13873, 1847 };
+        private static readonly List<int> InterestedCategories = new List<int> { 13870, 13871, 13872, 13873 };
         private static readonly List<int> SovietCategories = new List<int> { 13874, 13875, 13876 };
 
         public delegate void ProgressChangedHandler(int currentLotId, string? currentTitle);
@@ -165,11 +165,11 @@ namespace RareBooksService.Parser.Services
         {
             _logger.LogInformation("Starting FetchFreeListData with {IdCount} IDs.", ids.Count);
 
-            /*List<int> wrongData = _context.BooksInfo.
-                Where(x => x.SoldQuantity == 0 && x.Type == "fixedPrice")
+            /*List<int> wrongData = _context.BooksInfo
+                .Where(x => x.Category.CategoryId == 1847) //&& x.StartPrice == 1)
                 .Select(x => x.Id).ToList();
 
-            using (StreamWriter w = new StreamWriter("wrong_data_lots.txt", false, System.Text.Encoding.UTF8))
+            using (StreamWriter w = new StreamWriter("wrong_data_lots_1847.txt", false, System.Text.Encoding.UTF8))
             {
                 foreach (int i in wrongData)
                 {                
@@ -348,16 +348,16 @@ namespace RareBooksService.Parser.Services
         {
             //OnProgressChanged(lotId);
 
-            var bookInDb = _context.BooksInfo
-                            .Where(b => b.Id == lotId)
-                            .FirstOrDefault();
-            if (bookInDb != null)
-            {
-                /*bookInDb.ImageArchiveUrl = $"_compressed_images/{lotId}.zip";
-                _context.BooksInfo.Update(bookInDb);
-                await _context.SaveChangesAsync();*/
-                return;
-            }
+            //var bookInDb = _context.BooksInfo
+            //                .Where(b => b.Id == lotId)
+            //                .FirstOrDefault();
+            //if (bookInDb != null)
+            //{
+            //    /*bookInDb.ImageArchiveUrl = $"_compressed_images/{lotId}.zip";
+            //    _context.BooksInfo.Update(bookInDb);
+            //    await _context.SaveChangesAsync();*/
+            //    return;
+            //}
 
             var lotData = await _lotDataService.GetLotDataAsync(lotId);
             if (lotData == null || lotData.result == null)
@@ -377,7 +377,7 @@ namespace RareBooksService.Parser.Services
             // Логика выбора:
             // (A) startPrice >= 1  ИЛИ  (B) статус=2 и soldQuantity>0
             bool meetsMainCondition =
-                (lotData.result.startPrice == 1)
+                (lotData.result.startPrice == 1) //&& lotData.result.soldQuantity > 0)
                 || (lotData.result.status == 2 && lotData.result.soldQuantity > 0);
 
             if (!meetsMainCondition)
