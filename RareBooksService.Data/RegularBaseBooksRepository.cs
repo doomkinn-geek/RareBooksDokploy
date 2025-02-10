@@ -157,7 +157,7 @@ namespace RareBooksService.Data
             }
 
             // Сортируем
-            query = query.OrderBy(b => b.EndDate);
+            query = query.OrderByDescending(b => b.EndDate);
 
             // Вызываем общий метод
             return await BuildPagedBookResult(query, page, pageSize);
@@ -187,7 +187,7 @@ namespace RareBooksService.Data
                 query = query.Where(b => EF.Functions.Like(b.NormalizedDescription, $"%{word}%"));
             }
 
-            query = query.OrderBy(b => b.EndDate);
+            query = query.OrderByDescending(b => b.EndDate);
 
             return await BuildPagedBookResult(query, page, pageSize);
         }
@@ -197,7 +197,7 @@ namespace RareBooksService.Data
         {
             var query = _context.BooksInfo
                 .Where(b => b.CategoryId == categoryId)
-                .OrderBy(b => b.EndDate);
+                .OrderByDescending(b => b.EndDate);
 
             return await BuildPagedBookResult(query, page, pageSize);
         }
@@ -207,7 +207,7 @@ namespace RareBooksService.Data
         {
             var query = _context.BooksInfo
                 .Where(b => b.Price >= minPrice && b.Price <= maxPrice)
-                .OrderBy(b => b.Price);
+                .OrderByDescending(b => b.Price);
 
             return await BuildPagedBookResult(query, page, pageSize);
         }
@@ -217,7 +217,7 @@ namespace RareBooksService.Data
         {
             var query = _context.BooksInfo
                 .Where(b => b.SellerName == sellerName)
-                .OrderBy(b => b.EndDate);
+                .OrderByDescending(b => b.EndDate);
 
             return await BuildPagedBookResult(query, page, pageSize);
         }

@@ -5,6 +5,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using NLog.Web;
 using RareBooksService.Common.Models;            // <-- Для YandexCloudSettings
+using RareBooksService.Common.Models.Settings;
 using RareBooksService.Data;
 using RareBooksService.Data.Interfaces;
 using RareBooksService.Data.Services;
@@ -153,6 +154,10 @@ namespace RareBooksService.WebApi
                 {
                     options.AddPolicy("RequireAdministratorRole", policy => policy.RequireRole("Admin"));
                 });
+
+                builder.Services.Configure<CacheSettings>(builder.Configuration.GetSection("CacheSettings"));
+                builder.Services.AddHostedService<CacheCleanupService>();
+
 
                 // 7) Разные scoped-сервисы
                 builder.Services.AddScoped<IRegularBaseBooksRepository, RegularBaseBooksRepository>();

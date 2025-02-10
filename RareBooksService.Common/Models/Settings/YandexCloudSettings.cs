@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace RareBooksService.Common.Models
+namespace RareBooksService.Common.Models.Settings
 {
     public class YandexCloudSettings
     {

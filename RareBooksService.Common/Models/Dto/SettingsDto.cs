@@ -14,5 +14,6 @@ namespace RareBooksService.Common.Models.Dto
         public YandexCloudDto? YandexCloud { get; set; }
         // Новый блок настроек SMTP
         public SmtpDto? Smtp { get; set; }
+        public CacheSettingsDto? CacheSettings { get; set; }
     }
 }

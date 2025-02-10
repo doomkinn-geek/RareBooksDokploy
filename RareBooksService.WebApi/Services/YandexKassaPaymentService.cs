@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Options;
 using RareBooksService.Common.Models;
+using RareBooksService.Common.Models.Settings;
 using System.Net;
 using Yandex.Checkout.V3;
 

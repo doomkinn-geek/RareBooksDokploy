@@ -49,6 +49,12 @@ const AdminPanel = () => {
         pass: ''
     });
 
+    const [cacheSettings, setCacheSettings] = useState({
+        localCachePath: '',
+        daysToKeep: 30,
+        maxCacheSizeMB: 200
+    });
+
     // ----- Сервис обновления книг
     const [bookUpdateStatus, setBookUpdateStatus] = useState({
         isPaused: false,
@@ -139,6 +145,11 @@ const AdminPanel = () => {
                     port: data.smtp?.Port ?? '587',
                     user: data.smtp?.User ?? '',
                     pass: data.smtp?.Pass ?? ''
+                });
+                setCacheSettings({
+                    localCachePath: data.cacheSettings?.LocalCachePath || 'image_cache',
+                    daysToKeep: data.cacheSettings?.DaysToKeep || 30,
+                    maxCacheSizeMB: data.cacheSettings?.MaxCacheSizeMB || 200
                 });
             } catch (err) {
                 console.error('Error fetching admin settings:', err);
@@ -361,6 +372,11 @@ const AdminPanel = () => {
                     port: smtp.port,
                     user: smtp.user,
                     pass: smtp.pass
+                },
+                cacheSettings: {
+                    localCachePath: cacheSettings.localCachePath,
+                    daysToKeep: Number(cacheSettings.daysToKeep),
+                    maxCacheSizeMB: Number(cacheSettings.maxCacheSizeMB)
                 }
             };
             await updateAdminSettings(settingsDto);
@@ -984,6 +1000,41 @@ const AdminPanel = () => {
                                         value={smtp.pass}
                                         onChange={(e) =>
                                             setSmtp({ ...smtp, pass: e.target.value })
+                                        }
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div style={{ backgroundColor: '#f9f9f9', padding: 10, marginBottom: 10 }}>
+                            <h4>CacheSettings</h4>
+                            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                <div>
+                                    <label>LocalCachePath:</label><br />
+                                    <input
+                                        type="text"
+                                        value={cacheSettings.localCachePath}
+                                        onChange={(e) =>
+                                            setCacheSettings({ ...cacheSettings, localCachePath: e.target.value })
+                                        }
+                                    />
+                                </div>
+                                <div>
+                                    <label>DaysToKeep:</label><br />
+                                    <input
+                                        type="number"
+                                        value={cacheSettings.daysToKeep}
+                                        onChange={(e) =>
+                                            setCacheSettings({ ...cacheSettings, daysToKeep: e.target.value })
+                                        }
+                                    />
+                                </div>
+                                <div>
+                                    <label>MaxCacheSizeMB:</label><br />
+                                    <input
+                                        type="number"
+                                        value={cacheSettings.maxCacheSizeMB}
+                                        onChange={(e) =>
+                                            setCacheSettings({ ...cacheSettings, maxCacheSizeMB: e.target.value })
                                         }
                                     />
                                 </div>

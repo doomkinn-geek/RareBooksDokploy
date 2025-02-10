@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using RareBooksService.Common.Models.Dto;
+using RareBooksService.Common.Models.Settings;
 using RareBooksService.Parser.Services;
 using System.IO.Compression;
 
@@ -30,254 +32,385 @@ namespace RareBooksService.WebApi.Services
         private readonly ILogger<BookImagesService> _logger;
         private readonly IYandexStorageService _yandexStorageService;
 
+        // Общий HttpClient (для загрузки из URL)
         private static readonly HttpClient _httpClient = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(10)
         };
 
+        // ------------ НАСТРОЙКИ КЭША ------------
+        private readonly string _cacheRootPath;
+        private readonly TimeSpan _cacheLifetime = TimeSpan.FromDays(30);
+        private static readonly object _cacheLock = new object();
+
         public BookImagesService(ILogger<BookImagesService> logger,
-                                 IYandexStorageService yandexStorageService)
+                                 IYandexStorageService yandexStorageService,
+                                IOptions<CacheSettings> cacheOptions)
         {
             _logger = logger;
             _yandexStorageService = yandexStorageService;
+
+            var c = cacheOptions.Value;
+            _cacheRootPath = Path.Combine(AppContext.BaseDirectory, c.LocalCachePath);
+            _cacheLifetime = TimeSpan.FromDays(c.DaysToKeep);
+
+            Directory.CreateDirectory(_cacheRootPath);
         }
 
-        // =======================
-        // 1) Получение списков изображений
-        // =======================
+        // ==================================================================================
+        //  (1) ПОЛУЧЕНИЕ СПИСКА ИЗОБРАЖЕНИЙ (+ работа с кэшем)
+        // ==================================================================================
         public async Task<(List<string> images, List<string> thumbnails)> GetBookImagesAsync(
             BookDetailDto book,
             bool hasSubscription,
             bool useLocalFiles)
         {
+            // 1. Если нет подписки -> пусто
             if (!hasSubscription)
-            {
-                // Нет подписки => пустой список
                 return (new List<string>(), new List<string>());
-            }
 
-            // Если лот малоценный => всегда прямые ссылки
+            // 2. Если IsLessValuable -> только URL, без fallback
             if (book.IsLessValuable)
             {
-                return DirectLinksApproach(book);
+                // если вообще нет ссылок -> пусто
+                if (book.ImageUrls == null || book.ImageUrls.Count == 0)
+                    return (new List<string>(), new List<string>());
+
+                // Проверяем доступность или наличие в кэше первой ссылки:
+                var firstUrl = book.ImageUrls[0];
+                bool firstOk = await CheckImageOrCacheAsync(book.Id, firstUrl, isThumbnail: false, fallbackForbidden: true);
+                if (!firstOk)
+                {
+                    // если первая недоступна -> пусто
+                    return (new List<string>(), new List<string>());
+                }
+
+                // если первая доступна -> обрабатываем все images
+                var imagesOk = new List<string>();
+                foreach (var url in book.ImageUrls)
+                {
+                    bool ok = await CheckImageOrCacheAsync(book.Id, url, false, fallbackForbidden: true);
+                    if (ok) imagesOk.Add(url);
+                }
+                // Аналогично для миниатюр
+                var thumbsOk = new List<string>();
+                if (book.ThumbnailUrls != null)
+                {
+                    foreach (var turl in book.ThumbnailUrls)
+                    {
+                        bool ok = await CheckImageOrCacheAsync(book.Id, turl, true, fallbackForbidden: true);
+                        if (ok) thumbsOk.Add(turl);
+                    }
+                }
+
+                return (imagesOk, thumbsOk);
             }
 
-            // Иначе (IsLessValuable = false) => проверяем первую ссылку
+            // 3. Если IsImagesCompressed -> читаем из архива (локально или S3),
+            //    складываем все файлы в кэш, возвращаем списки.
+            if (book.IsImagesCompressed)
+            {
+                return await FetchArchiveImagesAndCache(book, useLocalFiles);
+            }
+
+            // 4. Иначе (обычный лот) -> проверяем первую ссылку (кэш / URL)
+            //    если доступна -> «прямые ссылки»
+            //    если нет -> «legacy» (локальные файлы или S3)
             if (book.ImageUrls != null && book.ImageUrls.Count > 0)
             {
-                // Проверяем доступность первой ссылки
-                var firstLink = book.ImageUrls[0];
-                bool firstLinkOk = await CheckUrlAccessibleAsync(firstLink);
-                if (firstLinkOk)
+                var firstUrl = book.ImageUrls[0];
+                bool firstOk = await CheckImageOrCacheAsync(book.Id, firstUrl, false, fallbackForbidden: false);
+                if (firstOk)
                 {
-                    // если первая ссылка доступна -> используем DirectLinksApproach, 
-                    // игнорируя IsImagesCompressed
-                    return DirectLinksApproach(book);
+                    // Значит URL доступны
+                    var imagesOk = new List<string>();
+                    foreach (var url in book.ImageUrls)
+                    {
+                        bool ok = await CheckImageOrCacheAsync(book.Id, url, false, fallbackForbidden: false);
+                        if (ok) imagesOk.Add(url);
+                    }
+                    var thumbsOk = new List<string>();
+                    if (book.ThumbnailUrls != null)
+                    {
+                        foreach (var turl in book.ThumbnailUrls)
+                        {
+                            bool ok = await CheckImageOrCacheAsync(book.Id, turl, true, fallbackForbidden: false);
+                            if (ok) thumbsOk.Add(turl);
+                        }
+                    }
+                    return (imagesOk, thumbsOk);
                 }
             }
 
-            // Если дошли сюда, значит 
-            //   - первая ссылка отсутствует/недоступна 
-            //     (или book.ImageUrls == null/empty),
-            // => тогда переходим к архиву/legacy
-            if (book.IsImagesCompressed)
-            {
-                return await GetImagesFromArchive(book, useLocalFiles);
-            }
-            else
-            {
-                return await GetLegacyImagesAsync(book.Id, useLocalFiles);
-            }
+            // Если дошли сюда -> ссылка либо отсутствует, либо недоступна
+            // -> Legacy (S3 или локальные)
+            return await FetchLegacyImagesAndCache(book.Id, useLocalFiles);
         }
 
-        // =======================
-        // 2) Получение *одного* полноразмерного изображения
-        // =======================
+        // ==================================================================================
+        //  (2) ПОЛУЧЕНИЕ ПОЛНОРАЗМЕРНОГО ИЗОБРАЖЕНИЯ
+        // ==================================================================================
         public async Task<ActionResult?> GetImageAsync(
-        BookDetailDto book,
-        string imageName,
-        bool hasSubscription,
-        bool useLocalFiles)
+            BookDetailDto book,
+            string imageName,
+            bool hasSubscription,
+            bool useLocalFiles)
         {
-            // 2.1) Сначала проверяем подписку
+            // Проверка подписки
             if (!hasSubscription)
             {
                 return new ForbidResult("Требуется подписка для полноразмерных изображений.");
             }
 
-            // 2.2) Если `imageName` – это полная ссылка (http/https),
-            //      сразу «проксируем» без поиска в book.ImageUrls
-            if (IsAbsoluteUrl(imageName))
+            // Смотрим кэш
+            var cached = TryGetFromCache(book.Id, imageName, isThumbnail: false);
+            if (cached != null)
             {
-                _logger.LogInformation("GetImageAsync: Параметр imageName = абсолютная ссылка {Url}, проксируем напрямую", imageName);
-                return await ProxyImageAsync(imageName);
+                _logger.LogDebug("GetImageAsync: {0}/{1} найдено в кэше", book.Id, imageName);
+                return new FileStreamResult(cached, "image/jpeg");
             }
 
-            // 2.3) Иначе работаем по «старым» правилам
             if (book.IsLessValuable)
             {
-                // ищем fileName в book.ImageUrls
-                var matchingUrl = FindByFileName(book.ImageUrls, imageName);
-                if (matchingUrl == null)
+                // Только URL без fallback
+                var url = FindByFileName(book.ImageUrls, imageName);
+                if (url == null)
                 {
-                    _logger.LogWarning("Не найдена ссылка на изображение '{imageName}' (малоценный) у лота {bookId}", imageName, book.Id);
+                    _logger.LogWarning("Не найдена ссылка на изображение '{0}' (малоценный) у лота {1}", imageName, book.Id);
                     return new NotFoundResult();
                 }
-                return await ProxyImageAsync(matchingUrl);
+
+                var stream = await DownloadImageFromUrlAsync(url, TimeSpan.FromSeconds(1));
+                if (stream == null)
+                    return new NotFoundResult();
+
+                SaveFileToCache(book.Id, imageName, false, stream);
+                stream.Position = 0;
+                return new FileStreamResult(stream, "image/jpeg");
             }
             else
             {
-                // обычный лот
+                // Обычный лот
                 if (book.IsImagesCompressed)
                 {
-                    // архив
-                    return await GetFileFromArchive(book.ImageArchiveUrl, $"images/{imageName}", useLocalFiles);
+                    // Чтение из архива
+                    return await GetFileFromArchive(book, $"images/{imageName}", useLocalFiles);
                 }
                 else
                 {
-                    // legacy
-                    return await GetLegacyImageAsync(book.Id, imageName, isThumbnail: false, useLocalFiles);
+                    // Legacy или URL
+                    // Сначала URL (1 сек)
+                    if (book.ImageUrls != null && book.ImageUrls.Count > 0)
+                    {
+                        var matchingUrl = FindByFileName(book.ImageUrls, imageName);
+                        if (matchingUrl != null)
+                        {
+                            var stream = await DownloadImageFromUrlAsync(matchingUrl, TimeSpan.FromSeconds(1));
+                            if (stream != null)
+                            {
+                                SaveFileToCache(book.Id, imageName, false, stream);
+                                stream.Position = 0;
+                                return new FileStreamResult(stream, "image/jpeg");
+                            }
+                        }
+                    }
+
+                    // Fallback -> legacy (S3 или локал)
+                    return await GetLegacyImageAsync(book.Id, imageName, false, useLocalFiles);
                 }
             }
         }
 
-        // ---------------------------
-        // 3) Получение одной миниатюры
-        // ---------------------------
+        // ==================================================================================
+        //  (3) ПОЛУЧЕНИЕ МИНИАТЮРЫ
+        // ==================================================================================
         public async Task<ActionResult?> GetThumbnailAsync(
             BookDetailDto book,
             string thumbName,
             bool hasSubscription,
             bool useLocalFiles)
         {
-            // 3.1) Если thumbName – полная ссылка → проксируем
-            if (IsAbsoluteUrl(thumbName))
-            {
-                _logger.LogInformation("GetThumbnailAsync: Параметр thumbName = абсолютная ссылка {Url}, проксируем", thumbName);
-                return await ProxyImageAsync(thumbName);
-            }
-
-            // 3.2) Если лот малоценный → ищем, проксируем
-            if (book.IsLessValuable)
-            {
-                var matchingUrl = FindByFileName(book.ThumbnailUrls, thumbName);
-                if (matchingUrl == null)
-                {
-                    _logger.LogWarning("Не найдена ссылка на миниатюру '{thumbName}' (малоценный) у лота {bookId}", thumbName, book.Id);
-                    return new NotFoundResult();
-                }
-                return await ProxyImageAsync(matchingUrl);
-            }
-
-            // 3.3) Иначе проверяем подписку
-            if (!hasSubscription)
+            if (!book.IsLessValuable && !hasSubscription)
             {
                 return new ForbidResult("Требуется подписка для миниатюр (кроме малоценных).");
             }
 
-            // 3.4) Иначе обычный лот
-            if (book.IsImagesCompressed)
+            var cached = TryGetFromCache(book.Id, thumbName, true);
+            if (cached != null)
             {
-                return await GetFileFromArchive(book.ImageArchiveUrl, $"thumbnails/{thumbName}", useLocalFiles);
+                _logger.LogDebug("GetThumbnailAsync: {0}/{1} взято из кэша", book.Id, thumbName);
+                return new FileStreamResult(cached, "image/jpeg");
+            }
+
+            if (book.IsLessValuable)
+            {
+                var url = FindByFileName(book.ThumbnailUrls, thumbName);
+                if (url == null)
+                {
+                    _logger.LogWarning("Не найдена ссылка на миниатюру '{0}' (малоценный) у лота {1}", thumbName, book.Id);
+                    return new NotFoundResult();
+                }
+
+                var stream = await DownloadImageFromUrlAsync(url, TimeSpan.FromSeconds(1));
+                if (stream == null)
+                    return new NotFoundResult();
+
+                SaveFileToCache(book.Id, thumbName, true, stream);
+                stream.Position = 0;
+                return new FileStreamResult(stream, "image/jpeg");
             }
             else
             {
-                return await GetLegacyImageAsync(book.Id, thumbName, isThumbnail: true, useLocalFiles);
+                // Обычный
+                if (book.IsImagesCompressed)
+                {
+                    return await GetFileFromArchive(book, $"thumbnails/{thumbName}", useLocalFiles);
+                }
+                else
+                {
+                    // Legacy или URL
+                    if (book.ThumbnailUrls != null && book.ThumbnailUrls.Count > 0)
+                    {
+                        var matchingUrl = FindByFileName(book.ThumbnailUrls, thumbName);
+                        if (matchingUrl != null)
+                        {
+                            var stream = await DownloadImageFromUrlAsync(matchingUrl, TimeSpan.FromSeconds(1));
+                            if (stream != null)
+                            {
+                                SaveFileToCache(book.Id, thumbName, true, stream);
+                                stream.Position = 0;
+                                return new FileStreamResult(stream, "image/jpeg");
+                            }
+                        }
+                    }
+
+                    return await GetLegacyImageAsync(book.Id, thumbName, true, useLocalFiles);
+                }
             }
         }
 
-        // ~~~~~~~~~~~~~~~~~~~~~~~~~
-        //  ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
-        // ~~~~~~~~~~~~~~~~~~~~~~~~~
+        // ==================================================================================
+        //   ВСПОМОГАТЕЛЬНАЯ ЛОГИКА ДЛЯ GetBookImagesAsync
+        // ==================================================================================
 
-        private bool IsAbsoluteUrl(string val)
+        /// <summary>
+        /// Проверяет, есть ли файл в кэше (по URL -> имя файла).
+        /// Если нет — скачивает (1 сек) и складывает в кэш.
+        /// Если `fallbackForbidden = true`, то при неудаче вернётся false (без попытки взять из ObjectStorage).
+        /// Возвращает true, если файл либо взят из кэша, либо успешно скачан.
+        /// </summary>
+        private async Task<bool> CheckImageOrCacheAsync(int bookId, string url, bool isThumbnail, bool fallbackForbidden)
         {
-            // Либо простая проверка, либо более точная Uri.TryCreate(...)
-            return val.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
-                || val.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
-        }
+            var fileName = Path.GetFileName(url);
 
-        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        //  HELPER: "Direct Links" — как для малоценных
-        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        private (List<string> images, List<string> thumbnails) DirectLinksApproach(BookDetailDto book)
-        {
-            // Просто возвращаем те же ссылки, без проверки CheckUrlAccessibleAsync
-            // (иначе мы бы снова делали много лишних запросов)
-            // Но, если хотите, можно проверить каждую, 
-            // тогда (List<string> bigImages, List<string> thumbs) = ...
-            var bigImages = new List<string>(book.ImageUrls);
-            var thumbs = new List<string>(book.ThumbnailUrls);
-            return (bigImages, thumbs);
-        }
-
-        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        //  HELPER: Ищем URL, чей "файл" совпадает с imageName
-        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        private string? FindByFileName(List<string> urls, string targetFileName)
-        {
-            if (urls == null) return null;
-            foreach (var url in urls)
+            // 1) Проверка кэша
+            using var cached = TryGetFromCache(bookId, fileName, isThumbnail);
+            if (cached != null)
             {
-                var fileName = Path.GetFileName(url);
-                if (fileName.Equals(targetFileName, StringComparison.OrdinalIgnoreCase))
-                    return url;
+                return true;
             }
-            return null;
+
+            // 2) Скачиваем
+            var stream = await DownloadImageFromUrlAsync(url, TimeSpan.FromSeconds(1));
+            if (stream != null)
+            {
+                SaveFileToCache(bookId, fileName, isThumbnail, stream);
+                return true;
+            }
+
+            // 3) Не скачалось
+            if (fallbackForbidden)
+            {
+                // Нет fallback
+                return false;
+            }
+
+            // Иначе вернём false → вызывающий код решит пойти ли в Legacy / ObjectStorage
+            return false;
         }
 
-        // =======================
-        // 4) Чтение архива
-        // =======================
-        private async Task<(List<string> images, List<string> thumbnails)> GetImagesFromArchive(
+        /// <summary>
+        /// Извлекает список изображений из архива (локально или S3),
+        /// выкладывает их в кэш и возвращает (images, thumbnails).
+        /// </summary>
+        private async Task<(List<string> images, List<string> thumbnails)> FetchArchiveImagesAndCache(
             BookDetailDto book, bool useLocalFiles)
         {
             var images = new List<string>();
-            var thumbs = new List<string>();
+            var thumbnails = new List<string>();
 
             if (useLocalFiles)
             {
                 if (!File.Exists(book.ImageArchiveUrl))
                 {
-                    _logger.LogWarning("Archive not found: {ArchivePath}", book.ImageArchiveUrl);
-                    return (images, thumbs);
+                    _logger.LogWarning("Archive not found: {0}", book.ImageArchiveUrl);
+                    return (images, thumbnails);
                 }
-                using var archive = ZipFile.OpenRead(book.ImageArchiveUrl);
-                foreach (var entry in archive.Entries)
+
+                using var zip = ZipFile.OpenRead(book.ImageArchiveUrl);
+                foreach (var entry in zip.Entries)
                 {
                     if (string.IsNullOrEmpty(entry.Name)) continue;
-                    if (entry.FullName.StartsWith("thumbnails/"))
-                        thumbs.Add(entry.Name);
-                    else if (entry.FullName.StartsWith("images/"))
-                        images.Add(entry.Name);
+                    bool isThumb = entry.FullName.StartsWith("thumbnails/", StringComparison.OrdinalIgnoreCase);
+                    var fileName = entry.Name;
+
+                    // Проверяем кэш
+                    using var existing = TryGetFromCache(book.Id, fileName, isThumb);
+                    if (existing == null)
+                    {
+                        // Сохраняем
+                        using var es = entry.Open();
+                        using var ms = new MemoryStream();
+                        es.CopyTo(ms);
+                        ms.Position = 0;
+                        SaveFileToCache(book.Id, fileName, isThumb, ms);
+                    }
+
+                    if (isThumb) thumbnails.Add(fileName);
+                    else images.Add(fileName);
                 }
             }
             else
             {
+                // S3
                 var archiveStream = await _yandexStorageService.GetArchiveStreamAsync(book.ImageArchiveUrl);
                 if (archiveStream == null)
                 {
-                    _logger.LogWarning("Archive not found in object storage: {ArchiveUrl}", book.ImageArchiveUrl);
-                    return (images, thumbs);
+                    _logger.LogWarning("Archive not found in object storage: {0}", book.ImageArchiveUrl);
+                    return (images, thumbnails);
                 }
-                using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Read);
-                foreach (var entry in archive.Entries)
+
+                using var zip = new ZipArchive(archiveStream, ZipArchiveMode.Read);
+                foreach (var entry in zip.Entries)
                 {
                     if (string.IsNullOrEmpty(entry.Name)) continue;
-                    if (entry.FullName.StartsWith("thumbnails/"))
-                        thumbs.Add(entry.Name);
-                    else if (entry.FullName.StartsWith("images/"))
-                        images.Add(entry.Name);
+                    bool isThumb = entry.FullName.StartsWith("thumbnails/", StringComparison.OrdinalIgnoreCase);
+                    var fileName = entry.Name;
+
+                    using var existing = TryGetFromCache(book.Id, fileName, isThumb);
+                    if (existing == null)
+                    {
+                        using var es = entry.Open();
+                        using var ms = new MemoryStream();
+                        es.CopyTo(ms);
+                        ms.Position = 0;
+                        SaveFileToCache(book.Id, fileName, isThumb, ms);
+                    }
+
+                    if (isThumb) thumbnails.Add(fileName);
+                    else images.Add(fileName);
                 }
             }
 
-            return (images, thumbs);
+            return (images, thumbnails);
         }
 
-        // =======================
-        // 5) "Legacy" (без архива)
-        // =======================
-        private async Task<(List<string>, List<string>)> GetLegacyImagesAsync(int bookId, bool useLocalFiles)
+        /// <summary>
+        /// Для "legacy" (S3 или локальные папки): получаем все имена,
+        /// скачиваем и складываем в кэш, возвращаем списки.
+        /// </summary>
+        private async Task<(List<string> images, List<string> thumbnails)> FetchLegacyImagesAndCache(
+            int bookId, bool useLocalFiles)
         {
             var images = new List<string>();
             var thumbs = new List<string>();
@@ -290,47 +423,124 @@ namespace RareBooksService.WebApi.Services
                 var thumbsPath = Path.Combine(basePath, "thumbnails");
 
                 if (Directory.Exists(imagesPath))
-                    images.AddRange(Directory.GetFiles(imagesPath).Select(Path.GetFileName));
+                {
+                    foreach (var path in Directory.GetFiles(imagesPath))
+                    {
+                        var fileName = Path.GetFileName(path);
+                        using var existing = TryGetFromCache(bookId, fileName, false);
+                        if (existing == null)
+                        {
+                            using var fs = File.OpenRead(path);
+                            using var ms = new MemoryStream();
+                            fs.CopyTo(ms);
+                            ms.Position = 0;
+                            SaveFileToCache(bookId, fileName, false, ms);
+                        }
+                        images.Add(fileName);
+                    }
+                }
+
                 if (Directory.Exists(thumbsPath))
-                    thumbs.AddRange(Directory.GetFiles(thumbsPath).Select(Path.GetFileName));
+                {
+                    foreach (var path in Directory.GetFiles(thumbsPath))
+                    {
+                        var fileName = Path.GetFileName(path);
+                        using var existing = TryGetFromCache(bookId, fileName, true);
+                        if (existing == null)
+                        {
+                            using var fs = File.OpenRead(path);
+                            using var ms = new MemoryStream();
+                            fs.CopyTo(ms);
+                            ms.Position = 0;
+                            SaveFileToCache(bookId, fileName, true, ms);
+                        }
+                        thumbs.Add(fileName);
+                    }
+                }
             }
             else
             {
                 // S3
                 var keysImg = await _yandexStorageService.GetImageKeysAsync(bookId);
                 var keysThumb = await _yandexStorageService.GetThumbnailKeysAsync(bookId);
-                images.AddRange(keysImg);
-                thumbs.AddRange(keysThumb);
+
+                foreach (var key in keysImg)
+                {
+                    using var existing = TryGetFromCache(bookId, key, false);
+                    if (existing == null)
+                    {
+                        var stream = await _yandexStorageService.GetImageStreamAsync($"{bookId}/images/{key}");
+                        if (stream != null)
+                        {
+                            using var ms = new MemoryStream();
+                            await stream.CopyToAsync(ms);
+                            ms.Position = 0;
+                            SaveFileToCache(bookId, key, false, ms);
+                        }
+                    }
+                    images.Add(key);
+                }
+
+                foreach (var key in keysThumb)
+                {
+                    using var existing = TryGetFromCache(bookId, key, true);
+                    if (existing == null)
+                    {
+                        var stream = await _yandexStorageService.GetThumbnailStreamAsync($"{bookId}/thumbnails/{key}");
+                        if (stream != null)
+                        {
+                            using var ms = new MemoryStream();
+                            await stream.CopyToAsync(ms);
+                            ms.Position = 0;
+                            SaveFileToCache(bookId, key, true, ms);
+                        }
+                    }
+                    thumbs.Add(key);
+                }
             }
 
             return (images, thumbs);
         }
 
-        // =======================
-        // 6) Читаем файл из архива
-        // =======================
+        // ==================================================================================
+        //  Чтение одного файла из архива
+        // ==================================================================================
         private async Task<ActionResult?> GetFileFromArchive(
-            string archiveUrl, string entryPath, bool useLocalFiles)
+            BookDetailDto book,
+            string entryPath,
+            bool useLocalFiles)
         {
+            // Сначала проверим в кэше
+            var fileName = Path.GetFileName(entryPath);
+            bool isThumb = entryPath.StartsWith("thumbnails/", StringComparison.OrdinalIgnoreCase);
+
+            var cached = TryGetFromCache(book.Id, fileName, isThumb);
+            if (cached != null)
+            {
+                _logger.LogDebug("GetFileFromArchive: {0}/{1} из кэша", book.Id, fileName);
+                return new FileStreamResult(cached, "image/jpeg");
+            }
+
             if (useLocalFiles)
             {
-                if (!File.Exists(archiveUrl))
-                {
+                if (!File.Exists(book.ImageArchiveUrl))
                     return new NotFoundResult();
-                }
-                using var zip = ZipFile.OpenRead(archiveUrl);
+
+                using var zip = ZipFile.OpenRead(book.ImageArchiveUrl);
                 var entry = zip.GetEntry(entryPath);
                 if (entry == null) return new NotFoundResult();
 
-                using var entryStream = entry.Open();
-                var ms = new MemoryStream();
-                await entryStream.CopyToAsync(ms);
+                using var es = entry.Open();
+                using var ms = new MemoryStream();
+                await es.CopyToAsync(ms);
+                ms.Position = 0;
+                SaveFileToCache(book.Id, fileName, isThumb, ms);
                 ms.Position = 0;
                 return new FileStreamResult(ms, "image/jpeg");
             }
             else
             {
-                var archiveStream = await _yandexStorageService.GetArchiveStreamAsync(archiveUrl);
+                var archiveStream = await _yandexStorageService.GetArchiveStreamAsync(book.ImageArchiveUrl);
                 if (archiveStream == null) return new NotFoundResult();
 
                 using var zip = new ZipArchive(archiveStream, ZipArchiveMode.Read);
@@ -338,80 +548,169 @@ namespace RareBooksService.WebApi.Services
                 if (entry == null) return new NotFoundResult();
 
                 using var es = entry.Open();
-                var ms = new MemoryStream();
+                using var ms = new MemoryStream();
                 await es.CopyToAsync(ms);
+                ms.Position = 0;
+                SaveFileToCache(book.Id, fileName, isThumb, ms);
                 ms.Position = 0;
                 return new FileStreamResult(ms, "image/jpeg");
             }
         }
 
-        // =======================
-        // 7) "Legacy" выдача одного файла
-        // =======================
+        // ==================================================================================
+        //  Legacy: один файл (S3 или локальные)
+        // ==================================================================================
         private async Task<ActionResult?> GetLegacyImageAsync(
-            int bookId, string fileName, bool isThumbnail, bool useLocalFiles)
+            int bookId,
+            string fileName,
+            bool isThumbnail,
+            bool useLocalFiles)
         {
+            var cached = TryGetFromCache(bookId, fileName, isThumbnail);
+            if (cached != null)
+            {
+                return new FileStreamResult(cached, "image/jpeg");
+            }
+
             if (useLocalFiles)
             {
                 string basePath = Path.Combine(AppContext.BaseDirectory, "books_photos", bookId.ToString());
                 var folder = isThumbnail ? "thumbnails" : "images";
                 var path = Path.Combine(basePath, folder, fileName);
-                if (!File.Exists(path)) return new NotFoundResult();
 
-                var stream = File.OpenRead(path);
-                return new FileStreamResult(stream, "image/jpeg");
+                if (!File.Exists(path))
+                    return new NotFoundResult();
+
+                using var fs = File.OpenRead(path);
+                using var ms = new MemoryStream();
+                fs.CopyTo(ms);
+                ms.Position = 0;
+                SaveFileToCache(bookId, fileName, isThumbnail, ms);
+                ms.Position = 0;
+                return new FileStreamResult(ms, "image/jpeg");
             }
             else
             {
-                // S3
                 var prefix = isThumbnail ? "thumbnails" : "images";
                 var key = $"{bookId}/{prefix}/{fileName}";
-                Stream imageStream = null;
-                if (isThumbnail)
-                    imageStream = await _yandexStorageService.GetThumbnailStreamAsync(key);
-                else
-                    imageStream = await _yandexStorageService.GetImageStreamAsync(key);
 
-                if (imageStream == null) return new NotFoundResult();
-                return new FileStreamResult(imageStream, "image/jpeg");
+                var stream = isThumbnail
+                    ? await _yandexStorageService.GetThumbnailStreamAsync(key)
+                    : await _yandexStorageService.GetImageStreamAsync(key);
+
+                if (stream == null)
+                    return new NotFoundResult();
+
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                ms.Position = 0;
+                SaveFileToCache(bookId, fileName, isThumbnail, ms);
+                ms.Position = 0;
+
+                return new FileStreamResult(ms, "image/jpeg");
             }
         }
 
-        // =======================
-        // 8) "Прокси": скачать по внешней ссылке
-        // =======================
-        private async Task<ActionResult?> ProxyImageAsync(string url)
+        // ==================================================================================
+        //  Загрузка из URL (с таймаутом)
+        // ==================================================================================
+        private async Task<MemoryStream?> DownloadImageFromUrlAsync(string url, TimeSpan timeout)
         {
             try
             {
-                using var resp = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+                using var cts = new CancellationTokenSource(timeout);
+                var resp = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cts.Token);
                 if (!resp.IsSuccessStatusCode)
-                    return null; // вернуть 404? => можно return new NotFoundResult()
+                    return null;
 
-                var contentType = resp.Content.Headers.ContentType?.ToString() ?? "image/jpeg";
-                var stream = await resp.Content.ReadAsStreamAsync();
-                return new FileStreamResult(stream, contentType);
+                var ms = new MemoryStream();
+                await resp.Content.CopyToAsync(ms);
+                ms.Position = 0;
+                return ms;
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogWarning("Не удалось скачать изображение {0}: {1}", url, ex.Message);
                 return null;
             }
         }
 
-        // =======================
-        // 9) Проверяем доступность URL
-        // =======================
-        private async Task<bool> CheckUrlAccessibleAsync(string url)
+        private string? FindByFileName(List<string>? urls, string targetFileName)
         {
-            try
+            if (urls == null) return null;
+            foreach (var u in urls)
             {
-                using var resp = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
-                return resp.IsSuccessStatusCode;
+                var fn = Path.GetFileName(u);
+                if (fn.Equals(targetFileName, StringComparison.OrdinalIgnoreCase))
+                    return u;
             }
-            catch
+            return null;
+        }
+
+        // ==================================================================================
+        //  КЭШ: запись / чтение / удаление устаревших
+        // ==================================================================================
+        private FileStream? TryGetFromCache(int bookId, string fileName, bool isThumbnail)
+        {
+            lock (_cacheLock)
             {
-                return false;
+                string path = GetCacheFilePath(bookId, fileName, isThumbnail);
+                if (!File.Exists(path))
+                    return null;
+
+                var fi = new FileInfo(path);
+                var age = DateTime.UtcNow - fi.LastWriteTimeUtc;
+                if (age > _cacheLifetime)
+                {
+                    // устарел
+                    try
+                    {
+                        File.Delete(path);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning("Ошибка удаления устаревшего файла кэша {0}: {1}", path, ex.Message);
+                    }
+                    return null;
+                }
+
+                try
+                {
+                    return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning("Ошибка при чтении файла кэша {0}: {1}", path, ex.Message);
+                    return null;
+                }
             }
+        }
+
+        private void SaveFileToCache(int bookId, string fileName, bool isThumbnail, MemoryStream source)
+        {
+            lock (_cacheLock)
+            {
+                source.Position = 0;
+                string path = GetCacheFilePath(bookId, fileName, isThumbnail);
+
+                try
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                    using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
+                    source.CopyTo(fs);
+                    fs.Flush();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning("Ошибка сохранения файла в кэш {0}: {1}", path, ex.Message);
+                }
+            }
+        }
+
+        private string GetCacheFilePath(int bookId, string fileName, bool isThumbnail)
+        {
+            var folder = isThumbnail ? "thumbnails" : "images";
+            return Path.Combine(_cacheRootPath, bookId.ToString(), folder, fileName);
         }
     }
 }

@@ -60,6 +60,8 @@ namespace RareBooksService.WebApi.Controllers
                     return BadRequest("Could not parse appsettings.json");
                 }
 
+
+
                 // Собираем нужные объекты (пример)
                 var yandexKassaNode = rootNode["YandexKassa"]?.AsObject();
                 var yandexDiskNode = rootNode["YandexDisk"]?.AsObject();
@@ -67,13 +69,17 @@ namespace RareBooksService.WebApi.Controllers
                 var yandexCloudNode = rootNode["YandexCloud"]?.AsObject();
                 var smtpNode = rootNode["Smtp"]?.AsObject();
 
+                var cacheSettingsNode = rootNode["CacheSettings"]?.AsObject();
+
                 return Ok(new
                 {
                     YandexKassa = yandexKassaNode,
                     YandexDisk = yandexDiskNode,
                     TypeOfAccessImages = typeOfAccessImagesNode,
                     YandexCloud = yandexCloudNode,
-                    Smtp = smtpNode
+                    Smtp = smtpNode,
+
+                    CacheSettings = cacheSettingsNode
                 });
             }
             catch (Exception ex)
@@ -159,6 +165,16 @@ namespace RareBooksService.WebApi.Controllers
                     smtpNode["User"] = dto.Smtp.User;
                     smtpNode["Pass"] = dto.Smtp.Pass;
                     rootNode["Smtp"] = smtpNode;
+                }
+
+                // ========== (2) CacheSettings =========
+                if (dto.CacheSettings != null)
+                {
+                    var cacheNode = rootNode["CacheSettings"] as JsonObject ?? new JsonObject();
+                    cacheNode["LocalCachePath"] = dto.CacheSettings.LocalCachePath;
+                    cacheNode["DaysToKeep"] = dto.CacheSettings.DaysToKeep;
+                    cacheNode["MaxCacheSizeMB"] = dto.CacheSettings.MaxCacheSizeMB;
+                    rootNode["CacheSettings"] = cacheNode;
                 }
 
                 // Записываем обновлённый JSON обратно в файл

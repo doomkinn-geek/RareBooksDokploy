@@ -10,6 +10,7 @@ import DOMPurify from 'dompurify';
 const BookDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+
     const [book, setBook] = useState(null);
     const [imageUrls, setImageUrls] = useState([]);
     const [error, setError] = useState(null);
@@ -33,30 +34,46 @@ const BookDetail = () => {
 
         const fetchBookImages = async () => {
             try {
+                // 1) Получаем список имён/ссылок на изображения
                 const response = await getBookImages(id);
                 const images = response.data.images; // массив строк
-
-                // Если массив пуст — всё просто
                 if (!images || images.length === 0) {
                     setImageUrls([]);
                     return;
                 }
 
-                // Определим, являются ли все ссылки "внешними"
-                // (проверим первый элемент, или даже все — смотря как вы хотите)
+                // Проверяем, являются ли ссылки внешними (http/https)
                 if (images[0].startsWith("http://") || images[0].startsWith("https://")) {
-                    // => Малоценный лот: сервер вернул "живые" ссылки
-                    // Сразу используем их в <img src="...">
-                    setImageUrls(images);
+                    // Малоценный лот (сервер вернул "живые" ссылки).
+                    // Браузер сам будет грузить их параллельно, и отображать постепенно,
+                    // но мы сразу добавим их в стейт (по одной), чтобы React сразу создал <img>.
+                    setImageUrls([]); // очищаем перед началом
+                    for (let i = 0; i < images.length; i++) {
+                        // Можно сделать небольшую задержку await, если хотим строго «по одной».
+                        // Но в большинстве случаев достаточно просто
+                        setImageUrls(prev => [...prev, images[i]]);
+                        // Браузер начнет их грузить, отображение произойдет по мере загрузки <img src=...>.
+                    }
                 } else {
-                    // => "обычный" режим: нужно поштучно вызвать /books/{id}/images/{imageName}
-                    const imageBlobs = await Promise.all(
-                        images.map(async (imageName) => {
+                    // "Обычный" режим: имена файлов -> нужно вызвать /books/{id}/images/{imageName}
+                    setImageUrls([]); // сначала очищаем
+                    for (let i = 0; i < images.length; i++) {
+                        const imageName = images[i];
+                        try {
+                            // 2) Запрашиваем конкретный файл (blob)
                             const imageResponse = await getBookImageFile(id, imageName);
-                            return URL.createObjectURL(imageResponse.data);
-                        })
-                    );
-                    setImageUrls(imageBlobs);
+                            // 3) Превращаем blob в "blob URL", который можно поставить в <img src=...>
+                            const blobUrl = URL.createObjectURL(imageResponse.data);
+
+                            // 4) Добавляем в стейт. Т.к. мы делаем это в цикле, React
+                            //    будет обновлять компонент и добавлять <img> по мере готовности каждого файла.
+                            setImageUrls(prevArray => [...prevArray, blobUrl]);
+                        } catch (err) {
+                            console.error("Ошибка при загрузке изображения:", imageName, err);
+                            // Можно просто пропускать ошибочные изображения,
+                            // либо выводить уведомление, в зависимости от вашей логики.
+                        }
+                    }
                 }
             } catch (err) {
                 console.error("Ошибка при получении изображений:", err);
@@ -65,6 +82,7 @@ const BookDetail = () => {
             }
         };
 
+        // Запрашиваем данные о книге и список/загрузку изображений
         fetchBookDetails();
         fetchBookImages();
     }, [id]);
@@ -87,10 +105,6 @@ const BookDetail = () => {
 
     return (
         <div className="container">
-            {/* 
-               Удаляем/упрощаем второй большой header,
-               пусть остается только общий header из App.jsx или Home.jsx
-            */}
             <Card sx={{ marginTop: 2 }}>
                 <CardContent>
                     <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
@@ -152,9 +166,8 @@ const BookDetail = () => {
                 </CardContent>
             </Card>
 
-            {/* Можно добавить футер, если хотите */}
             <footer className="footer" style={{ marginTop: '20px' }}>
-                <p>&copy; 2024 Rare Books Service. All rights reserved.</p>
+                <p>&copy; 2025 Rare Books Service. All rights reserved.</p>
             </footer>
         </div>
     );
