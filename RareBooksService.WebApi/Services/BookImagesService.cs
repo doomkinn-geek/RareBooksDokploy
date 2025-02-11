@@ -101,9 +101,9 @@ namespace RareBooksService.WebApi.Services
         //   1) Получение списков файлов (названий)
         // ======================================================================
         public async Task<(List<string> images, List<string> thumbnails)> GetBookImagesAsync(
-            BookDetailDto book,
-            bool hasSubscription,
-            bool useLocalFiles)
+    BookDetailDto book,
+    bool hasSubscription,
+    bool useLocalFiles)
         {
             // Если нет подписки, возвращаем пустые списки
             if (!hasSubscription)
@@ -111,23 +111,36 @@ namespace RareBooksService.WebApi.Services
                 return (new List<string>(), new List<string>());
             }
 
-            // Предполагаем, что поля book.ImageUrls и book.ThumbnailUrls
-            // уже содержат ссылки (URL), либо в случае "legacy/zip" — какие-то placeholder'ы,
-            // но, согласно задаче, нам нужны только ИМЕНА файлов.
+            // Функция, которая берёт fileName через Path.GetFileName,
+            // а потом убирает всё, что идёт после '?' или '#'
+            string ExtractCleanFileName(string url)
+            {
+                var name = Path.GetFileName(url); // например, "326167636.0.jpg?1"
+                if (string.IsNullOrEmpty(name)) return string.Empty;
+
+                // Ищем индекс '?' или '#'
+                var idx = name.IndexOfAny(new char[] { '?', '#' });
+                if (idx >= 0)
+                {
+                    // Если нашли, обрезаем до этого места
+                    name = name.Substring(0, idx);
+                }
+                return name;
+            }
+
             var images = (book.ImageUrls ?? new List<string>())
-                .Select(url => Path.GetFileName(url))
+                .Select(url => ExtractCleanFileName(url))
                 .Where(name => !string.IsNullOrEmpty(name))
                 .ToList();
 
             var thumbnails = (book.ThumbnailUrls ?? new List<string>())
-                .Select(url => Path.GetFileName(url))
+                .Select(url => ExtractCleanFileName(url))
                 .Where(name => !string.IsNullOrEmpty(name))
                 .ToList();
 
-            // Возвращаем именно имена, чтобы фронтенд делал запрос /books/{id}/images/{name}
-            // (или /thumbnails/{name})
             return (images, thumbnails);
         }
+
 
         // ======================================================================
         //   2) Получение ОДНОГО полноразмерного изображения
