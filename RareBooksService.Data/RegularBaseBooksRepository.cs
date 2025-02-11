@@ -84,7 +84,7 @@ namespace RareBooksService.Data
             int page,
             int pageSize)
         {
-            //baseQuery = baseQuery.Where(x => x.SoldQuantity > 0);
+            baseQuery = baseQuery.Where(x => x.SoldQuantity > 0);
             // Считаем общее кол-во
             var totalItems = await baseQuery.CountAsync();
             var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
@@ -92,7 +92,7 @@ namespace RareBooksService.Data
             // Выбираем нужные данные
             var rawData = await baseQuery
                 // дополнительно фильтруем: SoldQuantity>0 (как в вашем коде)
-                //.Where(b => b.SoldQuantity > 0)
+                .Where(b => b.SoldQuantity > 0)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .Select(b => new
