@@ -20,27 +20,40 @@ namespace RareBooksService.WebApi.Services
 
         public async Task SendEmailAsync(string toEmail, string subject, string body)
         {
-            // Читаем настройки SMTP из appsettings.json
-            var smtpHost = _configuration["Smtp:Host"];
-            var smtpPort = int.Parse(_configuration["Smtp:Port"] ?? "25");
-            var smtpUser = _configuration["Smtp:User"];
-            var smtpPass = _configuration["Smtp:Pass"];
-
-            using (var client = new SmtpClient(smtpHost, smtpPort))
+            try
             {
-                client.Credentials = new NetworkCredential(smtpUser, smtpPass);
-                client.EnableSsl = true; // если нужен SSL
+                // Читаем настройки SMTP из appsettings.json
+                var smtpHost = _configuration["Smtp:Host"];  // например, "smtp.example.com"
+                var smtpPort = 587;                          // или тянете из конфига, если там так записано
+                var smtpUser = _configuration["Smtp:User"];
+                var smtpPass = _configuration["Smtp:Pass"];
 
-                var mail = new MailMessage
+                using (var client = new SmtpClient(smtpHost, smtpPort))
                 {
-                    From = new MailAddress(smtpUser),
-                    Subject = subject,
-                    Body = body,
-                    IsBodyHtml = false
-                };
-                mail.To.Add(toEmail);
+                    client.UseDefaultCredentials = false;
+                    client.Credentials = new NetworkCredential(smtpUser, smtpPass);
 
-                await client.SendMailAsync(mail);
+                    // Для STARTTLS: EnableSsl = true
+                    client.EnableSsl = true;
+
+                    // Можно установить таймаут, чтобы не «висло» бесконечно при ошибке
+                    client.Timeout = 2000; 
+
+                    var mail = new MailMessage
+                    {
+                        From = new MailAddress(smtpUser),
+                        Subject = subject,
+                        Body = body,
+                        IsBodyHtml = false
+                    };
+                    mail.To.Add(toEmail);
+
+                    await client.SendMailAsync(mail);
+                }
+            }
+            catch (Exception ex)
+            {
+                ;
             }
         }
     }

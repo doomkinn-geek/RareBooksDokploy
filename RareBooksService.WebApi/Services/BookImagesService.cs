@@ -105,43 +105,28 @@ namespace RareBooksService.WebApi.Services
             bool hasSubscription,
             bool useLocalFiles)
         {
-            // 1) Если нет подписки — возвращаем пустой список
-            // (Хотя контроллер уже это проверил, дублируем логику для безопасности)
+            // Если нет подписки, возвращаем пустые списки
             if (!hasSubscription)
             {
                 return (new List<string>(), new List<string>());
             }
 
-            // 2) Малоценные книги: только внешние URL
-            if (book.IsLessValuable)
-            {
-                // Берём имена файлов из URL
-                // Если url пустые — значит картинок нет
-                var imageNames = book.ImageUrls?
-                    .Select(url => Path.GetFileName(url))
-                    .ToList() ?? new List<string>();
+            // Предполагаем, что поля book.ImageUrls и book.ThumbnailUrls
+            // уже содержат ссылки (URL), либо в случае "legacy/zip" — какие-то placeholder'ы,
+            // но, согласно задаче, нам нужны только ИМЕНА файлов.
+            var images = (book.ImageUrls ?? new List<string>())
+                .Select(url => Path.GetFileName(url))
+                .Where(name => !string.IsNullOrEmpty(name))
+                .ToList();
 
-                var thumbNames = book.ThumbnailUrls?
-                    .Select(url => Path.GetFileName(url))
-                    .ToList() ?? new List<string>();
+            var thumbnails = (book.ThumbnailUrls ?? new List<string>())
+                .Select(url => Path.GetFileName(url))
+                .Where(name => !string.IsNullOrEmpty(name))
+                .ToList();
 
-                return (imageNames, thumbNames);
-            }
-            else
-            {
-                // 3) Обычные книги
-                if (book.IsImagesCompressed)
-                {
-                    // Сжато => откроем архив (локально или из Object Storage),
-                    // прочитаем список файлов (entry.FullName).
-                    return await FetchArchiveFileList(book, useLocalFiles);
-                }
-                else
-                {
-                    // "Legacy" => прочитаем список из папки или Object Storage
-                    return await FetchLegacyFileList(book.Id, useLocalFiles);
-                }
-            }
+            // Возвращаем именно имена, чтобы фронтенд делал запрос /books/{id}/images/{name}
+            // (или /thumbnails/{name})
+            return (images, thumbnails);
         }
 
         // ======================================================================
