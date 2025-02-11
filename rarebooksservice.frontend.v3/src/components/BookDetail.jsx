@@ -1,7 +1,11 @@
 ﻿// src/components/BookDetail.jsx
 import React, { useEffect, useState } from 'react';
-import { useParams, useLocation, useNavigate, Link } from 'react-router-dom';
-import { getBookById, getBookImages, getBookImageFile } from '../api';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import {
+    getBookById,
+    getBookImages,
+    getBookImageFile
+} from '../api';
 import { Card, CardContent, Typography, Box, Button } from '@mui/material';
 import { SlideshowLightbox, initLightboxJS } from 'lightbox.js-react';
 import 'lightbox.js-react/dist/index.css';
@@ -16,9 +20,20 @@ const BookDetail = () => {
     const [error, setError] = useState(null);
     const [errorDetails, setErrorDetails] = useState(null);
 
+    // 1) Вызовем initLightboxJS один раз при монтировании (чтобы включить плагины)
     useEffect(() => {
         initLightboxJS("YOUR_LICENSE_KEY", "individual");
+    }, []);
 
+    // 2) Когда imageUrls изменяется, повторно инициализируем лайтбокс
+    //    (иначе он «не увидит» новые <img>)
+    useEffect(() => {
+        if (imageUrls.length > 0) {
+            initLightboxJS("YOUR_LICENSE_KEY", "individual");
+        }
+    }, [imageUrls]);
+
+    useEffect(() => {
         const fetchBookDetails = async () => {
             try {
                 const response = await getBookById(id);
@@ -34,47 +49,42 @@ const BookDetail = () => {
 
         const fetchBookImages = async () => {
             try {
-                // 1) Получаем список имён/ссылок на изображения
                 const response = await getBookImages(id);
-                const images = response.data.images; // массив строк
+                const { images = [], thumbnails = [] } = response.data;
+
                 if (!images || images.length === 0) {
                     setImageUrls([]);
                     return;
                 }
 
-                // Проверяем, являются ли ссылки внешними (http/https)
-                if (images[0].startsWith("http://") || images[0].startsWith("https://")) {
-                    // Малоценный лот (сервер вернул "живые" ссылки).
-                    // Браузер сам будет грузить их параллельно, и отображать постепенно,
-                    // но мы сразу добавим их в стейт (по одной), чтобы React сразу создал <img>.
-                    setImageUrls([]); // очищаем перед началом
-                    for (let i = 0; i < images.length; i++) {
-                        // Можно сделать небольшую задержку await, если хотим строго «по одной».
-                        // Но в большинстве случаев достаточно просто
-                        setImageUrls(prev => [...prev, images[i]]);
-                        // Браузер начнет их грузить, отображение произойдет по мере загрузки <img src=...>.
+                // Проверяем, являются ли это внешние ссылки
+                const firstItem = images[0];
+                const isExternalLink = firstItem.startsWith('http://') || firstItem.startsWith('https://');
+
+                // Здесь мы собираем finalArray (а не вызываем setImageUrls в цикле)
+                const finalArray = [];
+
+                if (isExternalLink) {
+                    // Малоценная книга: все URL — внешние ссылки
+                    for (const url of images) {
+                        finalArray.push(url);
                     }
                 } else {
-                    // "Обычный" режим: имена файлов -> нужно вызвать /books/{id}/images/{imageName}
-                    setImageUrls([]); // сначала очищаем
-                    for (let i = 0; i < images.length; i++) {
-                        const imageName = images[i];
+                    // Обычная книга: имена файлов => скачиваем BLOB
+                    for (const fileName of images) {
                         try {
-                            // 2) Запрашиваем конкретный файл (blob)
-                            const imageResponse = await getBookImageFile(id, imageName);
-                            // 3) Превращаем blob в "blob URL", который можно поставить в <img src=...>
-                            const blobUrl = URL.createObjectURL(imageResponse.data);
-
-                            // 4) Добавляем в стейт. Т.к. мы делаем это в цикле, React
-                            //    будет обновлять компонент и добавлять <img> по мере готовности каждого файла.
-                            setImageUrls(prevArray => [...prevArray, blobUrl]);
+                            const resp = await getBookImageFile(id, fileName);
+                            const blobUrl = URL.createObjectURL(resp.data);
+                            finalArray.push(blobUrl);
                         } catch (err) {
-                            console.error("Ошибка при загрузке изображения:", imageName, err);
-                            // Можно просто пропускать ошибочные изображения,
-                            // либо выводить уведомление, в зависимости от вашей логики.
+                            console.error('Ошибка при загрузке', fileName, err);
                         }
                     }
                 }
+
+                // После того как мы собрали все ссылки/blob, одним махом добавляем в state
+                setImageUrls(finalArray);
+
             } catch (err) {
                 console.error("Ошибка при получении изображений:", err);
                 setError("Failed to load book images.");
@@ -82,7 +92,6 @@ const BookDetail = () => {
             }
         };
 
-        // Запрашиваем данные о книге и список/загрузку изображений
         fetchBookDetails();
         fetchBookImages();
     }, [id]);
@@ -94,7 +103,9 @@ const BookDetail = () => {
                 {errorDetails && (
                     <Typography color="textSecondary">{errorDetails}</Typography>
                 )}
-                <Button variant="contained" onClick={() => navigate(-1)}>Назад</Button>
+                <Button variant="contained" onClick={() => navigate(-1)}>
+                    Назад
+                </Button>
             </div>
         );
     }
@@ -145,12 +156,12 @@ const BookDetail = () => {
                                     <img
                                         key={index}
                                         src={url}
-                                        alt="Book"
+                                        alt={`Book Image ${index}`}
                                         style={{
                                             width: '100%',
                                             maxWidth: '700px',
                                             height: 'auto',
-                                            objectFit: 'contain'
+                                            objectFit: 'contain',
                                         }}
                                     />
                                 ))}

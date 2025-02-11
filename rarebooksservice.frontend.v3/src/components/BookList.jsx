@@ -2,16 +2,21 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, Typography, Box, Button, Pagination } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { getBookImageFile } from '../api';
+import axios from 'axios';
+import { API_URL, getAuthHeaders } from '../api';
+
+function getBookImageFile(id, imageName) {
+    return axios.get(`${API_URL}/books/${id}/images/${imageName}`, {
+        headers: getAuthHeaders(),
+        responseType: 'blob',
+    });
+}
 
 const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
     const navigate = useNavigate();
-
-    // храним URL'ы миниатюр по ключу bookId
     const [thumbnails, setThumbnails] = useState({});
     const [error, setError] = useState('');
 
-    // При изменении books загружаем миниатюры
     useEffect(() => {
         if (!books || books.length === 0) {
             setThumbnails({});
@@ -21,59 +26,37 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
         setThumbnails({});
         setError('');
 
-        books.forEach((book) => {
-            if (!book.firstImageName) {
-                return; // у книги нет изображения
-            }
+        let cancelled = false;
 
-            // Проверяем, является ли firstImageName "внешней" ссылкой
-            if (
-                book.firstImageName.startsWith('http://') ||
-                book.firstImageName.startsWith('https://')
-            ) {
-                // Малоценный лот: просто сохраняем URL как есть
-                setThumbnails((prev) => ({
-                    ...prev,
-                    [book.id]: book.firstImageName,
-                }));
-            } else {
-                // Обычный лот: скачиваем миниатюру через API
-                getBookImageFile(book.id, book.firstImageName)
-                    .then((response) => {
-                        const blobUrl = URL.createObjectURL(response.data);
-                        setThumbnails((prev) => ({
-                            ...prev,
-                            [book.id]: blobUrl,
-                        }));
-                    })
-                    .catch((err) => {
-                        console.error(
-                            'Ошибка при загрузке миниатюры для книги',
-                            book.id,
-                            err
-                        );
-                        setError('Не удалось загрузить некоторые миниатюры.');
-                    });
-            }
+        books.forEach((book) => {
+            if (!book.firstImageName) return;
+
+            getBookImageFile(book.id, book.firstImageName)
+                .then((resp) => {
+                    if (cancelled) return;
+                    const blobUrl = URL.createObjectURL(resp.data);
+                    setThumbnails((prev) => ({
+                        ...prev,
+                        [book.id]: blobUrl,
+                    }));
+                })
+                .catch((err) => {
+                    console.error('Ошибка при загрузке миниатюры для книги', book.id, err);
+                    if (!cancelled) {
+                        setError('Возникли проблемы с загрузкой миниатюр (возможно, нет подписки).');
+                    }
+                });
         });
+
+        return () => {
+            cancelled = true;
+        };
     }, [books]);
 
-    // Переход к предыдущей / следующей странице
-    const handlePreviousPage = () => {
-        if (currentPage > 1) {
-            setCurrentPage(currentPage - 1);
-        }
-    };
-    const handleNextPage = () => {
-        if (currentPage < totalPages) {
-            setCurrentPage(currentPage + 1);
-        }
-    };
     const handlePageChange = (event, value) => {
         setCurrentPage(value);
     };
 
-    // Переход на страницу деталей
     const handleBookClick = (bookId) => {
         navigate(`/books/${bookId}`, { state: { fromPage: currentPage } });
     };
@@ -88,19 +71,12 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
 
             <Box
                 className="book-list"
-                sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 2,
-                }}
+                sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
             >
                 {books.map((book) => (
                     <Card
                         key={book.id}
-                        sx={{
-                            my: 1,
-                            borderRadius: '5px',
-                        }}
+                        sx={{ my: 1, borderRadius: '5px' }}
                     >
                         <CardContent
                             sx={{
@@ -142,18 +118,10 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                                 >
                                     {book.title}
                                 </Typography>
-                                <Typography variant="body1">
-                                    Цена: {book.price}
-                                </Typography>
-                                <Typography variant="body1">
-                                    Дата: {book.date}
-                                </Typography>
-                                <Typography variant="body1">
-                                    Продавец: {book.sellerName}
-                                </Typography>
-                                <Typography variant="body1">
-                                    Тип: {book.type}
-                                </Typography>
+                                <Typography variant="body1">Цена: {book.price}</Typography>
+                                <Typography variant="body1">Дата: {book.date}</Typography>
+                                <Typography variant="body1">Продавец: {book.sellerName}</Typography>
+                                <Typography variant="body1">Тип: {book.type}</Typography>
                             </Box>
                         </CardContent>
                     </Card>
@@ -172,7 +140,7 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                 >
                     <Button
                         variant="contained"
-                        onClick={handlePreviousPage}
+                        onClick={() => setCurrentPage(currentPage - 1)}
                         disabled={currentPage === 1}
                     >
                         Предыдущая страница
@@ -187,7 +155,7 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                     />
                     <Button
                         variant="contained"
-                        onClick={handleNextPage}
+                        onClick={() => setCurrentPage(currentPage + 1)}
                         disabled={currentPage === totalPages}
                     >
                         Следующая страница

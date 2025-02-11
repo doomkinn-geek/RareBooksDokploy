@@ -26,7 +26,7 @@ namespace RareBooksService.WebApi.Controllers
         private readonly IWebHostEnvironment _env;
         private readonly ISubscriptionService _subscriptionService;
 
-        // НОВОЕ: чтобы мы могли читать/записывать UserSearchStates
+        // Чтобы мы могли читать/записывать UserSearchStates
         private readonly UsersDbContext _usersDbContext;
 
         public BooksController(
@@ -38,7 +38,7 @@ namespace RareBooksService.WebApi.Controllers
             IConfiguration configuration,
             IWebHostEnvironment env,
             ISubscriptionService subscriptionService,
-            UsersDbContext usersDbContext // <-- внедряем
+            UsersDbContext usersDbContext
         ) : base(userManager)
         {
             _booksRepository = booksRepository;
@@ -49,7 +49,7 @@ namespace RareBooksService.WebApi.Controllers
             _env = env;
             _subscriptionService = subscriptionService;
 
-            _usersDbContext = usersDbContext; // сохраняем в поле
+            _usersDbContext = usersDbContext;
         }
 
         /// <summary>
@@ -142,7 +142,7 @@ namespace RareBooksService.WebApi.Controllers
         }
 
         /// <summary>
-        /// Скрывает цены/даты, если нет подписки.
+        /// Скрывает цены/даты, если нет подписки (логика без изменений).
         /// </summary>
         private void ApplyNoSubscriptionRulesToSearchResults(List<BookSearchResultDto> books)
         {
@@ -168,9 +168,6 @@ namespace RareBooksService.WebApi.Controllers
             if (user == null) return Unauthorized();
 
             // Проверяем подписку + лимит
-            // Если вам нужно "не списывать лимит при переходе на 2,3 страницу",
-            // вы можете добавить условие (page==1), но здесь списываем 
-            // при любом запросе, если текст изменился.
             var (hasSub, remain) = await CheckIfNewSearchAndConsumeLimit(user, "Title", title);
 
             // если нет подписки
@@ -183,24 +180,21 @@ namespace RareBooksService.WebApi.Controllers
 
             var books = await _booksRepository.GetBooksByTitleAsync(title, page, pageSize, exactPhrase);
 
-            // Если нет подписки (но у нас hasSub==true), 
-            // но на всякий случай:
+            // Если нет подписки (но у нас hasSub == true — теоретически невозможно),
+            // но оставим проверку на всякий случай:
             if (!hasSub)
             {
                 ApplyNoSubscriptionRulesToSearchResults(books.Items);
             }
 
             // Лог поиска
-            // (можно сделать if (isNewSearch) ... но вы не возвращаете 
-            //  isNewSearch из метода. При желании можно добавить.)
-            // Пока что логируем всегда.
             await _searchHistoryService.SaveSearchHistory(user.Id, title, "Title");
 
             return Ok(new
             {
                 Items = books.Items,
                 TotalPages = books.TotalPages,
-                RemainingRequests = remain // null => безлимит, 
+                RemainingRequests = remain // null => безлимит 
             });
         }
 
@@ -237,8 +231,7 @@ namespace RareBooksService.WebApi.Controllers
             var user = await GetCurrentUserAsync();
             if (user == null) return Unauthorized();
 
-            // Найдём имя категории (для лога + запроса)
-            // Хотя, searchType="Category"
+            // Найдём имя категории
             var category = await _booksRepository.GetCategoryByIdAsync(categoryId);
             var queryText = category != null ? category.Name : categoryId.ToString();
 
@@ -288,7 +281,6 @@ namespace RareBooksService.WebApi.Controllers
             var user = await GetCurrentUserAsync();
             if (user == null) return Unauthorized();
 
-            // Предположим, "PriceRange" => $"{minPrice}-{maxPrice}"
             var queryText = $"range:{minPrice}-{maxPrice}";
 
             var (hasSub, remain) = await CheckIfNewSearchAndConsumeLimit(user, "PriceRange", queryText);
@@ -325,7 +317,7 @@ namespace RareBooksService.WebApi.Controllers
 
             if (!hasSub)
             {
-                // скрываем часть данных
+                // скрываем часть данных (как у вас и было)
                 book.FinalPrice = null;
                 book.Price = 0;
                 book.EndDate = "Только для подписчиков";
@@ -336,55 +328,87 @@ namespace RareBooksService.WebApi.Controllers
             return Ok(book);
         }
 
-        // Просмотр изображений - аналогично
+        // ==============================================
+        //  Методы для получения изображений и списков
+        // ==============================================
+
+        /// <summary>
+        /// Возвращает список имён файлов (images, thumbnails).
+        /// Если нет подписки — возвращаем пустой список.
+        /// Если книга малоценная — берём списки из внешних URL (если есть).
+        /// Если книга обычная и подписка есть — разбираем ZIP или Legacy.
+        /// </summary>
         [HttpGet("{id}/images")]
         public async Task<ActionResult> GetBookImages(int id)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return Unauthorized();
 
-            var hasSubscription = false;
+            // Проверяем подписку
             var subDto = await _subscriptionService.GetActiveSubscriptionForUser(user.Id);
-            if (subDto != null && subDto.IsActive) hasSubscription = true;
-
-            bool useLocalFiles = bool.TryParse(_configuration["TypeOfAccessImages:UseLocalFiles"], out var useLocal) && useLocal;
+            bool hasSubscription = (subDto != null && subDto.IsActive);
 
             var book = await _booksRepository.GetBookByIdAsync(id);
             if (book == null) return NotFound();
 
+            // Если у пользователя нет подписки — пустой список
+            if (!hasSubscription)
+            {
+                return Ok(new { images = new List<string>(), thumbnails = new List<string>() });
+            }
+
+            bool useLocalFiles = bool.TryParse(_configuration["TypeOfAccessImages:UseLocalFiles"], out var useLocal) && useLocal;
+
+            // Получаем списки файлов
             var (images, thumbnails) = await _bookImagesService.GetBookImagesAsync(book, hasSubscription, useLocalFiles);
             return Ok(new { images, thumbnails });
         }
 
+        /// <summary>
+        /// Возвращает конкретный полноразмерный файл (blob).
+        /// Для любых изображений теперь требуется подписка (включая малоценные).
+        /// </summary>
         [HttpGet("{id}/images/{imageName}")]
         public async Task<ActionResult> GetImage(int id, string imageName)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return Unauthorized();
 
-            var hasSubscription = false;
             var subDto = await _subscriptionService.GetActiveSubscriptionForUser(user.Id);
-            if (subDto != null && subDto.IsActive) hasSubscription = true;
+            bool hasSubscription = (subDto != null && subDto.IsActive);
+            if (!hasSubscription)
+            {
+                return Forbid("Подписка требуется для просмотра изображений.");
+            }
 
             bool useLocalFiles = bool.TryParse(_configuration["TypeOfAccessImages:UseLocalFiles"], out var useLocal) && useLocal;
 
             var book = await _booksRepository.GetBookByIdAsync(id);
             if (book == null) return NotFound();
 
+            // Поручаем сервису достать файл
             var result = await _bookImagesService.GetImageAsync(book, imageName, hasSubscription, useLocalFiles);
             if (result == null) return NotFound();
+
             return result;
         }
 
+        /// <summary>
+        /// Возвращает конкретную миниатюру (blob).
+        /// Аналогично полноразмерным — требуется подписка.
+        /// </summary>
         [HttpGet("{id}/thumbnails/{thumbnailName}")]
         public async Task<ActionResult> GetThumbnail(int id, string thumbnailName)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return Unauthorized();
 
-            var hasSubscription = false;
             var subDto = await _subscriptionService.GetActiveSubscriptionForUser(user.Id);
-            if (subDto != null && subDto.IsActive) hasSubscription = true;
+            bool hasSubscription = (subDto != null && subDto.IsActive);
+            if (!hasSubscription)
+            {
+                return Forbid("Подписка требуется для просмотра миниатюр.");
+            }
 
             bool useLocalFiles = bool.TryParse(_configuration["TypeOfAccessImages:UseLocalFiles"], out var useLocal) && useLocal;
 
@@ -393,6 +417,7 @@ namespace RareBooksService.WebApi.Controllers
 
             var result = await _bookImagesService.GetThumbnailAsync(book, thumbnailName, hasSubscription, useLocalFiles);
             if (result == null) return NotFound();
+
             return result;
         }
     }

@@ -6,7 +6,7 @@ import Cookies from 'js-cookie';
 export const API_URL = 'https://localhost:7042/api';
 
 // Получаем токен только из cookies
-const getAuthHeaders = () => {
+export const getAuthHeaders = () => {
     const token = Cookies.get('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
 };
