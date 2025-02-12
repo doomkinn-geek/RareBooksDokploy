@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL, getAuthHeaders } from '../api';
 
+// Функция-заглушка для получения одного файла (миниатюры)
+// из бэкенда: GET /books/{id}/images/{imageName}
 function getBookImageFile(id, imageName) {
     return axios.get(`${API_URL}/books/${id}/images/${imageName}`, {
         headers: getAuthHeaders(),
@@ -14,49 +16,84 @@ function getBookImageFile(id, imageName) {
 
 const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
     const navigate = useNavigate();
+
+    // Объект, где ключ = book.id, значение = blob-URL
     const [thumbnails, setThumbnails] = useState({});
     const [error, setError] = useState('');
 
     useEffect(() => {
+        // Если books пуст — очищаем старые данные и выходим
         if (!books || books.length === 0) {
             setThumbnails({});
+            setError('');
             return;
         }
 
+        // Сбрасываем
         setThumbnails({});
         setError('');
 
+        // Флаг, который прерывает обновление, если компонент размонтирован
         let cancelled = false;
 
-        books.forEach((book) => {
-            if (!book.firstImageName) return;
-
-            getBookImageFile(book.id, book.firstImageName)
-                .then((resp) => {
-                    if (cancelled) return;
-                    const blobUrl = URL.createObjectURL(resp.data);
-                    setThumbnails((prev) => ({
-                        ...prev,
-                        [book.id]: blobUrl,
-                    }));
-                })
-                .catch((err) => {
-                    console.error('Ошибка при загрузке миниатюры для книги', book.id, err);
-                    if (!cancelled) {
-                        setError('Возникли проблемы с загрузкой миниатюр (возможно, нет подписки).');
+        // Асинхронная функция, которая загрузит все миниатюры "пакетом"
+        const fetchThumbnails = async () => {
+            try {
+                // Массив промисов (каждый запросит миниатюру)
+                const requests = books.map((book) => {
+                    if (!book.firstImageName) {
+                        // У книги нет миниатюры
+                        return null;
                     }
-                });
-        });
+                    // Возвращаем промис:
+                    return getBookImageFile(book.id, book.firstImageName)
+                        .then((resp) => {
+                            const blobUrl = URL.createObjectURL(resp.data);
+                            return { bookId: book.id, blobUrl };
+                        })
+                        .catch((err) => {
+                            console.error('Ошибка при загрузке миниатюры', book.id, err);
+                            return null; // Не прерываем весь Promise.all, просто вернём null
+                        });
+                }).filter(Boolean); // Уберём null'ы (где firstImageName отсутствует)
 
+                // Ждём, пока все запросы завершатся
+                const results = await Promise.all(requests);
+                if (cancelled) return;
+
+                // Собираем объект вида { bookId: blobUrl }
+                const newThumbs = {};
+                for (const r of results) {
+                    if (r) {
+                        newThumbs[r.bookId] = r.blobUrl;
+                    }
+                }
+
+                // Выставляем все миниатюры одним махом
+                setThumbnails(newThumbs);
+            } catch (err) {
+                console.error('Ошибка при параллельной загрузке миниатюр:', err);
+                if (!cancelled) {
+                    setError('Возникли проблемы с загрузкой миниатюр (возможно, нет подписки).');
+                }
+            }
+        };
+
+        // Запускаем загрузку
+        fetchThumbnails();
+
+        // Если компонент размонируется — выставим cancelled=true
         return () => {
             cancelled = true;
         };
     }, [books]);
 
+    // Обработка смены страницы
     const handlePageChange = (event, value) => {
         setCurrentPage(value);
     };
 
+    // Переход на детальную страницу книги
     const handleBookClick = (bookId) => {
         navigate(`/books/${bookId}`, { state: { fromPage: currentPage } });
     };
@@ -71,12 +108,19 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
 
             <Box
                 className="book-list"
-                sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+                sx={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 2,
+                }}
             >
                 {books.map((book) => (
                     <Card
                         key={book.id}
-                        sx={{ my: 1, borderRadius: '5px' }}
+                        sx={{
+                            my: 1,
+                            borderRadius: '5px',
+                        }}
                     >
                         <CardContent
                             sx={{
@@ -85,6 +129,7 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                                 gap: 2,
                             }}
                         >
+                            {/* показываем миниатюру, если она загрузилась */}
                             {book.firstImageName && thumbnails[book.id] && (
                                 <Box
                                     sx={{

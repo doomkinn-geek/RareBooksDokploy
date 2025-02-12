@@ -9,27 +9,17 @@ namespace RareBooksService.WebApi.Services
 {
     public interface IBookImagesService
     {
-        /// <summary>
-        /// Возвращает списки доступных изображений и миниатюр (только названия файлов).
-        /// Фронтенд может потом вызывать /books/{id}/images/{filename}.
-        /// </summary>
         Task<(List<string> images, List<string> thumbnails)> GetBookImagesAsync(
             BookDetailDto book,
             bool hasSubscription,
             bool useLocalFiles);
 
-        /// <summary>
-        /// Возвращает конкретный полноразмерный файл (blob).
-        /// </summary>
         Task<ActionResult?> GetImageAsync(
             BookDetailDto book,
             string imageName,
             bool hasSubscription,
             bool useLocalFiles);
 
-        /// <summary>
-        /// Возвращает конкретную миниатюру (blob).
-        /// </summary>
         Task<ActionResult?> GetThumbnailAsync(
             BookDetailDto book,
             string thumbName,
@@ -42,7 +32,7 @@ namespace RareBooksService.WebApi.Services
         private readonly ILogger<BookImagesService> _logger;
         private readonly IYandexStorageService _yandexStorageService;
 
-        // Общий HttpClient для скачивания внешних URL
+        // HttpClient для малоценных книг (внешние URL)
         private static readonly HttpClient _httpClient = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(10)
@@ -66,7 +56,6 @@ namespace RareBooksService.WebApi.Services
             _logger = logger;
             _yandexStorageService = yandexStorageService;
 
-            // Читаем CacheSettings, если есть
             var cacheSettingsSection = configuration.GetSection("CacheSettings");
             if (cacheSettingsSection.Exists())
             {
@@ -106,24 +95,20 @@ namespace RareBooksService.WebApi.Services
             bool hasSubscription,
             bool useLocalFiles)
         {
-            // Если нет подписки, возвращаем пустые списки
             if (!hasSubscription)
             {
                 return (new List<string>(), new List<string>());
             }
 
-            // Функция, которая берёт fileName через Path.GetFileName,
-            // а потом убирает всё, что идёт после '?' или '#'
+            // Извлекаем fileName, отрезая query-параметры
             string ExtractCleanFileName(string url)
             {
-                var name = Path.GetFileName(url); // например, "326167636.0.jpg?1"
+                var name = Path.GetFileName(url);
                 if (string.IsNullOrEmpty(name)) return string.Empty;
 
-                // Ищем индекс '?' или '#'
                 var idx = name.IndexOfAny(new char[] { '?', '#' });
                 if (idx >= 0)
                 {
-                    // Если нашли, обрезаем до этого места
                     name = name.Substring(0, idx);
                 }
                 return name;
@@ -151,23 +136,19 @@ namespace RareBooksService.WebApi.Services
             bool hasSubscription,
             bool useLocalFiles)
         {
-            // Для всех книг (малоценных/обычных) нужна подписка:
             if (!hasSubscription)
             {
                 return new ForbidResult("Подписка требуется для просмотра изображений.");
             }
 
-            // Сначала смотрим в кэше
             var cachedStream = TryGetFromCache(book.Id, imageName, isThumbnail: false);
             if (cachedStream != null)
             {
                 return new FileStreamResult(cachedStream, "image/jpeg");
             }
 
-            // Разделяем логику:
             if (book.IsLessValuable)
             {
-                // Малоценные => только внешние URL
                 var foundUrl = FindByFileName(book.ImageUrls, imageName);
                 if (foundUrl == null)
                 {
@@ -175,7 +156,6 @@ namespace RareBooksService.WebApi.Services
                     return new NotFoundResult();
                 }
 
-                // Скачиваем из внешнего URL + кладём в кэш
                 var stream = await DownloadImageFromUrlAsync(foundUrl);
                 if (stream == null)
                 {
@@ -183,18 +163,14 @@ namespace RareBooksService.WebApi.Services
                 }
 
                 SaveFileToCache(book.Id, imageName, false, stream);
-                // IMPORTANT: не закрываем stream вручную, 
-                //            возвращаем FileStreamResult, ASP.NET закроет его
                 stream.Position = 0;
-
                 return new FileStreamResult(stream, "image/jpeg");
             }
             else
             {
-                // Обычная книга
                 if (book.IsImagesCompressed)
                 {
-                    // Из архива
+                    // Извлекаем из ZIP (с кэшированием самого архива)
                     return await GetFileFromArchive(book, $"images/{imageName}", useLocalFiles);
                 }
                 else
@@ -214,13 +190,11 @@ namespace RareBooksService.WebApi.Services
             bool hasSubscription,
             bool useLocalFiles)
         {
-            // Тоже нужна подписка
             if (!hasSubscription)
             {
                 return new ForbidResult("Подписка требуется для просмотра миниатюр.");
             }
 
-            // проверяем кэше
             var cachedStream = TryGetFromCache(book.Id, thumbName, isThumbnail: true);
             if (cachedStream != null)
             {
@@ -229,7 +203,6 @@ namespace RareBooksService.WebApi.Services
 
             if (book.IsLessValuable)
             {
-                // Малоценная => только внешние URL
                 var foundUrl = FindByFileName(book.ThumbnailUrls, thumbName);
                 if (foundUrl == null)
                 {
@@ -244,20 +217,16 @@ namespace RareBooksService.WebApi.Services
 
                 SaveFileToCache(book.Id, thumbName, true, stream);
                 stream.Position = 0;
-
                 return new FileStreamResult(stream, "image/jpeg");
             }
             else
             {
-                // Обычная
                 if (book.IsImagesCompressed)
                 {
-                    // Отдаём из архива
                     return await GetFileFromArchive(book, $"thumbnails/{thumbName}", useLocalFiles);
                 }
                 else
                 {
-                    // Legacy
                     return await GetLegacyImageAsync(book.Id, thumbName, isThumbnail: true, useLocalFiles);
                 }
             }
@@ -274,62 +243,59 @@ namespace RareBooksService.WebApi.Services
             var isThumb = entryPath.StartsWith("thumbnails/");
             var fileName = Path.GetFileName(entryPath);
 
-            // Смотрим кэш
+            // 1) Проверяем: нет ли файла в кэше картинок
             var cachedStream = TryGetFromCache(book.Id, fileName, isThumb);
             if (cachedStream != null)
-            {
                 return new FileStreamResult(cachedStream, "image/jpeg");
+
+            // 2) Скачиваем / находим локальный ZIP (кэшируем его), 
+            //    затем извлекаем нужный файл
+            var localZipFolder = Path.Combine(_cacheRootPath!, "_compressed_images");
+            Directory.CreateDirectory(localZipFolder);
+            var localZipPath = Path.Combine(localZipFolder, $"{book.Id}.zip");
+
+            if (!File.Exists(localZipPath))
+            {
+                // Если нет — качаем из Object Storage или копируем локально
+                if (!useLocalFiles)
+                {
+                    if (string.IsNullOrWhiteSpace(book.ImageArchiveUrl))
+                        return new NotFoundResult();
+
+                    using var archiveStream = await _yandexStorageService.GetArchiveStreamAsync(book.ImageArchiveUrl);
+                    if (archiveStream == null)
+                        return new NotFoundResult();
+
+                    using var fs = File.Create(localZipPath);
+                    await archiveStream.CopyToAsync(fs);
+                }
+                else
+                {
+                    // Копируем локальный архив в кэш
+                    if (!File.Exists(book.ImageArchiveUrl))
+                        return new NotFoundResult();
+
+                    File.Copy(book.ImageArchiveUrl, localZipPath, overwrite: true);
+                }
             }
 
-            if (string.IsNullOrWhiteSpace(book.ImageArchiveUrl))
+            // 3) Читаем локальный ZIP
+            using var zip = ZipFile.OpenRead(localZipPath);
+            var entry = zip.GetEntry(entryPath);
+            if (entry == null)
                 return new NotFoundResult();
 
-            if (useLocalFiles)
-            {
-                if (!File.Exists(book.ImageArchiveUrl))
-                    return new NotFoundResult();
+            // 4) Считываем entry в MemoryStream (без using - нам нужно отдать этот ms)
+            using var es = entry.Open();
+            MemoryStream ms = new MemoryStream();
+            await es.CopyToAsync(ms);
+            ms.Position = 0;
 
-                // Поток архива можно закрыть, так как мы скопируем 
-                // всё в MemoryStream прежде, чем вернёмся
-                using var zip = ZipFile.OpenRead(book.ImageArchiveUrl);
-                var entry = zip.GetEntry(entryPath);
-                if (entry == null)
-                    return new NotFoundResult();
+            // 5) Кэшируем результат (одиночный файл)
+            SaveFileToCache(book.Id, fileName, isThumb, ms);
+            ms.Position = 0;
 
-                using var es = entry.Open(); // закроем после чтения
-                MemoryStream ms = new MemoryStream();
-                await es.CopyToAsync(ms);
-                ms.Position = 0;
-
-                SaveFileToCache(book.Id, fileName, isThumb, ms);
-                ms.Position = 0;
-
-                // Возвращаем FileStreamResult, но ms мы не Dispose 
-                // (ASP.NET закроет при завершении отправки)
-                return new FileStreamResult(ms, "image/jpeg");
-            }
-            else
-            {
-                var archiveStream = await _yandexStorageService.GetArchiveStreamAsync(book.ImageArchiveUrl);
-                if (archiveStream == null)
-                    return new NotFoundResult();
-
-                // Аналогично - читаем zip в локальный ms
-                using var zip = new ZipArchive(archiveStream, ZipArchiveMode.Read);
-                var entry = zip.GetEntry(entryPath);
-                if (entry == null)
-                    return new NotFoundResult();
-
-                using var es = entry.Open();
-                MemoryStream ms = new MemoryStream();
-                await es.CopyToAsync(ms);
-                ms.Position = 0;
-
-                SaveFileToCache(book.Id, fileName, isThumb, ms);
-                ms.Position = 0;
-
-                return new FileStreamResult(ms, "image/jpeg");
-            }
+            return new FileStreamResult(ms, "image/jpeg");
         }
 
         private async Task<ActionResult?> GetLegacyImageAsync(
@@ -338,7 +304,6 @@ namespace RareBooksService.WebApi.Services
             bool isThumbnail,
             bool useLocalFiles)
         {
-            // кэш?
             var cachedStream = TryGetFromCache(bookId, fileName, isThumbnail);
             if (cachedStream != null)
             {
@@ -347,6 +312,7 @@ namespace RareBooksService.WebApi.Services
 
             if (useLocalFiles)
             {
+                // Локальный файл
                 string basePath = Path.Combine(AppContext.BaseDirectory, "books_photos", bookId.ToString());
                 var folder = isThumbnail ? "thumbnails" : "images";
                 var path = Path.Combine(basePath, folder, fileName);
@@ -354,8 +320,7 @@ namespace RareBooksService.WebApi.Services
                 if (!File.Exists(path))
                     return new NotFoundResult();
 
-                // Здесь можно безопасно закрыть fs, 
-                // т.к. мы копируем в новый ms и возвращаем ms
+                // Считываем файл в MemoryStream
                 using var fs = File.OpenRead(path);
                 MemoryStream ms = new MemoryStream();
                 await fs.CopyToAsync(ms);
@@ -401,7 +366,6 @@ namespace RareBooksService.WebApi.Services
                 if (!resp.IsSuccessStatusCode)
                     return null;
 
-                // Здесь мы создаём MemoryStream (не using!)
                 MemoryStream ms = new MemoryStream();
                 await resp.Content.CopyToAsync(ms);
                 ms.Position = 0;
@@ -420,8 +384,9 @@ namespace RareBooksService.WebApi.Services
         private string? FindByFileName(List<string>? urls, string fileName)
         {
             if (urls == null) return null;
-            return urls.FirstOrDefault(u => Path.GetFileName(u)
-                .Equals(fileName, StringComparison.OrdinalIgnoreCase));
+            return urls.FirstOrDefault(u =>
+                Path.GetFileName(u).Equals(fileName, StringComparison.OrdinalIgnoreCase)
+            );
         }
 
         // ----------------------------------------------------------------------
@@ -439,8 +404,7 @@ namespace RareBooksService.WebApi.Services
 
                 try
                 {
-                    // Возвращаем FileStream. 
-                    // Его закроет ASP.NET Core, когда закончит отдавать ответ.
+                    // Не используем using, т.к. поток нужен ASP.NET для отправки
                     return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
                 }
                 catch (Exception ex)
@@ -457,18 +421,19 @@ namespace RareBooksService.WebApi.Services
 
             lock (_cacheLock)
             {
-                string path = GetCacheFilePath(bookId, fileName, isThumbnail);
+                var path = GetCacheFilePath(bookId, fileName, isThumbnail);
                 try
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                    using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
 
+                    // Записываем полученный MemoryStream в файл
+                    using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
                     source.Position = 0;
                     source.CopyTo(fs);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning("Ошибка сохранения в кэш {0}: {1}", path, ex.Message);
+                    _logger.LogWarning("Ошибка сохранения в кэшт {0}: {1}", path, ex.Message);
                 }
             }
         }
