@@ -135,6 +135,8 @@ namespace RareBooksService.Parser.Services
                             && b.EndDate < DateTime.UtcNow)
                 .ToListAsync();
 
+            int counter = 1;
+
             foreach (var book in booksToUpdate)
             {
                 // проверка отмены
@@ -172,6 +174,8 @@ namespace RareBooksService.Parser.Services
                             book.FinalPrice
                         );
                     }
+                    counter++;
+                    Console.Title = $"Обработка лота {counter} из {booksToUpdate.Count}";
                 }
                 catch (Exception ex)
                 {
