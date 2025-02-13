@@ -131,59 +131,47 @@ namespace RareBooksService.WebApi.Services
         //   2) Получение ОДНОГО полноразмерного изображения
         // ======================================================================
         public async Task<ActionResult?> GetImageAsync(
-            BookDetailDto book,
-            string imageName,
-            bool hasSubscription,
-            bool useLocalFiles)
+                                    BookDetailDto book,
+                                    string imageName,
+                                    bool hasSubscription,
+                                    bool useLocalFiles)
         {
             if (!hasSubscription)
-            {
                 return new ForbidResult("Подписка требуется для просмотра изображений.");
-            }
 
+            // 1. Проверяем кэш
             var cachedStream = TryGetFromCache(book.Id, imageName, isThumbnail: false);
             if (cachedStream != null)
-            {
                 return new FileStreamResult(cachedStream, "image/jpeg");
+
+            // 2. Пытаемся получить изображение по URL
+            var foundUrl = FindByFileName(book.ImageUrls, imageName);
+            if (!string.IsNullOrWhiteSpace(foundUrl))
+            {
+                var stream = await DownloadImageFromUrlAsync(foundUrl);
+                if (stream != null)
+                {
+                    SaveFileToCache(book.Id, imageName, false, stream);
+                    stream.Position = 0;
+                    return new FileStreamResult(stream, "image/jpeg");
+                }
+                _logger.LogWarning("Ошибка загрузки изображения по URL '{0}' для книги {1}", imageName, book.Id);
             }
 
+            // Для малоценных книг fallback не применяется
             if (book.IsLessValuable)
             {
-                var foundUrl = FindByFileName(book.ImageUrls, imageName);
-                if (foundUrl == null)
-                {
-                    _logger.LogWarning("Не найден внешний URL '{0}' для малоценной книги {1}", imageName, book.Id);
-                    return new NotFoundResult();
-                }
-
-                var stream = await DownloadImageFromUrlAsync(foundUrl);
-                if (stream == null)
-                {
-                    return new NotFoundResult();
-                }
-
-                SaveFileToCache(book.Id, imageName, false, stream);
-                stream.Position = 0;
-                return new FileStreamResult(stream, "image/jpeg");
+                _logger.LogWarning("Изображение '{0}' для малоценной книги {1} не найдено по URL.", imageName, book.Id);
+                return new NotFoundResult();
             }
+
+            // 3. Fallback для ценных книг: извлекаем из архива или legacy
+            if (book.IsImagesCompressed)
+                return await GetFileFromArchive(book, $"images/{imageName}", useLocalFiles);
             else
-            {
-                if (book.IsImagesCompressed)
-                {
-                    // Извлекаем из ZIP (с кэшированием самого архива)
-                    return await GetFileFromArchive(book, $"images/{imageName}", useLocalFiles);
-                }
-                else
-                {
-                    // Legacy
-                    return await GetLegacyImageAsync(book.Id, imageName, isThumbnail: false, useLocalFiles);
-                }
-            }
+                return await GetLegacyImageAsync(book.Id, imageName, isThumbnail: false, useLocalFiles);
         }
 
-        // ======================================================================
-        //   3) Получение ОДНОЙ миниатюры
-        // ======================================================================
         public async Task<ActionResult?> GetThumbnailAsync(
             BookDetailDto book,
             string thumbName,
@@ -191,46 +179,41 @@ namespace RareBooksService.WebApi.Services
             bool useLocalFiles)
         {
             if (!hasSubscription)
-            {
                 return new ForbidResult("Подписка требуется для просмотра миниатюр.");
-            }
 
+            // 1. Проверяем кэш
             var cachedStream = TryGetFromCache(book.Id, thumbName, isThumbnail: true);
             if (cachedStream != null)
-            {
                 return new FileStreamResult(cachedStream, "image/jpeg");
+
+            // 2. Пытаемся получить миниатюру по URL
+            var foundUrl = FindByFileName(book.ThumbnailUrls, thumbName);
+            if (!string.IsNullOrWhiteSpace(foundUrl))
+            {
+                var stream = await DownloadImageFromUrlAsync(foundUrl);
+                if (stream != null)
+                {
+                    SaveFileToCache(book.Id, thumbName, true, stream);
+                    stream.Position = 0;
+                    return new FileStreamResult(stream, "image/jpeg");
+                }
+                _logger.LogWarning("Ошибка загрузки миниатюры по URL '{0}' для книги {1}", thumbName, book.Id);
             }
 
+            // Для малоценных книг fallback не применяется
             if (book.IsLessValuable)
             {
-                var foundUrl = FindByFileName(book.ThumbnailUrls, thumbName);
-                if (foundUrl == null)
-                {
-                    return new NotFoundResult();
-                }
-
-                var stream = await DownloadImageFromUrlAsync(foundUrl);
-                if (stream == null)
-                {
-                    return new NotFoundResult();
-                }
-
-                SaveFileToCache(book.Id, thumbName, true, stream);
-                stream.Position = 0;
-                return new FileStreamResult(stream, "image/jpeg");
+                _logger.LogWarning("Миниатюра '{0}' для малоценной книги {1} не найдена по URL.", thumbName, book.Id);
+                return new NotFoundResult();
             }
+
+            // 3. Fallback для ценных книг: извлекаем из архива или legacy
+            if (book.IsImagesCompressed)
+                return await GetFileFromArchive(book, $"thumbnails/{thumbName}", useLocalFiles);
             else
-            {
-                if (book.IsImagesCompressed)
-                {
-                    return await GetFileFromArchive(book, $"thumbnails/{thumbName}", useLocalFiles);
-                }
-                else
-                {
-                    return await GetLegacyImageAsync(book.Id, thumbName, isThumbnail: true, useLocalFiles);
-                }
-            }
+                return await GetLegacyImageAsync(book.Id, thumbName, isThumbnail: true, useLocalFiles);
         }
+
 
         // ----------------------------------------------------------------------
         //  Методы чтения ОТДЕЛЬНОГО файла из архива / legacy

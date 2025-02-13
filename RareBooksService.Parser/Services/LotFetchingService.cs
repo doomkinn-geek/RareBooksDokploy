@@ -15,6 +15,7 @@ namespace RareBooksService.Parser.Services
         Task FetchAllOldDataExtended(int groupNumber);
         Task FetchAllOldDataWithLetterGroup(char groupLetter);
         Task FetchSoldFixedPriceLotsAsync(CancellationToken token);
+        Task RefreshLotsWithEmptyImageUrlsAsync(CancellationToken token);
     }
 
     public class LotFetchingService : ILotFetchingService
@@ -77,7 +78,7 @@ namespace RareBooksService.Parser.Services
             _logger.LogInformation("Начинаем загрузку проданных лотов с фиксированной ценой.");
 
             int lastProcessedId = _context.BooksInfo
-                    .Where(b => b.Type == "fixedPrice")
+                    .Where(b => b.Type == "fixedPrice" && b.SoldQuantity > 0) //b.EndDate < (DateTime.Now - TimeSpan.FromDays(14)))
                     .OrderByDescending(b => b.Id)
                     .Select(b => b.Id)
                     .FirstOrDefault();
@@ -160,6 +161,66 @@ namespace RareBooksService.Parser.Services
             _logger.LogInformation("Completed FetchAllNewData.");
         }
 
+        public async Task RefreshLotsWithEmptyImageUrlsAsync(CancellationToken token)
+        {
+            _logger.LogInformation("Начинаем обновление лотов, у которых нет URL изображений.");
+
+            // 1) Собираем список ID лотов у которых пустой список ImageUrls
+            var nullUrls = _context.BooksInfo
+                // делаем AsNoTracking() или без него — по ситуации, если хотим затем 
+                // только вручную обновлять/добавлять
+                .AsEnumerable()
+                .Where(x => x.ImageUrls != null && x.ImageUrls.Count == 0 && x.SoldQuantity > 0)
+                .Select(x => x.Id)
+                .ToList();
+
+            _logger.LogInformation("Найдено {Count} лотов с пустым списком изображений.", nullUrls.Count);
+
+            // 2) По каждому ID заново запрашиваем данные и обновляем
+            int counter = 0;
+            foreach (var lotId in nullUrls)
+            {
+                counter++;
+                try
+                {
+                    if (token.IsCancellationRequested || (_checkCancellationFunc?.Invoke() == true))
+                    {
+                        Console.WriteLine("Операция прервана (RefreshLotsWithEmptyImageUrlsAsync).");
+                        break;
+                    }
+                    _logger.LogInformation("Обновляем лот {LotId} ({Current}/{Total})", lotId, counter, nullUrls.Count);
+
+                    // Получаем данные лота
+                    var lotResponse = await _lotDataService.GetLotDataAsync(lotId);
+                    if (lotResponse?.result == null)
+                    {
+                        _logger.LogWarning("Не удалось получить данные лота {LotId} (null result)", lotId);
+                        continue;
+                    }
+
+                    // 3) Сохраняем (или обновляем) через существующий LotDataHandler.
+                    //    Обычно внутри SaveLotDataAsync есть логика проверки: если лот уже есть, 
+                    //    то делаем апдейт, если нет – создаём новую запись (Upsert).
+                    //    Обратите внимание на флаги downloadImages / isLessValuableLot 
+                    //    в зависимости от вашей бизнес-логики. 
+                    await _lotDataHandler.SaveLotDataAsync(
+                        lotResponse.result,
+                        lotResponse.result.categoryId,
+                        categoryName: "unknown",  // Можно поставить любое служебное имя
+                        downloadImages: true,             // Включаем скачивание картинок
+                        isLessValuableLot: false          // Или задайте логику, если нужно
+                    );
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Ошибка при обновлении лота {LotId}.", lotId);
+                }
+            }
+
+            _logger.LogInformation("Завершили обновление лотов с пустыми URL изображений.");
+        }
+
+
 
         public async Task FetchFreeListData(List<int> ids)
         {
@@ -183,6 +244,22 @@ namespace RareBooksService.Parser.Services
 
             _context.BooksInfo.RemoveRange(booksToDelete);
             await _context.SaveChangesAsync();*/
+
+            //try
+            //{
+
+                var nullUrls = _context.BooksInfo
+                                .AsEnumerable() // Switch to in-memory LINQ
+                                .Where(x => x.ImageUrls != null && x.ImageUrls.Count == 0)
+                                .Select(x => x.Id)
+                                .ToList();
+
+            //}
+            //catch (Exception e)
+            //{
+            //    int i = 0;
+            //}
+
 
             try
             {
@@ -343,22 +420,9 @@ namespace RareBooksService.Parser.Services
 
 
         private async Task ProcessLotAsync(int lotId,
-                                            string nonStandardPricesFilePath = "",
-                                            string nonStandardPricesSovietFilePath = "")
+                                   string nonStandardPricesFilePath = "",
+                                   string nonStandardPricesSovietFilePath = "")
         {
-            //OnProgressChanged(lotId);
-
-            //var bookInDb = _context.BooksInfo
-            //                .Where(b => b.Id == lotId)
-            //                .FirstOrDefault();
-            //if (bookInDb != null)
-            //{
-            //    /*bookInDb.ImageArchiveUrl = $"_compressed_images/{lotId}.zip";
-            //    _context.BooksInfo.Update(bookInDb);
-            //    await _context.SaveChangesAsync();*/
-            //    return;
-            //}
-
             var lotData = await _lotDataService.GetLotDataAsync(lotId);
             if (lotData == null || lotData.result == null)
             {
@@ -366,38 +430,61 @@ namespace RareBooksService.Parser.Services
                 return;
             }
 
-            // Если категория не относится ни к интересующим, ни к советским — пропускаем
             bool isInterestedCategory = InterestedCategories.Contains(lotData.result.categoryId);
             bool isSovietCategory = SovietCategories.Contains(lotData.result.categoryId);
+
+            // Если категория не относится ни к интересующим, ни к советским — пропускаем
             if (!isInterestedCategory && !isSovietCategory)
             {
                 return;
             }
 
-            // Логика выбора:
-            // (A) startPrice >= 1  ИЛИ  (B) статус=2 и soldQuantity>0
+            // ---------------------------------------------------------------
+            // Новая ветка: если лот (status == 2) и (soldQuantity == 0),
+            // то просто сохраняем в базу, но не скачиваем изображения.
+            // ---------------------------------------------------------------
+            if (lotData.result.status == 2 && lotData.result.soldQuantity == 0) // <-- добавлено
+            {
+                _logger.LogInformation(
+                    $"Lot {lotData.result.id}: статус=2, но soldQuantity=0. Сохраняем без скачивания изображений."
+                );
+
+                // Сохраняем в БД (downloadImages = false)
+                await _lotDataHandler.SaveLotDataAsync(
+                    lotData.result,
+                    lotData.result.categoryId,
+                    categoryName: isInterestedCategory ? "interested" : "unknown",
+                    downloadImages: false,              // <-- не скачиваем изображения
+                    isLessValuableLot: false
+                );
+
+                return; // Заканчиваем обработку лота.
+            }
+
+            // ---------------------------------------------------------------
+            // Старая логика "meetsMainCondition":
+            // (A) startPrice == 1 ИЛИ (B) status=2 && soldQuantity>0
+            // ---------------------------------------------------------------
             bool meetsMainCondition =
-                (lotData.result.startPrice == 1) //&& lotData.result.soldQuantity > 0)
+                (lotData.result.startPrice == 1)
                 || (lotData.result.status == 2 && lotData.result.soldQuantity > 0);
 
             if (!meetsMainCondition)
             {
                 // Если не попадает ни под какое условие — пропускаем
-                // (при желании можно писать в файл)
                 return;
             }
 
             try
             {
                 // ----- Ветка "ИНТЕРЕСУЮЩИЕ ЛОТЫ" (InterestedCategories) ------
-                // Всё, что meetsMainCondition => сохраняем как «обычный»
                 if (isInterestedCategory)
                 {
-                    // (при желании — логика записи в файл nonStandardPricesFilePath, если хочется)
-                    _logger.LogInformation($"Lot {lotData.result.id}: Found an INTERESTED book '{lotData.result.title}'");
+                    _logger.LogInformation(
+                        $"Lot {lotData.result.id}: Found an INTERESTED book '{lotData.result.title}'"
+                    );
 
-                    // Всё, что подходит под meetsMainCondition => не малоценное => скачиваем и архивируем
-                    // => передаём downloadImages = true, isLessValuableLot = false
+                    // meetsMainCondition => не малоценное => скачиваем
                     await _lotDataHandler.SaveLotDataAsync(
                         lotData.result,
                         lotData.result.categoryId,
@@ -409,20 +496,20 @@ namespace RareBooksService.Parser.Services
                 // ----- Ветка "СОВЕТСКИЕ ЛОТЫ" (SovietCategories) -------------
                 else if (isSovietCategory)
                 {
-                    // Если цена < 1000 — считаем малоценным
                     bool isLittleValue = (lotData.result.price < 1500);
-
                     if (isLittleValue)
                     {
-                        // Пишем, если нужно, в nonStandardPricesSovietFilePath
+                        // При желании пишем lotId в файл
                         if (!string.IsNullOrWhiteSpace(nonStandardPricesSovietFilePath))
                         {
                             WriteNonStandardPriceToFile(lotData.result.id, nonStandardPricesSovietFilePath);
                         }
 
-                        _logger.LogInformation($"Lot {lotData.result.id}: SOVIET book < 1500 '{lotData.result.title}' (little-value).");
+                        _logger.LogInformation(
+                            $"Lot {lotData.result.id}: SOVIET book < 1500 '{lotData.result.title}' (little-value)."
+                        );
 
-                        // Сохраняем в БД, но без скачивания изображений
+                        // Сохраняем в БД, но без скачивания
                         await _lotDataHandler.SaveLotDataAsync(
                             lotData.result,
                             lotData.result.categoryId,
@@ -433,7 +520,9 @@ namespace RareBooksService.Parser.Services
                     }
                     else
                     {
-                        _logger.LogInformation($"Lot {lotData.result.id}: SOVIET book >= 1500 '{lotData.result.title}'.");
+                        _logger.LogInformation(
+                            $"Lot {lotData.result.id}: SOVIET book >= 1500 '{lotData.result.title}'."
+                        );
 
                         // Сохраняем как «обычный» (архивируем)
                         await _lotDataHandler.SaveLotDataAsync(
@@ -451,6 +540,7 @@ namespace RareBooksService.Parser.Services
                 _logger.LogError(ex, "Error processing lot ID {LotId}", lotId);
             }
         }
+
 
 
         private void WriteNonStandardPriceToFile(int lotId, string filePath)

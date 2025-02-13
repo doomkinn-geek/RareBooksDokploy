@@ -76,7 +76,7 @@ namespace RareBooksService.Data
                                 IsMonitored = book.IsMonitored,
                                 FinalPrice = book.FinalPrice,
                                 YearPublished = book.YearPublished,
-                                CategoryId = book.CategoryId,
+                                //CategoryId = book.CategoryId,
                                 Tags = book.Tags,
                                 PicsRatio = book.PicsRatio,
                                 Status = book.Status,

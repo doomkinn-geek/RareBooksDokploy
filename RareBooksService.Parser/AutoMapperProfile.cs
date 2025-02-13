@@ -10,7 +10,7 @@ namespace RareBooksService.Parser
     {        
         public AutoMapperProfile()
         {
-            CreateMap<MeshokBook, RegularBaseBook>()
+            CreateMap<MeshokBook, RegularBaseBook>()                
                 .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.id))
                 .ForMember(dest => dest.Title, opt => opt.MapFrom(src => src.title))
                 .ForMember(dest => dest.NormalizedTitle, opt => opt.MapFrom(src => src.title.ToLower()))
