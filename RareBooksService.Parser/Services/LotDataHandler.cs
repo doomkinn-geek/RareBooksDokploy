@@ -80,13 +80,16 @@ namespace RareBooksService.Parser.Services
             var localPath = typeOfAccessImagesElement.GetProperty("LocalPathOfImages").GetString();            
 
             // 4) Проверяем
-            if (string.IsNullOrEmpty(useLocal) ||
-                string.IsNullOrEmpty(localPath))
-            {
-                throw new ArgumentException("Invalid YandexCloud config in appsettings.json");
-            }
+            //if (string.IsNullOrEmpty(useLocal) ||
+            //    string.IsNullOrEmpty(localPath))
+            //{
+            //    throw new ArgumentException("Invalid TypeOfAccessImages config in appsettings.json");
+            //}
             _imageStorageOptions.LocalPathOfImages = localPath;
             _imageStorageOptions.UseLocalFiles = Convert.ToBoolean(useLocal);
+
+            if (string.IsNullOrEmpty(_imageStorageOptions.LocalPathOfImages))
+                _imageStorageOptions.UseLocalFiles = false;
         }
 
         // Инициализация cookies
@@ -263,7 +266,7 @@ namespace RareBooksService.Parser.Services
             }
         }*/
 
-        public async Task SaveLotDataAsync(
+        /*public async Task SaveLotDataAsync(
                 MeshokBook lotData,
                 int categoryId,
                 string categoryName = "unknown",
@@ -341,7 +344,169 @@ namespace RareBooksService.Parser.Services
                 OnProgressChanged(lotData.id, $"Ошибка при сохранении лота {lotData.id}: {ex.Message}");
                 throw;
             }
+        }*/
+
+        public async Task SaveLotDataAsync(
+                    MeshokBook lotData,
+                    int categoryId,
+                    string categoryName = "unknown",
+                    bool downloadImages = true,
+                    bool isLessValuableLot = false)
+        {
+            try
+            {
+                await EnsureCookiesInitializedAsync();
+
+                OnProgressChanged(lotData.id, $"Начало обработки лота {lotData.id}.");
+                _logger.LogInformation("Обработка лота с ID {LotId}", lotData.id);
+
+                // Проверяем, есть ли уже такой лот в БД
+                var existingBook = await _context.BooksInfo
+                                                 .Include(b => b.Category)
+                                                 .FirstOrDefaultAsync(b => b.Id == lotData.id);
+
+                // Получаем (или создаём) сущность Category
+                var category = await GetOrCreateCategoryAsync(categoryId, categoryName);
+
+                // Содержимое описания
+                var descriptionFromWeb = await _lotDataService.GetBookDescriptionAsync(lotData.id);
+                var normalizedDesc = descriptionFromWeb?.ToLower() ?? string.Empty;
+
+                // Пытаемся вычислить год из описания или заголовка
+                int? year = PublishingYearExtractor.ExtractYearFromDescription(descriptionFromWeb)
+                          ?? PublishingYearExtractor.ExtractYearFromDescription(lotData.title);
+
+                // Если записи нет в БД, создаём новую
+                if (existingBook == null)
+                {
+                    _logger.LogInformation("Лот {LotId} отсутствует в БД. Создаём новую запись.", lotData.id);
+
+                    var newBook = _mapper.Map<RegularBaseBook>(lotData);
+
+                    // Дополнительные поля, которых нет в MeshokBook напрямую
+                    newBook.Category = category;
+                    newBook.Type = lotData.type;
+                    newBook.Description = descriptionFromWeb;
+                    newBook.NormalizedDescription = normalizedDesc;
+                    newBook.YearPublished = year;
+                    newBook.IsLessValuable = isLessValuableLot;
+
+                    // По умолчанию до архивации
+                    newBook.IsImagesCompressed = false;
+                    newBook.ImageArchiveUrl = null;
+
+                    // Логику IsMonitored и FinalPrice определяем
+                    if (lotData.beginDate == null || lotData.endDate == null)
+                    {
+                        newBook.IsMonitored = false;
+                        newBook.FinalPrice = lotData.normalizedPrice;
+                    }
+                    else
+                    {
+                        newBook.IsMonitored = (lotData.endDate >= DateTime.UtcNow);
+                        newBook.FinalPrice = (lotData.endDate < DateTime.UtcNow)
+                                                ? lotData.normalizedPrice
+                                                : null;
+                    }
+
+                    _context.BooksInfo.Add(newBook);
+                    await _context.SaveChangesAsync();
+
+                    // Если лот не «малоценный» и требуется скачивать изображения
+                    if (!isLessValuableLot && downloadImages)
+                    {
+                        await ArchiveImagesForBookAsync(newBook);
+                    }
+                }
+                else
+                {
+                    // ---------- Обновление существующей записи ----------
+                    _logger.LogInformation("Лот {LotId} уже есть в БД. Обновляем поля.", lotData.id);
+
+                    // Обновляем поля. Можно вручную, можно частично использовать AutoMapper.
+                    // Например, так: _mapper.Map(lotData, existingBook) – но внимательно
+                    // следите, чтобы не потерять нужные данные. Ниже – пример ручного обновления.
+
+                    existingBook.Category = category;
+                    existingBook.Title = lotData.title;
+                    existingBook.NormalizedTitle = lotData.title?.ToLower() ?? string.Empty;
+
+                    existingBook.Description = descriptionFromWeb;
+                    existingBook.NormalizedDescription = normalizedDesc;
+                    existingBook.BeginDate = lotData.beginDate ?? DateTime.MinValue;
+                    existingBook.EndDate = lotData.endDate ?? DateTime.MinValue;
+                    existingBook.Price = lotData.price ?? 0;
+                    existingBook.City = lotData.city?.name;
+                    existingBook.Type = lotData.type;
+                    existingBook.Status = lotData.status ?? 0;
+                    existingBook.StartPrice = (int)(lotData.startPrice ?? 0);
+                    existingBook.SoldQuantity = lotData.soldQuantity ?? 0;
+                    existingBook.BidsCount = lotData.bidsCount ?? 0;
+                    existingBook.SellerName = lotData.seller?.displayName;
+                    existingBook.PicsCount = lotData.picsCount ?? 0;
+                    existingBook.YearPublished = year;
+                    existingBook.IsLessValuable = isLessValuableLot;  // Можно решить, перезаписывать ли
+
+                    // Обновляем изображения
+                    existingBook.ImageUrls = lotData.pictures
+                        ?.Select(p => p.url)
+                        .Where(url => !string.IsNullOrEmpty(url))
+                        .ToList() ?? new List<string>();
+
+                    existingBook.ThumbnailUrls = lotData.pictures
+                        ?.Select(p => p.thumbnail.x1)
+                        .Where(url => !string.IsNullOrEmpty(url))
+                        .ToList() ?? new List<string>();
+
+                    existingBook.PicsRatio = lotData.pictures
+                        ?.Select(p => p.ratio)
+                        .ToArray() ?? new float[0];
+
+                    // Пересчёт IsMonitored / FinalPrice
+                    if (lotData.beginDate == null || lotData.endDate == null)
+                    {
+                        existingBook.IsMonitored = false;
+                        existingBook.FinalPrice = lotData.normalizedPrice;
+                    }
+                    else
+                    {
+                        existingBook.IsMonitored = (lotData.endDate >= DateTime.UtcNow);
+                        if (lotData.endDate < DateTime.UtcNow && lotData.normalizedPrice.HasValue)
+                        {
+                            existingBook.FinalPrice = lotData.normalizedPrice.Value;
+                        }
+                    }
+
+                    // Если надо заново архивать изображения (например, «сбросить» старые) – можно:
+                    //  1) Проверить наличие новых URL
+                    //  2) Или всегда скачивать, если downloadImages = true
+                    // Ниже – самый простой вариант: если не малоценный и downloadImages=true, то
+                    // перекачать/переархивировать. Если вы не хотите перезакачивать – уберите этот блок.
+
+                    if (!existingBook.IsLessValuable && downloadImages)
+                    {
+                        // Можно «сбросить» архив, чтобы пересоздать.
+                        // existingBook.IsImagesCompressed = false;
+                        // existingBook.ImageArchiveUrl = null;
+
+                        await ArchiveImagesForBookAsync(existingBook);
+                    }
+
+                    // Сохраняем изменения
+                    _context.BooksInfo.Update(existingBook);
+                    await _context.SaveChangesAsync();
+                }
+
+                _logger.LogInformation("Лот {LotId} успешно сохранён/обновлён в БД.", lotData.id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при сохранении (upsert) лота {LotId}", lotData.id);
+                OnProgressChanged(lotData.id, $"Ошибка при сохранении лота {lotData.id}: {ex.Message}");
+                throw;
+            }
         }
+
 
 
         /// <summary>

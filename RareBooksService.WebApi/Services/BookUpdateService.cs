@@ -150,12 +150,13 @@ namespace RareBooksService.WebApi.Services
 
             try
             {
-                /*if (!_cancellationRequested && !externalStoppingToken.IsCancellationRequested)
+                if (!_cancellationRequested && !externalStoppingToken.IsCancellationRequested)
                 {
-                    _currentOperationName = "RefreshLotsWithEmptyImageUrlsAsync";
+                    _currentOperationName = "UpdateFinishedAuctionsStartPriceOneAsync";
                     ResetProgress();
-                    await lotFetchingService.RefreshLotsWithEmptyImageUrlsAsync(externalStoppingToken);
-                }*/
+                    //await lotFetchingService.RefreshLotsWithEmptyImageUrlsAsync(externalStoppingToken);
+                    await lotFetchingService.UpdateFinishedAuctionsStartPriceOneAsync(externalStoppingToken);
+                }
 
                 // 0) FreeList с данными малозначимых книг:
 

@@ -16,6 +16,7 @@ namespace RareBooksService.Parser.Services
         Task FetchAllOldDataWithLetterGroup(char groupLetter);
         Task FetchSoldFixedPriceLotsAsync(CancellationToken token);
         Task RefreshLotsWithEmptyImageUrlsAsync(CancellationToken token);
+        Task UpdateFinishedAuctionsStartPriceOneAsync(CancellationToken token);
     }
 
     public class LotFetchingService : ILotFetchingService
@@ -123,6 +124,65 @@ namespace RareBooksService.Parser.Services
 
             _logger.LogInformation("Завершена загрузка проданных лотов с фиксированной ценой.");
         }
+
+        public async Task UpdateFinishedAuctionsStartPriceOneAsync(CancellationToken token)
+        {
+            // Выбираем только те книги, у которых тип = "auction", startPrice = 1,
+            // аукцион уже закончился (EndDate < DateTime.UtcNow) и при этом IsMonitored ещё = true
+            var booksToUpdate = await _context.BooksInfo
+                .Where(b => b.Type == "auction"
+                            && b.StartPrice == 1
+                            && b.EndDate < DateTime.UtcNow)
+                .ToListAsync();
+
+            foreach (var book in booksToUpdate)
+            {
+                // проверка отмены
+                token.ThrowIfCancellationRequested();
+
+                try
+                {
+                    // Запрашиваем актуальные данные по лоту
+                    var updatedLotData = await _lotDataService.GetLotDataAsync(book.Id);
+                    if (updatedLotData?.result != null)
+                    {
+                        // Полный апдейт через SaveLotDataAsync
+                        await _lotDataHandler.SaveLotDataAsync(
+                            lotData: updatedLotData.result,
+                            categoryId: updatedLotData.result.categoryId,
+                            categoryName: "unknown",
+                            downloadImages: false,  // обычно повторная закачка картинок не нужна
+                            isLessValuableLot: book.IsLessValuable
+                        );
+
+                        // снимаем с мониторинга
+                        book.IsMonitored = false;
+
+                        // при необходимости обновляем FinalPrice
+                        if (updatedLotData.result.normalizedPrice.HasValue)
+                        {
+                            book.FinalPrice = updatedLotData.result.normalizedPrice.Value;
+                        }
+
+                        await _context.SaveChangesAsync();
+
+                        _logger.LogInformation(
+                            "[UpdateFinishedAuctionsStartPriceOneAsync] Обновили лот {LotId}, финальная цена = {FinalPrice}.",
+                            book.Id,
+                            book.FinalPrice
+                        );
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "[UpdateFinishedAuctionsStartPriceOneAsync] Ошибка при обновлении лота {LotId}",
+                        book.Id
+                    );
+                }
+            }
+        }
+
 
         public async Task FetchAllNewData(CancellationToken token)
         {
