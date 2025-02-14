@@ -6,17 +6,17 @@ import { UserContext } from '../context/UserContext';
 const PrivateRoute = () => {
     const { user, loading } = React.useContext(UserContext);
 
-    // Пока грузим пользователя — можно показывать Spinner или возвращать null
     if (loading) {
+        // Пока идёт проверка токена
         return <div>Загрузка...</div>;
     }
 
-    // Если user отсутствует — редирект на /login
     if (!user) {
+        // Проверка закончилась, пользователя нет
         return <Navigate to="/login" />;
     }
 
-    // Иначе всё ок
+    // Иначе пропускаем дальше
     return <Outlet />;
 };
 

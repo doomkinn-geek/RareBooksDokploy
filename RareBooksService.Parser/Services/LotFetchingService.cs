@@ -135,10 +135,14 @@ namespace RareBooksService.Parser.Services
                             && b.EndDate < DateTime.UtcNow)
                 .ToListAsync();
 
-            int counter = 1;
+            int counter = 0;
 
             foreach (var book in booksToUpdate)
             {
+                counter++;
+                Console.Title = $"Обработка лота {counter} из {booksToUpdate.Count}";
+                if (counter < 48000)
+                    continue;
                 // проверка отмены
                 token.ThrowIfCancellationRequested();
 
@@ -158,7 +162,7 @@ namespace RareBooksService.Parser.Services
                         );
 
                         // снимаем с мониторинга
-                        book.IsMonitored = false;
+                        /*book.IsMonitored = false;
 
                         // при необходимости обновляем FinalPrice
                         if (updatedLotData.result.normalizedPrice.HasValue)
@@ -166,16 +170,13 @@ namespace RareBooksService.Parser.Services
                             book.FinalPrice = updatedLotData.result.normalizedPrice.Value;
                         }
 
-                        await _context.SaveChangesAsync();
-
+                        await _context.SaveChangesAsync();*/
                         _logger.LogInformation(
                             "[UpdateFinishedAuctionsStartPriceOneAsync] Обновили лот {LotId}, финальная цена = {FinalPrice}.",
                             book.Id,
-                            book.FinalPrice
-                        );
+                            book.FinalPrice);
                     }
-                    counter++;
-                    Console.Title = $"Обработка лота {counter} из {booksToUpdate.Count}";
+                    
                 }
                 catch (Exception ex)
                 {

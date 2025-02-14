@@ -1,7 +1,6 @@
 ﻿// src/context/UserContext.jsx
 import React, { createContext, useState, useEffect } from 'react';
 import axios from 'axios';
-import Cookies from 'js-cookie';
 import { API_URL } from '../api';
 
 export const UserContext = createContext(null);
@@ -11,11 +10,13 @@ export const UserProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // При старте просто пытаемся получить текущего пользователя (если есть токен).
         const fetchUser = async () => {
-            const token = Cookies.get('token');
+            //const token = Cookies.get('token');
+            // Берём токен из localStorage
+            const token = localStorage.getItem('token');
             if (token) {
                 try {
+                    // Пытаемся сходить на /auth/user
                     const response = await axios.get(`${API_URL}/auth/user`, {
                         headers: { Authorization: `Bearer ${token}` },
                     });
@@ -31,17 +32,12 @@ export const UserProvider = ({ children }) => {
                 setLoading(false);
             }
         };
+
         fetchUser();
     }, []);
 
     return (
-        <UserContext.Provider
-            value={{
-                user,
-                setUser,
-                loading,
-            }}
-        >
+        <UserContext.Provider value={{ user, setUser, loading }}>
             {children}
         </UserContext.Provider>
     );

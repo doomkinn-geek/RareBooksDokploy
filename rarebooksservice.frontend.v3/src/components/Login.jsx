@@ -2,7 +2,6 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
-import Cookies from 'js-cookie';
 import { UserContext } from '../context/UserContext';
 import { API_URL } from '../api';
 import ErrorMessage from './ErrorMessage';
@@ -19,8 +18,13 @@ const Login = () => {
         setError('');
         try {
             const response = await axios.post(`${API_URL}/auth/login`, { email, password });
-            Cookies.set('token', response.data.token, { expires: 7 });
+            //Cookies.set('token', response.data.token, { expires: 7 });
+            // вместо Cookies:
+            localStorage.setItem('token', response.data.token);
+
+            // прописываем пользователя в контекст
             setUser(response.data.user);
+
             navigate('/');
         } catch (err) {
             console.error('Ошибка входа:', err);

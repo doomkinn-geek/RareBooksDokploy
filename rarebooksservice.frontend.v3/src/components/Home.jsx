@@ -108,11 +108,12 @@ const Home = () => {
 
     // --- Логаут ---
     const handleLogout = () => {
-        document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        //document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
         localStorage.removeItem('token');
         setUser(null);
         navigate('/');
     };
+
 
     // --- Обратная связь ---
     const openFeedback = () => {
@@ -151,21 +152,30 @@ const Home = () => {
     const handleLogin = async () => {
         setLoginError('');
         try {
+            // отправляем запрос
             const response = await axios.post(`${API_URL}/auth/login`, {
                 email: loginEmail,
                 password: loginPassword
             });
-            Cookies.set('token', response.data.token, { expires: 7 });
+
+            //Cookies.set('token', response.data.token, { expires: 7 });
+            // Вместо Cookies — localStorage:
+            localStorage.setItem('token', response.data.token);
+
+            // Сразу прописываем пользователя в контекст
             setUser(response.data.user);
-            // очистим поля
+
+            // чистим поля формы
             setLoginEmail('');
             setLoginPassword('');
-            setLoginError('');
+
+            // переход или просто обновить UI
+            // navigate('/');
         } catch (err) {
             console.error('Ошибка входа:', err);
             setLoginError('Неверные учётные данные или ошибка сервера.');
         }
-    };
+    };   
 
     // Пока UserContext грузит данные (например, проверку токена)
     if (loading) {

@@ -6,8 +6,14 @@ export const API_URL = '/api';
 //export const API_URL = 'https://localhost:7042/api';
 
 // Получаем токен только из cookies
-export const getAuthHeaders = () => {
+/*export const getAuthHeaders = () => {
     const token = Cookies.get('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};*/
+
+// Вместо Cookies.get('token'):
+export const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
 };
 

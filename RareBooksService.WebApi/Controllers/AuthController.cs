@@ -131,7 +131,9 @@ namespace RareBooksService.WebApi.Controllers
         {
             _logger.LogInformation("Запрос информации о текущем пользователе");
 
-            var userId = User.FindFirstValue(ClaimTypes.Sid);
+            // 14.02.2025 - не работало обновление, т.к. при генерации токена информация об id клалась в другой ClaimTypes
+            //var userId = User.FindFirstValue(ClaimTypes.Sid);
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId == null)
             {
                 _logger.LogWarning("Не удалось получить идентификатор текущего пользователя");
