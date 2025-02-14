@@ -21,7 +21,6 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
     const [error, setError] = useState('');
 
     useEffect(() => {
-        // Если books пуст, сбрасываем миниатюры и выходим
         if (!books || books.length === 0) {
             setThumbnails({});
             setError('');
@@ -33,45 +32,34 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
         let cancelled = false;
 
         const fetchThumbnails = async () => {
-            try {
-                const requests = books.map((book) => {
-                    if (!book.firstImageName) {
-                        return null;
-                    }
-                    return getBookImageFile(book.id, book.firstImageName)
-                        .then((resp) => {
-                            const blobUrl = URL.createObjectURL(resp.data);
-                            return { bookId: book.id, blobUrl };
-                        })
-                        .catch((err) => {
-                            console.error('Ошибка при загрузке миниатюры', book.id, err);
-                            return null;
-                        });
-                }).filter(Boolean);
+            books.forEach((book) => {
+                if (!book.firstImageName) return; // нет миниатюры
 
-                const results = await Promise.all(requests);
-                if (cancelled) return;
+                getBookImageFile(book.id, book.firstImageName)
+                    .then((resp) => {
+                        if (cancelled) return;
+                        const blobUrl = URL.createObjectURL(resp.data);
 
-                const newThumbs = {};
-                for (const r of results) {
-                    if (r) {
-                        newThumbs[r.bookId] = r.blobUrl;
-                    }
-                }
-                setThumbnails(newThumbs);
-            } catch (err) {
-                console.error('Ошибка при загрузке миниатюр:', err);
-                if (!cancelled) {
-                    setError('Возникли проблемы с загрузкой миниатюр (возможно, нет подписки).');
-                }
-            }
+                        // Обновляем state точечно для этой одной миниатюры
+                        setThumbnails((prev) => ({
+                            ...prev,
+                            [book.id]: blobUrl,
+                        }));
+                    })
+                    .catch((err) => {
+                        console.error('Ошибка при загрузке миниатюры', book.id, err);
+                        // можно вывести локальную ошибку, но не прерывать
+                    });
+            });
         };
 
         fetchThumbnails();
+
         return () => {
             cancelled = true;
         };
     }, [books]);
+
 
     // Переход на детальную страницу
     const handleBookClick = (bookId) => {
@@ -171,7 +159,7 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                                             width: '100%',
                                             height: 'auto',
                                             objectFit: 'contain',
-                                            maxHeight: '200px', // Ограничение по высоте
+                                            maxHeight: '250px', // Ограничение по высоте
                                         }}
                                     />
                                 </Box>
