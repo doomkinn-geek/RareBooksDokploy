@@ -6,7 +6,6 @@ import axios from 'axios';
 import { API_URL, getAuthHeaders } from '../api';
 
 // Функция-заглушка для получения одного файла (миниатюры)
-// из бэкенда: GET /books/{id}/images/{imageName}
 function getBookImageFile(id, imageName) {
     return axios.get(`${API_URL}/books/${id}/images/${imageName}`, {
         headers: getAuthHeaders(),
@@ -17,35 +16,28 @@ function getBookImageFile(id, imageName) {
 const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
     const navigate = useNavigate();
 
-    // Объект, где ключ = book.id, значение = blob-URL
+    // Объект: ключ = book.id, значение = blob-URL
     const [thumbnails, setThumbnails] = useState({});
     const [error, setError] = useState('');
 
     useEffect(() => {
-        // Если books пуст — очищаем старые данные и выходим
+        // Если books пуст, сбрасываем миниатюры и выходим
         if (!books || books.length === 0) {
             setThumbnails({});
             setError('');
             return;
         }
 
-        // Сбрасываем
         setThumbnails({});
         setError('');
-
-        // Флаг, который прерывает обновление, если компонент размонтирован
         let cancelled = false;
 
-        // Асинхронная функция, которая загрузит все миниатюры "пакетом"
         const fetchThumbnails = async () => {
             try {
-                // Массив промисов (каждый запросит миниатюру)
                 const requests = books.map((book) => {
                     if (!book.firstImageName) {
-                        // У книги нет миниатюры
                         return null;
                     }
-                    // Возвращаем промис:
                     return getBookImageFile(book.id, book.firstImageName)
                         .then((resp) => {
                             const blobUrl = URL.createObjectURL(resp.data);
@@ -53,59 +45,93 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                         })
                         .catch((err) => {
                             console.error('Ошибка при загрузке миниатюры', book.id, err);
-                            return null; // Не прерываем весь Promise.all, просто вернём null
+                            return null;
                         });
-                }).filter(Boolean); // Уберём null'ы (где firstImageName отсутствует)
+                }).filter(Boolean);
 
-                // Ждём, пока все запросы завершатся
                 const results = await Promise.all(requests);
                 if (cancelled) return;
 
-                // Собираем объект вида { bookId: blobUrl }
                 const newThumbs = {};
                 for (const r of results) {
                     if (r) {
                         newThumbs[r.bookId] = r.blobUrl;
                     }
                 }
-
-                // Выставляем все миниатюры одним махом
                 setThumbnails(newThumbs);
             } catch (err) {
-                console.error('Ошибка при параллельной загрузке миниатюр:', err);
+                console.error('Ошибка при загрузке миниатюр:', err);
                 if (!cancelled) {
                     setError('Возникли проблемы с загрузкой миниатюр (возможно, нет подписки).');
                 }
             }
         };
 
-        // Запускаем загрузку
         fetchThumbnails();
-
-        // Если компонент размонируется — выставим cancelled=true
         return () => {
             cancelled = true;
         };
     }, [books]);
 
-    // Обработка смены страницы
-    const handlePageChange = (event, value) => {
-        setCurrentPage(value);
-    };
-
-    // Переход на детальную страницу книги
+    // Переход на детальную страницу
     const handleBookClick = (bookId) => {
         navigate(`/books/${bookId}`, { state: { fromPage: currentPage } });
     };
 
+    // Поменять страницу
+    const handlePageChange = (event, value) => {
+        setCurrentPage(value);
+    };
+
+    // Блок навигации (кнопки + пагинация)
+    const renderPagination = () => (
+        <Box
+            sx={{
+                display: 'flex',
+                justifyContent: 'center',
+                my: 2,
+                flexWrap: 'wrap',
+                gap: 2,
+            }}
+        >
+            <Button
+                variant="contained"
+                onClick={() => setCurrentPage(currentPage - 1)}
+                disabled={currentPage === 1}
+            >
+                Предыдущая страница
+            </Button>
+            <Pagination
+                count={totalPages}
+                page={currentPage}
+                onChange={handlePageChange}
+                color="primary"
+                siblingCount={0}
+                boundaryCount={1}
+            />
+            <Button
+                variant="contained"
+                onClick={() => setCurrentPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+            >
+                Следующая страница
+            </Button>
+        </Box>
+    );
+
     return (
         <Box sx={{ my: 2 }}>
+            {/* Ошибки */}
             {error && (
                 <Typography color="error" sx={{ mb: 2 }}>
                     {error}
                 </Typography>
             )}
 
+            {/* Если книги есть — показываем пагинацию и сверху */}
+            {books.length > 0 && renderPagination()}
+
+            {/* Список книг */}
             <Box
                 className="book-list"
                 sx={{
@@ -129,7 +155,7 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                                 gap: 2,
                             }}
                         >
-                            {/* показываем миниатюру, если она загрузилась */}
+                            {/* Миниатюра, если есть */}
                             {book.firstImageName && thumbnails[book.id] && (
                                 <Box
                                     sx={{
@@ -141,10 +167,11 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                                         src={thumbnails[book.id]}
                                         alt="Book Thumbnail"
                                         style={{
+                                            display: 'block',
                                             width: '100%',
                                             height: 'auto',
                                             objectFit: 'contain',
-                                            display: 'block',
+                                            maxHeight: '200px', // Ограничение по высоте
                                         }}
                                     />
                                 </Box>
@@ -163,50 +190,26 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                                 >
                                     {book.title}
                                 </Typography>
-                                <Typography variant="body1">Цена: {book.price}</Typography>
-                                <Typography variant="body1">Дата: {book.date}</Typography>
-                                <Typography variant="body1">Продавец: {book.sellerName}</Typography>
-                                <Typography variant="body1">Тип: {book.type}</Typography>
+                                <Typography variant="body1">
+                                    Цена: {book.price}
+                                </Typography>
+                                <Typography variant="body1">
+                                    Дата: {book.date}
+                                </Typography>
+                                <Typography variant="body1">
+                                    Продавец: {book.sellerName}
+                                </Typography>
+                                <Typography variant="body1">
+                                    Тип: {book.type}
+                                </Typography>
                             </Box>
                         </CardContent>
                     </Card>
                 ))}
             </Box>
 
-            {books.length > 0 && (
-                <Box
-                    sx={{
-                        display: 'flex',
-                        justifyContent: 'center',
-                        mt: 2,
-                        flexWrap: 'wrap',
-                        gap: 2,
-                    }}
-                >
-                    <Button
-                        variant="contained"
-                        onClick={() => setCurrentPage(currentPage - 1)}
-                        disabled={currentPage === 1}
-                    >
-                        Предыдущая страница
-                    </Button>
-                    <Pagination
-                        count={totalPages}
-                        page={currentPage}
-                        onChange={handlePageChange}
-                        color="primary"
-                        siblingCount={0}
-                        boundaryCount={1}
-                    />
-                    <Button
-                        variant="contained"
-                        onClick={() => setCurrentPage(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                    >
-                        Следующая страница
-                    </Button>
-                </Box>
-            )}
+            {/* Пагинация дублируется снизу */}
+            {books.length > 0 && renderPagination()}
         </Box>
     );
 };

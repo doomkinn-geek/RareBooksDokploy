@@ -33,29 +33,31 @@ const BookSearchByTitle = () => {
             try {
                 const response = await searchBooksByTitle(title, exactPhrase, page);
 
-                // Сервер возвращает: { items, totalPages, remainingRequests }
-                setBooks(response.data.items);
-                setTotalPages(response.data.totalPages);
+                const { data } = response;
+                if (!data || !Array.isArray(data.items)) {
+                    setBooks([]);
+                    setErrorMessage('Сервер вернул неожиданные данные.');
+                } else {
+                    setBooks(data.items);
+                    setTotalPages(data.totalPages);
 
-                // remainingRequests может быть числом или null
-                if (typeof response.data.remainingRequests !== 'undefined') {
-                    setRemainingRequests(response.data.remainingRequests);
+                    if (data.items.length === 0) {
+                        setErrorMessage('Ничего не найдено.');
+                    }
                 }
-
-                if (response.data.items.length === 0) {
-                    setErrorMessage('Ничего не найдено.');
-                }
-                // ...
             } catch (error) {
-                console.error('Ошибка поиска книг по названию:', error);
+                console.error('Ошибка поиска книг:', error);
+                setBooks([]);
                 setErrorMessage('Произошла ошибка при поиске книг. Попробуйте позже.');
             } finally {
+                // Ставим loading=false в любом случае (успех или ошибка)
                 setLoading(false);
             }
         };
 
         fetchBooks(currentPage);
     }, [title, exactPhrase, currentPage]);
+
 
     useEffect(() => {
         const newQuery = new URLSearchParams();
