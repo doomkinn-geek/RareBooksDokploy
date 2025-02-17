@@ -16,20 +16,25 @@ const BookDetail = () => {
     const navigate = useNavigate();
 
     const [book, setBook] = useState(null);
+
+    // Массив URL-адресов изображений (blob-ссылки или внешние)
     const [imageUrls, setImageUrls] = useState([]);
+    // Ошибки при загрузке
     const [error, setError] = useState(null);
     const [errorDetails, setErrorDetails] = useState(null);
 
-    // 1) Вызовем initLightboxJS один раз при монтировании (чтобы включить плагины)
+    // Состояние загрузки изображений
+    const [imagesLoading, setImagesLoading] = useState(false);
+
+    // Инициализируем lightbox один раз
     useEffect(() => {
-        initLightboxJS("YOUR_LICENSE_KEY", "individual");
+        initLightboxJS('YOUR_LICENSE_KEY', 'individual');
     }, []);
 
-    // 2) Когда imageUrls изменяется, повторно инициализируем лайтбокс
-    //    (иначе он «не увидит» новые <img>)
+    // Повторно инициализируем lightbox, когда меняется imageUrls
     useEffect(() => {
         if (imageUrls.length > 0) {
-            initLightboxJS("YOUR_LICENSE_KEY", "individual");
+            initLightboxJS('YOUR_LICENSE_KEY', 'individual');
         }
     }, [imageUrls]);
 
@@ -49,19 +54,23 @@ const BookDetail = () => {
 
         const fetchBookImages = async () => {
             try {
+                // Ставим состояние "идёт загрузка" и сбрасываем старые данные
+                setImagesLoading(true);
+                setImageUrls([]);
+
                 const response = await getBookImages(id);
                 const { images = [], thumbnails = [] } = response.data;
 
                 if (!images || images.length === 0) {
-                    setImageUrls([]);
+                    // Нет изображений вообще
                     return;
                 }
 
                 // Проверяем, являются ли это внешние ссылки
                 const firstItem = images[0];
-                const isExternalLink = firstItem.startsWith('http://') || firstItem.startsWith('https://');
+                const isExternalLink =
+                    firstItem.startsWith('http://') || firstItem.startsWith('https://');
 
-                // Здесь мы собираем finalArray (а не вызываем setImageUrls в цикле)
                 const finalArray = [];
 
                 if (isExternalLink) {
@@ -70,7 +79,7 @@ const BookDetail = () => {
                         finalArray.push(url);
                     }
                 } else {
-                    // Обычная книга: имена файлов => скачиваем BLOB
+                    // Обычная книга: имена файлов => скачиваем каждый файл как blob
                     for (const fileName of images) {
                         try {
                             const resp = await getBookImageFile(id, fileName);
@@ -78,17 +87,21 @@ const BookDetail = () => {
                             finalArray.push(blobUrl);
                         } catch (err) {
                             console.error('Ошибка при загрузке', fileName, err);
+                            // продолжаем, чтобы остальные подгрузить
                         }
                     }
                 }
 
-                // После того как мы собрали все ссылки/blob, одним махом добавляем в state
                 setImageUrls(finalArray);
-
             } catch (err) {
-                console.error("Ошибка при получении изображений:", err);
-                setError("Failed to load book images.");
-                setErrorDetails(err.response?.data?.message || err.message || "Unknown error");
+                console.error('Ошибка при получении изображений:', err);
+                setError('Failed to load book images.');
+                setErrorDetails(
+                    err.response?.data?.message || err.message || 'Unknown error'
+                );
+            } finally {
+                // В любом случае, загрузка завершена
+                setImagesLoading(false);
             }
         };
 
@@ -132,7 +145,7 @@ const BookDetail = () => {
                         Цена: {book.price}
                     </Typography>
                     <Typography variant="subtitle1">
-                        Продавец:{" "}
+                        Продавец:{' '}
                         <Link
                             to={`/searchBySeller/${book.sellerName}`}
                             style={{ textDecoration: 'none' }}
@@ -145,7 +158,12 @@ const BookDetail = () => {
 
                     <Box sx={{ my: 2 }}>
                         <Typography variant="h6">Изображения</Typography>
-                        {imageUrls.length > 0 ? (
+                        {/* Проверяем наше состояние загрузки */}
+                        {imagesLoading ? (
+                            <Typography>Изображения загружаются...</Typography>
+                        ) : imageUrls.length === 0 ? (
+                            <Typography>Изображения отсутствуют.</Typography>
+                        ) : (
                             <SlideshowLightbox
                                 theme="day"
                                 showThumbnails={true}
@@ -166,8 +184,6 @@ const BookDetail = () => {
                                     />
                                 ))}
                             </SlideshowLightbox>
-                        ) : (
-                            <Typography>Изображения отсутствуют.</Typography>
                         )}
                     </Box>
 
