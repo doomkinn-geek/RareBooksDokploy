@@ -79,7 +79,7 @@ namespace RareBooksService.Parser.Services
             _logger.LogInformation("Начинаем загрузку проданных лотов с фиксированной ценой.");
 
             int lastProcessedId = _context.BooksInfo
-                    .Where(b => b.Type == "fixedPrice" && b.SoldQuantity > 0) //b.EndDate < (DateTime.Now - TimeSpan.FromDays(14)))
+                    .Where(b => b.Type == "fixedPrice" && b.SoldQuantity > 0) //&& b.EndDate < (DateTime.Now - TimeSpan.FromDays(14)))
                     .OrderByDescending(b => b.Id)
                     .Select(b => b.Id)
                     .FirstOrDefault();
@@ -131,7 +131,7 @@ namespace RareBooksService.Parser.Services
             // аукцион уже закончился (EndDate < DateTime.UtcNow) и при этом IsMonitored ещё = true
             var booksToUpdate = await _context.BooksInfo
                 .Where(b => b.Type == "auction"
-                            && b.StartPrice == 1
+                            && b.SoldQuantity == 0
                             && b.EndDate < DateTime.UtcNow)
                 .ToListAsync();
 
@@ -141,8 +141,8 @@ namespace RareBooksService.Parser.Services
             {
                 counter++;
                 Console.Title = $"Обработка лота {counter} из {booksToUpdate.Count}";
-                if (counter < 48000)
-                    continue;
+                //if (counter < 48000)
+                //    continue;
                 // проверка отмены
                 token.ThrowIfCancellationRequested();
 
@@ -451,6 +451,10 @@ namespace RareBooksService.Parser.Services
 
                 try
                 {
+                    var currentLotInDb = _context.BooksInfo
+                        .Where(b => b.Id == lotId)
+                        .FirstOrDefault();
+                    if (currentLotInDb != null) continue;
                     var queryResult = await _lotDataService.GetLotDataAsync(lotId);
                     if (queryResult != null)
                     {
