@@ -167,34 +167,47 @@ namespace RareBooksService.Parser.Services
                     {
                         throw new TimeoutException($"Request timed out after {maxRetries} attempts.", ex);
                     }
+
                     Console.WriteLine($"Attempt {attempt} of {maxRetries} failed due to timeout. Retrying after {delayMilliseconds}ms...");
                     await Task.Delay(delayMilliseconds);
                     delayMilliseconds *= 2;
                 }
                 catch (HttpRequestException ex)
                 {
+                    // Если последняя попытка, пробрасываем исключение сразу
                     if (attempt == maxRetries)
                     {
                         throw;
                     }
-                    // Если получен Forbidden, повторно инициализируем cookies и увеличиваем задержку
+
+                    // Если получили 403 (Forbidden), то делаем реинициализацию и увеличиваем задержку
                     if (ex.Message.Contains("Forbidden"))
                     {
-                        Console.WriteLine($"Attempt {attempt} of {maxRetries} failed with Forbidden. Reinitializing cookies and retrying after {delayMilliseconds * 10}ms...");
+                        Console.WriteLine($"Attempt {attempt} of {maxRetries} failed with Forbidden. " +
+                                          $"Reinitializing cookies and retrying after {delayMilliseconds * 10}ms...");
                         await FetchInitialCookies();
                         await Task.Delay(delayMilliseconds * 10);
                         delayMilliseconds *= 2;
                     }
+                    // Если получили 404 (NotFound), то сразу выбрасываем исключение — не повторяем, не переинициализируем
+                    else if (ex.Message.Contains("NotFound"))
+                    {
+                        throw;
+                    }
                     else
                     {
-                        Console.WriteLine($"Attempt {attempt} of {maxRetries} failed with HttpRequestException. Retrying after {delayMilliseconds}ms...");
+                        Console.WriteLine($"Attempt {attempt} of {maxRetries} failed with HttpRequestException. " +
+                                          $"Retrying after {delayMilliseconds}ms...");
                         await Task.Delay(delayMilliseconds);
                         delayMilliseconds *= 2;
                     }
                 }
             }
+
+            // Сюда попасть теоретически не должны
             throw new Exception("Unexpected error in SendRequestWithRetries.");
         }
+
 
         public void Dispose()
         {

@@ -73,16 +73,39 @@ namespace RareBooksService.WebApi.Services
 
         public async Task<(string PaymentId, bool IsPaymentSucceeded)> ProcessWebhookAsync(HttpRequest request)
         {
-            // Внимание! По документации:
-            //   var notification = Client.ParseMessage(HttpMethod, ContentType, InputStream)
-            // Но вы используете ASP.NET Core: нужно «прокрутить» тело запроса:
-            request.Body.Position = 0;
-            var notification = Client.ParseMessage(
-                request.Method,
-                request.ContentType,
-                request.Body
-            );
+            // Включаем буферизацию, чтобы была возможность заново прочитать поток
+            request.EnableBuffering();
 
+            Notification notification = null;
+            try
+            {
+                // Создаём MemoryStream и копируем туда тело запроса
+                using var memoryStream = new MemoryStream();
+                await request.Body.CopyToAsync(memoryStream);
+
+                // «Перематываем» на начало
+                memoryStream.Position = 0;
+
+                // Вызываем парсинг
+                notification = Client.ParseMessage(
+                    request.Method,
+                    request.ContentType,
+                    memoryStream
+                );
+            }
+            catch (Exception ex)
+            {
+                // Если данные были некорректны — просто возвращаем признак ошибки
+                // Либо можно залогировать ex
+                return (null, false);
+            }
+            finally
+            {
+                // Возвращаем Position к нулю, чтобы тело запроса можно было прочесть снова, если потребуется
+                request.Body.Position = 0;
+            }
+
+            // Если мы тут — значит notification успешно распарсился
             if (notification is PaymentSucceededNotification succeeded)
             {
                 var payment = succeeded.Object;
@@ -91,14 +114,20 @@ namespace RareBooksService.WebApi.Services
             else if (notification is PaymentWaitingForCaptureNotification waitingForCapture)
             {
                 var payment = waitingForCapture.Object;
-                // Если нужно — можем вызвать Capture
                 // ...
-                return (payment.Id, false); // waiting, ещё не paid
+                return (payment.Id, false);
             }
-            // Можно добавить другие случаи (PaymentCanceledNotification, etc.)
+            else if (notification is PaymentCanceledNotification canceled)
+            {
+                // Если нужно обрабатывать отмену
+                var payment = canceled.Object;
+                return (payment.Id, false);
+            }
 
+            // На всякий случай: если пришел неизвестный тип нотификации — возвращаем (null, false)
             return (null, false);
         }
+
     }
 
 }

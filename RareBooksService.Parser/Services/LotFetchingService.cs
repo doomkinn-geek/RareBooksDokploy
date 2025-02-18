@@ -17,6 +17,7 @@ namespace RareBooksService.Parser.Services
         Task FetchSoldFixedPriceLotsAsync(CancellationToken token);
         Task RefreshLotsWithEmptyImageUrlsAsync(CancellationToken token);
         Task UpdateFinishedAuctionsStartPriceOneAsync(CancellationToken token);
+        Task UpdateFinishedFixedPriceAsync(CancellationToken token);
     }
 
     public class LotFetchingService : ILotFetchingService
@@ -79,7 +80,7 @@ namespace RareBooksService.Parser.Services
             _logger.LogInformation("Начинаем загрузку проданных лотов с фиксированной ценой.");
 
             int lastProcessedId = _context.BooksInfo
-                    .Where(b => b.Type == "fixedPrice" && b.SoldQuantity > 0) //&& b.EndDate < (DateTime.Now - TimeSpan.FromDays(14)))
+                    .Where(b => b.Type == "fixedPrice")// && b.SoldQuantity > 0) //&& b.EndDate < (DateTime.Now - TimeSpan.FromDays(14)))
                     .OrderByDescending(b => b.Id)
                     .Select(b => b.Id)
                     .FirstOrDefault();
@@ -123,6 +124,72 @@ namespace RareBooksService.Parser.Services
             }
 
             _logger.LogInformation("Завершена загрузка проданных лотов с фиксированной ценой.");
+        }
+
+        public async Task UpdateFinishedFixedPriceAsync(CancellationToken token)
+        {
+            // Выбираем только те книги, у которых тип = "auction", startPrice = 1,
+            // аукцион уже закончился (EndDate < DateTime.UtcNow) и при этом IsMonitored ещё = true
+            var booksToUpdate = await _context.BooksInfo
+                .Where(b => /*b.Type == "fixedPrice"
+                            && */b.SoldQuantity == 0
+                            && b.BeginDate > (DateTime.UtcNow - TimeSpan.FromDays(30)))
+                .ToListAsync();
+
+            int counter = 0;
+
+            foreach (var book in booksToUpdate)
+            {
+                counter++;
+                Console.Title = $"Обработка лота {counter} из {booksToUpdate.Count}";
+                //if (counter < 48000)
+                //    continue;
+                // проверка отмены
+                token.ThrowIfCancellationRequested();
+
+                try
+                {
+                    // Запрашиваем актуальные данные по лоту
+                    var updatedLotData = await _lotDataService.GetLotDataAsync(book.Id);
+                    if (updatedLotData?.result != null)
+                    {
+                        if (updatedLotData.result.soldQuantity > 0)
+                        {
+                            // Полный апдейт через SaveLotDataAsync
+                            await _lotDataHandler.SaveLotDataAsync(
+                                lotData: updatedLotData.result,
+                                categoryId: updatedLotData.result.categoryId,
+                                categoryName: "unknown",
+                                downloadImages: true,
+                                isLessValuableLot: book.IsLessValuable
+                            );
+
+                            // снимаем с мониторинга
+                            /*book.IsMonitored = false;
+
+                            // при необходимости обновляем FinalPrice
+                            if (updatedLotData.result.normalizedPrice.HasValue)
+                            {
+                                book.FinalPrice = updatedLotData.result.normalizedPrice.Value;
+                            }
+
+                            await _context.SaveChangesAsync();*/
+                            _logger.LogInformation(
+                                "[UpdateFinishedAuctionsStartPriceOneAsync] Обновили лот {LotId}, финальная цена = {FinalPrice}.",
+                                book.Id,
+                                book.FinalPrice);
+                        }
+                    }
+
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "[UpdateFinishedAuctionsStartPriceOneAsync] Ошибка при обновлении лота {LotId}",
+                        book.Id
+                    );
+                }
+            }
         }
 
         public async Task UpdateFinishedAuctionsStartPriceOneAsync(CancellationToken token)
