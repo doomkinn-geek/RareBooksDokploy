@@ -60,7 +60,7 @@ namespace RareBooksService.WebApi.Services
             }
         }
 
-        private async Task DoExport(Guid taskId, CancellationToken token)
+        /*private async Task DoExport(Guid taskId, CancellationToken token)
         {
             try
             {
@@ -132,10 +132,10 @@ namespace RareBooksService.WebApi.Services
                     while (true)
                     {
                         token.ThrowIfCancellationRequested();
-                        /*if (processed > totalBooks)
-                        {
-                            break;
-                        }*/
+                        //if (processed > totalBooks)
+                        //{
+                        //    break;
+                        //}
 
                         var books = await regularContext.BooksInfo
                             .Where(b => b.CategoryId == cat.Id)
@@ -228,7 +228,179 @@ namespace RareBooksService.WebApi.Services
             {
                 _cancellationTokens.TryRemove(taskId, out _);
             }
+        }*/
+
+        private async Task DoExport(Guid taskId, CancellationToken token)
+        {
+            try
+            {
+                _progress[taskId] = 0;
+                using var scope = _scopeFactory.CreateScope();
+                var regularContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+
+                // Определяем общее количество книг
+                int totalBooks = await regularContext.BooksInfo.CountAsync(token);
+                if (totalBooks == 0)
+                {
+                    _progress[taskId] = 100;
+                    return;
+                }
+                token.ThrowIfCancellationRequested();
+
+                // Загружаем категории (их всего около 20)
+                var categories = await regularContext.Categories.OrderBy(c => c.Id).ToListAsync(token);
+                // Берём уникальные категории по CategoryId
+                var distinctCats = categories
+                    .GroupBy(cat => cat.CategoryId)
+                    .Select(g => g.First())
+                    .ToList();
+                token.ThrowIfCancellationRequested();
+
+                // Создаём временный SQLite-файл
+                var tempPath = Path.GetTempFileName();
+                File.Delete(tempPath);
+                var sqliteFilename = Path.Combine(Path.GetTempPath(), $"export_{taskId}.db");
+                if (File.Exists(sqliteFilename)) File.Delete(sqliteFilename);
+
+                var optionsBuilder = new DbContextOptionsBuilder<ExtendedBooksContext>();
+                optionsBuilder.UseSqlite($"Filename={sqliteFilename}");
+
+                // 1. Создаём SQLite БД и записываем категории
+                using (var extContext = new ExtendedBooksContext(optionsBuilder.Options))
+                {
+                    extContext.Database.EnsureCreated();
+
+                    foreach (var cat in distinctCats)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        var newCat = new ExtendedCategory
+                        {
+                            CategoryId = cat.CategoryId,
+                            Name = cat.Name
+                        };
+                        extContext.Categories.Add(newCat);
+                    }
+                    await extContext.SaveChangesAsync(token);
+                    // Очищаем трекер, чтобы не копить отслеживаемые сущности
+                    extContext.ChangeTracker.Clear();
+                }
+
+                // Считываем категории из SQLite для построения словаря (небольшое количество записей)
+                Dictionary<int, ExtendedCategory> catMap;
+                using (var extContext = new ExtendedBooksContext(optionsBuilder.Options))
+                {
+                    catMap = await extContext.Categories.ToDictionaryAsync(c => c.CategoryId, token);
+                }
+
+                int processed = 0;
+                // Используем HashSet для отслеживания обработанных книг (200k int занимает не так много памяти)
+                var processedBookIds = new HashSet<int>();
+
+                // 2. Обрабатываем книги по категориям, постранично (PageSize можно при желании уменьшить)
+                foreach (var cat in categories)
+                {
+                    token.ThrowIfCancellationRequested();
+                    int page = 0;
+                    while (true)
+                    {
+                        token.ThrowIfCancellationRequested();
+
+                        // Загружаем порцию книг по конкретной категории
+                        var books = await regularContext.BooksInfo
+                            .Where(b => b.CategoryId == cat.Id)
+                            .OrderBy(b => b.Id)
+                            .Skip(page * PageSize)
+                            .Take(PageSize)
+                            .ToListAsync(token);
+
+                        if (books.Count == 0)
+                            break;
+
+                        // Для каждой порции создаём новый экземпляр ExtendedBooksContext,
+                        // чтобы не накапливать данные в одном контексте
+                        using (var extContext = new ExtendedBooksContext(optionsBuilder.Options))
+                        {
+                            foreach (var book in books)
+                            {
+                                token.ThrowIfCancellationRequested();
+
+                                if (!processedBookIds.Contains(book.Id))
+                                {
+                                    // Если по какой-то причине отсутствует категория — пропускаем запись
+                                    if (!catMap.TryGetValue(cat.CategoryId, out var categoryInMap))
+                                        continue;
+
+                                    // Копируем свойства книги в новую сущность для SQLite
+                                    var newBook = new ExtendedBookInfo
+                                    {
+                                        Id = book.Id,
+                                        Title = book.Title,
+                                        Description = book.Description,
+                                        BeginDate = book.BeginDate,
+                                        EndDate = book.EndDate,
+                                        Price = book.Price,
+                                        City = book.City,
+                                        IsMonitored = book.IsMonitored,
+                                        FinalPrice = book.FinalPrice,
+                                        YearPublished = book.YearPublished,
+                                        CategoryId = categoryInMap.Id,
+                                        Tags = book.Tags,
+                                        PicsRatio = book.PicsRatio,
+                                        Status = book.Status,
+                                        StartPrice = book.StartPrice,
+                                        Type = book.Type,
+                                        SoldQuantity = book.SoldQuantity,
+                                        BidsCount = book.BidsCount,
+                                        SellerName = book.SellerName,
+                                        PicsCount = book.PicsCount,
+                                        ImageUrls = book.ImageUrls,
+                                        ThumbnailUrls = book.ThumbnailUrls,
+                                        IsImagesCompressed = book.IsImagesCompressed,
+                                        ImageArchiveUrl = book.ImageArchiveUrl,
+                                        IsLessValuable = book.IsLessValuable
+                                    };
+
+                                    extContext.BooksInfo.Add(newBook);
+                                    processedBookIds.Add(book.Id);
+                                    processed++;
+                                }
+                                // Если книга уже обработана — пропускаем
+                            }
+
+                            // Сохраняем текущую партию и освобождаем память за счёт освобождения контекста
+                            await extContext.SaveChangesAsync(token);
+                        }
+
+                        // Обновляем прогресс экспорта
+                        if (processed % 100 == 0)
+                        {
+                            int percent = (int)((double)processed / totalBooks * 100);
+                            _progress[taskId] = percent;
+                        }
+
+                        // Очищаем ChangeTracker в исходном контексте, чтобы не накапливать данные
+                        regularContext.ChangeTracker.Clear();
+                        page++;
+                    }
+                }
+
+                _progress[taskId] = 100;
+                _files[taskId] = sqliteFilename;
+            }
+            catch (OperationCanceledException)
+            {
+                _progress[taskId] = -1;
+            }
+            catch
+            {
+                _progress[taskId] = -1;
+            }
+            finally
+            {
+                _cancellationTokens.TryRemove(taskId, out _);
+            }
         }
+
 
         public int GetProgress(Guid taskId)
         {

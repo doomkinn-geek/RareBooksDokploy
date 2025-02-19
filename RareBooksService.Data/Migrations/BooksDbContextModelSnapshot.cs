@@ -123,7 +123,7 @@ namespace RareBooksService.Data.Migrations
 
                     b.HasIndex("CategoryId");
 
-                    b.ToTable("BooksInfo");
+                    b.ToTable("BooksInfo", (string)null);
                 });
 
             modelBuilder.Entity("RareBooksService.Common.Models.RegularBaseCategory", b =>
@@ -143,7 +143,7 @@ namespace RareBooksService.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Categories");
+                    b.ToTable("Categories", (string)null);
                 });
 
             modelBuilder.Entity("RareBooksService.Common.Models.RegularBaseBook", b =>

@@ -2,3 +2,5 @@ Add-Migration SubscriptionPlanAdded -Context RegularBaseBooksContext
 
 Add-Migration BooksInitialCreate -Context BooksDbContext
 Add-Migration UsersInitialCreate -Context UsersDbContext
+
+Remove-Migration -Context BooksDbContext

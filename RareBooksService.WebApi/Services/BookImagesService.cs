@@ -368,9 +368,19 @@ namespace RareBooksService.WebApi.Services
         {
             if (urls == null) return null;
             return urls.FirstOrDefault(u =>
-                Path.GetFileName(u).Equals(fileName, StringComparison.OrdinalIgnoreCase)
-            );
+            {
+                var name = Path.GetFileName(u);
+                if (string.IsNullOrEmpty(name))
+                    return false;
+                int idx = name.IndexOfAny(new char[] { '?', '#' });
+                if (idx >= 0)
+                {
+                    name = name.Substring(0, idx);
+                }
+                return name.Equals(fileName, StringComparison.OrdinalIgnoreCase);
+            });
         }
+
 
         // ----------------------------------------------------------------------
         //  Методы кэша
