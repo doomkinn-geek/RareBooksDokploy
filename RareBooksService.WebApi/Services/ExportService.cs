@@ -7,6 +7,9 @@ using System.Globalization;
 using RareBooksService.Data.Parsing;
 using Microsoft.Extensions.DependencyInjection;
 using System.Threading;
+using System.IO.Compression;
+using System.Data;
+using Microsoft.Data.Sqlite;
 
 namespace RareBooksService.WebApi.Services
 {
@@ -250,181 +253,136 @@ namespace RareBooksService.WebApi.Services
 
                 token.ThrowIfCancellationRequested();
 
-                // Грузим все категории из PostgreSQL
+                // Загружаем все категории (до 50 записей), которые включим в каждую часть
                 var categories = await regularContext.Categories.OrderBy(c => c.Id).ToListAsync(token);
-                // Если могут быть дубликаты CategoryId, берём distinct:
-                var distinctCats = categories
-                    .GroupBy(cat => cat.CategoryId)
-                    .Select(g => g.First())
-                    .ToList();
 
                 token.ThrowIfCancellationRequested();
 
-                // Готовим пустой .db-файл
-                var sqliteFilename = Path.Combine(Path.GetTempPath(), $"export_{taskId}.db");
-                if (File.Exists(sqliteFilename))
-                    File.Delete(sqliteFilename);
+                // Создадим временную папку для хранения chunk-файлов .db
+                string tempFolder = Path.Combine(Path.GetTempPath(), $"export_{taskId}");
+                if (!Directory.Exists(tempFolder))
+                    Directory.CreateDirectory(tempFolder);
 
-                var optionsBuilder = new DbContextOptionsBuilder<ExtendedBooksContext>();
-                optionsBuilder.UseSqlite($"Filename={sqliteFilename}");
-
-                using var extendedContext = new ExtendedBooksContext(optionsBuilder.Options);
-                extendedContext.Database.EnsureCreated();
-
-                // Отключаем автопроверку изменений ради оптимизации
-                extendedContext.ChangeTracker.AutoDetectChangesEnabled = false;
-
-                // 1) Перенос категорий
-                foreach (var cat in distinctCats)
-                {
-                    token.ThrowIfCancellationRequested();
-                    var newCat = new ExtendedCategory
-                    {
-                        CategoryId = cat.CategoryId,
-                        Name = cat.Name
-                    };
-                    extendedContext.Categories.Add(newCat);
-                }
-                await extendedContext.SaveChangesAsync(token);
-
-                // Сбрасываем трекер, чтобы не держать объекты категорий в памяти
-                extendedContext.ChangeTracker.Clear();
-
-                // Заново читаем категории из SQLite, формируем карту CategoryId -> ExtendedCategory
-                var extendedCategories = await extendedContext.Categories.ToListAsync(token);
-                var catMap = extendedCategories.ToDictionary(c => c.CategoryId, c => c);
-
-                // 2) Перенос книг
+                // Число книг на одну часть
+                const int chunkSize = 50000;
                 int processed = 0;
-                // Если нужно пропускать идентичные книги, можно вернуть HashSet<int>
-                // var processedBookIds = new HashSet<int>();
+                int chunkIndex = 0;
 
-                foreach (var cat in categories)
+                // Будем бежать по всем книгам
+                while (processed < totalBooks)
                 {
                     token.ThrowIfCancellationRequested();
 
-                    if (!catMap.TryGetValue(cat.CategoryId, out var categoryInMap))
+                    var booksChunk = await regularContext.BooksInfo
+                        .OrderBy(b => b.Id)
+                        .Skip(processed)
+                        .Take(chunkSize)
+                        .ToListAsync(token);
+
+                    if (booksChunk.Count == 0)
+                        break;
+
+                    // Создаём отдельный файл SQLite для каждой части
+                    chunkIndex++;
+                    string chunkDbPath = Path.Combine(tempFolder, $"part_{chunkIndex}.db");
+                    if (File.Exists(chunkDbPath)) File.Delete(chunkDbPath);
+
+                    var optionsBuilder = new DbContextOptionsBuilder<ExtendedBooksContext>();
+                    optionsBuilder.UseSqlite($"Filename={chunkDbPath}");
+
+                    using (var extendedContext = new ExtendedBooksContext(optionsBuilder.Options))
                     {
-                        // так не должно быть, если мы брали distinct, но на всякий случай
-                        continue;
+                        extendedContext.Database.EnsureCreated();
+                        // Отключаем автодетект изменений для ускорения вставок
+                        extendedContext.ChangeTracker.AutoDetectChangesEnabled = false;
+
+                        // 1) Добавляем все категории
+                        extendedContext.Categories.AddRange(
+                            categories.Select(c => new ExtendedCategory
+                            {
+                                CategoryId = c.CategoryId,
+                                Name = c.Name
+                            })
+                        );
+                        await extendedContext.SaveChangesAsync(token);
+
+                        // Снова читаем список категорий из SQLite, чтобы иметь корректные PK
+                        var extCats = await extendedContext.Categories.ToListAsync(token);
+                        var catMap = extCats.ToDictionary(x => x.CategoryId, x => x.Id);
+
+                        // 2) Добавляем chunk книг
+                        extendedContext.BooksInfo.AddRange(
+                            booksChunk.Select(b => new ExtendedBookInfo
+                            {
+                                Id = b.Id,
+                                Title = b.Title,
+                                Description = b.Description,
+                                BeginDate = b.BeginDate,
+                                EndDate = b.EndDate,
+                                Price = b.Price,
+                                FinalPrice = b.FinalPrice,
+                                City = b.City,
+                                IsMonitored = b.IsMonitored,
+                                YearPublished = b.YearPublished,
+                                Tags = b.Tags,
+                                PicsRatio = b.PicsRatio,
+                                Status = b.Status,
+                                StartPrice = b.StartPrice,
+                                Type = b.Type,
+                                SoldQuantity = b.SoldQuantity,
+                                BidsCount = b.BidsCount,
+                                SellerName = b.SellerName,
+                                PicsCount = b.PicsCount,
+                                ImageUrls = b.ImageUrls,
+                                ThumbnailUrls = b.ThumbnailUrls,
+                                IsImagesCompressed = b.IsImagesCompressed,
+                                ImageArchiveUrl = b.ImageArchiveUrl,
+                                IsLessValuable = b.IsLessValuable,
+                                // Подставим FK категории
+                                CategoryId = catMap.TryGetValue(
+                                    b.Category.CategoryId,
+                                    out var extCatId)
+                                    ? extCatId
+                                    : 0
+                            })
+                        );
+
+                        await extendedContext.SaveChangesAsync(token);
+
+                        var conn = extendedContext.Database.GetDbConnection();
+                        if (conn.State != ConnectionState.Closed)
+                            conn.Close();
+
+                        SqliteConnection.ClearAllPools();
+                        GC.Collect();
+                        GC.WaitForPendingFinalizers();
                     }
 
-                    int page = 0;
-                    while (true)
-                    {
-                        token.ThrowIfCancellationRequested();
+                    processed += booksChunk.Count;
 
-                        var books = await regularContext.BooksInfo
-                            .Where(b => b.CategoryId == cat.Id)
-                            .OrderBy(b => b.Id)
-                            .Skip(page * PageSize)
-                            .Take(PageSize)
-                            .ToListAsync(token);
-
-                        if (books.Count == 0)
-                            break; // переходим к следующей категории
-
-                        // Готовим список для массовой вставки
-                        var listForContext = new List<ExtendedBookInfo>();
-                        foreach (var book in books)
-                        {
-                            token.ThrowIfCancellationRequested();
-
-                            // Если нужно пропускать дубли, можно раскомментировать проверку:
-                            // if (processedBookIds.Contains(book.Id)) continue;
-
-                            var newBook = new ExtendedBookInfo
-                            {
-                                Id = book.Id,
-                                Title = book.Title,
-                                Description = book.Description,
-                                BeginDate = book.BeginDate,
-                                EndDate = book.EndDate,
-                                ImageUrls = book.ImageUrls,
-                                ThumbnailUrls = book.ThumbnailUrls,
-                                Price = book.Price,
-                                City = book.City,
-                                IsMonitored = book.IsMonitored,
-                                FinalPrice = book.FinalPrice,
-                                YearPublished = book.YearPublished,
-                                Tags = book.Tags,
-                                CategoryId = categoryInMap.Id,
-                                PicsRatio = book.PicsRatio,
-                                Status = book.Status,
-                                StartPrice = book.StartPrice,
-                                Type = book.Type,
-                                SoldQuantity = book.SoldQuantity,
-                                BidsCount = book.BidsCount,
-                                SellerName = book.SellerName,
-                                PicsCount = book.PicsCount,
-                                IsImagesCompressed = book.IsImagesCompressed,
-                                ImageArchiveUrl = book.ImageArchiveUrl,
-                                IsLessValuable = book.IsLessValuable
-                            };
-
-                            listForContext.Add(newBook);
-                        }
-
-                        // 2.1) Массовая вставка чанком
-                        extendedContext.BooksInfo.AddRange(listForContext);
-
-                        try
-                        {
-                            await extendedContext.SaveChangesAsync(token);
-                            processed += listForContext.Count;
-                        }
-                        catch (DbUpdateException ex)
-                        {
-                            if (IsDuplicateKeyException(ex))
-                            {
-                                // Как в ImportInBackgroundAsync: обрабатываем поштучно
-                                extendedContext.ChangeTracker.Clear();
-
-                                int subcount = 0;
-                                foreach (var bk2 in listForContext)
-                                {
-                                    extendedContext.BooksInfo.Add(bk2);
-                                    try
-                                    {
-                                        await extendedContext.SaveChangesAsync(token);
-                                        subcount++;
-                                    }
-                                    catch (DbUpdateException ex2)
-                                    {
-                                        if (IsDuplicateKeyException(ex2))
-                                        {
-                                            // Пропускаем повтор
-                                            extendedContext.ChangeTracker.Clear();
-                                        }
-                                        else
-                                        {
-                                            throw; // другая ошибка
-                                        }
-                                    }
-                                }
-                                processed += subcount;
-                            }
-                            else
-                            {
-                                // Если ошибка не связана с дублями, пробрасываем дальше
-                                throw;
-                            }
-                        }
-
-                        // Обновляем прогресс
-                        int percent = (int)((double)processed / totalBooks * 100);
-                        _progress[taskId] = percent;
-
-                        // Сбрасываем трекер, чтобы не держать объекты книг
-                        extendedContext.ChangeTracker.Clear();
-
-                        page++;
-                    }
+                    // Обновим прогресс
+                    int percent = (int)((double)processed / totalBooks * 100);
+                    _progress[taskId] = percent;
                 }
+
+                await Task.Delay(500);
+
+                // Все части сформированы в tempFolder
+                // Упаковываем всё в один zip
+                string zipFilePath = Path.Combine(Path.GetTempPath(), $"export_{taskId}.zip");
+                if (File.Exists(zipFilePath))
+                    File.Delete(zipFilePath);
+
+                System.IO.Compression.ZipFile.CreateFromDirectory(tempFolder, zipFilePath);
+
+                // Сохраняем путь к итоговому архиву
+                _files[taskId] = zipFilePath;
+
+                // Удаляем временную папку
+                Directory.Delete(tempFolder, true);
 
                 // Завершаем
                 _progress[taskId] = 100;
-                _files[taskId] = sqliteFilename;
             }
             catch (OperationCanceledException)
             {
@@ -437,17 +395,11 @@ namespace RareBooksService.WebApi.Services
             }
             finally
             {
-                // На всякий случай восстанавливаем флаг автодетекта
-                using var scope2 = _scopeFactory.CreateScope();
-                using var tmpContext = new ExtendedBooksContext(
-                    new DbContextOptionsBuilder<ExtendedBooksContext>()
-                        .UseSqlite($"Filename=:memory:")
-                        .Options);
-
-                tmpContext.ChangeTracker.AutoDetectChangesEnabled = true;
                 _cancellationTokens.TryRemove(taskId, out _);
             }
         }
+
+
 
         // Аналогичная проверка, как в ImportInBackgroundAsync, только для SQLite.
         // Если вы используете ту же базу (PostgreSQL), смотрите код из ImportService.

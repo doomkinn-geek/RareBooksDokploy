@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using RareBooksService.Common.Models;
 using RareBooksService.Common.Models.Interfaces;
 using RareBooksService.Common.Models.Parsing;
@@ -112,6 +113,218 @@ namespace RareBooksService.WebApi.Services
         }
 
         private async Task ImportInBackgroundAsync(ImportTaskInfo taskInfo)
+        {
+            try
+            {
+                // 1) Распаковываем полученный zip во временную папку
+                string importFolder = Path.Combine(Path.GetTempPath(), $"import_{taskInfo.ImportTaskId}");
+                if (Directory.Exists(importFolder))
+                    Directory.Delete(importFolder, true);
+                Directory.CreateDirectory(importFolder);
+
+                System.IO.Compression.ZipFile.ExtractToDirectory(taskInfo.TempFilePath, importFolder);
+
+                // Найдём все part_*.db-файлы
+                var chunkFiles = Directory.GetFiles(importFolder, "part_*.db");
+
+                // Посчитаем общее число книг во всех chunk'ах, 
+                // чтобы примерно оценивать общий прогресс
+                long totalBooksCount = 0;
+                foreach (var chunkFile in chunkFiles)
+                {
+                    var sqliteOptions = new DbContextOptionsBuilder<ExtendedBooksContext>()
+                        .UseSqlite($"Filename={chunkFile}")
+                        .Options;
+
+                    using var srcContext = new ExtendedBooksContext(sqliteOptions);
+                    long cnt = await srcContext.BooksInfo.LongCountAsync();
+                    totalBooksCount += cnt;
+                }
+
+                long processed = 0;
+
+                // 2) Идём по всем частям по порядку
+                foreach (var chunkFile in chunkFiles.OrderBy(x => x))
+                {
+                    // Открываем контекст SQLite
+                    var sqliteOptions = new DbContextOptionsBuilder<ExtendedBooksContext>()
+                        .UseSqlite($"Filename={chunkFile}")
+                        .Options;
+
+                    using var srcContext = new ExtendedBooksContext(sqliteOptions);
+
+                    // 2.1) Upsert категорий
+                    var chunkCategories = await srcContext.Categories
+                        .AsNoTracking()
+                        .ToListAsync();
+                    using (var scope = _scopeFactory.CreateScope())
+                    {
+                        var pgContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+                        pgContext.ChangeTracker.AutoDetectChangesEnabled = false;
+
+                        foreach (var cat in chunkCategories)
+                        {
+                            // Ищем по CategoryId
+                            var existingCat = await pgContext.Categories
+                                .FirstOrDefaultAsync(c => c.CategoryId == cat.CategoryId);
+
+                            if (existingCat == null)
+                            {
+                                // Нет — создаём
+                                var newCat = new RegularBaseCategory
+                                {
+                                    CategoryId = cat.CategoryId,
+                                    Name = cat.Name
+                                };
+                                pgContext.Categories.Add(newCat);
+                            }
+                            else
+                            {
+                                // Обновляем при необходимости
+                                existingCat.Name = cat.Name;
+                            }
+                        }
+                        await pgContext.SaveChangesAsync();
+                    }
+
+                    // Словарь CategoryId -> real PK
+                    Dictionary<int, int> catMap;
+                    using (var scope = _scopeFactory.CreateScope())
+                    {
+                        var pgContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+                        catMap = await pgContext.Categories
+                            .ToDictionaryAsync(c => c.CategoryId, c => c.Id);
+                    }
+
+                    // 2.2) Идём по книгам, чанками (например, по 2000)
+                    int pageSize = 2000;
+                    int pageIndex = 0;
+
+                    while (true)
+                    {
+                        var chunkBooks = await srcContext.BooksInfo
+                            .AsNoTracking()
+                            .OrderBy(b => b.Id)
+                            .Skip(pageIndex * pageSize)
+                            .Take(pageSize)
+                            .Include(b => b.Category) // чтобы bk.Category.CategoryId было доступно
+                            .ToListAsync();
+
+                        if (chunkBooks.Count == 0)
+                            break;
+
+                        // Переходим к upsert
+                        using (var scope = _scopeFactory.CreateScope())
+                        {
+                            var pgContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+                            pgContext.ChangeTracker.AutoDetectChangesEnabled = false;
+
+                            foreach (var book in chunkBooks)
+                            {
+                                // Ищем существующую запись (по Id)
+                                var existingBook = await pgContext.BooksInfo
+                                    .FirstOrDefaultAsync(b => b.Id == book.Id);
+
+                                // Узнаём реальный PK категории
+                                catMap.TryGetValue(book.Category.CategoryId, out var realCatId);
+
+                                if (existingBook == null)
+                                {
+                                    // Создаём новую
+                                    var newBook = new RegularBaseBook
+                                    {
+                                        Id = book.Id,
+                                        Title = book.Title,
+                                        NormalizedTitle = book.Title.ToLower(),
+                                        Description = book.Description,
+                                        NormalizedDescription = book.Description.ToLower(),
+                                        BeginDate = DateTime.SpecifyKind(book.BeginDate, DateTimeKind.Utc),
+                                        EndDate = DateTime.SpecifyKind(book.EndDate, DateTimeKind.Utc),
+                                        ImageUrls = book.ImageUrls,
+                                        ThumbnailUrls = book.ThumbnailUrls,
+                                        Price = book.Price,
+                                        City = book.City,
+                                        IsMonitored = book.IsMonitored,
+                                        FinalPrice = book.FinalPrice,
+                                        YearPublished = book.YearPublished,
+                                        CategoryId = realCatId,
+                                        Tags = book.Tags,
+                                        PicsRatio = book.PicsRatio,
+                                        Status = book.Status,
+                                        StartPrice = book.StartPrice,
+                                        Type = book.Type,
+                                        SoldQuantity = book.SoldQuantity,
+                                        BidsCount = book.BidsCount,
+                                        SellerName = book.SellerName,
+                                        PicsCount = book.PicsCount,
+                                        IsImagesCompressed = book.IsImagesCompressed,
+                                        ImageArchiveUrl = book.ImageArchiveUrl,
+                                        IsLessValuable = book.IsLessValuable
+                                    };
+                                    pgContext.BooksInfo.Add(newBook);
+                                }
+                                else
+                                {
+                                    // Обновляем существующую
+                                    existingBook.Title = book.Title;
+                                    existingBook.NormalizedTitle = book.Title.ToLower();
+                                    existingBook.Description = book.Description;
+                                    existingBook.NormalizedDescription = book.Description.ToLower();
+                                    existingBook.BeginDate = DateTime.SpecifyKind(book.BeginDate, DateTimeKind.Utc);
+                                    existingBook.EndDate = DateTime.SpecifyKind(book.EndDate, DateTimeKind.Utc);
+                                    existingBook.ImageUrls = book.ImageUrls;
+                                    existingBook.ThumbnailUrls = book.ThumbnailUrls;
+                                    existingBook.Price = book.Price;
+                                    existingBook.City = book.City;
+                                    existingBook.IsMonitored = book.IsMonitored;
+                                    existingBook.FinalPrice = book.FinalPrice;
+                                    existingBook.YearPublished = book.YearPublished;
+                                    existingBook.CategoryId = realCatId;
+                                    existingBook.Tags = book.Tags;
+                                    existingBook.PicsRatio = book.PicsRatio;
+                                    existingBook.Status = book.Status;
+                                    existingBook.StartPrice = book.StartPrice;
+                                    existingBook.Type = book.Type;
+                                    existingBook.SoldQuantity = book.SoldQuantity;
+                                    existingBook.BidsCount = book.BidsCount;
+                                    existingBook.SellerName = book.SellerName;
+                                    existingBook.PicsCount = book.PicsCount;
+                                    existingBook.IsImagesCompressed = book.IsImagesCompressed;
+                                    existingBook.ImageArchiveUrl = book.ImageArchiveUrl;
+                                    existingBook.IsLessValuable = book.IsLessValuable;
+                                }
+                            }
+
+                            await pgContext.SaveChangesAsync();
+                        }
+
+                        processed += chunkBooks.Count;
+                        taskInfo.ImportProgress = (double)processed / totalBooksCount * 100.0;
+                        pageIndex++;
+                    }
+                    SqliteConnection.ClearAllPools();
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                }
+
+                // Завершаем
+                taskInfo.ImportProgress = 100.0;
+                taskInfo.IsCompleted = true;
+                taskInfo.Message = $"Imported/Updated {processed} books total.";
+
+                // Удаляем временную папку
+                Directory.Delete(importFolder, true);
+            }
+            catch (Exception ex)
+            {
+                taskInfo.IsCancelledOrError = true;
+                taskInfo.Message = $"Error: {ex.Message}. {ex.InnerException?.Message}";
+            }
+        }
+
+
+
+        /*private async Task ImportInBackgroundAsync(ImportTaskInfo taskInfo)
         {
             try
             {
@@ -309,208 +522,6 @@ namespace RareBooksService.WebApi.Services
                 taskInfo.IsCompleted = true;
                 taskInfo.Message = $"Imported {processed} books (total), {catCount} categories.";
             }
-            catch (Exception ex)
-            {
-                taskInfo.IsCancelledOrError = true;
-                taskInfo.Message = $"Error: {ex.Message}. {ex.InnerException?.Message}";
-            }
-        }
-
-
-        /*private async Task ImportInBackgroundAsync(ImportTaskInfo taskInfo)
-        {
-            try
-            {
-                // 1) Настраиваем подключения
-                var sqliteOptions = new DbContextOptionsBuilder<ExtendedBooksContext>()
-                    .UseSqlite($"Filename={taskInfo.TempFilePath}")
-                    .Options;
-
-                using var sourceContext = new ExtendedBooksContext(sqliteOptions);
-
-                using var scope = _scopeFactory.CreateScope();
-                var pgContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
-
-                // 2) Частями очищаем таблицу BooksInfo
-                // Вместо:  var allBooks = pgContext.BooksInfo.ToList();
-                // используем цикл, чтобы не грузить все в память.
-                while (true)
-                {
-                    // Берём по 1000 книг
-                    var chunk = pgContext.BooksInfo
-                        .Take(1000)
-                        .ToList();
-
-                    if (chunk.Count == 0) break;
-
-                    pgContext.BooksInfo.RemoveRange(chunk);
-                    await pgContext.SaveChangesAsync();
-                }
-
-                // Очищаем Categories (обычно их мало, можно убрать chunk)
-                var allCats = pgContext.Categories.ToList();
-                pgContext.Categories.RemoveRange(allCats);
-                await pgContext.SaveChangesAsync();
-
-                // 3) Перенос категорий целиком
-                var categories = await sourceContext.Categories.ToListAsync();
-                int catCount = categories.Count;
-
-                foreach (var cat in categories)
-                {
-                    var newCat = new RegularBaseCategory
-                    {
-                        CategoryId = cat.CategoryId,
-                        Name = cat.Name
-                    };
-                    pgContext.Categories.Add(newCat);
-                }
-                await pgContext.SaveChangesAsync();
-
-                // Формируем словарь meshokId -> реальный PK (Id)
-                var catMap = await pgContext.Categories
-                    .ToDictionaryAsync(c => c.CategoryId, c => c.Id);
-
-                // 4) Частями читаем книги из sourceContext (SQLite) и вставляем в PostgreSQL
-                int pageSize = 1000;
-                int pageIndex = 0;
-
-                int processed = 0;
-                int totalBooks; // общее число книг (узнаем один раз)
-
-                // Получаем общее число книг (чтобы прогресс более точно считать).
-                totalBooks = await sourceContext.BooksInfo.CountAsync();
-
-                while (true)
-                {
-                    // Читаем кусок по 1000 книг
-                    var chunk = await sourceContext.BooksInfo
-                        .OrderBy(b => b.Id) // или OrderBy(b => b.CategoryId) - важно иметь порядок
-                        .Skip(pageIndex * pageSize)
-                        .Take(pageSize)
-                        .Include(b => b.Category)  // т.к. мы используем bk.Category.CategoryId
-                        .ToListAsync();
-
-                    if (chunk.Count == 0) break; // всё прочитали
-
-                    // Готовим список объектов RegularBaseBook
-                    var listForContext = new List<RegularBaseBook>();
-                    foreach (var bk in chunk)
-                    {
-                        // Пытаемся найти реальный PK категории
-                        if (!catMap.TryGetValue(bk.Category.CategoryId, out var realCatId))
-                        {
-                            throw new Exception($"No matching category for meshokId={bk.CategoryId}");
-                        }
-
-                        var newBook = new RegularBaseBook
-                        {
-                            Id = bk.Id,
-                            Title = bk.Title,
-                            NormalizedTitle = bk.Title.ToLower(),
-                            Description = bk.Description,
-                            NormalizedDescription = bk.Description.ToLower(),
-                            BeginDate = DateTime.SpecifyKind(bk.BeginDate, DateTimeKind.Utc),
-                            EndDate = DateTime.SpecifyKind(bk.EndDate, DateTimeKind.Utc),
-                            ImageUrls = bk.ImageUrls,
-                            ThumbnailUrls = bk.ThumbnailUrls,
-                            Price = bk.Price,
-                            City = bk.City,
-                            IsMonitored = bk.IsMonitored,
-                            FinalPrice = bk.FinalPrice,
-                            YearPublished = bk.YearPublished,
-                            CategoryId = realCatId,
-                            Tags = bk.Tags,
-                            PicsRatio = bk.PicsRatio,
-                            Status = bk.Status,
-                            StartPrice = bk.StartPrice,
-                            Type = bk.Type,
-                            SoldQuantity = bk.SoldQuantity,
-                            BidsCount = bk.BidsCount,
-                            SellerName = bk.SellerName,
-                            PicsCount = bk.PicsCount,
-
-                            //08.11.2024 - добавил поддержку малоценных лотов (советские до 1500) и сжатие изображений в object storage
-                            IsImagesCompressed = bk.IsImagesCompressed,
-                            ImageArchiveUrl = bk.ImageArchiveUrl,
-
-                            //22.01.2025 - т.к. малоценных лотов очень много, храним их без загрузки изображений
-                            //изображения будем получать по тем ссылкам, что есть на мешке
-                            IsLessValuable = bk.IsLessValuable
-                        };
-
-                        listForContext.Add(newBook);
-                    }
-
-                    // Добавляем все записи chunk-ом
-                    pgContext.BooksInfo.AddRange(listForContext);
-
-                    try
-                    {
-                        // Пытаемся сохранить одним махом
-                        await pgContext.SaveChangesAsync();
-
-                        // Если всё прошло успешно — значит конфликтов в этом чанке нет
-                        processed += listForContext.Count;
-                    }
-                    catch (DbUpdateException ex)
-                    {
-                        // Проверяем код ошибки — может, это именно нарушение уникальности PK
-                        if (IsDuplicateKeyException(ex))
-                        {
-                            // Очищаем ChangeTracker
-                            pgContext.ChangeTracker.Clear();
-
-                            // Переходим к поштучному режиму для этого чанка
-                            int subcount = 0;
-                            foreach (var bk in listForContext)
-                            {
-                                pgContext.BooksInfo.Add(bk);
-                                try
-                                {
-                                    await pgContext.SaveChangesAsync();
-                                    subcount++;
-                                }
-                                catch (DbUpdateException ex2)
-                                {
-                                    if (IsDuplicateKeyException(ex2))
-                                    {
-                                        // Пропускаем именно эту запись
-                                        // Чистим трекер и не увеличиваем subcount
-                                        pgContext.ChangeTracker.Clear();
-                                    }
-                                    else
-                                    {
-                                        // другая ошибка — пробрасываем выше
-                                        throw;
-                                    }
-                                }
-                            }
-                            processed += subcount;
-                        }
-                        else
-                        {
-                            // Ошибка не связана с дублированием PK — завершаем весь импорт
-                            throw;
-                        }
-                    }
-
-
-                    //Это сбрасывает локальное отслеживание сущностей и позволяет отработать сборщику мусора
-                    pgContext.ChangeTracker.Clear();
-
-                    // Обновляем прогресс
-                    taskInfo.ImportProgress = (double)processed / totalBooks * 100.0;
-
-                    pageIndex++;
-                }
-
-                // 5) Завершаем
-                taskInfo.ImportProgress = 100.0;
-                taskInfo.IsCompleted = true;
-                taskInfo.Message = $"Imported {processed} books (total), {catCount} categories.";
-            }
-
             catch (Exception ex)
             {
                 taskInfo.IsCancelledOrError = true;

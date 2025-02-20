@@ -333,7 +333,7 @@ const AdminPanel = () => {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `export_${exportTaskId}.db`;
+            a.download = `export_${exportTaskId}.zip`;
             document.body.appendChild(a);
             a.click();
             a.remove();
@@ -1061,7 +1061,7 @@ const AdminPanel = () => {
                         <div style={{ margin: '10px 0' }}>
                             <input
                                 type="file"
-                                accept=".db"
+                                accept=".zip"
                                 onChange={handleSelectImportFile}
                                 disabled={isImporting}
                             />

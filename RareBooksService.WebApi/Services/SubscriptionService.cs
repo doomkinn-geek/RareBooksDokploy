@@ -26,11 +26,13 @@ namespace RareBooksService.WebApi.Services
     {
         private readonly UsersDbContext _db;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly ILogger<SubscriptionService> logger;
 
-        public SubscriptionService(UsersDbContext db, UserManager<ApplicationUser> userManager)
+        public SubscriptionService(UsersDbContext db, UserManager<ApplicationUser> userManager, ILogger<SubscriptionService> logger)
         {
             _db = db;
             _userManager = userManager;
+            this.logger = logger;
         }
 
         public async Task<SubscriptionDto> CreateSubscriptionAsync(ApplicationUser user, SubscriptionPlan plan, bool autoRenew)
@@ -86,10 +88,18 @@ namespace RareBooksService.WebApi.Services
 
         public async Task<List<SubscriptionPlanDto>> GetActiveSubscriptionPlansAsync()
         {
-            var plans = await _db.SubscriptionPlans
-                .Where(p => p.IsActive)
-                .ToListAsync();
-            return plans.Select(ToDto).ToList();
+            try
+            {
+                var plans = await _db.SubscriptionPlans
+                    .Where(p => p.IsActive)
+                    .ToListAsync();
+                return plans.Select(ToDto).ToList();
+            }
+            catch (Exception e)
+            {
+                logger.LogError(e, "Ошибка получения планов подписки");
+                return null;
+            }
         }
 
         public async Task<SubscriptionPlanDto?> GetPlanByIdAsync(int planId)
