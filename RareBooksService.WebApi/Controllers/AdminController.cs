@@ -44,10 +44,18 @@ namespace RareBooksService.WebApi.Controllers
         [HttpGet("export-progress/{taskId}")]
         public IActionResult GetExportProgress(Guid taskId)
         {
-            int progress = _exportService.GetProgress(taskId);
-            if (progress == -1)
-                return NotFound("Задача не найдена или произошла ошибка.");
-            return Ok(new { Progress = progress });
+            try
+            {
+                int progress = _exportService.GetProgress(taskId);
+                if (progress == -1)
+                    return NotFound("Задача не найдена или произошла ошибка.");
+                return Ok(new { Progress = progress });
+            }
+            catch(Exception e)
+            {
+                _logger.LogError(e, "Ошибка получения прогресса экспорта");
+                return Ok(new { Progress = -1 });
+            }
         }
 
         [HttpGet("download-exported-file/{taskId}")]
