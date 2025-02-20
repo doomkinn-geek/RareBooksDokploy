@@ -1,6 +1,7 @@
 ﻿// src/context/UserContext.jsx
 import React, { createContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import Cookies from 'js-cookie';
 import { API_URL } from '../api';
 
 export const UserContext = createContext(null);
@@ -11,9 +12,9 @@ export const UserProvider = ({ children }) => {
 
     useEffect(() => {
         const fetchUser = async () => {
-            //const token = Cookies.get('token');
+            const token = Cookies.get('token');
             // Берём токен из localStorage
-            const token = localStorage.getItem('token');
+            //const token = localStorage.getItem('token');
             if (token) {
                 try {
                     // Пытаемся сходить на /auth/user

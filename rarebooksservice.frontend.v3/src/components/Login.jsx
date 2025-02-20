@@ -18,9 +18,9 @@ const Login = () => {
         setError('');
         try {
             const response = await axios.post(`${API_URL}/auth/login`, { email, password });
-            //Cookies.set('token', response.data.token, { expires: 7 });
+            Cookies.set('token', response.data.token, { expires: 7 });
             // вместо Cookies:
-            localStorage.setItem('token', response.data.token);
+            //localStorage.setItem('token', response.data.token);
 
             // прописываем пользователя в контекст
             setUser(response.data.user);

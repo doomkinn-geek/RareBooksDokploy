@@ -46,17 +46,28 @@ namespace RareBooksService.WebApi.Controllers
         {
             try
             {
-                int progress = _exportService.GetProgress(taskId);
-                if (progress == -1)
-                    return NotFound("Задача не найдена или произошла ошибка.");
-                return Ok(new { Progress = progress });
+                var status = _exportService.GetStatus(taskId);
+
+                if (status.Progress == -1 && !status.IsError)
+                {
+                    // Значит задача не найдена
+                    return NotFound("Задача не найдена.");
+                }
+
+                return Ok(new
+                {
+                    Progress = status.Progress,
+                    IsError = status.IsError,
+                    ErrorDetails = status.ErrorDetails
+                });
             }
-            catch(Exception e)
+            catch (Exception e)
             {
                 _logger.LogError(e, "Ошибка получения прогресса экспорта");
-                return Ok(new { Progress = -1 });
+                return Ok(new { Progress = -1, IsError = true, ErrorDetails = e.ToString() });
             }
         }
+
 
         [HttpGet("download-exported-file/{taskId}")]
         public IActionResult DownloadExportedFile(Guid taskId)

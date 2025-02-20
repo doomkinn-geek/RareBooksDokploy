@@ -108,8 +108,8 @@ const Home = () => {
 
     // --- Логаут ---
     const handleLogout = () => {
-        //document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-        localStorage.removeItem('token');
+        document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        //localStorage.removeItem('token');
         setUser(null);
         navigate('/');
     };
@@ -158,9 +158,9 @@ const Home = () => {
                 password: loginPassword
             });
 
-            //Cookies.set('token', response.data.token, { expires: 7 });
+            Cookies.set('token', response.data.token, { expires: 7 });
             // Вместо Cookies — localStorage:
-            localStorage.setItem('token', response.data.token);
+            //localStorage.setItem('token', response.data.token);
 
             // Сразу прописываем пользователя в контекст
             setUser(response.data.user);

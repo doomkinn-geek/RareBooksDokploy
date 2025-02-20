@@ -21,6 +21,7 @@ const AdminPanel = () => {
     // ----- Экспорт
     const [exportTaskId, setExportTaskId] = useState(null);
     const [progress, setProgress] = useState(null);
+    const [exportError, setExportError] = useState(null);
     const [isExporting, setIsExporting] = useState(false);
     const [intervalId, setIntervalId] = useState(null);
 
@@ -261,6 +262,7 @@ const AdminPanel = () => {
         if (isExporting || isImporting) return;
         try {
             setError('');
+            setExportError(null);
             setProgress(null);
             setIsExporting(true);
 
@@ -278,12 +280,19 @@ const AdminPanel = () => {
                         `${API_URL}/admin/export-progress/${response.data.taskId}`,
                         { headers: { Authorization: `Bearer ${token}` } }
                     );
-                    setProgress(progressRes.data.progress);
 
-                    if (
-                        progressRes.data.progress >= 100 ||
-                        progressRes.data.progress === -1
-                    ) {
+                    // progressRes.data => { Progress, IsError, ErrorDetails }
+                    const { Progress, IsError, ErrorDetails } = progressRes.data;
+
+                    setProgress(Progress);
+                    if (IsError && Progress === -1) {
+                        // Это означает ошибка
+                        setExportError(ErrorDetails || 'Неизвестная ошибка при экспорте');
+                        clearInterval(id);
+                        setIntervalId(null);
+                        setIsExporting(false);
+                    } else if (Progress >= 100) {
+                        // Завершено
                         clearInterval(id);
                         setIntervalId(null);
                         setIsExporting(false);
@@ -296,6 +305,7 @@ const AdminPanel = () => {
                     setIsExporting(false);
                 }
             }, 500);
+
             setIntervalId(id);
         } catch (err) {
             console.error(err);
@@ -712,21 +722,16 @@ const AdminPanel = () => {
 
                         {exportTaskId && progress !== null && (
                             <div className="admin-export-status">
-                                {progress === -1 && (
+                                {progress === -1 ? (
                                     <div className="admin-error">
-                                        Экспорт отменен или произошла ошибка.
+                                        Экспорт прерван: {exportError}
                                     </div>
-                                )}
-                                {progress >= 0 && progress < 100 && progress !== -1 && (
+                                ) : progress < 100 ? (
                                     <div>Прогресс экспорта: {progress}%</div>
-                                )}
-                                {progress >= 100 && (
+                                ) : (
                                     <div className="admin-export-complete">
                                         Экспорт завершен!
-                                        <button
-                                            onClick={downloadExportedFile}
-                                            className="admin-button"
-                                        >
+                                        <button onClick={downloadExportedFile} className="admin-button">
                                             Скачать файл
                                         </button>
                                     </div>
