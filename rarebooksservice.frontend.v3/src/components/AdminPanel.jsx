@@ -293,19 +293,19 @@ const AdminPanel = () => {
                     );
                     // сервер возвращает объект вида:
                     // { Progress: number, IsError: bool, ErrorDetails: string }
-                    const { Progress, IsError, ErrorDetails } = progressRes.data;
+                    const { progress, isError, errorDetails } = progressRes.data;
 
                     // Обновляем состояние
-                    setProgress(Progress);
+                    setProgress(progress);
 
-                    if (IsError && Progress === -1) {
+                    if (isError && progress === -1) {
                         // Сервер сообщил об ошибке => выходим из режима экспорта
-                        setExportError(ErrorDetails || 'Неизвестная ошибка при экспорте');
+                        setExportError(errorDetails || 'Неизвестная ошибка при экспорте');
                         setIsExporting(false);
                         clearInterval(id);
                         setIntervalId(null);
                     }
-                    else if (Progress >= 100) {
+                    else if (progress >= 100) {
                         // Экспорт завершён
                         setIsExporting(false);
                         clearInterval(id);
