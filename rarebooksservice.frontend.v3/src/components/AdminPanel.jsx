@@ -18,10 +18,10 @@ const AdminPanel = () => {
     const [users, setUsers] = useState([]);
     const [error, setError] = useState('');
 
-    // ----- Экспорт
+    // Состояния для экспорта
     const [exportTaskId, setExportTaskId] = useState(null);
-    const [progress, setProgress] = useState(null);
-    const [exportError, setExportError] = useState(null);
+    const [progress, setProgress] = useState(null);        // число (0..100 или -1)
+    const [exportError, setExportError] = useState(null);  // текст ошибки с сервера, если есть
     const [isExporting, setIsExporting] = useState(false);
     const [intervalId, setIntervalId] = useState(null);
 
@@ -258,9 +258,15 @@ const AdminPanel = () => {
     };
 
     // ====================== Экспорт ======================
+    // ==========================================
+    // ========== Логика старта экспорта ========
+    // ==========================================
     const startExport = async () => {
+        // Если уже что-то идёт — не делаем повторный экспорт
         if (isExporting || isImporting) return;
+
         try {
+            // Сбрасываем возможные старые значения
             setError('');
             setExportError(null);
             setProgress(null);
@@ -272,39 +278,49 @@ const AdminPanel = () => {
                 {},
                 { headers: { Authorization: `Bearer ${token}` } }
             );
-            setExportTaskId(response.data.taskId);
+            const taskIdFromServer = response.data.taskId;
+            setExportTaskId(taskIdFromServer);
 
+            // Ставим прогресс 0 (чтобы пользователь видел, что началось)
+            setProgress(0);
+
+            // Запускаем интервал опроса
             const id = setInterval(async () => {
                 try {
                     const progressRes = await axios.get(
-                        `${API_URL}/admin/export-progress/${response.data.taskId}`,
+                        `${API_URL}/admin/export-progress/${taskIdFromServer}`,
                         { headers: { Authorization: `Bearer ${token}` } }
                     );
-
-                    // progressRes.data => { Progress, IsError, ErrorDetails }
+                    // сервер возвращает объект вида:
+                    // { Progress: number, IsError: bool, ErrorDetails: string }
                     const { Progress, IsError, ErrorDetails } = progressRes.data;
 
+                    // Обновляем состояние
                     setProgress(Progress);
+
                     if (IsError && Progress === -1) {
-                        // Это означает ошибка
+                        // Сервер сообщил об ошибке => выходим из режима экспорта
                         setExportError(ErrorDetails || 'Неизвестная ошибка при экспорте');
+                        setIsExporting(false);
                         clearInterval(id);
                         setIntervalId(null);
-                        setIsExporting(false);
-                    } else if (Progress >= 100) {
-                        // Завершено
-                        clearInterval(id);
-                        setIntervalId(null);
-                        setIsExporting(false);
                     }
+                    else if (Progress >= 100) {
+                        // Экспорт завершён
+                        setIsExporting(false);
+                        clearInterval(id);
+                        setIntervalId(null);
+                    }
+                    // Иначе просто продолжаем (прогресс < 100, IsError=false)
                 } catch (e) {
+                    // Ошибка самого запроса (сеть, 500 и т.п.)
                     console.error(e);
-                    setError('Ошибка при получении прогресса экспорта.');
+                    setError('Ошибка при получении прогресса экспорта (сетевая или серверная).');
+                    setIsExporting(false);
                     clearInterval(id);
                     setIntervalId(null);
-                    setIsExporting(false);
                 }
-            }, 500);
+            }, 1000);  // например, раз в секунду
 
             setIntervalId(id);
         } catch (err) {
@@ -314,6 +330,9 @@ const AdminPanel = () => {
         }
     };
 
+    // ================================================
+    // ======== Прекращение экспорта (Cancel) =========
+    // ================================================
     const cancelExport = async () => {
         if (!exportTaskId) return;
         const token = Cookies.get('token');
@@ -323,12 +342,19 @@ const AdminPanel = () => {
                 {},
                 { headers: { Authorization: `Bearer ${token}` } }
             );
+            // Отмена успешно отправлена, можно сбросить состояние
+            setIsExporting(false);
+            setProgress(-1);
+            setExportError('Экспорт отменён пользователем.');
         } catch (err) {
             console.error(err);
             setError('Ошибка при отмене экспорта.');
         }
     };
 
+    // ================================================
+    // ============ Скачать экспортированный ZIP ======
+    // ================================================
     const downloadExportedFile = async () => {
         if (!exportTaskId) return;
         const token = Cookies.get('token');
@@ -343,7 +369,7 @@ const AdminPanel = () => {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `export_${exportTaskId}.zip`;
+            a.download = `export_${exportTaskId}.zip`; // меняем расширение на .zip
             document.body.appendChild(a);
             a.click();
             a.remove();
@@ -704,15 +730,16 @@ const AdminPanel = () => {
                 {currentTab === 'export' && (
                     <div className="admin-section">
                         <h3 className="admin-section-title">Экспорт данных</h3>
+
                         <div className="admin-actions" style={{ marginBottom: '15px' }}>
                             <button
                                 onClick={startExport}
-                                className={`admin-button ${isExporting || isImporting ? 'admin-button-disabled' : ''
-                                    }`}
+                                className={`admin-button ${isExporting || isImporting ? 'admin-button-disabled' : ''}`}
                                 disabled={isExporting || isImporting}
                             >
                                 Начать экспорт в SQLite
                             </button>
+
                             {isExporting && exportTaskId && (
                                 <button onClick={cancelExport} className="admin-button">
                                     Отменить экспорт
@@ -720,14 +747,23 @@ const AdminPanel = () => {
                             )}
                         </div>
 
+                        {/* Блок отображения прогресса/ошибок */}
                         {exportTaskId && progress !== null && (
                             <div className="admin-export-status">
                                 {progress === -1 ? (
+                                    // Ошибка или отмена
                                     <div className="admin-error">
-                                        Экспорт прерван: {exportError}
+                                        Экспорт прерван: {exportError || 'Неизвестная причина'}
                                     </div>
                                 ) : progress < 100 ? (
-                                    <div>Прогресс экспорта: {progress}%</div>
+                                    <div>
+                                        Прогресс экспорта: {progress}%
+                                        {exportError && (
+                                            <div style={{ marginTop: '10px', color: 'red', whiteSpace: 'pre-wrap' }}>
+                                                {exportError}
+                                            </div>
+                                        )}
+                                    </div>
                                 ) : (
                                     <div className="admin-export-complete">
                                         Экспорт завершен!
