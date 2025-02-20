@@ -54,7 +54,7 @@ namespace RareBooksService.WebApi.Controllers
                     return NotFound("Задача не найдена.");
                 }
 
-                return Ok(new
+                return Ok(new ExportStatusDto
                 {
                     Progress = status.Progress,
                     IsError = status.IsError,
