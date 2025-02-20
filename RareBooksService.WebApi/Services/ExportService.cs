@@ -328,8 +328,8 @@ namespace RareBooksService.WebApi.Services
                         {
                             token.ThrowIfCancellationRequested();
 
-                            if (!processedBookIds.Contains(book.Id))
-                            {
+                            //if (!processedBookIds.Contains(book.Id))
+                            //{
                                 var newBook = new ExtendedBookInfo
                                 {
                                     Id = book.Id,
@@ -360,7 +360,7 @@ namespace RareBooksService.WebApi.Services
                                 };
 
                                 extendedContext.BooksInfo.Add(newBook);
-                                processedBookIds.Add(book.Id);
+                                //processedBookIds.Add(book.Id);
                                 processed++;
 
                                 // Каждые 100 добавлений — сохраняем и сбрасываем трекер
@@ -372,11 +372,11 @@ namespace RareBooksService.WebApi.Services
                                     int percent = (int)((double)processed / totalBooks * 100);
                                     _progress[taskId] = percent;
                                 }
-                            }
-                            else
-                            {
+                            //}
+                            //else
+                            //{
                                 // Уже добавляли такую книгу, пропускаем
-                            }
+                            //}
                         }
 
                         // Сохраняем «хвост» (если в пачке < 100)
