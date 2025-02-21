@@ -36,7 +36,7 @@ const SubscriptionSuccess = () => {
             if (activeSub) {
                 setSuccess(true);
             } else {
-                setError('Подписка пока не активирована. Подождите немного или обратитесь в поддержку.');
+                setError('Подписка пока не активирована. Подождите немного или обратитесь в поддержку.<br/>Для экстренной связи пишите в телеграм https://t.me/doomkinn');
             }
         } catch (err) {
             console.error('Check subscription error:', err);
