@@ -221,18 +221,43 @@ namespace RareBooksService.WebApi.Services
                     GC.WaitForPendingFinalizers();
 
                     processed += booksChunk.Count;
-                    int percent = (int)((double)processed / totalBooks * 100);
+                    int percent = (int)((double)processed / totalBooks * 90); // 90% на основной процесс
                     _progress[taskId] = percent;
                 }
 
                 // Перед упаковкой подождём чуть-чуть
                 await Task.Delay(300, token);
 
-                // Упаковываем всё в zip
+                // ====== Упаковка в ZIP ======
                 string zipFilePath = Path.Combine(Path.GetTempPath(), $"export_{taskId}.zip");
                 if (File.Exists(zipFilePath)) File.Delete(zipFilePath);
 
-                ZipFile.CreateFromDirectory(tempFolder, zipFilePath);
+                int packingProgressWeight = 10; // Процент, отводимый на упаковку
+
+                // Разделим упаковку на несколько этапов для обновления прогресса
+                var packTask = Task.Run(() =>
+                {
+                    string[] files = Directory.GetFiles(tempFolder);
+                    int fileCount = files.Length;
+                    int processedFiles = 0;
+
+                    using (var zip = ZipFile.Open(zipFilePath, ZipArchiveMode.Create))
+                    {
+                        foreach (var file in files)
+                        {
+                            token.ThrowIfCancellationRequested();
+
+                            zip.CreateEntryFromFile(file, Path.GetFileName(file), CompressionLevel.Optimal);
+                            processedFiles++;
+
+                            // Обновляем прогресс
+                            int percent = 90 + (int)((double)processedFiles / fileCount * packingProgressWeight);
+                            _progress[taskId] = percent;
+                        }
+                    }
+                });
+
+                await packTask;
 
                 _files[taskId] = zipFilePath;
 
@@ -258,6 +283,7 @@ namespace RareBooksService.WebApi.Services
                 _cancellationTokens.TryRemove(taskId, out _);
             }
         }
+
 
         public FileInfo GetExportedFile(Guid taskId)
         {

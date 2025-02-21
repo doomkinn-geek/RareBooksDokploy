@@ -22,6 +22,7 @@ const AdminPanel = () => {
     const [exportTaskId, setExportTaskId] = useState(null);
     const [progress, setProgress] = useState(null);        // число (0..100 или -1)
     const [exportError, setExportError] = useState(null);  // текст ошибки с сервера, если есть
+    const [exportInternalError, setExportInternalError] = useState(null);  
     const [isExporting, setIsExporting] = useState(false);
     const [intervalId, setIntervalId] = useState(null);
 
@@ -269,6 +270,7 @@ const AdminPanel = () => {
             // Сбрасываем возможные старые значения
             setError('');
             setExportError(null);
+            setExportInternalError(null);
             setProgress(null);
             setIsExporting(true);
 
@@ -301,6 +303,7 @@ const AdminPanel = () => {
                     if (isError && progress === -1) {
                         // Сервер сообщил об ошибке => выходим из режима экспорта
                         setExportError(errorDetails || 'Неизвестная ошибка при экспорте');
+                        setExportInternalError(errorDetails);
                         setIsExporting(false);
                         clearInterval(id);
                         setIntervalId(null);
@@ -360,7 +363,7 @@ const AdminPanel = () => {
         const token = Cookies.get('token');
         try {
             const response = await fetch(
-                `${API_URL}/admin/download-exported-file/${exportTaskId}`,
+                `${API_URL}/Admin/download-exported-file/${exportTaskId}`,
                 { headers: { Authorization: `Bearer ${token}` } }
             );
             if (!response.ok) throw new Error('Не удалось скачать файл');
@@ -754,6 +757,8 @@ const AdminPanel = () => {
                                     // Ошибка или отмена
                                     <div className="admin-error">
                                         Экспорт прерван: {exportError || 'Неизвестная причина'}
+                                        <br></br>
+                                        Ошибка экспорта: {exportInternalError}
                                     </div>
                                 ) : progress < 100 ? (
                                     <div>
