@@ -200,6 +200,8 @@ namespace RareBooksService.WebApi
                 // 12) BookUpdateService – singleton + HostedService
                 builder.Services.AddSingleton<IBookUpdateService, BookUpdateService>();
                 builder.Services.AddHostedService(sp => (BookUpdateService)sp.GetRequiredService<IBookUpdateService>());
+                builder.Services.AddHostedService<SubscriptionRenewalBackgroundService>();
+
 
 
                 // 13) MemoryCache, AutoMapper, ...

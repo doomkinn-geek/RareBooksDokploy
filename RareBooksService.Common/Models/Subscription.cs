@@ -51,5 +51,7 @@
         public decimal PriceAtPurchase { get; set; }
         //сколько запросов уже израсходовано в текущем периоде
         public int UsedRequestsThisPeriod { get; set; }
+        // Новое поле для «привязанной карты» / способа оплаты
+        public string? PaymentMethodId { get; set; }
     }
 }

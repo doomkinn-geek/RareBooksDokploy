@@ -106,13 +106,24 @@ namespace RareBooksService.WebApi.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> Webhook()
         {
-            var (paymentId, isSucceeded) = await _paymentService.ProcessWebhookAsync(HttpContext.Request);
-            if (!string.IsNullOrEmpty(paymentId) && isSucceeded)
+            var (paymentId, isSucceeded, paymentMethodId) = await _paymentService.ProcessWebhookAsync(HttpContext.Request);
+            if (!string.IsNullOrEmpty(paymentId))
             {
-                await _subscriptionService.ActivateSubscriptionAsync(paymentId);
+                if (isSucceeded)
+                {
+                    // Успешная оплата
+                    await _subscriptionService.ActivateSubscriptionAsync(paymentId, paymentMethodId);
+                }
+                else
+                {
+                    // Неуспешная (или отменённая) оплата — отменяем подписку
+                    await _subscriptionService.CancelSubscriptionAsync(paymentId);
+                }
             }
-            return Ok();
+            return Ok(); // Подтверждаем получение
         }
+
+
 
         /// <summary>
         /// Вернуть DTO всех подписок текущего пользователя

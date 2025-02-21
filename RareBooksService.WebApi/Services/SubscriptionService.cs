@@ -1,16 +1,20 @@
 ﻿using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using RareBooksService.Common.Models;
 using RareBooksService.Common.Models.Dto;
 using RareBooksService.Common.Models.Dto.RareBooksService.Common.Models.Dto;
+using RareBooksService.Common.Models.Settings;
 using RareBooksService.Data;
+using System.Net;
+using Yandex.Checkout.V3;
 
 namespace RareBooksService.WebApi.Services
 {
     public interface ISubscriptionService
     {
         Task<SubscriptionDto> CreateSubscriptionAsync(ApplicationUser user, SubscriptionPlan plan, bool autoRenew);
-        Task ActivateSubscriptionAsync(string paymentId);
+        Task ActivateSubscriptionAsync(string paymentId, string? paymentMethodId);
         Task<List<SubscriptionPlanDto>> GetActiveSubscriptionPlansAsync();
         Task<SubscriptionPlanDto?> GetPlanByIdAsync(int planId);
 
@@ -20,19 +24,31 @@ namespace RareBooksService.WebApi.Services
 
         Task<bool> AssignSubscriptionPlanAsync(string userId, int planId, bool autoRenew);
         Task<bool> DisableSubscriptionAsync(string userId);
+        Task<bool> TryAutoRenewSubscriptionAsync(int subscriptionId);
+
+        Task CancelSubscriptionAsync(string paymentId);
     }
 
     public class SubscriptionService : ISubscriptionService
     {
         private readonly UsersDbContext _db;
         private readonly UserManager<ApplicationUser> _userManager;
-        private readonly ILogger<SubscriptionService> logger;
+        private readonly ILogger<SubscriptionService> _logger;
+        private readonly Client _yooKassaClient;
 
-        public SubscriptionService(UsersDbContext db, UserManager<ApplicationUser> userManager, ILogger<SubscriptionService> logger)
+        public SubscriptionService(UsersDbContext db, 
+            UserManager<ApplicationUser> userManager, 
+            ILogger<SubscriptionService> logger,
+            IOptions<YandexKassaSettings> ykSettings)
         {
             _db = db;
             _userManager = userManager;
-            this.logger = logger;
+            _logger = logger;
+
+            // Инициализируем клиента
+            var settings = ykSettings.Value;
+            _yooKassaClient = new Client(settings.ShopId, settings.SecretKey);
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
         }
 
         public async Task<SubscriptionDto> CreateSubscriptionAsync(ApplicationUser user, SubscriptionPlan plan, bool autoRenew)
@@ -65,48 +81,130 @@ namespace RareBooksService.WebApi.Services
             return ToDto(newSub, plan);
         }
 
-        public async Task ActivateSubscriptionAsync(string paymentId)
+        public async Task ActivateSubscriptionAsync(string paymentId, string? paymentMethodId)
         {
             var sub = await _db.Subscriptions
+                .Where(s => s.PaymentId == paymentId)
                 .Include(s => s.User)
-                .FirstOrDefaultAsync(s => s.PaymentId == paymentId);
+                .FirstOrDefaultAsync();
+
             if (sub == null) return;
 
+            // Делаем активной
             sub.IsActive = true;
             sub.UsedRequestsThisPeriod = 0;
             sub.User.HasSubscription = true;
 
-            // Отключаем все остальные
-            var sameUserActive = await _db.Subscriptions
+            // Если передан PaymentMethodId, сохраняем
+            if (!string.IsNullOrEmpty(paymentMethodId))
+            {
+                sub.PaymentMethodId = paymentMethodId;
+            }
+
+            // Отключаем все остальные подписки пользователя (если бизнес-логика требует)
+            var others = await _db.Subscriptions
                 .Where(s => s.UserId == sub.UserId && s.Id != sub.Id && s.IsActive)
                 .ToListAsync();
-            foreach (var old in sameUserActive)
-                old.IsActive = false;
+            foreach (var other in others)
+                other.IsActive = false;
 
             await _db.SaveChangesAsync();
         }
+
+        public async Task<bool> TryAutoRenewSubscriptionAsync(int subscriptionId)
+        {
+            var sub = await _db.Subscriptions
+                .Include(s => s.User)
+                .Include(s => s.SubscriptionPlan)
+                .FirstOrDefaultAsync(s => s.Id == subscriptionId);
+
+            if (sub == null || !sub.IsActive || !sub.AutoRenew)
+                return false;
+
+            if (string.IsNullOrEmpty(sub.PaymentMethodId))
+                return false; // нечего списывать, нет сохранённой карты
+
+            var plan = sub.SubscriptionPlan;
+            var user = sub.User;
+
+            // Делаем асинхронный клиент
+            var asyncClient = _yooKassaClient.MakeAsync();
+
+            // Формируем запрос
+            var newPayment = new NewPayment
+            {
+                Amount = new Amount
+                {
+                    Value = plan.Price,
+                    Currency = "RUB"
+                },
+                PaymentMethodId = sub.PaymentMethodId,
+                Capture = true,
+                Description = $"Автопродление подписки: {plan.Name} для {user.Email}",
+                Metadata = new Dictionary<string, string>
+                {
+                    { "userId", user.Id },
+                    { "planId", plan.Id.ToString() },
+                    { "autoRenew", "true" },
+                    { "renewForSubId", sub.Id.ToString() }
+                }
+            };
+
+            try
+            {
+                var payment = await asyncClient.CreatePaymentAsync(newPayment);
+
+                if (payment.Status == PaymentStatus.Succeeded)
+                {
+                    // Успешно списали — продлеваем
+                    sub.EndDate = sub.EndDate < DateTime.UtcNow
+                        ? DateTime.UtcNow.AddMonths(1)
+                        : sub.EndDate.AddMonths(1);
+
+                    sub.IsActive = true;
+                    await _db.SaveChangesAsync();
+                    return true;
+                }
+                else
+                {
+                    // Платёж не прошёл
+                    sub.IsActive = false;
+                    sub.User.HasSubscription = false;
+                    await _db.SaveChangesAsync();
+
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "AutoRenew: ошибка при создании платежа");
+                return false;
+            }
+        }
+
+
 
         public async Task<List<SubscriptionPlanDto>> GetActiveSubscriptionPlansAsync()
         {
             try
             {
-                logger.LogInformation("Начинаем выборку активных планов подписки из базы...");
+                _logger.LogInformation("Начинаем выборку активных планов подписки из базы...");
 
                 var plans = await _db.SubscriptionPlans
                     .Where(p => p.IsActive)
                     .ToListAsync();
 
-                logger.LogInformation("Активные планы подписки выбраны: {Count} шт.", plans.Count);
+                _logger.LogInformation("Активные планы подписки выбраны: {Count} шт.", plans.Count);
 
                 // Преобразование в DTO
                 var result = plans.Select(ToDto).ToList();
-                logger.LogInformation("Сформирован список DTO планов подписки: {Count} шт.", result.Count);
+                _logger.LogInformation("Сформирован список DTO планов подписки: {Count} шт.", result.Count);
 
                 return result;
             }
             catch (Exception e)
             {
-                logger.LogError(e, "Ошибка в GetActiveSubscriptionPlansAsync при выборке планов из БД");
+                _logger.LogError(e, "Ошибка в GetActiveSubscriptionPlansAsync при выборке планов из БД");
                 // Обязательно пробрасываем исключение выше, чтобы контроллер мог отреагировать
                 throw;
             }
@@ -215,6 +313,30 @@ namespace RareBooksService.WebApi.Services
 
             return true;
         }
+
+        public async Task CancelSubscriptionAsync(string paymentId)
+        {
+            // Ищем подписку по paymentId
+            var sub = await _db.Subscriptions
+                .Include(s => s.User)
+                .FirstOrDefaultAsync(s => s.PaymentId == paymentId);
+
+            if (sub == null)
+            {
+                _logger.LogWarning("CancelSubscriptionAsync: не найдена подписка для paymentId={PaymentId}", paymentId);
+                return;
+            }
+
+            // Отключаем подписку
+            sub.IsActive = false;
+            sub.User.HasSubscription = false;
+            // Если хотите явно зафиксировать дату окончания, можно:
+            // sub.EndDate = DateTime.UtcNow; 
+
+            await _db.SaveChangesAsync();
+            _logger.LogInformation("Подписка {SubId} для пользователя {UserId} отменена (ошибка платежа)", sub.Id, sub.UserId);
+        }
+
 
         // ---------------------------
         // PRIVATE MAPPERS
