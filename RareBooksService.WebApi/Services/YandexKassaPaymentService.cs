@@ -135,31 +135,34 @@ namespace RareBooksService.WebApi.Services
         {
             try
             {
-                // 1. Считать тело запроса
-                request.Body.Position = 0; // на всякий случай
-                using var reader = new StreamReader(request.Body);
+                // Разрешаем перемотку тела
+                request.EnableBuffering();
+
+                // «Перематываем» на начало
+                request.Body.Position = 0;
+
+                // Читаем тело запроса
+                using var reader = new StreamReader(request.Body, leaveOpen: true);
                 var body = await reader.ReadToEndAsync();
 
+                // Логируем
                 _logger.LogInformation("Webhook received: {Body}", body);
 
-                // 2. (Опционально) Проверить IP-адрес, если хотите фильтровать запросы
+                // Возвращаемся в начало, чтобы при необходимости повторно прочесть
+                request.Body.Position = 0;
+
+                // Проверка IP (опционально)
                 var remoteIp = request.HttpContext.Connection.RemoteIpAddress;
                 if (!IsIpFromYooKassa(remoteIp))
                 {
                     _logger.LogWarning("Webhook from unknown IP {IP}. Potentially not from YandexKassa.", remoteIp);
                     // Решайте сами: либо возвращать ошибку, либо продолжить
-                    // return (null, false);
                 }
 
-                // 3. Разобрать JSON
-                // Структура:
-                // {
-                //   "event": "payment.succeeded",
-                //   "type": "notification",
-                //   "object": { ... информация о платеже ... }
-                // }
+                // Парсим JSON
                 using var doc = JsonDocument.Parse(body);
                 var root = doc.RootElement;
+
                 if (!root.TryGetProperty("event", out var eventProp))
                 {
                     _logger.LogError("No 'event' property in webhook JSON");
@@ -173,42 +176,33 @@ namespace RareBooksService.WebApi.Services
                     return (null, false);
                 }
 
-                // Для платежей "object.id" = paymentId
                 if (!objectProp.TryGetProperty("id", out var idProp))
                 {
                     _logger.LogError("No 'object.id' property in webhook JSON");
                     return (null, false);
                 }
+
                 var paymentId = idProp.GetString();
 
-                // 4. Логика в зависимости от события
-                //    (Можно смотреть ещё на status в objectProp)
-                if (eventName == "payment.succeeded")
+                // Обработка событий
+                switch (eventName)
                 {
-                    // Можно считать PaymentStatus= "succeeded"
-                    // Возвращаем флажок isSucceeded = true
-                    _logger.LogInformation("Payment {PaymentId} succeeded", paymentId);
-                    return (paymentId, true);
-                }
-                else if (eventName == "payment.canceled")
-                {
-                    _logger.LogInformation("Payment {PaymentId} canceled", paymentId);
-                    // Можете здесь же вызвать свой код, который отменяет подписку
-                    return (paymentId, false);
-                }
-                else if (eventName == "payment.waiting_for_capture")
-                {
-                    // Если вы используете флоу с capture, нужно вызвать метод capture
-                    // PaymentId можно сохранить, потом отдельным методом.
-                    _logger.LogInformation("Payment {PaymentId} waiting for capture", paymentId);
-                    // Возвращать (paymentId, false) или как-то иначе.
-                    // Можете вручную вызвать API capture, если нужно.
-                    return (paymentId, false);
-                }
-                else
-                {
-                    _logger.LogInformation("Ignored event {EventName} for payment {PaymentId}", eventName, paymentId);
-                    return (paymentId, false);
+                    case "payment.succeeded":
+                        _logger.LogInformation("Payment {PaymentId} succeeded", paymentId);
+                        return (paymentId, true);
+
+                    case "payment.canceled":
+                        _logger.LogInformation("Payment {PaymentId} canceled", paymentId);
+                        return (paymentId, false);
+
+                    case "payment.waiting_for_capture":
+                        _logger.LogInformation("Payment {PaymentId} waiting for capture", paymentId);
+                        // Тут при необходимости вызвать Capture
+                        return (paymentId, false);
+
+                    default:
+                        _logger.LogInformation("Ignored event {EventName} for payment {PaymentId}", eventName, paymentId);
+                        return (paymentId, false);
                 }
             }
             catch (Exception ex)
@@ -217,6 +211,7 @@ namespace RareBooksService.WebApi.Services
                 return (null, false);
             }
         }
+
 
         private bool IsIpFromYooKassa(IPAddress? ip)
         {
