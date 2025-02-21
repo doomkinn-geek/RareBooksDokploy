@@ -19,16 +19,19 @@ namespace RareBooksService.WebApi.Controllers
         private readonly UsersDbContext _context; // <-- добавлено
         private readonly IYandexKassaPaymentService _paymentService;
         private readonly ISubscriptionService _subscriptionService;
+        private readonly ILogger<SubscriptionController> _logger;
 
         public SubscriptionController(
             UserManager<ApplicationUser> userManager,
             UsersDbContext context,
             IYandexKassaPaymentService paymentService,
-            ISubscriptionService subscriptionService) : base(userManager)
+            ISubscriptionService subscriptionService,
+            ILogger<SubscriptionController> logger) : base(userManager)
         {
             _context = context;
             _paymentService = paymentService;
             _subscriptionService = subscriptionService;
+            _logger = logger;
         }
 
         /// <summary>
@@ -38,9 +41,25 @@ namespace RareBooksService.WebApi.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> GetPlans()
         {
-            var planDtos = await _subscriptionService.GetActiveSubscriptionPlansAsync();
-            return Ok(planDtos);
+            try
+            {
+                _logger.LogInformation("Получен запрос на получение списка активных планов подписки.");
+
+                var planDtos = await _subscriptionService.GetActiveSubscriptionPlansAsync();
+
+                // Дополнительный лог об успешно полученных планах
+                _logger.LogInformation("Успешно получен список планов подписки (Count={Count}).", planDtos?.Count ?? 0);
+
+                return Ok(planDtos);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при получении планов подписки в методе GetPlans");
+                // Отдаём статус 500 + человекочитаемое сообщение
+                return StatusCode(500, "Внутренняя ошибка при получении планов подписки.");
+            }
         }
+
 
         /// <summary>
         /// Создаёт оплату. Пользователь выбирает planId, autoRenew. 

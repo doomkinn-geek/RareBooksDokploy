@@ -22,6 +22,7 @@ const AdminPanel = () => {
     const [exportTaskId, setExportTaskId] = useState(null);
     const [progress, setProgress] = useState(null);        // число (0..100 или -1)
     const [exportError, setExportError] = useState(null);  // текст ошибки с сервера, если есть
+    const [exportInternalError, setExportInternalError] = useState(null);  
     const [isExporting, setIsExporting] = useState(false);
     const [intervalId, setIntervalId] = useState(null);
 
@@ -269,6 +270,7 @@ const AdminPanel = () => {
             // Сбрасываем возможные старые значения
             setError('');
             setExportError(null);
+            setExportInternalError(null);
             setProgress(null);
             setIsExporting(true);
 
@@ -291,17 +293,20 @@ const AdminPanel = () => {
                         `${API_URL}/admin/export-progress/${taskIdFromServer}`,
                         { headers: { Authorization: `Bearer ${token}` } }
                     );
-                    // сервер возвращает объект вида:
-                    // { Progress: number, IsError: bool, ErrorDetails: string }
+                    // Сервер возвращает объект вида:
+                    // { progress: number, isError: bool, errorDetails: string }
                     const { progress, isError, errorDetails } = progressRes.data;
 
-                    // Обновляем состояние
+                    // Обновляем локальное состояние прогресса
                     setProgress(progress);
 
                     if (isError && progress === -1) {
                         // Сервер сообщил об ошибке => выходим из режима экспорта
                         setExportError(errorDetails || 'Неизвестная ошибка при экспорте');
+                        setExportInternalError(errorDetails);
                         setIsExporting(false);
+
+                        // Останавливаем таймер опроса
                         clearInterval(id);
                         setIntervalId(null);
                     }
@@ -311,16 +316,18 @@ const AdminPanel = () => {
                         clearInterval(id);
                         setIntervalId(null);
                     }
-                    // Иначе просто продолжаем (прогресс < 100, IsError=false)
+                    // Иначе (прогресс < 100, isError=false) — продолжаем опрашивать
                 } catch (e) {
-                    // Ошибка самого запроса (сеть, 500 и т.п.)
+                    // Сюда попадаем при сетевой ошибке, 5xx, 4xx и т.д.
                     console.error(e);
                     setError('Ошибка при получении прогресса экспорта (сетевая или серверная).');
                     setIsExporting(false);
+
+                    // Не забываем остановить таймер
                     clearInterval(id);
                     setIntervalId(null);
                 }
-            }, 1000);  // например, раз в секунду
+            }, 1000); // например, раз в секунду
 
             setIntervalId(id);
         } catch (err) {
@@ -329,6 +336,7 @@ const AdminPanel = () => {
             setIsExporting(false);
         }
     };
+
 
     // ================================================
     // ======== Прекращение экспорта (Cancel) =========
@@ -360,7 +368,7 @@ const AdminPanel = () => {
         const token = Cookies.get('token');
         try {
             const response = await fetch(
-                `${API_URL}/admin/download-exported-file/${exportTaskId}`,
+                `${API_URL}/Admin/download-exported-file/${exportTaskId}`,
                 { headers: { Authorization: `Bearer ${token}` } }
             );
             if (!response.ok) throw new Error('Не удалось скачать файл');
@@ -754,6 +762,8 @@ const AdminPanel = () => {
                                     // Ошибка или отмена
                                     <div className="admin-error">
                                         Экспорт прерван: {exportError || 'Неизвестная причина'}
+                                        <br></br>
+                                        Ошибка экспорта: {exportInternalError}
                                     </div>
                                 ) : progress < 100 ? (
                                     <div>

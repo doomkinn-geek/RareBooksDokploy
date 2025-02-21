@@ -3,13 +3,11 @@ using RareBooksService.Data;
 using RareBooksService.Common.Models;
 using RareBooksService.Common.Models.Parsing;
 using System.Collections.Concurrent;
-using System.Globalization;
 using RareBooksService.Data.Parsing;
 using Microsoft.Extensions.DependencyInjection;
-using System.Threading;
 using System.IO.Compression;
-using System.Data;
 using Microsoft.Data.Sqlite;
+using System.Data;
 
 namespace RareBooksService.WebApi.Services
 {
@@ -27,7 +25,7 @@ namespace RareBooksService.WebApi.Services
     /// </summary>
     public class ExportStatusDto
     {
-        public int Progress { get; set; }
+        public int Progress { get; set; }      // 0..100 или -1 при ошибке/отмене
         public bool IsError { get; set; }
         public string ErrorDetails { get; set; }
     }
@@ -35,16 +33,16 @@ namespace RareBooksService.WebApi.Services
     public class ExportService : IExportService
     {
         private readonly IServiceScopeFactory _scopeFactory;
+        private readonly ILogger<ExportService> _logger;
+
+        // Словари для хранения состояния экспорта:
         private static ConcurrentDictionary<Guid, int> _progress = new ConcurrentDictionary<Guid, int>();
-
-        // Храним подробности ошибок в отдельном словаре.
         private static ConcurrentDictionary<Guid, string> _errors = new ConcurrentDictionary<Guid, string>();
-
         private static ConcurrentDictionary<Guid, string> _files = new ConcurrentDictionary<Guid, string>();
         private static ConcurrentDictionary<Guid, CancellationTokenSource> _cancellationTokens = new ConcurrentDictionary<Guid, CancellationTokenSource>();
 
-        private const int PageSize = 1000; // Число книг за раз
-        private readonly ILogger<ExportService> _logger;
+        // Уменьшаем chunkSize для снижения пикового потребления памяти
+        private const int ChunkSize = 20000;
 
         public ExportService(IServiceScopeFactory scopeFactory, ILogger<ExportService> logger)
         {
@@ -52,224 +50,114 @@ namespace RareBooksService.WebApi.Services
             _logger = logger;
         }
 
+
         public async Task<Guid> StartExportAsync()
         {
-            // Проверяем, нет ли уже запущенной задачи
+            // 1) Перед запуском нового экспорта удалим старые файлы экспорта
+            CleanupOldExportFilesOnDisk();
+
+            // 2) Проверяем, нет ли уже активного экспорта
             bool anyActive = _progress.Values.Any(p => p >= 0 && p < 100);
             if (anyActive)
                 throw new InvalidOperationException("Экспорт уже выполняется. Дождитесь завершения или отмените предыдущий экспорт.");
 
             var taskId = Guid.NewGuid();
             _progress[taskId] = 0;
-            // Сбрасываем предыдущие ошибки на случай повторного использования taskId
             _errors[taskId] = string.Empty;
 
             var cts = new CancellationTokenSource();
             _cancellationTokens[taskId] = cts;
 
+            // Запускаем DoExport в фоновом потоке
             _ = Task.Run(() => DoExport(taskId, cts.Token));
             return taskId;
+        }
+
+        /// <summary>
+        /// Удаляем все временные файлы/папки предыдущих экспортных заданий.
+        /// </summary>
+        private void CleanupOldExportFilesOnDisk()
+        {
+            try
+            {
+                // Папка для временных файлов
+                string tempPath = Path.GetTempPath();
+
+                // 1) Удаляем все zip-файлы вида export_{...}.zip
+                var oldZips = Directory.GetFiles(tempPath, "export_*.zip");
+                foreach (var zip in oldZips)
+                {
+                    try
+                    {
+                        File.Delete(zip);
+                    }
+                    catch
+                    {
+                        // Игнорируем любые ошибки
+                    }
+                }
+
+                // 2) Удаляем все подпапки вида export_{...}, где лежали part_*.db
+                var oldDirs = Directory.GetDirectories(tempPath, "export_*");
+                foreach (var dir in oldDirs)
+                {
+                    try
+                    {
+                        Directory.Delete(dir, true);
+                    }
+                    catch
+                    {
+                        // Игнорируем любые ошибки
+                    }
+                }
+            }
+            catch
+            {
+                // Если что-то пошло не так, не прерываем работу, а просто продолжаем
+            }
+        }
+
+
+        public ExportStatusDto GetStatus(Guid taskId)
+        {
+            int progress = -1;
+            if (_progress.TryGetValue(taskId, out var p))
+                progress = p;
+
+            string errorDetails = null;
+            if (_errors.TryGetValue(taskId, out var err) && !string.IsNullOrEmpty(err))
+            {
+                errorDetails = err;
+            }
+
+            return new ExportStatusDto
+            {
+                Progress = progress,
+                IsError = (progress == -1),
+                ErrorDetails = errorDetails
+            };
+        }
+
+        public FileInfo GetExportedFile(Guid taskId)
+        {
+            if (_files.TryGetValue(taskId, out var path))
+            {
+                return new FileInfo(path);
+            }
+            return null;
         }
 
         public void CancelExport(Guid taskId)
         {
             if (_cancellationTokens.TryGetValue(taskId, out var cts))
             {
-                cts.Cancel();
+                cts.Cancel();  // попросим прервать DoExport
             }
-        }
-
-        public ExportStatusDto GetStatus(Guid taskId)
-        {
-            // Прогресс
-            int progress = -1;
-            if (_progress.TryGetValue(taskId, out var p))
-                progress = p;
-
-            // Ошибка
-            string error = null;
-            if (_errors.TryGetValue(taskId, out var err) && !string.IsNullOrEmpty(err))
-            {
-                // Если там лежит текст ошибки — вернём
-                error = err;
-            }
-
-            // Собираем DTO
-            var dto = new ExportStatusDto
-            {
-                Progress = progress,
-                IsError = (progress == -1),
-                ErrorDetails = error
-            };
-            return dto;
-        }
-
-        private async Task DoExport(Guid taskId, CancellationToken token)
-        {
-            try
-            {
-                _progress[taskId] = 0;
-
-                using var scope = _scopeFactory.CreateScope();
-                var regularContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
-
-                int totalBooks = await regularContext.BooksInfo.CountAsync(token);
-                if (totalBooks == 0)
-                {
-                    _progress[taskId] = 100;
-                    return;
-                }
-
-                token.ThrowIfCancellationRequested();
-
-                // Загружаем все категории (до 50 записей)
-                var categories = await regularContext.Categories.OrderBy(c => c.Id).ToListAsync(token);
-                token.ThrowIfCancellationRequested();
-
-                // Создадим временную папку
-                string tempFolder = Path.Combine(Path.GetTempPath(), $"export_{taskId}");
-                if (!Directory.Exists(tempFolder))
-                    Directory.CreateDirectory(tempFolder);
-
-                const int chunkSize = 50000;
-                int processed = 0;
-                int chunkIndex = 0;
-
-                while (processed < totalBooks)
-                {
-                    token.ThrowIfCancellationRequested();
-
-                    var booksChunk = await regularContext.BooksInfo
-                        .OrderBy(b => b.Id)
-                        .Skip(processed)
-                        .Take(chunkSize)
-                        .ToListAsync(token);
-
-                    if (booksChunk.Count == 0) break;
-
-                    chunkIndex++;
-                    string chunkDbPath = Path.Combine(tempFolder, $"part_{chunkIndex}.db");
-                    if (File.Exists(chunkDbPath)) File.Delete(chunkDbPath);
-
-                    var optionsBuilder = new DbContextOptionsBuilder<ExtendedBooksContext>();
-                    optionsBuilder.UseSqlite($"Filename={chunkDbPath}");
-
-                    using (var extendedContext = new ExtendedBooksContext(optionsBuilder.Options))
-                    {
-                        extendedContext.Database.EnsureCreated();
-                        extendedContext.ChangeTracker.AutoDetectChangesEnabled = false;
-
-                        // Сохраняем категории
-                        extendedContext.Categories.AddRange(
-                            categories.Select(c => new ExtendedCategory
-                            {
-                                CategoryId = c.CategoryId,
-                                Name = c.Name
-                            })
-                        );
-                        await extendedContext.SaveChangesAsync(token);
-
-                        // Сопоставим CategoryId => PK
-                        var extCats = await extendedContext.Categories.ToListAsync(token);
-                        var catMap = extCats.ToDictionary(x => x.CategoryId, x => x.Id);
-
-                        // Добавляем chunk книг
-                        extendedContext.BooksInfo.AddRange(
-                            booksChunk.Select(b => new ExtendedBookInfo
-                            {
-                                Id = b.Id,
-                                Title = b.Title,
-                                Description = b.Description,
-                                BeginDate = b.BeginDate,
-                                EndDate = b.EndDate,
-                                Price = b.Price,
-                                FinalPrice = b.FinalPrice,
-                                City = b.City,
-                                IsMonitored = b.IsMonitored,
-                                YearPublished = b.YearPublished,
-                                Tags = b.Tags,
-                                PicsRatio = b.PicsRatio,
-                                Status = b.Status,
-                                StartPrice = b.StartPrice,
-                                Type = b.Type,
-                                SoldQuantity = b.SoldQuantity,
-                                BidsCount = b.BidsCount,
-                                SellerName = b.SellerName,
-                                PicsCount = b.PicsCount,
-                                ImageUrls = b.ImageUrls,
-                                ThumbnailUrls = b.ThumbnailUrls,
-                                IsImagesCompressed = b.IsImagesCompressed,
-                                ImageArchiveUrl = b.ImageArchiveUrl,
-                                IsLessValuable = b.IsLessValuable,
-                                CategoryId = catMap.TryGetValue(b.Category.CategoryId, out var extCatId)
-                                    ? extCatId : 0
-                            })
-                        );
-
-                        await extendedContext.SaveChangesAsync(token);
-
-                        // Закрываем соединения
-                        var conn = extendedContext.Database.GetDbConnection();
-                        if (conn.State != ConnectionState.Closed)
-                            conn.Close();
-                    }
-
-                    // Очищаем пулы
-                    SqliteConnection.ClearAllPools();
-                    // Можно вызвать GC, чтобы форсировать закрытие файлов (редко нужно, но можно):
-                    GC.Collect();
-                    GC.WaitForPendingFinalizers();
-
-                    processed += booksChunk.Count;
-                    int percent = (int)((double)processed / totalBooks * 100);
-                    _progress[taskId] = percent;
-                }
-
-                // Перед упаковкой подождём чуть-чуть
-                await Task.Delay(300, token);
-
-                // Упаковываем всё в zip
-                string zipFilePath = Path.Combine(Path.GetTempPath(), $"export_{taskId}.zip");
-                if (File.Exists(zipFilePath)) File.Delete(zipFilePath);
-
-                ZipFile.CreateFromDirectory(tempFolder, zipFilePath);
-
-                _files[taskId] = zipFilePath;
-
-                // Удаляем временную папку
-                Directory.Delete(tempFolder, true);
-
-                _progress[taskId] = 100;
-            }
-            catch (OperationCanceledException)
-            {
-                _progress[taskId] = -1;
-                _errors[taskId] = "Экспорт отменён пользователем.";
-            }
-            catch (Exception e)
-            {
-                _logger.LogError(e, "Ошибка экспорта");
-                // Ставим прогресс -1 и сохраняем текст ошибки
-                _progress[taskId] = -1;
-                _errors[taskId] = e.ToString(); // или e.Message + e.StackTrace
-            }
-            finally
-            {
-                _cancellationTokens.TryRemove(taskId, out _);
-            }
-        }
-
-        public FileInfo GetExportedFile(Guid taskId)
-        {
-            if (_files.TryGetValue(taskId, out var filename))
-            {
-                return new FileInfo(filename);
-            }
-            return null;
         }
 
         public void CleanupAllFiles()
         {
+            // Удаляем все сохранённые zip-файлы
             foreach (var kvp in _files)
             {
                 var file = kvp.Value;
@@ -279,10 +167,211 @@ namespace RareBooksService.WebApi.Services
                     {
                         File.Delete(file);
                     }
-                    catch { }
+                    catch { /* ignore */ }
                 }
             }
             _files.Clear();
         }
+
+        /// <summary>
+        /// Основная логика экспорта
+        /// </summary>
+        private async Task DoExport(Guid taskId, CancellationToken token)
+        {
+            try
+            {
+                _progress[taskId] = 0;
+
+                using var scope = _scopeFactory.CreateScope();
+                var regularContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+
+                // 1) Узнаём общее число книг
+                int totalBooks = await regularContext.BooksInfo.CountAsync(token);
+                if (totalBooks == 0)
+                {
+                    // Если книг нет, сразу выходим
+                    _progress[taskId] = 100;
+                    return;
+                }
+                token.ThrowIfCancellationRequested();
+
+                // 2) Загружаем все категории из старой базы (PostgreSQL / PostgreSQL)
+                //    Здесь Category.Id — это старый PK, Category.CategoryId — meshok ID
+                var allCategories = await regularContext.Categories
+                    .AsNoTracking()
+                    .OrderBy(c => c.Id)
+                    .ToListAsync(token);
+
+                token.ThrowIfCancellationRequested();
+
+                // 3) Создаём временную папку, куда будем складывать part_*.db
+                string tempFolder = Path.Combine(Path.GetTempPath(), $"export_{taskId}");
+                if (!Directory.Exists(tempFolder))
+                    Directory.CreateDirectory(tempFolder);
+
+                int processed = 0;
+                int chunkIndex = 0;
+
+                // Цикл по порциям книг (ChunkSize задан у вас в классе ExportService)
+                while (processed < totalBooks)
+                {
+                    token.ThrowIfCancellationRequested();
+
+                    // 4) Загружаем очередной блок (chunk) книг из старой базы
+                    var booksChunk = await regularContext.BooksInfo
+                        .OrderBy(b => b.Id)
+                        .Skip(processed)
+                        .Take(ChunkSize)
+                        .AsNoTracking()  // отключаем трекинг EF для экономии памяти
+                        .ToListAsync(token);
+
+                    if (booksChunk.Count == 0)
+                        break;
+
+                    chunkIndex++;
+                    string chunkDbPath = Path.Combine(tempFolder, $"part_{chunkIndex}.db");
+                    if (File.Exists(chunkDbPath))
+                        File.Delete(chunkDbPath);
+
+                    // 5) Создаём контекст SQLite для текущего чанка
+                    var optionsBuilder = new DbContextOptionsBuilder<ExtendedBooksContext>();
+                    optionsBuilder.UseSqlite($"Filename={chunkDbPath}");
+
+                    using (var extendedContext = new ExtendedBooksContext(optionsBuilder.Options))
+                    {
+                        // Создаём таблицы, если вдруг не созданы
+                        extendedContext.Database.EnsureCreated();
+                        // Отключаем автоматическое DetectChanges для быстроты
+                        extendedContext.ChangeTracker.AutoDetectChangesEnabled = false;
+
+                        // 6) Заполняем таблицу категорий (полностью),
+                        //    чтобы у каждой категории был свой auto-increment PK (Id)
+                        //    и также сохранить meshok.net ID в поле CategoryId (не путать с PK!)
+                        var newCats = allCategories.Select(oldCat => new ExtendedCategory
+                        {
+                            // Старый PK (oldCat.Id) мы не копируем, он не нужен.
+                            // Логично хранить во "внешнем" поле meshok ID (старый oldCat.CategoryId).
+                            CategoryId = oldCat.CategoryId,
+                            Name = oldCat.Name
+                        })
+                        .ToList();
+
+                        extendedContext.Categories.AddRange(newCats);
+                        await extendedContext.SaveChangesAsync(token);
+
+                        // 7) Построим словарь, который сопоставляет "старый PK" -> "новый PK"
+                        //    Чтобы для каждой категории oldCat.Id узнать newCat.Id
+                        //    Для этого нужно идти «параллельно» по спискам allCategories и newCats,
+                        //    так как мы вставляли их в одинаковом порядке.
+                        var catMap = new Dictionary<int, int>(newCats.Count);
+                        for (int i = 0; i < allCategories.Count; i++)
+                        {
+                            int oldId = allCategories[i].Id;    // Старый PK
+                            int newId = newCats[i].Id;         // Новый PK (в SQLite)
+                            catMap[oldId] = newId;
+                        }
+
+                        // 8) Конвертируем книги чанка под новую модель ExtendedBookInfo
+                        //    и главное — подставляем правильный newCat.Id в поле CategoryId
+                        //    (поскольку BookInfo.CategoryId ссылается на Category.Id)
+                        var extendedBooks = new List<ExtendedBookInfo>(booksChunk.Count);
+                        foreach (var oldBook in booksChunk)
+                        {
+                            token.ThrowIfCancellationRequested();
+
+                            // Если в старой базе oldBook.CategoryId указывает на несуществующий id,
+                            // нужно либо пропустить, либо подставить заглушку:
+                            if (!catMap.TryGetValue(oldBook.CategoryId, out int newCatId))
+                            {
+                                // Пропустим книгу (или можно newCatId = 0)
+                                continue;
+                            }
+
+                            var newBook = new ExtendedBookInfo
+                            {
+                                // Переносим поля один в один
+                                Id = oldBook.Id,  // Можно сохранить старый BookId
+                                Title = oldBook.Title,
+                                Description = oldBook.Description,
+                                BeginDate = oldBook.BeginDate,
+                                EndDate = oldBook.EndDate,
+                                Price = oldBook.Price,
+                                FinalPrice = oldBook.FinalPrice,
+                                City = oldBook.City,
+                                IsMonitored = oldBook.IsMonitored,
+                                YearPublished = oldBook.YearPublished,
+                                Tags = oldBook.Tags,
+                                PicsRatio = oldBook.PicsRatio,
+                                Status = oldBook.Status,
+                                StartPrice = oldBook.StartPrice,
+                                Type = oldBook.Type,
+                                SoldQuantity = oldBook.SoldQuantity,
+                                BidsCount = oldBook.BidsCount,
+                                SellerName = oldBook.SellerName,
+                                PicsCount = oldBook.PicsCount,
+                                ImageUrls = oldBook.ImageUrls,
+                                ThumbnailUrls = oldBook.ThumbnailUrls,
+                                IsImagesCompressed = oldBook.IsImagesCompressed,
+                                ImageArchiveUrl = oldBook.ImageArchiveUrl,
+                                IsLessValuable = oldBook.IsLessValuable,
+
+                                // Самое главное: CategoryId = новый PK
+                                CategoryId = newCatId
+                            };
+
+                            extendedBooks.Add(newBook);
+                        }
+
+                        // Сохраняем книги этого чанка
+                        extendedContext.BooksInfo.AddRange(extendedBooks);
+                        await extendedContext.SaveChangesAsync(token);
+                    }
+
+                    // Закрываем соединения, освобождаем SQLite connection pool
+                    SqliteConnection.ClearAllPools();
+
+                    processed += booksChunk.Count;
+
+                    // 0..90%: остальное 10% зарезервируем на упаковку
+                    int percent = (int)((double)processed / totalBooks * 90);
+                    _progress[taskId] = percent;
+                }
+
+                // Небольшая пауза, чтобы гарантировать, что все файлы освобождены
+                await Task.Delay(300, token);
+
+                // 9) Создаём zip из tempFolder
+                string zipFilePath = Path.Combine(Path.GetTempPath(), $"export_{taskId}.zip");
+                if (File.Exists(zipFilePath))
+                    File.Delete(zipFilePath);
+                ZipFile.CreateFromDirectory(tempFolder, zipFilePath);
+
+                // Запоминаем путь к zip, чтобы потом отдавать файл
+                _files[taskId] = zipFilePath;
+
+                // Удаляем временную папку part_*.db
+                Directory.Delete(tempFolder, true);
+
+                // 100% – готово
+                _progress[taskId] = 100;
+            }
+            catch (OperationCanceledException)
+            {
+                _progress[taskId] = -1;
+                _errors[taskId] = "Экспорт отменён пользователем.";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка экспорта");
+                _progress[taskId] = -1;
+                _errors[taskId] = ex.ToString();
+            }
+            finally
+            {
+                _cancellationTokens.TryRemove(taskId, out _);
+            }
+        }
+
+
     }
 }

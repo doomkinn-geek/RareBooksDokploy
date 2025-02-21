@@ -2,6 +2,7 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
+import Cookies from 'js-cookie';
 import { UserContext } from '../context/UserContext';
 import { API_URL } from '../api';
 import ErrorMessage from './ErrorMessage';
