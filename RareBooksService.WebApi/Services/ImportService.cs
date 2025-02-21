@@ -93,12 +93,11 @@ namespace RareBooksService.WebApi.Services
                     Directory.Delete(importFolder, true);
                 Directory.CreateDirectory(importFolder);
 
+                // Извлекаем все part_*.db
                 System.IO.Compression.ZipFile.ExtractToDirectory(taskInfo.TempFilePath, importFolder);
-
-                // Находим part_*.db
                 var chunkFiles = Directory.GetFiles(importFolder, "part_*.db");
 
-                // Считаем общее число книг во всех chunk'ах (для расчёта %)
+                // Подсчитываем общее количество книг (для прогресса)
                 long totalBooksCount = 0;
                 foreach (var chunkFile in chunkFiles)
                 {
@@ -113,17 +112,21 @@ namespace RareBooksService.WebApi.Services
 
                 long processed = 0;
 
-                // 2) По всем chunk'ам
+                // 2) Идём по всем chunk’ам
                 foreach (var chunkFile in chunkFiles.OrderBy(x => x))
                 {
-                    // Открываем контекст SQLite
                     var sqliteOptions = new DbContextOptionsBuilder<ExtendedBooksContext>()
                         .UseSqlite($"Filename={chunkFile}")
                         .Options;
 
-                    using var srcContext = new ExtendedBooksContext(sqliteOptions);
+                    using var srcContext = new ExtendedBooksContext(sqliteOptions)
+                    {
+                        // Необязательно, но можно отключить TrackChanges
+                        ChangeTracker = { AutoDetectChangesEnabled = false }
+                    };
 
-                    // 2.1) Upsert категорий (все категории chunk’а)
+                    // ======================= Шаг 2.1: Категории =========================
+                    // Считываем категории из chunk-файла. У каждой будет .Id (локальный PK) и .CategoryId (meshok.net)
                     var chunkCategories = await srcContext.Categories
                         .AsNoTracking()
                         .ToListAsync();
@@ -133,9 +136,10 @@ namespace RareBooksService.WebApi.Services
                         var pgContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
                         pgContext.ChangeTracker.AutoDetectChangesEnabled = false;
 
+                        // 2.1.1) Upsert категорий в PG (по Meshok.net-ID = cat.CategoryId)
                         foreach (var cat in chunkCategories)
                         {
-                            // Ищем по CategoryId (считаем его уникальным/PK)
+                            // Ищем в PG запись с таким же CategoryId (у нас в PG это поле — "CategoryId" на meshok.net)
                             var existingCat = await pgContext.Categories
                                 .FirstOrDefaultAsync(c => c.CategoryId == cat.CategoryId);
 
@@ -144,45 +148,67 @@ namespace RareBooksService.WebApi.Services
                                 // Добавляем новую
                                 var newCat = new RegularBaseCategory
                                 {
-                                    CategoryId = cat.CategoryId,
+                                    CategoryId = cat.CategoryId,  // meshok ID
                                     Name = cat.Name
                                 };
                                 pgContext.Categories.Add(newCat);
                             }
                             else
                             {
-                                // Обновляем
+                                // Обновляем уже имеющуюся
                                 existingCat.Name = cat.Name;
                             }
                         }
                         await pgContext.SaveChangesAsync();
-                    }
 
-                    // 2.2) Upsert книг
-                    // Берём chunk книг частями, чтобы не грузить в память слишком много
-                    int pageSize = 2000;
-                    int pageIndex = 0;
-
-                    while (true)
-                    {
-                        var chunkBooks = await srcContext.BooksInfo
-                            .AsNoTracking()
-                            .OrderBy(b => b.Id)
-                            .Skip(pageIndex * pageSize)
-                            .Take(pageSize)
+                        // 2.1.2) Собираем словарь "chunkCategory.Id => pgCategory.Id"
+                        //        Т.е. локальный PK => реальный PK в PG
+                        var meshokIds = chunkCategories.Select(c => c.CategoryId).Distinct().ToList();
+                        var realPgCategories = await pgContext.Categories
+                            .Where(x => meshokIds.Contains(x.CategoryId))
                             .ToListAsync();
 
-                        if (chunkBooks.Count == 0) break;
-
-                        // upsert
-                        using (var scope = _scopeFactory.CreateScope())
+                        var catMap = new Dictionary<int, int>();
+                        // Идём параллельно по chunkCategories
+                        // chunkCat.Id = локальный PK, chunkCat.CategoryId = meshok ID
+                        // Ищем реальный pgCat.Id, у которого (pgCat.CategoryId == chunkCat.CategoryId)
+                        foreach (var chunkCat in chunkCategories)
                         {
-                            var pgContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
-                            pgContext.ChangeTracker.AutoDetectChangesEnabled = false;
+                            var pgCat = realPgCategories.FirstOrDefault(x => x.CategoryId == chunkCat.CategoryId);
+                            if (pgCat != null)
+                            {
+                                catMap[chunkCat.Id] = pgCat.Id;
+                            }
+                        }
 
+                        // ======================= Шаг 2.2: Книги =========================
+                        // Поскольку книг может быть много, обрабатываем их постранично
+                        int pageSize = 2000;
+                        int pageIndex = 0;
+
+                        while (true)
+                        {
+                            var chunkBooks = await srcContext.BooksInfo
+                                .AsNoTracking()
+                                .OrderBy(b => b.Id)
+                                .Skip(pageIndex * pageSize)
+                                .Take(pageSize)
+                                .ToListAsync();
+
+                            if (chunkBooks.Count == 0) break;
+
+                            // Upsert книг в PostgreSQL
                             foreach (var book in chunkBooks)
                             {
-                                // Ищем по Id (PK книги)
+                                // В chunk-файле book.CategoryId = локальный PK категории
+                                // Сопоставляем его к реальному PG-Id
+                                if (!catMap.TryGetValue(book.CategoryId, out int realPgCatId))
+                                {
+                                    // Не нашли в словаре => пропускаем книгу или привязываем к "заглушке"
+                                    continue;
+                                }
+
+                                // Ищем книгу по её Id (предполагая, что он уникален между chunk’ами)
                                 var existingBook = await pgContext.BooksInfo
                                     .FirstOrDefaultAsync(b => b.Id == book.Id);
 
@@ -205,8 +231,8 @@ namespace RareBooksService.WebApi.Services
                                         IsMonitored = book.IsMonitored,
                                         FinalPrice = book.FinalPrice,
                                         YearPublished = book.YearPublished,
-                                        // Тут ВАЖНО: CategoryId уже совпадает с основным, т. к. в PG Categories мы по нему upsert'им
-                                        CategoryId = book.CategoryId,
+                                        // ВАЖНО: тут пишем реальный PK категории
+                                        CategoryId = realPgCatId,
 
                                         Tags = book.Tags,
                                         PicsRatio = book.PicsRatio,
@@ -225,7 +251,7 @@ namespace RareBooksService.WebApi.Services
                                 }
                                 else
                                 {
-                                    // Обновляем существующую
+                                    // Обновляем
                                     existingBook.Title = book.Title;
                                     existingBook.NormalizedTitle = book.Title.ToLowerInvariant();
                                     existingBook.Description = book.Description;
@@ -239,7 +265,9 @@ namespace RareBooksService.WebApi.Services
                                     existingBook.IsMonitored = book.IsMonitored;
                                     existingBook.FinalPrice = book.FinalPrice;
                                     existingBook.YearPublished = book.YearPublished;
-                                    existingBook.CategoryId = book.CategoryId;
+                                    // Снова ВАЖНО: реальный PK
+                                    existingBook.CategoryId = realPgCatId;
+
                                     existingBook.Tags = book.Tags;
                                     existingBook.PicsRatio = book.PicsRatio;
                                     existingBook.Status = book.Status;
@@ -254,20 +282,21 @@ namespace RareBooksService.WebApi.Services
                                     existingBook.IsLessValuable = book.IsLessValuable;
                                 }
                             }
+
                             await pgContext.SaveChangesAsync();
+
+                            processed += chunkBooks.Count;
+                            taskInfo.ImportProgress = (double)processed / totalBooksCount * 100.0;
+
+                            pageIndex++;
                         }
-
-                        processed += chunkBooks.Count;
-                        taskInfo.ImportProgress = (double)processed / totalBooksCount * 100.0;
-
-                        pageIndex++;
                     }
 
-                    // Освобождаем SQLite
+                    // Закрываем SQLite для данного chunk
                     SqliteConnection.ClearAllPools();
                 }
 
-                // Закончили все chunk
+                // Закончили все chunks
                 taskInfo.ImportProgress = 100.0;
                 taskInfo.IsCompleted = true;
                 taskInfo.Message = $"Imported/Updated {processed} books total.";
@@ -281,6 +310,7 @@ namespace RareBooksService.WebApi.Services
                 taskInfo.Message = $"Error: {ex.Message} {ex.InnerException?.Message}";
             }
         }
+
 
         public ImportProgressDto GetImportProgress(Guid importTaskId)
         {
