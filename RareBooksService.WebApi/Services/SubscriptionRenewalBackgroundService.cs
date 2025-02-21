@@ -6,16 +6,13 @@ namespace RareBooksService.WebApi.Services
     public class SubscriptionRenewalBackgroundService : BackgroundService
     {
         private readonly ILogger<SubscriptionRenewalBackgroundService> _logger;
-        private readonly ISubscriptionService _subscriptionService;
         private readonly IServiceScopeFactory _scopeFactory;
 
         public SubscriptionRenewalBackgroundService(
             ILogger<SubscriptionRenewalBackgroundService> logger,
-            ISubscriptionService subscriptionService,
             IServiceScopeFactory scopeFactory)
         {
             _logger = logger;
-            _subscriptionService = subscriptionService;
             _scopeFactory = scopeFactory;
         }
 
@@ -33,21 +30,24 @@ namespace RareBooksService.WebApi.Services
                 {
                     _logger.LogError(ex, "Error in RenewExpiredSubscriptions");
                 }
-
-                // Спим сутки — либо можно сделать чаще
                 await Task.Delay(TimeSpan.FromHours(24), stoppingToken);
+                // пока ставим маленький интервал для теста
                 //await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
             }
         }
 
         private async Task RenewExpiredSubscriptions(CancellationToken stoppingToken)
         {
+            // Создаём scope
             using var scope = _scopeFactory.CreateScope();
+
+            // Берём необходимые scoped‑сервисы
             var db = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
+            var subscriptionService = scope.ServiceProvider.GetRequiredService<ISubscriptionService>();
 
             var now = DateTime.UtcNow;
 
-            // 1) Попытка продлить те подписки, у которых включён autoRenew:
+            // 1) Пытаемся продлить те подписки, где авто-продление включено
             var subsToRenew = await db.Subscriptions
                 .Where(s => s.IsActive && s.AutoRenew && s.PaymentMethodId != null && s.EndDate <= now)
                 .ToListAsync(stoppingToken);
@@ -56,11 +56,10 @@ namespace RareBooksService.WebApi.Services
 
             foreach (var sub in subsToRenew)
             {
-                if (stoppingToken.IsCancellationRequested)
-                    break;
+                if (stoppingToken.IsCancellationRequested) break;
 
                 _logger.LogInformation("Trying to auto-renew subscription #{Id}", sub.Id);
-                bool success = await _subscriptionService.TryAutoRenewSubscriptionAsync(sub.Id);
+                bool success = await subscriptionService.TryAutoRenewSubscriptionAsync(sub.Id);
                 _logger.LogInformation("Auto-renew subscription #{Id}: {Result}", sub.Id, success ? "SUCCESS" : "FAILED");
             }
 
@@ -72,7 +71,10 @@ namespace RareBooksService.WebApi.Services
 
             if (subsToCancel.Count > 0)
             {
-                _logger.LogInformation("Found {Count} subscriptions that expired and will be canceled (autoRenew = false)", subsToCancel.Count);
+                _logger.LogInformation(
+                    "Found {Count} subscriptions that expired and will be canceled (autoRenew = false)",
+                    subsToCancel.Count
+                );
 
                 foreach (var sub in subsToCancel)
                 {
@@ -81,14 +83,13 @@ namespace RareBooksService.WebApi.Services
                     {
                         sub.User.HasSubscription = false;
                     }
-                    // Или sub.EndDate = DateTime.UtcNow; // если хотите зафиксировать, что она закончилась прямо сейчас
                 }
 
                 await db.SaveChangesAsync(stoppingToken);
                 _logger.LogInformation("{Count} expired subscriptions canceled", subsToCancel.Count);
             }
         }
-
     }
+
 
 }
