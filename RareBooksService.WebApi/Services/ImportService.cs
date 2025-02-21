@@ -299,7 +299,7 @@ namespace RareBooksService.WebApi.Services
                 // Закончили все chunks
                 taskInfo.ImportProgress = 100.0;
                 taskInfo.IsCompleted = true;
-                taskInfo.Message = $"Imported/Updated {processed} books total.";
+                taskInfo.Message = $"Импортировано / Обновлено {processed} книг всего.";
 
                 // Удалим временную папку
                 Directory.Delete(importFolder, true);
@@ -307,7 +307,7 @@ namespace RareBooksService.WebApi.Services
             catch (Exception ex)
             {
                 taskInfo.IsCancelledOrError = true;
-                taskInfo.Message = $"Error: {ex.Message} {ex.InnerException?.Message}";
+                taskInfo.Message = $"Ошибка импорта: {ex.Message} {ex.InnerException?.Message}";
             }
         }
 
@@ -319,7 +319,7 @@ namespace RareBooksService.WebApi.Services
                 return new ImportProgressDto
                 {
                     IsCancelledOrError = true,
-                    Message = "Task not found"
+                    Message = "Задача не найдена"
                 };
             }
 

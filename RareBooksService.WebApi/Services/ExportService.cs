@@ -50,10 +50,13 @@ namespace RareBooksService.WebApi.Services
             _logger = logger;
         }
 
-        /// <summary>Запуск экспорта</summary>
+
         public async Task<Guid> StartExportAsync()
         {
-            // Проверка: не идёт ли уже экспорт
+            // 1) Перед запуском нового экспорта удалим старые файлы экспорта
+            CleanupOldExportFilesOnDisk();
+
+            // 2) Проверяем, нет ли уже активного экспорта
             bool anyActive = _progress.Values.Any(p => p >= 0 && p < 100);
             if (anyActive)
                 throw new InvalidOperationException("Экспорт уже выполняется. Дождитесь завершения или отмените предыдущий экспорт.");
@@ -69,6 +72,51 @@ namespace RareBooksService.WebApi.Services
             _ = Task.Run(() => DoExport(taskId, cts.Token));
             return taskId;
         }
+
+        /// <summary>
+        /// Удаляем все временные файлы/папки предыдущих экспортных заданий.
+        /// </summary>
+        private void CleanupOldExportFilesOnDisk()
+        {
+            try
+            {
+                // Папка для временных файлов
+                string tempPath = Path.GetTempPath();
+
+                // 1) Удаляем все zip-файлы вида export_{...}.zip
+                var oldZips = Directory.GetFiles(tempPath, "export_*.zip");
+                foreach (var zip in oldZips)
+                {
+                    try
+                    {
+                        File.Delete(zip);
+                    }
+                    catch
+                    {
+                        // Игнорируем любые ошибки
+                    }
+                }
+
+                // 2) Удаляем все подпапки вида export_{...}, где лежали part_*.db
+                var oldDirs = Directory.GetDirectories(tempPath, "export_*");
+                foreach (var dir in oldDirs)
+                {
+                    try
+                    {
+                        Directory.Delete(dir, true);
+                    }
+                    catch
+                    {
+                        // Игнорируем любые ошибки
+                    }
+                }
+            }
+            catch
+            {
+                // Если что-то пошло не так, не прерываем работу, а просто продолжаем
+            }
+        }
+
 
         public ExportStatusDto GetStatus(Guid taskId)
         {

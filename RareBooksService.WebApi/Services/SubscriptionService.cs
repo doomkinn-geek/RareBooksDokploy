@@ -90,17 +90,28 @@ namespace RareBooksService.WebApi.Services
         {
             try
             {
+                logger.LogInformation("Начинаем выборку активных планов подписки из базы...");
+
                 var plans = await _db.SubscriptionPlans
                     .Where(p => p.IsActive)
                     .ToListAsync();
-                return plans.Select(ToDto).ToList();
+
+                logger.LogInformation("Активные планы подписки выбраны: {Count} шт.", plans.Count);
+
+                // Преобразование в DTO
+                var result = plans.Select(ToDto).ToList();
+                logger.LogInformation("Сформирован список DTO планов подписки: {Count} шт.", result.Count);
+
+                return result;
             }
             catch (Exception e)
             {
-                logger.LogError(e, "Ошибка получения планов подписки");
-                return null;
+                logger.LogError(e, "Ошибка в GetActiveSubscriptionPlansAsync при выборке планов из БД");
+                // Обязательно пробрасываем исключение выше, чтобы контроллер мог отреагировать
+                throw;
             }
         }
+
 
         public async Task<SubscriptionPlanDto?> GetPlanByIdAsync(int planId)
         {
