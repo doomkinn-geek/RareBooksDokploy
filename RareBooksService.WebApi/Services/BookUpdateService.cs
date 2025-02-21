@@ -111,8 +111,8 @@ namespace RareBooksService.WebApi.Services
                 if (stoppingToken.IsCancellationRequested)
                     return;
 
-                // Запланируем следующий запуск через 3 дня
-                var nextRun = DateTime.UtcNow.AddDays(3);
+                // Запланируем следующий запуск через 1 дня
+                var nextRun = DateTime.UtcNow.AddDays(1);
                 _nextRunTimeUtc = nextRun;
                 var delay = nextRun - DateTime.UtcNow;
                 if (delay < TimeSpan.Zero)
