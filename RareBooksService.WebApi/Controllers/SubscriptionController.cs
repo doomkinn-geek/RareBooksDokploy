@@ -68,35 +68,44 @@ namespace RareBooksService.WebApi.Controllers
         [HttpPost("create-payment")]
         public async Task<IActionResult> CreatePayment([FromBody] CreatePaymentRequest request)
         {
-            if (request == null || request.SubscriptionPlanId <= 0)
-                return BadRequest("Не указан план подписки");
+            try
+            {
+                if (request == null || request.SubscriptionPlanId <= 0)
+                    return BadRequest("Не указан план подписки");
 
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId))
-                return Unauthorized("Не удалось определить идентификатор пользователя");
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized("Не удалось определить идентификатор пользователя");
 
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null)
-                return Unauthorized("Пользователь в базе не найден");
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null)
+                    return Unauthorized("Пользователь в базе не найден");
 
-            // Получаем EF-план
-            var planEntity = await _context.SubscriptionPlans
-                .FirstOrDefaultAsync(p => p.Id == request.SubscriptionPlanId && p.IsActive);
-            if (planEntity == null)
-                return BadRequest("Невалидный или неактивный план подписки");
+                // Получаем EF-план
+                var planEntity = await _context.SubscriptionPlans
+                    .FirstOrDefaultAsync(p => p.Id == request.SubscriptionPlanId && p.IsActive);
+                if (planEntity == null)
+                    return BadRequest("Невалидный или неактивный план подписки");
 
-            // 1) Создаём новую подписку (DTO)
-            var newSubDto = await _subscriptionService.CreateSubscriptionAsync(user, planEntity, request.AutoRenew);
+                // 1) Создаём новую подписку (DTO)
+                var newSubDto = await _subscriptionService.CreateSubscriptionAsync(user, planEntity, request.AutoRenew);
 
-            // 2) Создаём платёж
-            var (paymentId, redirectUrl) = await _paymentService.CreatePaymentAsync(user, planEntity, request.AutoRenew);
+                // 2) Создаём платёж
+                var (paymentId, redirectUrl) = await _paymentService.CreatePaymentAsync(user, planEntity, request.AutoRenew);
 
-            // 3) Запишем PaymentId
-            newSubDto.PaymentId = paymentId;
-            await _subscriptionService.UpdateSubscriptionAsync(newSubDto);
+                // 3) Запишем PaymentId
+                newSubDto.PaymentId = paymentId;
+                await _subscriptionService.UpdateSubscriptionAsync(newSubDto);
 
-            // 4) Возвращаем redirectUrl
-            return Ok(new { RedirectUrl = redirectUrl });
+                // 4) Возвращаем redirectUrl
+                return Ok(new { RedirectUrl = redirectUrl });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка создания платежа CreatePayment");
+                // Отдаём статус 500 + человекочитаемое сообщение
+                return StatusCode(500, "Ошибка создания платежа CreatePayment");
+            }
         }
 
         /// <summary>
