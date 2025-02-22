@@ -104,7 +104,7 @@ namespace RareBooksService.WebApi.Controllers
             {
                 _logger.LogError(ex, "Ошибка создания платежа CreatePayment");
                 // Отдаём статус 500 + человекочитаемое сообщение
-                return StatusCode(500, "Ошибка создания платежа CreatePayment");
+                return StatusCode(500, $"Ошибка создания платежа CreatePayment: {ex.Message}");
             }
         }
 
