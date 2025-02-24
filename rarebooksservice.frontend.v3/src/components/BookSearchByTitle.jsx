@@ -41,6 +41,9 @@ const BookSearchByTitle = () => {
                     setBooks(data.items);
                     setTotalPages(data.totalPages);
 
+                    // Добавьте эту строчку:
+                    setRemainingRequests(data.remainingRequests);
+
                     if (data.items.length === 0) {
                         setErrorMessage('Ничего не найдено.');
                     }

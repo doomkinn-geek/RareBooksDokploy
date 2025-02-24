@@ -15,7 +15,7 @@ namespace RareBooksService.WebApi.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize] // Требуется авторизация для всех действий
+    [Authorize] // Требуется авторизация
     public class BooksController : BaseController
     {
         private readonly IRegularBaseBooksRepository _booksRepository;
@@ -26,7 +26,7 @@ namespace RareBooksService.WebApi.Controllers
         private readonly IWebHostEnvironment _env;
         private readonly ISubscriptionService _subscriptionService;
 
-        // Чтобы мы могли читать/записывать UserSearchStates
+        // Для доступа к UserSearchStates
         private readonly UsersDbContext _usersDbContext;
 
         public BooksController(
@@ -53,43 +53,53 @@ namespace RareBooksService.WebApi.Controllers
         }
 
         /// <summary>
-        /// Проверяет подписку, смотрит в UserSearchStates,
-        /// если текущий запрос не совпадает с последним — прибавляет 1 к счётчику.
-        /// Возвращает (hasSubscription, remainRequests).
-        /// Если лимит исчерпан — вернётся (true, 0) => нужно вызвать Forbid().
-        /// Если нет подписки — (false, 0).
+        /// Проверяет подписку, считает новый поиск, если запрос изменился.
+        /// Если лимит исчерпан, отключает подписку (IsActive=false).
+        /// Возвращает (hasSubscription, remainingRequests).
         /// </summary>
         private async Task<(bool hasSubscription, int? remainingRequests)>
             CheckIfNewSearchAndConsumeLimit(ApplicationUser user, string searchType, string queryText)
         {
-            // 1) Смотрим, есть ли активная подписка
+            // 1) Есть ли действующая подписка
             var subDto = await _subscriptionService.GetActiveSubscriptionForUser(user.Id);
             if (subDto == null || !subDto.IsActive)
             {
-                // нет подписки
+                // Нет подписки — возвращаем (false, 0)
                 return (false, 0);
             }
 
             var plan = subDto.SubscriptionPlan;
             if (plan == null)
             {
-                // данные подписки битые
+                // Битые данные подписки
                 return (false, 0);
             }
 
-            // безлимит
+            // Безлимит
             if (plan.MonthlyRequestLimit <= 0)
             {
                 return (true, null);
             }
 
-            // если уже исчерпано
+            // Проверяем, не исчерпан ли уже
             if (subDto.UsedRequestsThisPeriod >= plan.MonthlyRequestLimit)
             {
-                return (true, 0);
+                // Лимит уже исчерпан => отключаем
+                subDto.IsActive = false;
+
+                // Обновляем флажок у пользователя
+                var userEntity = await _usersDbContext.Users.FindAsync(user.Id);
+                if (userEntity != null)
+                {
+                    userEntity.HasSubscription = false;
+                }
+
+                await _subscriptionService.UpdateSubscriptionAsync(subDto);
+
+                return (false, 0);
             }
 
-            // 2) ищем в UserSearchStates
+            // 2) Проверяем, не новый ли это запрос
             var state = await _usersDbContext.UserSearchStates
                 .FirstOrDefaultAsync(s => s.UserId == user.Id && s.SearchType == searchType);
 
@@ -112,7 +122,7 @@ namespace RareBooksService.WebApi.Controllers
                 // Запись есть
                 if (state.LastQuery != queryText)
                 {
-                    // другой запрос => новый
+                    // новый поиск
                     isNewSearch = true;
                     state.LastQuery = queryText;
                     state.UpdatedAt = DateTime.UtcNow;
@@ -120,11 +130,10 @@ namespace RareBooksService.WebApi.Controllers
                 }
             }
 
+            // Если действительно новый поиск
             if (isNewSearch)
             {
-                // прибавляем 1 к счётчику
                 subDto.UsedRequestsThisPeriod++;
-                // обновляем в БД
                 await _subscriptionService.UpdateSubscriptionAsync(subDto);
             }
 
@@ -134,15 +143,36 @@ namespace RareBooksService.WebApi.Controllers
             // Считаем остаток
             var used = subDto.UsedRequestsThisPeriod;
             var limit = plan.MonthlyRequestLimit;
-
             var remain = limit - used;
+
+            // Если вдруг «ушли» в минус (не должно, но на всякий случай)
             if (remain < 0) remain = 0;
 
+            // Если только что исчерпали лимит => отключим подписку
+            if (remain == 0)
+            {
+                subDto.IsActive = false;
+                var userEntity = await _usersDbContext.Users.FindAsync(user.Id);
+                if (userEntity != null)
+                {
+                    userEntity.HasSubscription = false;
+                }
+
+                await _subscriptionService.UpdateSubscriptionAsync(subDto);
+            }
+
+            // Если после этого подписка стала неактивной, возвращаем (false,0)
+            if (!subDto.IsActive)
+            {
+                return (false, 0);
+            }
+
+            // Иначе (активна, есть остаток)
             return (true, remain);
         }
 
         /// <summary>
-        /// Скрывает цены/даты, если нет подписки (логика без изменений).
+        /// Скрывает цены/даты/превью-картинку, если нет подписки.
         /// </summary>
         private void ApplyNoSubscriptionRulesToSearchResults(List<BookSearchResultDto> books)
         {
@@ -155,38 +185,37 @@ namespace RareBooksService.WebApi.Controllers
         }
 
         // =======================
-        // Примеры методов поиска
+        // Методы поиска
         // =======================
 
         [HttpGet("searchByTitle")]
         public async Task<ActionResult<PagedResultDto<BookSearchResultDto>>> SearchByTitle(
-                string title, bool exactPhrase = false, int page = 1, int pageSize = 10)
+            string title, bool exactPhrase = false, int page = 1, int pageSize = 10)
         {
             _logger.LogInformation("Поиск по названию: {Title}, page={Page}", title, page);
 
             var user = await GetCurrentUserAsync();
-            if (user == null) return Unauthorized();
+            if (user == null)
+                return Unauthorized();
 
-            // Проверяем подписку + лимит
-            var (hasSub, remain) = await CheckIfNewSearchAndConsumeLimit(user, "Title", title);            
+            var (hasSub, remain) = await CheckIfNewSearchAndConsumeLimit(user, "Title", title);
 
             var books = await _booksRepository.GetBooksByTitleAsync(title, page, pageSize, exactPhrase);
 
-            // Если нет подписки (но у нас hasSub == true — теоретически невозможно),
-            // но оставим проверку на всякий случай:
-            // Если нет подписки или лимит запросов исчерпан — скрываем цену/дату/превью-картинку
+            // Если подписки нет или лимит исчерпан => скрываем платную информацию
             if (!hasSub || remain == 0)
             {
                 ApplyNoSubscriptionRulesToSearchResults(books.Items);
             }
 
-            // Лог поиска
+            // Пишем в историю поиска
             await _searchHistoryService.SaveSearchHistory(user.Id, title, "Title");
 
+            // Возвращаем всегда: даже если осталось 0, frontend покажет "0" оставшихся
             return Ok(new
             {
                 Items = books.Items,
-                TotalPages = books.TotalPages,
+                books.TotalPages,
                 RemainingRequests = remain // null => безлимит 
             });
         }
@@ -196,17 +225,19 @@ namespace RareBooksService.WebApi.Controllers
             string description, bool exactPhrase = false, int page = 1, int pageSize = 10)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return Unauthorized();
+            if (user == null)
+                return Unauthorized();
 
             var (hasSub, remain) = await CheckIfNewSearchAndConsumeLimit(user, "Description", description);
-            if (!hasSub)
-                return Forbid("Нет активной подписки.");
-            if (remain == 0)
-                return Forbid("Лимит запросов исчерпан.");
 
             var books = await _booksRepository.GetBooksByDescriptionAsync(description, page, pageSize, exactPhrase);
 
-            // ...
+            if (!hasSub || remain == 0)
+            {
+                // Скрываем данные
+                ApplyNoSubscriptionRulesToSearchResults(books.Items);
+            }
+
             await _searchHistoryService.SaveSearchHistory(user.Id, description, "Description");
 
             return Ok(new
@@ -222,19 +253,22 @@ namespace RareBooksService.WebApi.Controllers
             int categoryId, int page = 1, int pageSize = 10)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return Unauthorized();
+            if (user == null)
+                return Unauthorized();
 
-            // Найдём имя категории
+            // Для корректной записи в историю: берём название категории
             var category = await _booksRepository.GetCategoryByIdAsync(categoryId);
             var queryText = category != null ? category.Name : categoryId.ToString();
 
             var (hasSub, remain) = await CheckIfNewSearchAndConsumeLimit(user, "Category", queryText);
-            if (!hasSub) return Forbid("Нет подписки");
-            if (remain == 0) return Forbid("Лимит исчерпан.");
 
             var books = await _booksRepository.GetBooksByCategoryAsync(categoryId, page, pageSize);
 
-            // ...
+            if (!hasSub || remain == 0)
+            {
+                ApplyNoSubscriptionRulesToSearchResults(books.Items);
+            }
+
             await _searchHistoryService.SaveSearchHistory(user.Id, queryText, "Category");
 
             return Ok(new
@@ -250,13 +284,18 @@ namespace RareBooksService.WebApi.Controllers
             string sellerName, int page = 1, int pageSize = 10)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return Unauthorized();
+            if (user == null)
+                return Unauthorized();
 
             var (hasSub, remain) = await CheckIfNewSearchAndConsumeLimit(user, "Seller", sellerName);
-            if (!hasSub) return Forbid("Нет подписки");
-            if (remain == 0) return Forbid("Лимит исчерпан.");
 
             var books = await _booksRepository.GetBooksBySellerAsync(sellerName, page, pageSize);
+
+            if (!hasSub || remain == 0)
+            {
+                ApplyNoSubscriptionRulesToSearchResults(books.Items);
+            }
+
             await _searchHistoryService.SaveSearchHistory(user.Id, sellerName, "Seller");
 
             return Ok(new
@@ -272,15 +311,19 @@ namespace RareBooksService.WebApi.Controllers
             double minPrice, double maxPrice, int page = 1, int pageSize = 10)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return Unauthorized();
+            if (user == null)
+                return Unauthorized();
 
             var queryText = $"range:{minPrice}-{maxPrice}";
 
             var (hasSub, remain) = await CheckIfNewSearchAndConsumeLimit(user, "PriceRange", queryText);
-            if (!hasSub) return Forbid("Нет подписки");
-            if (remain == 0) return Forbid("Лимит исчерпан.");
 
             var books = await _booksRepository.GetBooksByPriceRangeAsync(minPrice, maxPrice, page, pageSize);
+
+            if (!hasSub || remain == 0)
+            {
+                ApplyNoSubscriptionRulesToSearchResults(books.Items);
+            }
 
             await _searchHistoryService.SaveSearchHistory(user.Id, queryText, "PriceRange");
 
@@ -292,14 +335,18 @@ namespace RareBooksService.WebApi.Controllers
             });
         }
 
+        /// <summary>
+        /// Просмотр детали книги: без подписки часть информации скрывается,
+        /// но мы не запрещаем просмотр полностью.
+        /// </summary>
         [HttpGet("{id}")]
         public async Task<ActionResult<BookDetailDto>> GetBookById(int id)
         {
-            // просматривать книгу можно и без подписки?
             var user = await GetCurrentUserAsync();
-            if (user == null) return Unauthorized();
+            if (user == null)
+                return Unauthorized();
 
-            var hasSub = false;
+            bool hasSub = false;
             var subDto = await _subscriptionService.GetActiveSubscriptionForUser(user.Id);
             if (subDto != null && subDto.IsActive)
                 hasSub = true;
@@ -310,7 +357,7 @@ namespace RareBooksService.WebApi.Controllers
 
             if (!hasSub)
             {
-                // скрываем часть данных (как у вас и было)
+                // Скрываем часть данных
                 book.FinalPrice = null;
                 book.Price = 0;
                 book.EndDate = "Только для подписчиков";
@@ -322,96 +369,100 @@ namespace RareBooksService.WebApi.Controllers
         }
 
         // ==============================================
-        //  Методы для получения изображений и списков
+        // Методы для изображений
         // ==============================================
 
         /// <summary>
         /// Возвращает список имён файлов (images, thumbnails).
-        /// Если нет подписки — возвращаем пустой список.
-        /// Если книга малоценная — берём списки из внешних URL (если есть).
-        /// Если книга обычная и подписка есть — разбираем ZIP или Legacy.
+        /// Если нет подписки — пустой список.
         /// </summary>
         [HttpGet("{id}/images")]
         public async Task<ActionResult> GetBookImages(int id)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return Unauthorized();
+            if (user == null)
+                return Unauthorized();
 
-            // Проверяем подписку
             var subDto = await _subscriptionService.GetActiveSubscriptionForUser(user.Id);
             bool hasSubscription = (subDto != null && subDto.IsActive);
 
             var book = await _booksRepository.GetBookByIdAsync(id);
-            if (book == null) return NotFound();
+            if (book == null)
+                return NotFound();
 
-            // Если у пользователя нет подписки — пустой список
+            // Если у пользователя нет подписки — вернуть пустые списки
             if (!hasSubscription)
             {
                 return Ok(new { images = new List<string>(), thumbnails = new List<string>() });
             }
 
-            bool useLocalFiles = bool.TryParse(_configuration["TypeOfAccessImages:UseLocalFiles"], out var useLocal) && useLocal;
+            bool useLocalFiles = bool.TryParse(_configuration["TypeOfAccessImages:UseLocalFiles"], out var useLocal)
+                                 && useLocal;
 
-            // Получаем списки файлов
             var (images, thumbnails) = await _bookImagesService.GetBookImagesAsync(book, hasSubscription, useLocalFiles);
             return Ok(new { images, thumbnails });
         }
 
         /// <summary>
-        /// Возвращает конкретный полноразмерный файл (blob).
-        /// Для любых изображений теперь требуется подписка (включая малоценные).
+        /// Возвращает полноразмерное изображение (требуется подписка).
+        /// Без подписки возвращаем NotFound (чтобы "скрыть" наличие файла).
         /// </summary>
         [HttpGet("{id}/images/{imageName}")]
         public async Task<ActionResult> GetImage(int id, string imageName)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return Unauthorized();
+            if (user == null)
+                return Unauthorized();
 
             var subDto = await _subscriptionService.GetActiveSubscriptionForUser(user.Id);
             bool hasSubscription = (subDto != null && subDto.IsActive);
             if (!hasSubscription)
             {
-                // Можно возвращать 404, чтобы "спрятать" факт существования изображения
-                // или 200 c пустым телом. На ваше усмотрение.
                 return NotFound();
             }
 
-            bool useLocalFiles = bool.TryParse(_configuration["TypeOfAccessImages:UseLocalFiles"], out var useLocal) && useLocal;
+            bool useLocalFiles = bool.TryParse(_configuration["TypeOfAccessImages:UseLocalFiles"], out var useLocal)
+                                 && useLocal;
 
             var book = await _booksRepository.GetBookByIdAsync(id);
-            if (book == null) return NotFound();
+            if (book == null)
+                return NotFound();
 
-            // Поручаем сервису достать файл
             var result = await _bookImagesService.GetImageAsync(book, imageName, hasSubscription, useLocalFiles);
-            if (result == null) return NotFound();
+            if (result == null)
+                return NotFound();
 
             return result;
         }
 
         /// <summary>
-        /// Возвращает конкретную миниатюру (blob).
-        /// Аналогично полноразмерным — требуется подписка.
+        /// Возвращает миниатюру (требуется подписка).
+        /// Без подписки — NotFound().
         /// </summary>
         [HttpGet("{id}/thumbnails/{thumbnailName}")]
         public async Task<ActionResult> GetThumbnail(int id, string thumbnailName)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return Unauthorized();
+            if (user == null)
+                return Unauthorized();
 
             var subDto = await _subscriptionService.GetActiveSubscriptionForUser(user.Id);
             bool hasSubscription = (subDto != null && subDto.IsActive);
             if (!hasSubscription)
             {
-                return NotFound(); // или другой способ скрыть изображение
+                return NotFound();
             }
 
-            bool useLocalFiles = bool.TryParse(_configuration["TypeOfAccessImages:UseLocalFiles"], out var useLocal) && useLocal;
+            bool useLocalFiles = bool.TryParse(_configuration["TypeOfAccessImages:UseLocalFiles"], out var useLocal)
+                                 && useLocal;
 
             var book = await _booksRepository.GetBookByIdAsync(id);
-            if (book == null) return NotFound();
+            if (book == null)
+                return NotFound();
 
             var result = await _bookImagesService.GetThumbnailAsync(book, thumbnailName, hasSubscription, useLocalFiles);
-            if (result == null) return NotFound();
+            if (result == null)
+                return NotFound();
 
             return result;
         }

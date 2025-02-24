@@ -1,4 +1,6 @@
-﻿import React, { useState, useContext, useEffect } from 'react';
+﻿// src/components/SubscriptionPage.jsx
+
+import React, { useState, useContext, useEffect } from 'react';
 import { UserContext } from '../context/UserContext';
 import ErrorMessage from './ErrorMessage';
 import axios from 'axios';
@@ -6,35 +8,45 @@ import { API_URL } from '../api';
 import Cookies from 'js-cookie';
 
 const SubscriptionPage = () => {
-    const { user } = useContext(UserContext);
+    const { user, loadingUser, refreshUser } = useContext(UserContext);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [plans, setPlans] = useState([]);
     const [selectedPlanId, setSelectedPlanId] = useState(null);
     const [autoRenew, setAutoRenew] = useState(false);
-    const [supportsAutoRenew] = useState(false);
+    const [supportsAutoRenew] = useState(false); // ваш магазин не поддерживает recurring
 
+    // При монтировании компонента — сначала обновляем пользователя, потом грузим планы
     useEffect(() => {
-        fetchPlans();
+        let mounted = true;
+
+        (async () => {
+            try {
+                setError('');
+                setLoading(true);
+
+                // 1) Обновить пользователя
+                await refreshUser(); // меняет user, но мы не перерисовываем ещё раз через зависимость
+
+                // 2) Загрузить планы
+                const response = await axios.get(`${API_URL}/subscription/plans`);
+                if (mounted) setPlans(response.data);
+            } catch (err) {
+                if (mounted) {
+                    const serverMessage = err.response?.data || 'Нет дополнительной информации';
+                    setError(`Не удалось загрузить планы подписки: ${serverMessage}`);
+                }
+            } finally {
+                if (mounted) setLoading(false);
+            }
+        })();
+
+        return () => {
+            mounted = false;
+        };
+        // Пустой массив зависимостей — эффект вызовется один раз при монтировании
     }, []);
 
-    const fetchPlans = async () => {
-        setError('');
-        setLoading(true);
-        try {
-            console.log("Отправляем запрос на получение активных планов подписки:", `${API_URL}/subscription/plans`);
-            const response = await axios.get(`${API_URL}/subscription/plans`);
-            console.log("Ответ на запрос планов:", response.data);
-            setPlans(response.data);
-        } catch (err) {
-            console.error("Ошибка при загрузке планов подписки:", err);
-            // Выводим как можно больше деталей:
-            const serverMessage = err.response?.data || 'Нет дополнительной информации';
-            setError(`Не удалось загрузить планы подписки: ${serverMessage}`);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const handleSubscribe = async () => {
         setError('');
@@ -64,6 +76,12 @@ const SubscriptionPage = () => {
         }
     };
 
+    // Если ещё грузим данные пользователя - покажем прелоадер
+    if (loadingUser) {
+        return <div className="container"><p>Загрузка данных пользователя...</p></div>;
+    }
+
+    // Проверяем user
     if (!user) {
         return (
             <div className="container">

@@ -1,4 +1,5 @@
 ﻿// src/context/UserContext.jsx
+
 import React, { createContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import Cookies from 'js-cookie';
@@ -8,37 +9,37 @@ export const UserContext = createContext(null);
 
 export const UserProvider = ({ children }) => {
     const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [loadingUser, setLoadingUser] = useState(true);
 
-    useEffect(() => {
-        const fetchUser = async () => {
+    // Метод, который в любой момент можно вызвать, чтобы 
+    // повторно загрузить данные пользователя с бэкенда
+    const refreshUser = async () => {
+        setLoadingUser(true);
+        try {
             const token = Cookies.get('token');
-            // Берём токен из localStorage
-            //const token = localStorage.getItem('token');
-            if (token) {
-                try {
-                    // Пытаемся сходить на /auth/user
-                    const response = await axios.get(`${API_URL}/auth/user`, {
-                        headers: { Authorization: `Bearer ${token}` },
-                    });
-                    setUser(response.data);
-                } catch (error) {
-                    console.error('Ошибка при получении данных пользователя:', error);
-                    setUser(null);
-                } finally {
-                    setLoading(false);
-                }
-            } else {
+            if (!token) {
                 setUser(null);
-                setLoading(false);
+                return;
             }
-        };
+            const response = await axios.get(`${API_URL}/auth/user`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            setUser(response.data);
+        } catch (error) {
+            console.error('Ошибка при получении данных пользователя:', error);
+            setUser(null);
+        } finally {
+            setLoadingUser(false);
+        }
+    };
 
-        fetchUser();
+    // При первой загрузке контекста тоже вызываем refreshUser
+    useEffect(() => {
+        refreshUser();
     }, []);
 
     return (
-        <UserContext.Provider value={{ user, setUser, loading }}>
+        <UserContext.Provider value={{ user, setUser, loadingUser, refreshUser }}>
             {children}
         </UserContext.Provider>
     );

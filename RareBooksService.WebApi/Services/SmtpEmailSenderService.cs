@@ -1,5 +1,6 @@
-﻿using System.Net;
-using System.Net.Mail;
+﻿using MailKit.Net.Smtp;
+using MailKit.Security;
+using MimeKit;
 using System.Threading.Tasks;
 
 namespace RareBooksService.WebApi.Services
@@ -22,38 +23,36 @@ namespace RareBooksService.WebApi.Services
         {
             try
             {
-                // Читаем настройки SMTP из appsettings.json
-                var smtpHost = _configuration["Smtp:Host"];  // например, "smtp.example.com"
-                var smtpPort = 587;                          // или тянете из конфига, если там так записано
-                var smtpUser = _configuration["Smtp:User"];
-                var smtpPass = _configuration["Smtp:Pass"];
+                // Читаем настройки из appsettings.json
+                var smtpHost = _configuration["Smtp:Host"];  // "smtp.yandex.ru"
+                var smtpPort = int.Parse(_configuration["Smtp:Port"] ?? "465");
+                var smtpUser = _configuration["Smtp:User"];  // "doomkinn" (без @yandex.ru)
+                var smtpPass = _configuration["Smtp:Pass"];  // пароль приложения
 
-                using (var client = new SmtpClient(smtpHost, smtpPort))
+                var message = new MimeMessage();
+                message.From.Add(new MailboxAddress("Отправитель", "doomkinn@yandex.ru"));
+                message.To.Add(MailboxAddress.Parse(toEmail));
+                message.Subject = subject;
+                message.Body = new TextPart("plain") { Text = body };
+
+                using (var client = new SmtpClient())
                 {
-                    client.UseDefaultCredentials = false;
-                    client.Credentials = new NetworkCredential(smtpUser, smtpPass);
+                    client.Timeout = 2000;
+                    // Подключаемся без SSL, но указываем, что нужно "подняться" до TLS
+                    // SecureSocketOptions.StartTls = сначала обычное, потом команда STARTTLS
+                    // SecureSocketOptions.StartTlsWhenAvailable = попытается STARTTLS, если сервер его объявляет
+                    await client.ConnectAsync(smtpHost, smtpPort, SecureSocketOptions.StartTls);
 
-                    // Для STARTTLS: EnableSsl = true
-                    client.EnableSsl = true;
+                    // После успешного STARTTLS делаем AUTH
+                    await client.AuthenticateAsync(smtpUser, smtpPass);
 
-                    // Можно установить таймаут, чтобы не «висло» бесконечно при ошибке
-                    client.Timeout = 2000; 
-
-                    var mail = new MailMessage
-                    {
-                        From = new MailAddress(smtpUser),
-                        Subject = subject,
-                        Body = body,
-                        IsBodyHtml = false
-                    };
-                    mail.To.Add(toEmail);
-
-                    await client.SendMailAsync(mail);
+                    await client.SendAsync(message);
+                    await client.DisconnectAsync(true);
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) 
             {
-                ;
+                throw;
             }
         }
     }

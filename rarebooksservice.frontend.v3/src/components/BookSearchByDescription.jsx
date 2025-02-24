@@ -35,6 +35,8 @@ const BookSearchByDescription = () => {
                 setBooks(response.data.items);
                 setTotalPages(response.data.totalPages);
 
+                setRemainingRequests(data.remainingRequests);
+
                 if (typeof response.data.remainingRequests !== 'undefined') {
                     setRemainingRequests(response.data.remainingRequests);
                 }

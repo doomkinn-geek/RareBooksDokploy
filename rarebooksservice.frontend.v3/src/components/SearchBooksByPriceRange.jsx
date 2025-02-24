@@ -38,6 +38,8 @@ const SearchBooksByPriceRange = () => {
                 setBooks(response.data.items);
                 setTotalPages(response.data.totalPages);
 
+                setRemainingRequests(data.remainingRequests);
+
                 // Если бэкенд прислал remainingRequests, сохраняем его
                 if (typeof response.data.remainingRequests !== 'undefined') {
                     setRemainingRequests(response.data.remainingRequests);
