@@ -1,6 +1,4 @@
-﻿// src/components/SubscriptionPage.jsx
-
-import React, { useState, useContext, useEffect } from 'react';
+﻿import React, { useState, useContext, useEffect } from 'react';
 import { UserContext } from '../context/UserContext';
 import ErrorMessage from './ErrorMessage';
 import axios from 'axios';
@@ -16,21 +14,21 @@ const SubscriptionPage = () => {
     const [autoRenew, setAutoRenew] = useState(false);
     const [supportsAutoRenew] = useState(false); // ваш магазин не поддерживает recurring
 
-    // При монтировании компонента — сначала обновляем пользователя, потом грузим планы
     useEffect(() => {
         let mounted = true;
-
         (async () => {
             try {
                 setError('');
                 setLoading(true);
 
                 // 1) Обновить пользователя
-                await refreshUser(); // меняет user, но мы не перерисовываем ещё раз через зависимость
+                await refreshUser();
 
                 // 2) Загрузить планы
                 const response = await axios.get(`${API_URL}/subscription/plans`);
-                if (mounted) setPlans(response.data);
+                if (mounted) {
+                    setPlans(response.data);
+                }
             } catch (err) {
                 if (mounted) {
                     const serverMessage = err.response?.data || 'Нет дополнительной информации';
@@ -40,13 +38,8 @@ const SubscriptionPage = () => {
                 if (mounted) setLoading(false);
             }
         })();
-
-        return () => {
-            mounted = false;
-        };
-        // Пустой массив зависимостей — эффект вызовется один раз при монтировании
+        return () => { mounted = false; };
     }, []);
-
 
     const handleSubscribe = async () => {
         setError('');
@@ -57,7 +50,6 @@ const SubscriptionPage = () => {
         setLoading(true);
 
         try {
-            console.log("Создаём платёж для плана", selectedPlanId, "autoRenew=", autoRenew);
             const token = Cookies.get('token');
             const response = await axios.post(
                 `${API_URL}/subscription/create-payment`,
@@ -65,10 +57,8 @@ const SubscriptionPage = () => {
                 { headers: { Authorization: `Bearer ${token}` } }
             );
             const { redirectUrl } = response.data;
-            console.log("Payment создан. Редирект на:", redirectUrl);
             window.location.href = redirectUrl;
         } catch (err) {
-            console.error("Ошибка при создании платежа:", err);
             const serverMessage = err.response?.data || 'Нет дополнительной информации';
             setError(`Не удалось создать платёж. Причина: ${serverMessage}`);
         } finally {
@@ -76,12 +66,14 @@ const SubscriptionPage = () => {
         }
     };
 
-    // Если ещё грузим данные пользователя - покажем прелоадер
     if (loadingUser) {
-        return <div className="container"><p>Загрузка данных пользователя...</p></div>;
+        return (
+            <div className="container">
+                <p>Загрузка данных пользователя...</p>
+            </div>
+        );
     }
 
-    // Проверяем user
     if (!user) {
         return (
             <div className="container">
@@ -108,25 +100,67 @@ const SubscriptionPage = () => {
 
             <div style={{ margin: '20px 0' }}>
                 <h3>Выберите план:</h3>
+
                 {plans.length === 0 && !loading && (
                     <p>Нет доступных планов или произошла ошибка при загрузке.</p>
                 )}
-                <ul>
-                    {plans.map(plan => (
-                        <li key={plan.id} style={{ marginBottom: '10px' }}>
-                            <label>
-                                <input
-                                    type="radio"
-                                    name="subscriptionPlan"
-                                    value={plan.id}
-                                    checked={selectedPlanId === plan.id}
-                                    onChange={() => setSelectedPlanId(plan.id)}
-                                />
-                                {plan.name} — {plan.price} руб/мес, лимит: {plan.monthlyRequestLimit} запросов
-                            </label>
-                        </li>
-                    ))}
-                </ul>
+
+                {/* Блок карточек */}
+                <div
+                    style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+                        gap: '16px',
+                        marginTop: '16px'
+                    }}
+                >
+                    {plans.map((plan) => {
+                        const isSelected = selectedPlanId === plan.id;
+
+                        return (
+                            <div
+                                key={plan.id}
+                                className="plan-card"
+                                style={{
+                                    border: isSelected ? '2px solid #ffcc00' : '1px solid #ccc',
+                                    borderRadius: '4px',
+                                    padding: '16px',
+                                    boxShadow: isSelected
+                                        ? '0 0 8px rgba(255, 204, 0, 0.5)'
+                                        : '0 2px 4px rgba(0,0,0,0.1)',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease-in-out'
+                                }}
+                                onClick={() => setSelectedPlanId(plan.id)}
+                            >
+                                <h4 style={{ marginTop: 0 }}>{plan.name}</h4>
+                                <p style={{ margin: '8px 0' }}>
+                                    <strong>Цена:</strong> {plan.price} руб/мес
+                                </p>
+                                <p style={{ margin: '8px 0' }}>
+                                    <strong>Лимит запросов:</strong> {plan.monthlyRequestLimit}
+                                </p>
+                                <div style={{ marginTop: '12px' }}>
+                                    {/* Радиокнопка, скрытая от глаз, 
+                                        но всё же обрабатываем checked для логики */}
+                                    <input
+                                        type="radio"
+                                        name="subscriptionPlan"
+                                        value={plan.id}
+                                        checked={isSelected}
+                                        onChange={() => setSelectedPlanId(plan.id)}
+                                        style={{ display: 'none' }}
+                                    />
+                                    {isSelected && (
+                                        <span style={{ color: '#ffcc00', fontWeight: 'bold' }}>
+                                            Выбрано
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
 
             {supportsAutoRenew && (
@@ -136,13 +170,25 @@ const SubscriptionPage = () => {
                             type="checkbox"
                             checked={autoRenew}
                             onChange={() => setAutoRenew(!autoRenew)}
+                            style={{ marginRight: '8px' }}
                         />
                         Автоматически продлевать подписку
                     </label>
                 </div>
             )}
 
-            <button onClick={handleSubscribe} disabled={loading}>
+            <button
+                onClick={handleSubscribe}
+                disabled={loading || !selectedPlanId}
+                style={{
+                    backgroundColor: '#ffcc00',
+                    color: '#000',
+                    border: 'none',
+                    padding: '10px 20px',
+                    cursor: 'pointer',
+                    borderRadius: '4px'
+                }}
+            >
                 Перейти к оплате
             </button>
         </div>
