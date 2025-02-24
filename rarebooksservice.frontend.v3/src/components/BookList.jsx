@@ -17,16 +17,25 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
 
     const [thumbnails, setThumbnails] = useState({});
     const [error, setError] = useState('');
+    // НОВОЕ: состояние, чтобы показывать CTA подписки
+    const [showSubscriptionCTA, setShowSubscriptionCTA] = useState(false);
 
     useEffect(() => {
         if (!books || books.length === 0) {
             setThumbnails({});
             setError('');
+            // Скрыть CTA
+            setShowSubscriptionCTA(false);
             return;
         }
 
         setThumbnails({});
         setError('');
+
+        // НОВОЕ: проверяем, есть ли среди книг дата "Только для подписчиков"
+        const hasPaidOnlyBooks = books.some((book) => book.date === 'Только для подписчиков');
+        setShowSubscriptionCTA(hasPaidOnlyBooks);
+
         let cancelled = false;
 
         const fetchThumbnails = async () => {
@@ -106,6 +115,34 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                 <Typography color="error" sx={{ mb: 2 }}>
                     {error}
                 </Typography>
+            )}
+
+            {/* НОВОЕ: Если есть книги, доступные только по подписке, показываем CTA */}
+            {showSubscriptionCTA && (
+                <Box
+                    sx={{
+                        p: 2,
+                        mb: 2,
+                        border: '1px solid #ccc',
+                        borderRadius: '5px',
+                        backgroundColor: '#faf5e6',
+                    }}
+                >
+                    <Typography variant="h6" sx={{ mb: 1 }}>
+                        Данные цены, даты и изображения доступны только по подписке
+                    </Typography>
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                        Чтобы увидеть полную информацию по этим книгам, пожалуйста,
+                        <strong> оформите подписку</strong>.
+                    </Typography>
+                    <Button
+                        variant="contained"
+                        color="secondary"
+                        onClick={() => navigate('/subscription')}
+                    >
+                        Оформить подписку
+                    </Button>
+                </Box>
             )}
 
             {books.length > 0 && renderPagination()}

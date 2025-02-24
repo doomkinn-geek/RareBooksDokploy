@@ -48,7 +48,7 @@ namespace RareBooksService.WebApi.Services
             var now = DateTime.UtcNow;
 
             // 1) Пытаемся продлить те подписки, где авто-продление включено
-            var subsToRenew = await db.Subscriptions
+            /*var subsToRenew = await db.Subscriptions
                 .Where(s => s.IsActive && s.AutoRenew && s.PaymentMethodId != null && s.EndDate <= now)
                 .ToListAsync(stoppingToken);
 
@@ -61,7 +61,7 @@ namespace RareBooksService.WebApi.Services
                 _logger.LogInformation("Trying to auto-renew subscription #{Id}", sub.Id);
                 bool success = await subscriptionService.TryAutoRenewSubscriptionAsync(sub.Id);
                 _logger.LogInformation("Auto-renew subscription #{Id}: {Result}", sub.Id, success ? "SUCCESS" : "FAILED");
-            }
+            }*/
 
             // 2) Отключаем подписки, которые НЕ autoRenew и уже истекли
             var subsToCancel = await db.Subscriptions
@@ -87,6 +87,36 @@ namespace RareBooksService.WebApi.Services
 
                 await db.SaveChangesAsync(stoppingToken);
                 _logger.LogInformation("{Count} expired subscriptions canceled", subsToCancel.Count);
+            }
+            // 3) Отключаем подписки, у которых исчерпан лимит запросов
+            var subsOverLimit = await db.Subscriptions
+                .Include(s => s.User)
+                .Include(s => s.SubscriptionPlan)
+                .Where(s => s.IsActive
+                            && s.SubscriptionPlan != null
+                            && s.UsedRequestsThisPeriod >= s.SubscriptionPlan.MonthlyRequestLimit)
+                .ToListAsync(stoppingToken);
+
+            if (subsOverLimit.Count > 0)
+            {
+                _logger.LogInformation(
+                    "Found {Count} subscriptions that exceeded request limit and will be canceled",
+                    subsOverLimit.Count
+                );
+
+                foreach (var sub in subsOverLimit)
+                {
+                    sub.IsActive = false;
+                    if (sub.User != null)
+                    {
+                        sub.User.HasSubscription = false;
+                    }
+                    // Опционально: сразу зафиксировать дату окончания
+                    // sub.EndDate = DateTime.UtcNow;
+                }
+
+                await db.SaveChangesAsync(stoppingToken);
+                _logger.LogInformation("{Count} subscriptions were canceled due to request limit exceeded", subsOverLimit.Count);
             }
         }
     }

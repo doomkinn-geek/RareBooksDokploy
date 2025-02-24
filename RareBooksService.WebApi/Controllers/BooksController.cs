@@ -168,21 +168,14 @@ namespace RareBooksService.WebApi.Controllers
             if (user == null) return Unauthorized();
 
             // Проверяем подписку + лимит
-            var (hasSub, remain) = await CheckIfNewSearchAndConsumeLimit(user, "Title", title);
-
-            // если нет подписки
-            if (!hasSub)
-                return Forbid("У вас нет активной подписки");
-
-            // если remain=0 => лимит исчерпан
-            if (remain == 0)
-                return Forbid("Вы исчерпали лимит запросов.");
+            var (hasSub, remain) = await CheckIfNewSearchAndConsumeLimit(user, "Title", title);            
 
             var books = await _booksRepository.GetBooksByTitleAsync(title, page, pageSize, exactPhrase);
 
             // Если нет подписки (но у нас hasSub == true — теоретически невозможно),
             // но оставим проверку на всякий случай:
-            if (!hasSub)
+            // Если нет подписки или лимит запросов исчерпан — скрываем цену/дату/превью-картинку
+            if (!hasSub || remain == 0)
             {
                 ApplyNoSubscriptionRulesToSearchResults(books.Items);
             }
@@ -378,7 +371,9 @@ namespace RareBooksService.WebApi.Controllers
             bool hasSubscription = (subDto != null && subDto.IsActive);
             if (!hasSubscription)
             {
-                return Forbid("Подписка требуется для просмотра изображений.");
+                // Можно возвращать 404, чтобы "спрятать" факт существования изображения
+                // или 200 c пустым телом. На ваше усмотрение.
+                return NotFound();
             }
 
             bool useLocalFiles = bool.TryParse(_configuration["TypeOfAccessImages:UseLocalFiles"], out var useLocal) && useLocal;
@@ -407,7 +402,7 @@ namespace RareBooksService.WebApi.Controllers
             bool hasSubscription = (subDto != null && subDto.IsActive);
             if (!hasSubscription)
             {
-                return Forbid("Подписка требуется для просмотра миниатюр.");
+                return NotFound(); // или другой способ скрыть изображение
             }
 
             bool useLocalFiles = bool.TryParse(_configuration["TypeOfAccessImages:UseLocalFiles"], out var useLocal) && useLocal;

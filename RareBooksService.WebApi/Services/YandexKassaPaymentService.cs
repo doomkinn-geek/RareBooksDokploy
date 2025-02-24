@@ -69,75 +69,31 @@ namespace RareBooksService.WebApi.Services
                     { "planId", plan.Id.ToString() },
                     { "autoRenew", autoRenew.ToString() }
                 },
-                PaymentMethodData = new PaymentMethod
+                // Сохранение данных для автоматической оплаты не работает
+                /*PaymentMethodData = new PaymentMethod
                 {
                     Type = PaymentMethodType.BankCard
                 },
-                SavePaymentMethod = true
+                SavePaymentMethod = true*/
 
             };
 
-            var payment = await asyncClient.CreatePaymentAsync(newPayment);
-            return (payment.Id, payment.Confirmation.ConfirmationUrl);
-        }
-
-        /*public async Task<(string PaymentId, bool IsPaymentSucceeded)> ProcessWebhookAsync(HttpRequest request)
-        {
-            // Включаем буферизацию, чтобы была возможность заново прочитать поток
-            request.EnableBuffering();
-
-            Notification notification = null;
             try
             {
-                // Создаём MemoryStream и копируем туда тело запроса
-                using var memoryStream = new MemoryStream();
-                await request.Body.CopyToAsync(memoryStream);
-
-                // «Перематываем» на начало
-                memoryStream.Position = 0;
-
-                // Вызываем парсинг
-                notification = Client.ParseMessage(
-                    request.Method,
-                    request.ContentType,
-                    memoryStream
-                );
+                var payment = await asyncClient.CreatePaymentAsync(newPayment);
+                return (payment.Id, payment.Confirmation.ConfirmationUrl);
             }
-            catch (Exception ex)
+            catch (YandexCheckoutException ex)
             {
-                // Если данные были некорректны — просто возвращаем признак ошибки
-                // Либо можно залогировать ex
-                return (null, false);
-            }
-            finally
-            {
-                // Возвращаем Position к нулю, чтобы тело запроса можно было прочесть снова, если потребуется
-                request.Body.Position = 0;
-            }
+                // Перехватываем конкретную ошибку и логируем
+                _logger.LogError(ex, "Error from YandexKassa while creating payment.");
 
-            // Если мы тут — значит notification успешно распарсился
-            if (notification is PaymentSucceededNotification succeeded)
-            {
-                var payment = succeeded.Object;
-                return (payment.Id, true);
+                // Пробрасываем дальше или возвращаем человекочитаемый текст
+                // Можно выкинуть Exception, который потом в контроллере 
+                // переведём в return StatusCode(500, ex.Message) или что-то подобное
+                throw new InvalidOperationException("Ошибка при создании платежа: " + ex.Message, ex);
             }
-            else if (notification is PaymentWaitingForCaptureNotification waitingForCapture)
-            {
-                var payment = waitingForCapture.Object;
-                // ...
-                return (payment.Id, false);
-            }
-            else if (notification is PaymentCanceledNotification canceled)
-            {
-                // Если нужно обрабатывать отмену
-                var payment = canceled.Object;
-                return (payment.Id, false);
-            }
-
-            // На всякий случай: если пришел неизвестный тип нотификации — возвращаем (null, false)
-            return (null, false);
-        }*/
-
+        }
         public async Task<(string? paymentId, bool isSucceeded, string? paymentMethodId)> ProcessWebhookAsync(HttpRequest request)
         {
             try

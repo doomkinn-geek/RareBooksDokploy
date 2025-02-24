@@ -210,6 +210,22 @@ const Home = () => {
                 </Typography>
             </div>
 
+            {user && (
+                <>
+                    {!user.hasSubscription && (
+                        <div
+                            className="subscription-warning"
+                            style={{ textAlign: 'center', marginBottom: 20 }}
+                        >
+                            <Typography color="error">
+                                У вас нет подписки. Оформите подписку, чтобы получить доступ к полной версии поиска.{' '}
+                                <Link to="/subscription">Подписаться сейчас</Link>
+                            </Typography>
+                        </div>
+                    )}
+                </>
+            )}
+
             {/* Если пользователь не авторизован — показываем форму логина */}
             {!user && (
                 <div
@@ -431,18 +447,6 @@ const Home = () => {
             {/* Если пользователь авторизован, показываем доп. функционал (подписка и т.д.) */}
             {user && (
                 <>
-                    {!user.hasSubscription && (
-                        <div
-                            className="subscription-warning"
-                            style={{ textAlign: 'center', marginBottom: 20 }}
-                        >
-                            <Typography color="error">
-                                У вас нет подписки. Оформите подписку, чтобы получить доступ к полной версии поиска.{' '}
-                                <Link to="/subscription">Подписаться сейчас</Link>
-                            </Typography>
-                        </div>
-                    )}
-
                     {/* Ссылка на панель админа (для Admin) */}
                     {user.role === 'Admin' && (
                         <div className="admin-link" style={{ textAlign: 'center', marginBottom: 20 }}>

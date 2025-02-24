@@ -12,6 +12,7 @@ const SubscriptionPage = () => {
     const [plans, setPlans] = useState([]);
     const [selectedPlanId, setSelectedPlanId] = useState(null);
     const [autoRenew, setAutoRenew] = useState(false);
+    const [supportsAutoRenew] = useState(false);
 
     useEffect(() => {
         fetchPlans();
@@ -110,16 +111,18 @@ const SubscriptionPage = () => {
                 </ul>
             </div>
 
-            <div style={{ margin: '20px 0' }}>
-                <label>
-                    <input
-                        type="checkbox"
-                        checked={autoRenew}
-                        onChange={() => setAutoRenew(!autoRenew)}
-                    />
-                    Автоматически продлевать подписку
-                </label>
-            </div>
+            {supportsAutoRenew && (
+                <div style={{ margin: '20px 0' }}>
+                    <label>
+                        <input
+                            type="checkbox"
+                            checked={autoRenew}
+                            onChange={() => setAutoRenew(!autoRenew)}
+                        />
+                        Автоматически продлевать подписку
+                    </label>
+                </div>
+            )}
 
             <button onClick={handleSubscribe} disabled={loading}>
                 Перейти к оплате

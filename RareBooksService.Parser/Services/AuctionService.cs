@@ -107,7 +107,6 @@ namespace RareBooksService.Parser.Services
                         }
 
                         await _context.SaveChangesAsync();
-
                         _logger.LogInformation($"[UpdateCompletedAuctionsAsync] Updated lot {book.Id} with final price {book.FinalPrice}.");
                     }
                 }
