@@ -224,7 +224,8 @@ namespace RareBooksService.WebApi.Services
         private void OnLotProgressChanged(int currentLotId, string? currentTitle)
         {
             _processedCount++;
-            _lastProcessedLotId = currentLotId;
+            if(currentLotId != 0)
+                _lastProcessedLotId = currentLotId;
             if (!string.IsNullOrWhiteSpace(currentTitle))
                 _lastProcessedLotTitle = currentTitle;
 
