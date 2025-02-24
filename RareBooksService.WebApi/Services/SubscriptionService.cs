@@ -45,10 +45,17 @@ namespace RareBooksService.WebApi.Services
             _userManager = userManager;
             _logger = logger;
 
-            // Инициализируем клиента
-            var settings = ykSettings.Value;
-            _yooKassaClient = new Client(settings.ShopId, settings.SecretKey);
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+            try
+            {
+                // Инициализируем клиента
+                var settings = ykSettings.Value;
+                _yooKassaClient = new Client(settings.ShopId, settings.SecretKey);
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+            }
+            catch (Exception ex)
+            {
+                return;
+            }
         }
 
         public async Task<SubscriptionDto> CreateSubscriptionAsync(ApplicationUser user, SubscriptionPlan plan, bool autoRenew)
