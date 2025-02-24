@@ -218,6 +218,29 @@ namespace RareBooksService.Data
             return await BuildPagedBookResult(query, page, pageSize);
         }
 
+        /// <summary>
+        /// Возвращает только общее количество и первые два названия книг
+        /// в заданном диапазоне цен (учитывая SoldQuantity>0).
+        /// </summary>
+        public async Task<(int totalFound, List<string> firstTwoTitles)> GetPartialInfoByPriceRangeAsync(
+            double minPrice, double maxPrice)
+        {
+            var baseQuery = _context.BooksInfo
+                .Where(b => b.SoldQuantity > 0)
+                .Where(b => b.Price >= minPrice && b.Price <= maxPrice);
+
+            int totalFound = await baseQuery.CountAsync();
+
+            // Берём первые две книги (например, по цене убыванию)
+            var twoTitles = await baseQuery
+                .OrderByDescending(b => b.Price)
+                .Take(2)
+                .Select(b => b.Title)
+                .ToListAsync();
+
+            return (totalFound, twoTitles);
+        }
+
         public async Task<PagedResultDto<BookSearchResultDto>> GetBooksBySellerAsync(
             string sellerName, int page, int pageSize)
         {

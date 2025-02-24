@@ -308,7 +308,7 @@ namespace RareBooksService.WebApi.Controllers
 
         [HttpGet("searchByPriceRange")]
         public async Task<ActionResult> SearchByPriceRange(
-            double minPrice, double maxPrice, int page = 1, int pageSize = 10)
+    double minPrice, double maxPrice, int page = 1, int pageSize = 10)
         {
             var user = await GetCurrentUserAsync();
             if (user == null)
@@ -316,24 +316,47 @@ namespace RareBooksService.WebApi.Controllers
 
             var queryText = $"range:{minPrice}-{maxPrice}";
 
+            // Проверяем подписку
             var (hasSub, remain) = await CheckIfNewSearchAndConsumeLimit(user, "PriceRange", queryText);
-
-            var books = await _booksRepository.GetBooksByPriceRangeAsync(minPrice, maxPrice, page, pageSize);
 
             if (!hasSub || remain == 0)
             {
-                ApplyNoSubscriptionRulesToSearchResults(books.Items);
+                // Если подписки нет/лимит исчерпан => выдаём только частичную информацию
+                // и специальное поле partialResults=true
+                var (total, firstTwoTitles) =
+                    await _booksRepository.GetPartialInfoByPriceRangeAsync(minPrice, maxPrice);
+
+                // Лог поиска
+                await _searchHistoryService.SaveSearchHistory(user.Id, queryText, "PriceRange");
+
+                return Ok(new
+                {
+                    partialResults = true,
+                    totalFound = total,
+                    firstBookTitles = firstTwoTitles,
+                    RemainingRequests = remain
+                });
             }
-
-            await _searchHistoryService.SaveSearchHistory(user.Id, queryText, "PriceRange");
-
-            return Ok(new
+            else
             {
-                Items = books.Items,
-                books.TotalPages,
-                RemainingRequests = remain
-            });
+                // Полноценный поиск
+                var books = await _booksRepository.GetBooksByPriceRangeAsync(minPrice, maxPrice, page, pageSize);
+
+                // Лог
+                await _searchHistoryService.SaveSearchHistory(user.Id, queryText, "PriceRange");
+
+                return Ok(new
+                {
+                    partialResults = false,
+                    Items = books.Items,
+                    books.TotalPages,
+                    RemainingRequests = remain
+                });
+            }
         }
+
+
+
 
         /// <summary>
         /// Просмотр детали книги: без подписки часть информации скрывается,

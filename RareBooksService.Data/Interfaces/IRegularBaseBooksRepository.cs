@@ -14,6 +14,7 @@ namespace RareBooksService.Data.Interfaces
         Task<PagedResultDto<BookSearchResultDto>> GetBooksByDescriptionAsync(string description, int page, int pageSize, bool exactPhrase = false);
         Task<PagedResultDto<BookSearchResultDto>> GetBooksByCategoryAsync(int categoryId, int page, int pageSize);
         Task<PagedResultDto<BookSearchResultDto>> GetBooksByPriceRangeAsync(double minPrice, double maxPrice, int page, int pageSize);
+        Task<(int totalFound, List<string> firstTwoTitles)> GetPartialInfoByPriceRangeAsync(double minPrice, double maxPrice);
         Task<PagedResultDto<BookSearchResultDto>> GetBooksBySellerAsync(string sellerName, int page, int pageSize);
         Task<BookDetailDto> GetBookByIdAsync(int id);
         Task<List<CategoryDto>> GetCategoriesAsync();
