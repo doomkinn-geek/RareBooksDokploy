@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using RareBooksService.Data;
 using RareBooksService.Common.Models.FromMeshok;
 using System.Net;
+using RareBooksService.Common.Models.Interfaces;
 
 namespace RareBooksService.Parser.Services
 {
@@ -108,6 +109,7 @@ namespace RareBooksService.Parser.Services
                 {
                     await ProcessLotAsync(currentId++, nonStandardPricesFilePath, nonStandardPricesSovietFilePath);
                     Console.Title = $"{counter++} of {lastIdInDB - lastProcessedId}";
+                    ProgressChanged?.Invoke(0, $"{counter++} of {lastIdInDB - lastProcessedId}");
                     //await Task.Delay(25); // Replacing Thread.Sleep
 
                     if (currentId >= lastIdInDB)
@@ -142,6 +144,7 @@ namespace RareBooksService.Parser.Services
             {
                 counter++;
                 Console.Title = $"Обработка лота {counter} из {booksToUpdate.Count}";
+                ProgressChanged?.Invoke(book.Id, $"Обработка лота {counter} из {booksToUpdate.Count}");
                 //if (counter < 48000)
                 //    continue;
                 // проверка отмены
@@ -208,6 +211,7 @@ namespace RareBooksService.Parser.Services
             {
                 counter++;
                 Console.Title = $"Обработка лота {counter} из {booksToUpdate.Count}";
+                ProgressChanged?.Invoke(book.Id, $"Обработка лота {counter} из {booksToUpdate.Count}");
                 //if (counter < 48000)
                 //    continue;
                 // проверка отмены
