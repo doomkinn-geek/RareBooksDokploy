@@ -108,8 +108,9 @@ namespace RareBooksService.Parser.Services
                 try
                 {
                     await ProcessLotAsync(currentId++, nonStandardPricesFilePath, nonStandardPricesSovietFilePath);
-                    Console.Title = $"{counter++} of {lastIdInDB - lastProcessedId}";
-                    ProgressChanged?.Invoke(0, $"{counter++} of {lastIdInDB - lastProcessedId}");
+                    counter++;
+                    Console.Title = $"{counter} of {lastIdInDB - lastProcessedId}";
+                    ProgressChanged?.Invoke(0, $"{counter} of {lastIdInDB - lastProcessedId}");
                     //await Task.Delay(25); // Replacing Thread.Sleep
 
                     if (currentId >= lastIdInDB)

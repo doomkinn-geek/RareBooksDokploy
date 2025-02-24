@@ -6,7 +6,7 @@ import { API_URL } from '../api';
 import Cookies from 'js-cookie';
 
 const SubscriptionPage = () => {
-    const { user, loadingUser, refreshUser } = useContext(UserContext);
+    const { user, loadingUser, refreshUser, userRefreshInProgress } = useContext(UserContext);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [plans, setPlans] = useState([]);
@@ -65,6 +65,10 @@ const SubscriptionPage = () => {
             setLoading(false);
         }
     };
+
+    if (userRefreshInProgress) {
+        return <div>Обновляем данные пользователя…</div>;
+    }
 
     if (loadingUser) {
         return (

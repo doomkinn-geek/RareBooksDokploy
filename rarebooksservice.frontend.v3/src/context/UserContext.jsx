@@ -1,5 +1,4 @@
-﻿// src/context/UserContext.jsx
-
+﻿// UserContext.jsx
 import React, { createContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import Cookies from 'js-cookie';
@@ -9,12 +8,36 @@ export const UserContext = createContext(null);
 
 export const UserProvider = ({ children }) => {
     const [user, setUser] = useState(null);
-    const [loadingUser, setLoadingUser] = useState(true);
 
-    // Метод, который в любой момент можно вызвать, чтобы 
-    // повторно загрузить данные пользователя с бэкенда
-    const refreshUser = async () => {
-        setLoadingUser(true);
+    // Показываем PrivateRoute «запрет на рендер» только во время первого запроса
+    const [initialLoading, setInitialLoading] = useState(true);
+
+    // А это «фоновое» обновление, которое не мешает рендеру
+    const [userRefreshInProgress, setUserRefreshInProgress] = useState(false);
+
+    // Первый вызов при загрузке приложения
+    useEffect(() => {
+        (async () => {
+            try {
+                await refreshUser(); // см. ниже
+            } finally {
+                // По окончании «первого» refreshUser снимаем initialLoading
+                setInitialLoading(false);
+            }
+        })();
+    }, []);
+
+    // Обычный метод refreshUser, но различаем, первый это вызов или нет
+    const refreshUser = async (force = false) => {
+        // Если force === true, мы допускаем, что нужно «принудительно» сходить за данными
+        // и обновить user, при этом показывать local-спиннер,
+        // но не выключать всё приложение.
+
+        // Если это «не первая загрузка», используем userRefreshInProgress
+        if (!initialLoading) {
+            setUserRefreshInProgress(true);
+        }
+
         try {
             const token = Cookies.get('token');
             if (!token) {
@@ -29,17 +52,22 @@ export const UserProvider = ({ children }) => {
             console.error('Ошибка при получении данных пользователя:', error);
             setUser(null);
         } finally {
-            setLoadingUser(false);
+            if (!initialLoading) {
+                setUserRefreshInProgress(false);
+            }
         }
     };
 
-    // При первой загрузке контекста тоже вызываем refreshUser
-    useEffect(() => {
-        refreshUser();
-    }, []);
-
     return (
-        <UserContext.Provider value={{ user, setUser, loadingUser, refreshUser }}>
+        <UserContext.Provider
+            value={{
+                user,
+                setUser,
+                initialLoading,
+                userRefreshInProgress,
+                refreshUser,
+            }}
+        >
             {children}
         </UserContext.Provider>
     );
