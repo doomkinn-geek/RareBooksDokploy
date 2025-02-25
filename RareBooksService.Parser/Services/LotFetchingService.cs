@@ -27,6 +27,7 @@ namespace RareBooksService.Parser.Services
         private readonly ILotDataHandler _lotDataHandler;
         private readonly IMapper _mapper;
         private readonly ILogger<LotFetchingService> _logger;
+        private readonly IProgressReporter _progressReporter;
         private readonly BooksDbContext _context;
 
         private static readonly string LastProcessedFixedPriceIdFilePath = "lastProcessedFixedPriceId.txt";
@@ -44,6 +45,7 @@ namespace RareBooksService.Parser.Services
             ILotDataHandler lotDataHandler,
             IMapper mapper,
             ILogger<LotFetchingService> logger,
+            IProgressReporter progressReporter,
             BooksDbContext context)
         {
             _lotDataService = lotDataService;
@@ -51,6 +53,7 @@ namespace RareBooksService.Parser.Services
             _mapper = mapper;
             _logger = logger;
             _context = context;
+            _progressReporter = progressReporter;
 
             // Подписываемся на событие LotDataHandler
             _lotDataHandler.ProgressChanged += OnLotDataHandlerProgressChanged;
@@ -111,6 +114,7 @@ namespace RareBooksService.Parser.Services
                     counter++;
                     Console.Title = $"{counter} of {lastIdInDB - lastProcessedId}";
                     ProgressChanged?.Invoke(0, $"{counter} of {lastIdInDB - lastProcessedId}");
+                    _progressReporter.ReportInfo($"{counter} of {lastIdInDB - lastProcessedId}");
                     //await Task.Delay(25); // Replacing Thread.Sleep
 
                     if (currentId >= lastIdInDB)
@@ -122,6 +126,7 @@ namespace RareBooksService.Parser.Services
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Ошибка при обработке лота с ID {LotId}", currentId);
+                    _progressReporter.ReportError(ex, $"Ошибка при загрузке FetchSoldFixedPriceLotsAsync лота {currentId}", "FetchSoldFixedPriceLotsAsync", currentId);
                     currentId++;
                 }
             }
@@ -146,10 +151,11 @@ namespace RareBooksService.Parser.Services
                 counter++;
                 Console.Title = $"Обработка лота {counter} из {booksToUpdate.Count}";
                 ProgressChanged?.Invoke(book.Id, $"Обработка лота {counter} из {booksToUpdate.Count}");
-                //if (counter < 48000)
-                //    continue;
-                // проверка отмены
-                token.ThrowIfCancellationRequested();
+                _progressReporter.ReportInfo($"Обработка лота {counter} из {booksToUpdate.Count}", "UpdateFinishedFixedPriceAsync", book.Id);            
+            //if (counter < 48000)
+            //    continue;
+            // проверка отмены
+            token.ThrowIfCancellationRequested();
 
                 try
                 {
@@ -192,6 +198,7 @@ namespace RareBooksService.Parser.Services
                         "[UpdateFinishedAuctionsStartPriceOneAsync] Ошибка при обновлении лота {LotId}",
                         book.Id
                     );
+                    _progressReporter.ReportError(ex, $"[UpdateFinishedAuctionsStartPriceOneAsync] Ошибка при обновлении лота {book.Id}", "UpdateFinishedFixedPriceAsync", book.Id);
                 }
             }
         }
@@ -285,6 +292,9 @@ namespace RareBooksService.Parser.Services
                 categoryIndex++;
                 _logger.LogInformation("Fetching lots list for categoryId = {CategoryId} (категория {Index} из {Total})",
                     categoryId, categoryIndex, totalCategories);
+
+                _progressReporter.ReportInfo($"Fetching lots list for categoryId = {categoryId} (категория {categoryIndex} из {totalCategories})");
+
 
                 var (categoryName, lotIds) = await _lotDataService.GetLotsListAsync(categoryId);
 

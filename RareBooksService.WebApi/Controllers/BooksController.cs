@@ -323,8 +323,7 @@ namespace RareBooksService.WebApi.Controllers
             {
                 // Если подписки нет/лимит исчерпан => выдаём только частичную информацию
                 // и специальное поле partialResults=true
-                var (total, firstTwoTitles) =
-                    await _booksRepository.GetPartialInfoByPriceRangeAsync(minPrice, maxPrice);
+                var (total, firstTwoTitles) = await _booksRepository.GetPartialInfoByPriceRangeAsync(minPrice, maxPrice);
 
                 // Лог поиска
                 await _searchHistoryService.SaveSearchHistory(user.Id, queryText, "PriceRange");

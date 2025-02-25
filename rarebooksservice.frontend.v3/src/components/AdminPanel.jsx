@@ -66,8 +66,10 @@ const AdminPanel = () => {
         currentOperationName: null,
         processedCount: 0,
         lastProcessedLotId: 0,
-        lastProcessedLotTitle: ''
+        lastProcessedLotTitle: '',
+        logs: []  // <-- можно добавить сюда дефолтное пустое поле
     });
+
 
     // ----- Импорт
     const [importTaskId, setImportTaskId] = useState(null);
@@ -539,7 +541,7 @@ const AdminPanel = () => {
             const response = await axios.get(`${API_URL}/bookupdateservice/status`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setBookUpdateStatus(response.data);
+            setBookUpdateStatus(response.data);  // у response.data будет поле logs
         } catch (err) {
             console.error('Ошибка при получении статуса сервиса обновления книг:', err);
         }
@@ -1222,13 +1224,59 @@ const AdminPanel = () => {
                             )}
                         </div>
 
+                        {/* Блок отображения логов */}
                         <div className="admin-log-container" style={{ marginTop: '20px' }}>
-                            <h4>Подробная информация / логи:</h4>
-                            <div>
-                                {bookUpdateStatus.lastProcessedLotTitle
-                                    ? bookUpdateStatus.lastProcessedLotTitle
-                                    : 'Пока нет дополнительных сообщений.'}
-                            </div>
+                            <h4>Подробная информация / логи</h4>
+
+                            {/* Если хотите, можно отдельно показать текущее lastProcessedLotTitle */}
+                            {bookUpdateStatus.lastProcessedLotTitle && (
+                                <div style={{ marginBottom: '10px' }}>
+                                    Последний заголовок: {bookUpdateStatus.lastProcessedLotTitle}
+                                </div>
+                            )}
+
+                            {/* Основная таблица логов, если они есть */}
+                            {bookUpdateStatus.logs && bookUpdateStatus.logs.length > 0 ? (
+                                <table className="admin-table responsive-table">
+                                    <thead>
+                                        <tr>
+                                            <th style={{ width: '150px' }}>Время (UTC)</th>
+                                            <th>Сообщение</th>
+                                            <th>Операция</th>
+                                            <th>LotId</th>
+                                            <th>Ошибка?</th>
+                                            <th>Exception</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {[...bookUpdateStatus.logs]
+                                            .reverse() // Чтобы последние записи шли сверху (если нужно - уберите)
+                                            .map((entry, idx) => {
+                                                const timeLocal = new Date(entry.timestamp);
+                                                return (
+                                                    <tr
+                                                        key={idx}
+                                                        style={{ color: entry.isError ? 'red' : 'inherit' }}
+                                                    >
+                                                        <td>
+                                                            {timeLocal.toLocaleString()}
+                                                            {/* Например: 2025-02-25 15:38:12 */}
+                                                        </td>
+                                                        <td>{entry.message}</td>
+                                                        <td>{entry.operationName || '-'}</td>
+                                                        <td>{entry.lotId ?? '-'}</td>
+                                                        <td>{entry.isError ? 'Да' : 'Нет'}</td>
+                                                        <td style={{ whiteSpace: 'pre-wrap' }}>
+                                                            {entry.exceptionMessage || ''}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                    </tbody>
+                                </table>
+                            ) : (
+                                <div>Логи пока отсутствуют.</div>
+                            )}
                         </div>
                     </div>
                 )}

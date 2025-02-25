@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using RareBooksService.Parser;
 
 namespace RareBooksService.WebApi.Services
 {
@@ -23,8 +24,13 @@ namespace RareBooksService.WebApi.Services
         void ForceRunNow();
     }
 
-    public class BookUpdateService : BackgroundService, IBookUpdateService
+    public class BookUpdateService : BackgroundService, IBookUpdateService, IProgressReporter
     {
+        // для хранения логов
+        private readonly List<LogEntry> _logEntries = new();
+        private readonly object _logLock = new object();
+        private const int MAX_LOG_COUNT = 50;
+
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<BookUpdateService> _logger;
 
@@ -71,6 +77,53 @@ namespace RareBooksService.WebApi.Services
         public DateTime? NextRunTimeUtc => _nextRunTimeUtc;
 
         public bool MissedRunDueToPause => _missedRunDueToPause;
+
+        public void ReportInfo(string message, string? operation = null, int? lotId = null, string? title = null)
+        {
+            AddLogEntry(new LogEntry
+            {
+                Timestamp = DateTime.UtcNow,
+                Message = message,
+                OperationName = operation,
+                LotId = lotId,
+                LotTitle = title,
+                IsError = false
+            });
+        }
+
+        public void ReportError(Exception ex, string message, string? operation = null, int? lotId = null, string? title = null)
+        {
+            AddLogEntry(new LogEntry
+            {
+                Timestamp = DateTime.UtcNow,
+                Message = message,
+                OperationName = operation,
+                LotId = lotId,
+                LotTitle = title,
+                IsError = true,
+                ExceptionMessage = ex.Message // или ex.ToString() для более подробной инфы
+            });
+        }
+
+        private void AddLogEntry(LogEntry entry)
+        {
+            lock (_logLock)
+            {
+                if (_logEntries.Count >= MAX_LOG_COUNT)
+                {
+                    _logEntries.RemoveAt(0);
+                }
+                _logEntries.Add(entry);
+            }
+        }
+
+        public List<LogEntry> GetLogEntriesSnapshot()
+        {
+            lock (_logLock)
+            {
+                return _logEntries.ToList();
+            }
+        }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {

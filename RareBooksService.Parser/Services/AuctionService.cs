@@ -20,51 +20,21 @@ namespace RareBooksService.Parser.Services
         private readonly ILotDataWebService _lotDataService;
         private readonly ILogger<AuctionService> _logger;
         private readonly ILotDataHandler _lotHandler;
+        private readonly IProgressReporter _progressReporter;
         private readonly BooksDbContext _context;
 
         public AuctionService(ILotDataWebService lotDataService, 
             ILogger<AuctionService> logger,
             BooksDbContext context,
-            ILotDataHandler lotHandler)
+            ILotDataHandler lotHandler,
+            IProgressReporter progressReporter)
         {
             _lotDataService = lotDataService;
             _logger = logger;
             _context = context;
             _lotHandler = lotHandler;
-        }
-
-        //18.12.2024 случайно обнаружил, что финальные цены записываются не в ту базу данных
-        //записывается в старую базу SQLite. Меняю так, чтобы данные были заполнены верно.
-        /*public async Task UpdateCompletedAuctionsAsync(CancellationToken token)
-        {            
-            var booksToUpdate = await _context.BooksInfo
-                .Where(b => b.EndDate < DateTime.UtcNow && b.IsMonitored)
-                .ToListAsync();
-
-            foreach (var book in booksToUpdate)
-            {
-                token.ThrowIfCancellationRequested();  // проверка отмены
-                try
-                {
-                    var updatedLotData = await _lotDataService.GetLotDataAsync(book.Id);
-                    if (updatedLotData != null && updatedLotData.result != null)
-                    {
-                        if (book.FinalPrice < updatedLotData.result.normalizedPrice)
-                        {
-                            book.Price = (double)updatedLotData.result.price;
-                            book.FinalPrice = updatedLotData.result.normalizedPrice;
-                            book.IsMonitored = false;
-                            await _context.SaveChangesAsync();
-                        }
-                    }
-                    _logger.LogInformation($"Updated lot {book.Id} with final price {book.FinalPrice}.");
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError("UpdateCompletedAuctionsAsync", ex);
-                }
-            }            
-        }*/
+            _progressReporter = progressReporter;
+        }        
 
         public async Task UpdateCompletedAuctionsAsync(CancellationToken token)
         {
@@ -107,6 +77,7 @@ namespace RareBooksService.Parser.Services
                         }
 
                         await _context.SaveChangesAsync();
+                        _progressReporter.ReportInfo($"[UpdateCompletedAuctionsAsync] Updated lot {book.Id} with final price {book.FinalPrice}.", "FetchFreeListData", book.Id);
                         _logger.LogInformation($"[UpdateCompletedAuctionsAsync] Updated lot {book.Id} with final price {book.FinalPrice}.");
                     }
                 }

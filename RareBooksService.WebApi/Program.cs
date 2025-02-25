@@ -199,6 +199,14 @@ namespace RareBooksService.WebApi
 
                 // 12) BookUpdateService – singleton + HostedService
                 builder.Services.AddSingleton<IBookUpdateService, BookUpdateService>();
+
+                // Добавим, чтобы IProgressReporter -> BookUpdateService:
+                builder.Services.AddSingleton<IProgressReporter>(sp =>
+                {
+                    // Используем тот же самый singleton, что и для IBookUpdateService:
+                    return (IProgressReporter)sp.GetRequiredService<IBookUpdateService>();
+                });
+
                 builder.Services.AddHostedService(sp => (BookUpdateService)sp.GetRequiredService<IBookUpdateService>());
                 builder.Services.AddHostedService<SubscriptionRenewalBackgroundService>();
 

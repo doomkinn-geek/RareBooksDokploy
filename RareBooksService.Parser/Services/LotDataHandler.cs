@@ -41,6 +41,8 @@ namespace RareBooksService.Parser.Services
         private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(5);
         private bool _cookiesInitialized = false;
 
+        private readonly IProgressReporter _progressReporter;
+
         private readonly string _appSettingsPath;
 
         public event Action<int, string> ProgressChanged;
@@ -55,7 +57,8 @@ namespace RareBooksService.Parser.Services
             ILotDataWebService lotDataService,
             IYandexStorageService yandexStorageService,
             IOptions<TypeOfAccessImages> imageStorageOptions,
-            ILogger<LotDataHandler> logger)
+            ILogger<LotDataHandler> logger,
+            IProgressReporter progressReporter)
         {
             _appSettingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
 
@@ -66,6 +69,8 @@ namespace RareBooksService.Parser.Services
             _imageStorageOptions = imageStorageOptions.Value;
             _logger = logger;
             _cookieContainer = new CookieContainer();
+
+            _progressReporter = progressReporter;   
 
             var jsonText = File.ReadAllText(_appSettingsPath);
             using var doc = JsonDocument.Parse(jsonText);
@@ -128,223 +133,7 @@ namespace RareBooksService.Parser.Services
             {
                 _logger.LogError(ex, "Ошибка при инициализации cookies для URL {Url}", url);
             }
-        }
-
-        // SaveLotDataAsync для лотов с путым списком изображений
-        /*public async Task SaveLotDataAsync(
-                            MeshokBook lotData,
-                            int categoryId,
-                            string categoryName = "unknown",
-                            bool downloadImages = true,
-                            bool isLessValuableLot = false)
-        {
-            try
-            {
-                await EnsureCookiesInitializedAsync();
-
-                OnProgressChanged(lotData.id, $"Начало обработки лота {lotData.id}.");
-                _logger.LogInformation("Обработка лота с ID {LotId}", lotData.id);
-
-                // Смотрим, есть ли уже такой лот в БД
-                var existingBookInfo = await _context.BooksInfo
-                                                     .Include(b => b.Category) // если нужно сразу загрузить категорию
-                                                     .FirstOrDefaultAsync(b => b.Id == lotData.id);                
-
-                if (existingBookInfo == null)
-                {
-                    // Создаём или берём существующую категорию
-                    var category = await GetOrCreateCategoryAsync(categoryId, categoryName);
-
-                    // Текст описания лота (можно получать всегда заново, либо при необходимости)
-                    var lotDescription = await _lotDataService.GetBookDescriptionAsync(lotData.id);
-                    var normalizedDesc = lotDescription?.ToLower() ?? string.Empty;
-
-                    // Вычисляем год
-                    int? year = PublishingYearExtractor.ExtractYearFromDescription(lotDescription)
-                             ?? PublishingYearExtractor.ExtractYearFromDescription(lotData.title);
-                    // ------------------- Создание новой записи -------------------
-                    _logger.LogInformation("Лот {LotId} отсутствует в базе. Сохраняем новую запись.", lotData.id);
-                    OnProgressChanged(lotData.id, $"Лот {lotData.id} отсутствует в БД. Сохраняем...");
-
-                    // Маппим данные MeshokBook -> RegularBaseBook (через AutoMapper)
-                    var bookInfo = _mapper.Map<RegularBaseBook>(lotData);
-
-                    // Заполняем дополнительные поля
-                    bookInfo.Category = category;
-                    bookInfo.Type = lotData.type;
-                    bookInfo.Description = lotDescription;
-                    bookInfo.NormalizedDescription = normalizedDesc;
-                    bookInfo.YearPublished = year;
-                    bookInfo.IsLessValuable = isLessValuableLot;
-                    bookInfo.IsImagesCompressed = false; // по умолчанию
-                    bookInfo.ImageArchiveUrl = null;
-
-                    // IsMonitored / FinalPrice
-                    if (lotData.beginDate == null || lotData.endDate == null)
-                    {
-                        bookInfo.IsMonitored = false;
-                        bookInfo.FinalPrice = lotData.normalizedPrice;
-                    }
-                    else
-                    {
-                        bookInfo.IsMonitored = (lotData.endDate >= DateTime.UtcNow);
-                        bookInfo.FinalPrice = (lotData.endDate < DateTime.UtcNow) ? lotData.normalizedPrice : null;
-                    }
-
-                    _context.BooksInfo.Add(bookInfo);
-                    await _context.SaveChangesAsync();
-
-                    // Если не малоценный => скачиваем и архивируем
-                    if (!isLessValuableLot && downloadImages)
-                    {
-                        await ArchiveImagesForBookAsync(bookInfo);
-                    }
-                }
-                else
-                {
-                    // -------------------- Обновление записи --------------------
-                    _logger.LogInformation("Лот {LotId} уже существует в БД. Обновляем запись.", lotData.id);
-                    OnProgressChanged(lotData.id, $"Лот {lotData.id} найден в БД. Обновляем данные...");
-
-                    // Можно использовать AutoMapper для частичного обновления, 
-                    // например:
-                    // МАППЕР НЕ Корректно ставит данные для existingBookInfo.Category
-                    // _mapper.Map(lotData, existingBookInfo);
-                    //
-                    // Но зачастую удобнее выборочно менять нужные поля вручную, 
-                    // чтобы не перезаписывать лишнее. Ниже — пример ручного обновления.                    
-
-                    if (lotData.pictures.Length != 0)
-                    {
-                        existingBookInfo.ImageUrls = lotData.pictures.Select(p => p.url).ToList();
-                        existingBookInfo.ThumbnailUrls = lotData.pictures.Select(p => p.thumbnail.x1).ToList();
-                    }
-
-                    existingBookInfo.Type = lotData.type;                   
-
-                    // Признак малоценности (приходит извне)
-                    existingBookInfo.IsLessValuable = isLessValuableLot;
-
-                    // Для наглядности: если IsImagesCompressed уже было true, 
-                    // но мы хотим заново скачивать и архивировать картинки, 
-                    // то возможно обнулить эти поля, чтобы пересоздать архив:
-                    // existingBookInfo.IsImagesCompressed = false;
-                    // existingBookInfo.ImageArchiveUrl = null;
-
-                    // Пересчитываем IsMonitored / FinalPrice
-                    if (lotData.beginDate == null || lotData.endDate == null)
-                    {
-                        existingBookInfo.IsMonitored = false;
-                        existingBookInfo.FinalPrice = lotData.normalizedPrice;
-                    }
-                    else
-                    {
-                        existingBookInfo.IsMonitored = (lotData.endDate >= DateTime.UtcNow);
-                        existingBookInfo.FinalPrice = (lotData.endDate < DateTime.UtcNow) ? lotData.normalizedPrice : null;
-                    }
-
-                    // Обновляем в контексте
-                    _context.BooksInfo.Update(existingBookInfo);
-                    await _context.SaveChangesAsync();
-
-                    // Если нужно перекачать/обновить картинки
-                    if (!isLessValuableLot && downloadImages)
-                    {
-                        // Например, можно проверить, есть ли вообще картинки
-                        // или принудительно перекачать:
-                        await ArchiveImagesForBookAsync(existingBookInfo);
-                    }
-                }
-
-                _logger.LogInformation("Лот {LotId} успешно сохранён (insert/update).", lotData.id);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Ошибка при сохранении лота {LotId}", lotData.id);
-                OnProgressChanged(lotData.id, $"Ошибка при сохранении лота {lotData.id}: {ex.Message}");
-                throw;
-            }
-        }*/
-
-        /*public async Task SaveLotDataAsync(
-                MeshokBook lotData,
-                int categoryId,
-                string categoryName = "unknown",
-                bool downloadImages = true,
-                bool isLessValuableLot = false)
-        {
-            try
-            {
-                await EnsureCookiesInitializedAsync();
-
-                OnProgressChanged(lotData.id, $"Начало обработки лота {lotData.id}.");
-                _logger.LogInformation("Обработка лота с ID {LotId}", lotData.id);
-
-                // Проверяем, нет ли уже такого лота в БД
-                bool alreadyExists = await _context.BooksInfo.AnyAsync(b => b.Id == lotData.id);
-                if (alreadyExists)
-                {
-                    _logger.LogInformation("Лот {LotId} уже существует в базе. Пропускаем.", lotData.id);
-                    OnProgressChanged(lotData.id, $"Лот {lotData.id} уже есть в БД.");
-                    return;
-                }
-
-                // Нет в БД, создаём
-                _logger.LogInformation("Лот {LotId} отсутствует в базе. Сохраняем.", lotData.id);
-                OnProgressChanged(lotData.id, $"Лот {lotData.id} отсутствует в БД. Сохраняем...");
-
-                // Создаём категорию (или берём существующую)
-                var category = await GetOrCreateCategoryAsync(categoryId, categoryName);
-
-                // Создаём RegularBaseBook
-                var bookInfo = _mapper.Map<RegularBaseBook>(lotData);
-                bookInfo.Category = category;
-                bookInfo.Type = lotData.type;
-
-                // Описание
-                bookInfo.Description = await _lotDataService.GetBookDescriptionAsync(lotData.id);
-                bookInfo.NormalizedDescription = bookInfo.Description.ToLower();
-
-                // Год
-                bookInfo.YearPublished = PublishingYearExtractor.ExtractYearFromDescription(bookInfo.Description)
-                                        ?? PublishingYearExtractor.ExtractYearFromDescription(bookInfo.Title);
-
-                // Признак малоценности
-                bookInfo.IsLessValuable = isLessValuableLot;
-
-                // IsImagesCompressed = false по умолчанию (при необходимости)
-                bookInfo.IsImagesCompressed = false;
-                bookInfo.ImageArchiveUrl = null;
-
-                // Заполняем IsMonitored / FinalPrice
-                if (lotData.beginDate == null || lotData.endDate == null)
-                {
-                    bookInfo.IsMonitored = false;
-                    bookInfo.FinalPrice = lotData.normalizedPrice;
-                }
-                else
-                {
-                    bookInfo.IsMonitored = (lotData.endDate >= DateTime.UtcNow);
-                    bookInfo.FinalPrice = (lotData.endDate < DateTime.UtcNow) ? lotData.normalizedPrice : null;
-                }
-
-                _context.BooksInfo.Add(bookInfo);
-                await _context.SaveChangesAsync();
-                _logger.LogInformation("Лот {LotId} сохранён в БД.", lotData.id);
-
-                // Если не малоценный => скачиваем + архивируем
-                if (!isLessValuableLot && downloadImages)
-                {
-                    await ArchiveImagesForBookAsync(bookInfo);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Ошибка при сохранении лота {LotId}", lotData.id);
-                OnProgressChanged(lotData.id, $"Ошибка при сохранении лота {lotData.id}: {ex.Message}");
-                throw;
-            }
-        }*/
+        }        
 
         public async Task SaveLotDataAsync(
                     MeshokBook lotData,
@@ -498,11 +287,13 @@ namespace RareBooksService.Parser.Services
                 }
 
                 _logger.LogInformation("Лот {LotId} успешно сохранён/обновлён в БД.", lotData.id);
+                _progressReporter.ReportInfo($"Лот {lotData.id} успешно сохранён/обновлён в БД.", "SaveLotDataAsync", lotData.id);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при сохранении (upsert) лота {LotId}", lotData.id);
                 OnProgressChanged(lotData.id, $"Ошибка при сохранении лота {lotData.id}: {ex.Message}");
+                _progressReporter.ReportError(ex, $"Ошибка при сохранении (upsert) лота {lotData.id}", "SaveLotDataAsync", lotData.id);
                 throw;
             }
         }
@@ -521,6 +312,7 @@ namespace RareBooksService.Parser.Services
 
             _logger.LogInformation("Архивирование изображений для лота {LotId}", bookId);
             OnProgressChanged(bookId, $"Архивирование изображений (ID {bookId})...");
+            _progressReporter.ReportInfo($"Архивирование изображений (ID {bookId})...", "ArchiveImagesForBookAsync", bookId);
 
             string archiveKeyOrPath = null;
 

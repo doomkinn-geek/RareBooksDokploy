@@ -28,6 +28,7 @@ namespace RareBooksService.WebApi.Controllers
         {
             // Чтобы показать доп. поля, приводим к BookUpdateService только для чтения расширенных свойств
             var bus = _bookUpdateService as BookUpdateService;
+            if (bus == null) return Ok(new { message = "No data" });
 
             return Ok(new
             {
@@ -39,7 +40,9 @@ namespace RareBooksService.WebApi.Controllers
                 currentOperationName = bus?.CurrentOperationName,
                 processedCount = bus?.ProcessedCount,
                 lastProcessedLotId = bus?.LastProcessedLotId,
-                lastProcessedLotTitle = bus?.LastProcessedLotTitle
+                lastProcessedLotTitle = bus?.LastProcessedLotTitle,
+
+                logs = bus.GetLogEntriesSnapshot()
             });
         }
 
