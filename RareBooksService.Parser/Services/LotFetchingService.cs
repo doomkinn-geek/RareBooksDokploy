@@ -114,7 +114,7 @@ namespace RareBooksService.Parser.Services
                     counter++;
                     Console.Title = $"{counter} of {lastIdInDB - lastProcessedId}";
                     ProgressChanged?.Invoke(0, $"{counter} of {lastIdInDB - lastProcessedId}");
-                    _progressReporter.ReportInfo($"{counter} of {lastIdInDB - lastProcessedId}");
+                    //_progressReporter.ReportInfo($"{counter} of {lastIdInDB - lastProcessedId}");
                     //await Task.Delay(25); // Replacing Thread.Sleep
 
                     if (currentId >= lastIdInDB)
@@ -151,7 +151,7 @@ namespace RareBooksService.Parser.Services
                 counter++;
                 Console.Title = $"Обработка лота {counter} из {booksToUpdate.Count}";
                 ProgressChanged?.Invoke(book.Id, $"Обработка лота {counter} из {booksToUpdate.Count}");
-                _progressReporter.ReportInfo($"Обработка лота {counter} из {booksToUpdate.Count}", "UpdateFinishedFixedPriceAsync", book.Id);            
+                //_progressReporter.ReportInfo($"Обработка лота {counter} из {booksToUpdate.Count}", "UpdateFinishedFixedPriceAsync", book.Id);            
             //if (counter < 48000)
             //    continue;
             // проверка отмены
