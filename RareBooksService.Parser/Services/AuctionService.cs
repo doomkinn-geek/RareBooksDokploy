@@ -77,7 +77,7 @@ namespace RareBooksService.Parser.Services
                         }
 
                         await _context.SaveChangesAsync();
-                        _progressReporter.ReportInfo($"[UpdateCompletedAuctionsAsync] Updated lot {book.Id} with final price {book.FinalPrice}.", "FetchFreeListData", book.Id);
+                        _progressReporter.ReportInfo($"[UpdateCompletedAuctionsAsync] Updated lot {book.Id} with final price {book.FinalPrice}.", "UpdateCompletedAuctionsAsync", book.Id);
                         _logger.LogInformation($"[UpdateCompletedAuctionsAsync] Updated lot {book.Id} with final price {book.FinalPrice}.");
                     }
                 }
