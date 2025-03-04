@@ -198,40 +198,32 @@ namespace RareBooksService.WebApi.Controllers
         public async Task<ActionResult<PagedResultDto<BookSearchResultDto>>> SearchByTitle(
             string title, bool exactPhrase = false, int page = 1, int pageSize = 10)
         {
-            try
+            _logger.LogInformation("Поиск по названию: {Title}, page={Page}", title, page);
+
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return Unauthorized();
+
+            var (hasSub, remain) = await CheckIfNewSearchAndConsumeLimit(user, "Title", title);
+
+            var books = await _booksRepository.GetBooksByTitleAsync(title, page, pageSize, exactPhrase);
+
+            // Если подписки нет или лимит исчерпан => скрываем платную информацию
+            if (!hasSub || remain == 0)
             {
-                _logger.LogInformation("Поиск по названию: {Title}, page={Page}", title, page);
-
-                var user = await GetCurrentUserAsync();
-                if (user == null)
-                    return Unauthorized();
-
-                var (hasSub, remain) = await CheckIfNewSearchAndConsumeLimit(user, "Title", title);
-
-                var books = await _booksRepository.GetBooksByTitleAsync(title, page, pageSize, exactPhrase);
-
-                // Если подписки нет или лимит исчерпан => скрываем платную информацию
-                if (!hasSub || remain == 0)
-                {
-                    ApplyNoSubscriptionRulesToSearchResults(books.Items);
-                }
-
-                // Пишем в историю поиска
-                await _searchHistoryService.SaveSearchHistory(user.Id, title, "Title");
-
-                // Возвращаем всегда: даже если осталось 0, frontend покажет "0" оставшихся
-                return Ok(new
-                {
-                    Items = books.Items,
-                    books.TotalPages,
-                    RemainingRequests = remain // null => безлимит 
-                });
+                ApplyNoSubscriptionRulesToSearchResults(books.Items);
             }
-            catch (Exception ex)
+
+            // Пишем в историю поиска
+            await _searchHistoryService.SaveSearchHistory(user.Id, title, "Title");
+
+            // Возвращаем всегда: даже если осталось 0, frontend покажет "0" оставшихся
+            return Ok(new
             {
-                _logger.LogError("Ошибка поиска SearchByTitle: ", ex.ToString());
-                return BadRequest();
-            }
+                Items = books.Items,
+                books.TotalPages,
+                RemainingRequests = remain // null => безлимит 
+            });
         }
 
         [HttpGet("searchByDescription")]
