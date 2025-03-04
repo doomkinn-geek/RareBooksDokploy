@@ -186,7 +186,7 @@ const RecentSales = () => {
                     {recentSalesError}
                 </Alert>
             ) : recentSales && recentSales.length > 0 ? (
-                <Grid container spacing={2}>
+                <Grid container spacing={isMobile ? 1 : 2}>
                     {recentSales.map((book) => (
                         <Grid item xs={12} sm={6} md={4} key={book.bookId}>
                             <Card 
@@ -198,44 +198,56 @@ const RecentSales = () => {
                                         transform: 'translateY(-4px)',
                                         boxShadow: '0 8px 24px rgba(0,0,0,0.12)'
                                     },
-                                    cursor: 'pointer'
+                                    cursor: 'pointer',
+                                    overflow: 'hidden',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    width: '100%',
+                                    maxWidth: '100%'
                                 }}
                                 onClick={() => navigate(`/books/${book.bookId}`)}
+                                className="recent-sales-card"
                             >
-                                {/* Изображения с обработчиком ошибок */}
-                                {book.imageUrl ? (
-                                    <CardMedia
-                                        component="img"
-                                        height={isMobile ? "120" : "140"}
-                                        image={book.imageUrl}
-                                        alt={book.title}
-                                        onError={handleImageError}
-                                        sx={{ objectFit: 'contain', bgcolor: '#f5f5f5', p: 1 }}
-                                    />
-                                ) : book.thumbnailUrl ? (
-                                    <CardMedia
-                                        component="img"
-                                        height={isMobile ? "120" : "140"}
-                                        image={book.thumbnailUrl}
-                                        alt={book.title}
-                                        onError={handleImageError}
-                                        sx={{ objectFit: 'contain', bgcolor: '#f5f5f5', p: 1 }}
-                                    />
-                                ) : (
-                                    <Box
-                                        sx={{
-                                            height: isMobile ? 120 : 140,
-                                            bgcolor: '#f5f5f5',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center'
-                                        }}
-                                    >
+                                {/* Контейнер для изображения с фиксированной высотой */}
+                                <Box sx={{ 
+                                    height: isMobile ? 120 : 140, 
+                                    bgcolor: '#f5f5f5',
+                                    display: 'flex',
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                    overflow: 'hidden'
+                                }}
+                                className="book-image-container"
+                                >
+                                    {/* Изображения с обработчиком ошибок */}
+                                    {book.imageUrl ? (
+                                        <img
+                                            src={book.imageUrl}
+                                            alt={book.title}
+                                            onError={handleImageError}
+                                            style={{ 
+                                                maxWidth: '100%',
+                                                maxHeight: '100%',
+                                                objectFit: 'contain'
+                                            }}
+                                        />
+                                    ) : book.thumbnailUrl ? (
+                                        <img
+                                            src={book.thumbnailUrl}
+                                            alt={book.title}
+                                            onError={handleImageError}
+                                            style={{ 
+                                                maxWidth: '100%',
+                                                maxHeight: '100%',
+                                                objectFit: 'contain'
+                                            }}
+                                        />
+                                    ) : (
                                         <Typography variant="body2" color="text.secondary">
                                             Нет изображения
                                         </Typography>
-                                    </Box>
-                                )}
+                                    )}
+                                </Box>
                                 <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
                                     <Typography 
                                         variant="subtitle1" 

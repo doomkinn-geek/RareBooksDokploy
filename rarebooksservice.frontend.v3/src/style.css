@@ -1094,6 +1094,25 @@ body {
         width: calc(100% - 32px) !important;
         max-height: calc(100% - 32px) !important;
     }
+    
+    /* Улучшение отображения изображений в списке Recent Sales */
+    .book-image-container {
+        height: 120px !important;
+        padding: 8px !important;
+    }
+    
+    .book-image-container img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        margin: 0 auto;
+        display: block;
+    }
+    
+    /* Уменьшаем горизонтальные отступы в карточках на мобильных устройствах */
+    .MuiCardContent-root {
+        padding: 12px 8px !important;
+    }
 }
 
 /* Оптимизации для планшетов */
@@ -1101,6 +1120,11 @@ body {
     .MuiContainer-root {
         padding-left: 16px !important;
         padding-right: 16px !important;
+    }
+    
+    /* Настройки для изображений на планшетах */
+    .book-image-container {
+        height: 140px !important;
     }
 }
 
@@ -1112,4 +1136,24 @@ body {
         min-height: 60vh !important;
     }
 }
+
+/* Стили для карточек недавних продаж */
+.recent-sales-card {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+@media (max-width: 600px) {
+    .recent-sales-card {
+        margin-bottom: 12px !important;
+    }
+    
+    .recent-sales-card .MuiCardContent-root {
+        padding: 12px 8px !important;
+    }
+}
+
+/* Новые стили для мобильной адаптации - добавляем после существующего кода */
+/* Общие улучшения для мобильных устройств */
 
