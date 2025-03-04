@@ -133,11 +133,20 @@ const RecentSales = () => {
     
     // Форматирование цены
     const formatPrice = (price) => {
-        return new Intl.NumberFormat(language === 'RU' ? 'ru-RU' : 'en-US', {
-            style: 'currency',
-            currency: language === 'RU' ? 'RUB' : 'USD',
-            maximumFractionDigits: 0
-        }).format(price);
+        try {
+            if (price === undefined || price === null) {
+                console.warn('Цена не определена');
+                return 'Цена неизвестна';
+            }
+            
+            return new Intl.NumberFormat('ru-RU', {
+                style: 'decimal',
+                maximumFractionDigits: 0
+            }).format(price) + ' ₽';
+        } catch (error) {
+            console.error('Ошибка форматирования цены:', error, price);
+            return 'Ошибка цены';
+        }
     };
     
     // Проверяем авторизацию пользователя
@@ -438,7 +447,7 @@ const RecentSales = () => {
                                                 fontSize: { xs: '1.1rem', sm: '1.2rem' },
                                                 mr: 0.3
                                             }} />
-                                            {formatPrice(book?.salePrice || 0)}
+                                            Цена: {formatPrice(book?.finalPrice || 0)}
                                         </Typography>
                                     </Box>
                                 </CardContent>
