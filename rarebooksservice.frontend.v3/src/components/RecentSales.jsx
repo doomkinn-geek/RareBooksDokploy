@@ -11,7 +11,9 @@ import {
     Paper,
     Chip,
     Grid,
-    Alert
+    Alert,
+    useMediaQuery,
+    useTheme
 } from '@mui/material';
 import Cookies from 'js-cookie';
 import { getRecentSales } from '../api';
@@ -23,6 +25,8 @@ const RecentSales = () => {
     const { user } = useContext(UserContext);
     const { language } = useContext(LanguageContext);
     const navigate = useNavigate();
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     
     const [recentSales, setRecentSales] = useState([]);
     const [loadingRecentSales, setLoadingRecentSales] = useState(false);
@@ -126,11 +130,18 @@ const RecentSales = () => {
     }
     
     return (
-        <Paper elevation={2} sx={{ p: 3, borderRadius: '12px', mb: 3 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Paper elevation={2} sx={{ p: { xs: 2, sm: 3 }, borderRadius: '12px', mb: 3 }}>
+            <Box sx={{ 
+                display: 'flex', 
+                flexDirection: { xs: 'column', sm: 'row' },
+                justifyContent: 'space-between', 
+                alignItems: { xs: 'flex-start', sm: 'center' }, 
+                mb: 2,
+                gap: { xs: 2, sm: 0 }
+            }}>
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <HistoryIcon sx={{ mr: 1 }} color="primary" />
-                    <Typography variant="h6" fontWeight="bold">
+                    <Typography variant="h6" fontWeight="bold" sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' } }}>
                         Недавние продажи
                     </Typography>
                 </Box>
@@ -140,23 +151,29 @@ const RecentSales = () => {
                     variant="outlined" 
                     size="small" 
                     onClick={fetchRecentSales}
+                    fullWidth={isMobile}
                 >
                     Обновить данные
                 </Button>
             </Box>
             
             {!user.hasSubscription && (
-                <Alert severity="warning" sx={{ mb: 2 }}>
-                    Для просмотра недавних продаж требуется активная подписка. 
-                    <Button 
-                        component={Link} 
-                        to="/subscription" 
-                        color="primary" 
-                        size="small" 
-                        sx={{ ml: 1 }}
-                    >
-                        Оформить подписку
-                    </Button>
+                <Alert 
+                    severity="warning" 
+                    sx={{ mb: 2 }}
+                    action={
+                        <Button 
+                            component={Link} 
+                            to="/subscription" 
+                            color="primary" 
+                            size="small"
+                            sx={{ ml: { xs: 0, sm: 1 }, mt: { xs: 1, sm: 0 } }}
+                        >
+                            Оформить подписку
+                        </Button>
+                    }
+                >
+                    Для просмотра недавних продаж требуется активная подписка.
                 </Alert>
             )}
             
@@ -189,7 +206,7 @@ const RecentSales = () => {
                                 {book.imageUrl ? (
                                     <CardMedia
                                         component="img"
-                                        height="140"
+                                        height={isMobile ? "120" : "140"}
                                         image={book.imageUrl}
                                         alt={book.title}
                                         onError={handleImageError}
@@ -198,7 +215,7 @@ const RecentSales = () => {
                                 ) : book.thumbnailUrl ? (
                                     <CardMedia
                                         component="img"
-                                        height="140"
+                                        height={isMobile ? "120" : "140"}
                                         image={book.thumbnailUrl}
                                         alt={book.title}
                                         onError={handleImageError}
@@ -207,7 +224,7 @@ const RecentSales = () => {
                                 ) : (
                                     <Box
                                         sx={{
-                                            height: 140,
+                                            height: isMobile ? 120 : 140,
                                             bgcolor: '#f5f5f5',
                                             display: 'flex',
                                             alignItems: 'center',
@@ -219,8 +236,14 @@ const RecentSales = () => {
                                         </Typography>
                                     </Box>
                                 )}
-                                <CardContent>
-                                    <Typography variant="subtitle1" fontWeight="bold" noWrap title={book.title}>
+                                <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
+                                    <Typography 
+                                        variant="subtitle1" 
+                                        fontWeight="bold" 
+                                        noWrap 
+                                        title={book.title}
+                                        sx={{ fontSize: { xs: '0.9rem', md: '1rem' } }}
+                                    >
                                         {book.title}
                                     </Typography>
                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
@@ -232,10 +255,20 @@ const RecentSales = () => {
                                             sx={{ fontSize: '0.75rem' }}
                                         />
                                     </Box>
-                                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                                    <Typography 
+                                        variant="body2" 
+                                        color="text.secondary" 
+                                        gutterBottom
+                                        sx={{ fontSize: { xs: '0.75rem', md: '0.875rem' } }}
+                                    >
                                         Дата продажи: {formatDate(book.saleDate)}
                                     </Typography>
-                                    <Typography variant="h6" color="primary" fontWeight="bold">
+                                    <Typography 
+                                        variant="h6" 
+                                        color="primary" 
+                                        fontWeight="bold"
+                                        sx={{ fontSize: { xs: '1rem', md: '1.25rem' } }}
+                                    >
                                         {formatPrice(book.finalPrice || book.price)}
                                     </Typography>
                                 </CardContent>

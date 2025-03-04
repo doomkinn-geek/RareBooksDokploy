@@ -1,5 +1,5 @@
 ﻿// src/components/BookDetail.jsx
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
     getBookById,
@@ -9,23 +9,7 @@ import {
     API_URL,
     getAuthHeaders
 } from '../api';
-import { 
-    Card, 
-    CardContent, 
-    Typography, 
-    Box, 
-    Button, 
-    Container, 
-    Paper, 
-    Grid, 
-    Divider, 
-    Chip, 
-    CircularProgress, 
-    Alert,
-    useMediaQuery,
-    useTheme,
-    IconButton
-} from '@mui/material';
+import { Card, CardContent, Typography, Box, Button, Container, Paper, Grid, Divider, Chip, CircularProgress, Alert } from '@mui/material';
 import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
 import DOMPurify from 'dompurify';
@@ -34,8 +18,6 @@ import Cookies from 'js-cookie';
 const BookDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
     const [book, setBook] = useState(null);
     const [bookImages, setBookImages] = useState([]);
@@ -311,272 +293,334 @@ const BookDetail = () => {
         }
     };
 
-    // Обновленный рендеринг для десктопной и мобильной версии
+    // Рендеринг содержимого компонента
     return (
-        <Container maxWidth="lg" className={isMobile ? "book-detail-container mobile-container" : "book-detail-container"}>
-            {loadingBook ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-                    <CircularProgress />
-                </Box>
-            ) : error ? (
-                <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
-            ) : book ? (
+        <Container maxWidth="lg" sx={{ py: 4 }}>
+            {error ? (
+                <Alert severity="error" sx={{ mb: 3 }}>
+                    {error}
+                </Alert>
+            ) : (
                 <>
-                    <Button 
-                        variant="outlined" 
-                        onClick={() => navigate(-1)} 
-                        sx={{ mb: 2, mt: 2 }}
-                    >
-                        Назад
-                    </Button>
-                    
-                    <Card sx={{ mb: 4 }} className="book-detail-card">
-                        <CardContent>
-                            <Grid container spacing={isMobile ? 2 : 4}>
-                                {/* Блок с изображениями */}
-                                <Grid item xs={12} md={5}>
-                                    {loadingImages ? (
-                                        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
-                                            <CircularProgress />
-                                        </Box>
-                                    ) : bookImages.length > 0 ? (
-                                        <Box className="book-images-container">
-                                            <Box 
-                                                className="main-image-container"
-                                                sx={{ 
-                                                    height: isMobile ? '200px' : '300px',
-                                                    display: 'flex',
-                                                    justifyContent: 'center',
-                                                    mb: 2
-                                                }}
-                                            >
-                                                <img 
-                                                    src={bookImages[selectedImageIndex]?.imageUrl} 
-                                                    alt={`${book.title} - изображение ${selectedImageIndex + 1}`}
+                    {/* Основная информация о книге */}
+                    {loadingBook ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+                            <CircularProgress />
+                        </Box>
+                    ) : book ? (
+                        <>
+                            <Box sx={{ mb: 4, display: 'flex', alignItems: 'center' }}>
+                                <Button 
+                                    onClick={() => navigate(-1)} 
+                                    variant="outlined" 
+                                    sx={{ mr: 2, borderRadius: '8px' }}
+                                >
+                                    Назад
+                                </Button>
+                                <Typography variant="h4" component="h1" fontWeight="bold">
+                                    Информация о книге
+                                </Typography>
+                            </Box>
+
+                            <Paper elevation={2} sx={{ p: 3, borderRadius: '12px', mb: 4 }}>
+                                <Grid container spacing={4}>
+                                    {/* Галерея изображений */}
+                                    <Grid item xs={12} md={6}>
+                                        {/* Основное изображение */}
+                                        <Box
+                                            sx={{ 
+                                                height: 400, 
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                bgcolor: '#f5f5f5',
+                                                borderRadius: '8px',
+                                                mb: 2,
+                                                overflow: 'hidden',
+                                                position: 'relative'
+                                            }}
+                                        >
+                                            {loadingImages && bookImages.length === 0 ? (
+                                                <CircularProgress />
+                                            ) : bookImages.length > 0 && bookImages[selectedImageIndex] ? (
+                                                <img
+                                                    src={bookImages[selectedImageIndex].imageUrl}
+                                                    alt={book.title || 'Изображение книги'}
                                                     style={{ 
+                                                        maxWidth: '100%', 
                                                         maxHeight: '100%', 
-                                                        maxWidth: '100%',
                                                         objectFit: 'contain',
                                                         cursor: 'pointer'
                                                     }}
                                                     onClick={() => setOpen(true)}
                                                 />
-                                            </Box>
-                                            
-                                            <Box className="thumbnail-container">
-                                                {bookImages.map((img, index) => (
-                                                    <Box 
-                                                        key={index}
-                                                        className={`thumbnail ${selectedImageIndex === index ? 'active' : ''}`}
-                                                        onClick={() => setSelectedImageIndex(index)}
-                                                        sx={{
-                                                            width: isMobile ? '60px' : '80px',
-                                                            height: isMobile ? '60px' : '80px',
-                                                            border: selectedImageIndex === index ? '2px solid #E72B3D' : '1px solid #ddd',
-                                                            overflow: 'hidden',
-                                                            display: 'inline-flex',
-                                                            justifyContent: 'center',
-                                                            alignItems: 'center',
-                                                            marginRight: '8px',
-                                                            borderRadius: '4px',
-                                                            cursor: 'pointer'
-                                                        }}
-                                                    >
-                                                        <img 
-                                                            src={img.imageUrl} 
-                                                            alt={`Миниатюра ${index + 1}`}
-                                                            style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }}
-                                                        />
-                                                    </Box>
-                                                ))}
-                                            </Box>
+                                            ) : (
+                                                <Typography variant="body1" color="text.secondary">
+                                                    Изображение отсутствует
+                                                </Typography>
+                                            )}
                                         </Box>
-                                    ) : (
-                                        <Box sx={{ 
-                                            height: isMobile ? '200px' : '300px', 
-                                            display: 'flex', 
-                                            justifyContent: 'center', 
-                                            alignItems: 'center',
-                                            backgroundColor: '#f5f5f5'
-                                        }}>
-                                            <Typography variant="body1" color="textSecondary">
-                                                Изображения отсутствуют
+                                        
+                                        {/* Миниатюры - отображаем по мере загрузки */}
+                                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', minHeight: 70 }}>
+                                            {bookImages.length > 1 && bookImages.map((image, index) => (
+                                                <Box
+                                                    key={index}
+                                                    sx={{
+                                                        width: 70,
+                                                        height: 70,
+                                                        borderRadius: '8px',
+                                                        overflow: 'hidden',
+                                                        cursor: 'pointer',
+                                                        border: index === selectedImageIndex ? '2px solid var(--primary-color)' : '2px solid transparent',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                    onClick={() => setSelectedImageIndex(index)}
+                                                >
+                                                    <img
+                                                        src={image.thumbnailUrl || image.imageUrl}
+                                                        alt={`${book.title || 'Книга'} - миниатюра ${index + 1}`}
+                                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                    />
+                                                </Box>
+                                            ))}
+                                            {loadingImages && bookImages.length > 0 && (
+                                                <Box
+                                                    sx={{
+                                                        width: 70,
+                                                        height: 70,
+                                                        borderRadius: '8px',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        backgroundColor: '#f5f5f5'
+                                                    }}
+                                                >
+                                                    <CircularProgress size={30} />
+                                                </Box>
+                                            )}
+                                        </Box>
+                                    </Grid>
+                                    
+                                    {/* Информация о книге */}
+                                    <Grid item xs={12} md={6}>
+                                        <Typography variant="h4" gutterBottom fontWeight="bold">
+                                            {book.title || 'Без названия'}
+                                        </Typography>
+                                        
+                                        {book.author && (
+                                            <Typography variant="subtitle1" color="text.secondary" gutterBottom>
+                                                {book.author}
+                                            </Typography>
+                                        )}
+                                        
+                                        <Box sx={{ mb: 3, mt: 2 }}>
+                                            {book.year && (
+                                                <Chip 
+                                                    label={`${book.year || 'Н/Д'} год`} 
+                                                    sx={{ mr: 1, mb: 1 }} 
+                                                    variant="outlined"
+                                                />
+                                            )}
+                                            {book.sellerName && (
+                                                <Chip 
+                                                    label={`Продавец: ${book.sellerName}`} 
+                                                    color="primary" 
+                                                    sx={{ mr: 1, mb: 1 }} 
+                                                    component={Link}
+                                                    to={`/searchBySeller/${book.sellerName}`}
+                                                    clickable
+                                                />
+                                            )}
+                                            {book.type && (
+                                                <Chip 
+                                                    label={book.type} 
+                                                    color="secondary" 
+                                                    sx={{ mr: 1, mb: 1 }}
+                                                />
+                                            )}
+                                        </Box>
+                                        
+                                        <Divider sx={{ my: 2 }} />
+                                        
+                                        <Box sx={{ mb: 3 }}>
+                                            <Typography variant="h6" gutterBottom>
+                                                Цена
+                                            </Typography>
+                                            <Typography variant="h3" color="primary" fontWeight="bold">
+                                                {formatPrice(book.finalPrice)}
+                                            </Typography>
+                                            <Typography variant="body2" color="text.secondary">
+                                                Дата продажи: {formatDate(book.endDate)}
                                             </Typography>
                                         </Box>
-                                    )}
+                                        
+                                        {book.description && (
+                                            <Box sx={{ mb: 3 }}>
+                                                <Typography variant="h6" gutterBottom>
+                                                    Описание
+                                                </Typography>
+                                                <Typography variant="body1" 
+                                                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(book.description) }} 
+                                                />
+                                            </Box>
+                                        )}
+                                    </Grid>
                                 </Grid>
-                                
-                                {/* Информация о книге */}
-                                <Grid item xs={12} md={7} className="book-detail-content">
-                                    <Typography variant={isMobile ? "h5" : "h4"} component="h1" gutterBottom sx={{ fontWeight: 'bold' }}>
-                                        {book.title}
-                                    </Typography>
-                                    
-                                    <Typography variant="h6" color="error" sx={{ mb: 2, fontWeight: 'bold' }}>
-                                        {book.price?.toLocaleString('ru-RU')} ₽
-                                    </Typography>
-                                    
-                                    <Box sx={{ mb: 2 }}>
-                                        <Grid container spacing={1}>
-                                            <Grid item xs={isMobile ? 4 : 3}>
-                                                <Typography variant="body2" color="textSecondary">
-                                                    Автор:
-                                                </Typography>
-                                            </Grid>
-                                            <Grid item xs={isMobile ? 8 : 9}>
-                                                <Typography variant="body2">
-                                                    {book.author || 'Не указан'}
-                                                </Typography>
-                                            </Grid>
-                                        </Grid>
+                            </Paper>
+                            
+                            {/* Блок для истории цен и графика */}
+                            <Grid container spacing={4}>
+                                <Grid item xs={12} md={12}>
+                                    <Paper elevation={2} sx={{ p: 3, borderRadius: '12px', mb: 4 }}>
+                                        <Typography variant="h5" gutterBottom fontWeight="bold">
+                                            История цен
+                                        </Typography>
                                         
-                                        <Grid container spacing={1}>
-                                            <Grid item xs={isMobile ? 4 : 3}>
-                                                <Typography variant="body2" color="textSecondary">
-                                                    Издательство:
+                                        {loadingPriceHistory ? (
+                                            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+                                                <CircularProgress />
+                                            </Box>
+                                        ) : priceHistory && (priceHistory.PricePoints || priceHistory.pricePoints) && 
+                                           ((priceHistory.PricePoints && priceHistory.PricePoints.length > 0) || 
+                                            (priceHistory.pricePoints && priceHistory.pricePoints.length > 0)) ? (
+                                            <div>
+                                                <Typography variant="body2" color="text.secondary" gutterBottom>
+                                                    Средняя цена: {formatPrice(priceHistory.AveragePrice || priceHistory.averagePrice)}
                                                 </Typography>
-                                            </Grid>
-                                            <Grid item xs={isMobile ? 8 : 9}>
-                                                <Typography variant="body2">
-                                                    {book.publisher || 'Не указано'}
+                                                
+                                                {(priceHistory.KeywordsUsed || priceHistory.keywordsUsed) && 
+                                                 ((priceHistory.KeywordsUsed && priceHistory.KeywordsUsed.length > 0) || 
+                                                  (priceHistory.keywordsUsed && priceHistory.keywordsUsed.length > 0)) && (
+                                                    <Box sx={{ mb: 2 }}>
+                                                        <Typography variant="body2" color="text.secondary">
+                                                            Ключевые слова для поиска: 
+                                                        </Typography>
+                                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                                                            {(priceHistory.KeywordsUsed || priceHistory.keywordsUsed || []).map((keyword, idx) => (
+                                                                <Chip 
+                                                                    key={idx} 
+                                                                    label={keyword} 
+                                                                    size="small" 
+                                                                    color="primary" 
+                                                                    variant="outlined"
+                                                                />
+                                                            ))}
+                                                        </Box>
+                                                    </Box>
+                                                )}
+                                                
+                                                <Grid container spacing={2} sx={{ mt: 2 }}>
+                                                    {(priceHistory.PricePoints || priceHistory.pricePoints || []).map((point, index) => (
+                                                        <Grid item xs={12} sm={6} md={4} key={index}>
+                                                            <Card 
+                                                                elevation={1} 
+                                                                sx={{ 
+                                                                    height: '100%', 
+                                                                    borderRadius: '8px',
+                                                                    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                                                                    '&:hover': {
+                                                                        transform: 'translateY(-4px)',
+                                                                        boxShadow: '0 8px 24px rgba(0,0,0,0.12)'
+                                                                    },
+                                                                    cursor: (point.BookId || point.bookId) ? 'pointer' : 'default'
+                                                                }}
+                                                                onClick={() => {
+                                                                    const pointId = point.BookId || point.bookId;
+                                                                    const bookId = book?.id || book?.Id;
+                                                                    if (pointId && pointId !== bookId) {
+                                                                        navigate(`/books/${pointId}`);
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <Box 
+                                                                    sx={{ 
+                                                                        height: 180, 
+                                                                        bgcolor: '#f5f5f5',
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'center',
+                                                                        overflow: 'hidden'
+                                                                    }}
+                                                                >
+                                                                    {(point.FirstImageName || point.firstImageName) ? (
+                                                                        <img
+                                                                            src={getSafeImageUrl(point.FirstImageName || point.firstImageName, point.BookId || point.bookId)}
+                                                                            alt={(point.Title || point.title) || (priceHistory.Title || priceHistory.title) || 'Книга'}
+                                                                            style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }}
+                                                                            onError={(e) => {
+                                                                                // При ошибке загрузки отключаем повторные попытки
+                                                                                e.target.onerror = null;
+                                                                                e.target.src = '/placeholder-book.png';
+                                                                            }}
+                                                                        />
+                                                                    ) : (
+                                                                        <Typography variant="body2" color="text.secondary">
+                                                                            Изображение недоступно
+                                                                        </Typography>
+                                                                    )}
+                                                                </Box>
+                                                                <CardContent>
+                                                                    <Typography variant="h6" component="h3" gutterBottom>
+                                                                        {(point.Title || point.title) || (priceHistory.Title || priceHistory.title) || 'Книга'}
+                                                                    </Typography>
+                                                                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                                                                        Дата продажи: {formatDate(point.Date || point.date)}
+                                                                    </Typography>
+                                                                    <Typography variant="h5" color="primary" fontWeight="bold">
+                                                                        {formatPrice(point.Price || point.price)}
+                                                                    </Typography>
+                                                                    <Typography variant="body2" color="text.secondary">
+                                                                        {point.Source || point.source}
+                                                                    </Typography>
+                                                                </CardContent>
+                                                            </Card>
+                                                        </Grid>
+                                                    ))}
+                                                </Grid>
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+                                                    История цен недоступна для этой книги
                                                 </Typography>
-                                            </Grid>
-                                        </Grid>
-                                        
-                                        <Grid container spacing={1}>
-                                            <Grid item xs={isMobile ? 4 : 3}>
-                                                <Typography variant="body2" color="textSecondary">
-                                                    Год издания:
-                                                </Typography>
-                                            </Grid>
-                                            <Grid item xs={isMobile ? 8 : 9}>
-                                                <Typography variant="body2">
-                                                    {book.yearPublished || 'Не указан'}
-                                                </Typography>
-                                            </Grid>
-                                        </Grid>
-                                        
-                                        <Grid container spacing={1}>
-                                            <Grid item xs={isMobile ? 4 : 3}>
-                                                <Typography variant="body2" color="textSecondary">
-                                                    Категория:
-                                                </Typography>
-                                            </Grid>
-                                            <Grid item xs={isMobile ? 8 : 9}>
-                                                <Typography variant="body2">
-                                                    {book.category || 'Не указана'}
-                                                </Typography>
-                                            </Grid>
-                                        </Grid>
-                                    </Box>
-                                    
-                                    <Divider sx={{ my: 2 }} />
-                                    
-                                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
-                                        Описание
-                                    </Typography>
-                                    
-                                    <Typography 
-                                        variant="body2" 
-                                        component="div"
-                                        sx={{ 
-                                            whiteSpace: 'pre-line',
-                                            mb: 2,
-                                            maxHeight: isMobile ? '150px' : '200px',
-                                            overflowY: 'auto'
-                                        }}
-                                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(book.description || 'Описание отсутствует') }}
-                                    />
-                                    
-                                    <Box className="book-detail-actions" sx={{ 
-                                        display: 'flex', 
-                                        gap: 2, 
-                                        mt: 2,
-                                        flexDirection: isMobile ? 'column' : 'row'
-                                    }}>
-                                        <Button 
-                                            variant="contained" 
-                                            color="primary" 
-                                            fullWidth={isMobile}
-                                            onClick={() => window.open(`mailto:?subject=Информация о книге: ${book.title}&body=Посмотрите эту книгу: ${window.location.href}`, '_blank')}
-                                        >
-                                            Поделиться
-                                        </Button>
-                                        <Button 
-                                            variant="outlined" 
-                                            fullWidth={isMobile}
-                                            onClick={() => navigate(`/seller/${book.sellerId}`)}
-                                        >
-                                            Продавец
-                                        </Button>
-                                    </Box>
+                                                
+                                                <Box sx={{ 
+                                                    p: 3, 
+                                                    bgcolor: '#f5f5f5', 
+                                                    borderRadius: '8px',
+                                                    textAlign: 'center'
+                                                }}>
+                                                    <Typography variant="h6" color="text.secondary" gutterBottom>
+                                                        Отладочная информация
+                                                    </Typography>
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        priceHistory доступен: {priceHistory ? 'Да' : 'Нет'}
+                                                    </Typography>
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        PricePoints доступны: {priceHistory?.PricePoints ? 'Да' : 'Нет'} 
+                                                        (размер: {priceHistory?.PricePoints?.length || 0})
+                                                    </Typography>
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        pricePoints доступны: {priceHistory?.pricePoints ? 'Да' : 'Нет'} 
+                                                        (размер: {priceHistory?.pricePoints?.length || 0})
+                                                    </Typography>
+                                                </Box>
+                                            </div>
+                                        )}
+                                    </Paper>
                                 </Grid>
                             </Grid>
-                        </CardContent>
-                    </Card>
-                    
-                    {/* История цен */}
-                    <Card sx={{ mb: 4 }}>
-                        <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                                История цен
-                            </Typography>
-                            
-                            {loadingPriceHistory ? (
-                                <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
-                                    <CircularProgress size={30} />
-                                </Box>
-                            ) : priceHistory.length > 0 ? (
-                                <Box className="table-container">
-                                    <table className="responsive-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Дата</th>
-                                                <th>Цена</th>
-                                                <th>Изменение</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {priceHistory.map((item, index) => {
-                                                const prevPrice = index < priceHistory.length - 1 ? priceHistory[index + 1].price : null;
-                                                const priceDiff = prevPrice !== null ? item.price - prevPrice : 0;
-                                                const percentChange = prevPrice !== null ? (priceDiff / prevPrice) * 100 : 0;
-                                                
-                                                return (
-                                                    <tr key={index}>
-                                                        <td>{new Date(item.date).toLocaleDateString('ru-RU')}</td>
-                                                        <td>{item.price.toLocaleString('ru-RU')} ₽</td>
-                                                        <td>
-                                                            {prevPrice !== null && (
-                                                                <Box sx={{ 
-                                                                    color: priceDiff > 0 ? 'error.main' : priceDiff < 0 ? 'success.main' : 'text.secondary',
-                                                                    display: 'flex',
-                                                                    alignItems: 'center'
-                                                                }}>
-                                                                    {priceDiff > 0 ? '+' : ''}{priceDiff.toLocaleString('ru-RU')} ₽
-                                                                    <Typography variant="caption" sx={{ ml: 1 }}>
-                                                                        ({priceDiff > 0 ? '+' : ''}{percentChange.toFixed(1)}%)
-                                                                    </Typography>
-                                                                </Box>
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </Box>
-                            ) : (
-                                <Typography variant="body2" color="textSecondary">
-                                    История цен отсутствует
-                                </Typography>
-                            )}
-                        </CardContent>
-                    </Card>
+                        </>
+                    ) : (
+                        <Typography variant="h6" color="text.secondary" sx={{ textAlign: 'center', py: 5 }}>
+                            Книга не найдена
+                        </Typography>
+                    )}
                 </>
-            ) : null}
+            )}
             
-            {/* Лайтбокс для просмотра изображений */}
+            {/* Lightbox для просмотра изображений */}
             {bookImages.length > 0 && (
                 <Lightbox
                     open={open}

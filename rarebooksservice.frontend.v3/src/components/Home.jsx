@@ -65,7 +65,7 @@ const Home = () => {
     const navigate = useNavigate();
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-    const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+    const isTablet = useMediaQuery(theme.breakpoints.down('md'));
     
     // Получаем переводы для текущего языка
     const t = translations[language];
@@ -241,10 +241,16 @@ const Home = () => {
         const hasSubscription = user.hasSubscription || false;
 
         return (
-            <Paper elevation={3} sx={{ padding: 2, mb: 4, bgcolor: '#f5f8ff', borderRadius: '12px' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Paper elevation={3} sx={{ padding: { xs: 2, md: 3 }, mb: 4, bgcolor: '#f5f8ff', borderRadius: '12px' }}>
+                <Box sx={{ 
+                    display: 'flex', 
+                    flexDirection: { xs: 'column', sm: 'row' },
+                    justifyContent: 'space-between', 
+                    alignItems: { xs: 'flex-start', sm: 'center' },
+                    gap: { xs: 2, sm: 0 }
+                }}>
                     <Box>
-                        <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, fontSize: { xs: '1rem', md: '1.25rem' } }}>
                             {t.subscriptionStatus}: {hasSubscription ? (
                                 <Chip 
                                     label={t.active} 
@@ -270,13 +276,19 @@ const Home = () => {
                         )}
                     </Box>
                     
-                    <Box sx={{ display: 'flex', gap: 2 }}>
+                    <Box sx={{ 
+                        display: 'flex', 
+                        gap: 2,
+                        flexDirection: { xs: 'column', sm: 'row' },
+                        width: { xs: '100%', sm: 'auto' }
+                    }}>
                         {!hasSubscription && (
                             <Button 
                                 variant="contained" 
                                 color="primary" 
                                 component={Link} 
                                 to="/subscription"
+                                fullWidth={isMobile}
                                 sx={{ 
                                     borderRadius: '8px', 
                                     textTransform: 'none',
@@ -294,6 +306,7 @@ const Home = () => {
                                 color="secondary" 
                                 component={Link} 
                                 to="/admin"
+                                fullWidth={isMobile}
                                 sx={{ 
                                     borderRadius: '8px', 
                                     textTransform: 'none',
@@ -308,6 +321,7 @@ const Home = () => {
                             variant="outlined" 
                             color="error" 
                             onClick={handleLogout}
+                            fullWidth={isMobile}
                             sx={{ 
                                 borderRadius: '8px', 
                                 textTransform: 'none',
@@ -491,102 +505,120 @@ const Home = () => {
     };
 
     const renderHeroSection = () => (
-        <Box 
-            className="hero-section" 
-            sx={{ 
-                textAlign: 'center', 
-                padding: isMobile ? '40px 16px' : '80px 32px',
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                color: 'white',
-                position: 'relative',
-                '&::before': {
-                    content: '""',
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                    zIndex: 1
-                }
-            }}
-        >
-            <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 2 }}>
-                <Typography 
-                    variant={isMobile ? "h4" : "h2"} 
-                    className="hero-title fade-in" 
-                    gutterBottom
-                    sx={{ 
-                        fontWeight: 'bold',
-                        mb: isMobile ? 2 : 4
-                    }}
-                >
-                    {t.mainTitle}
-                </Typography>
-                
-                <Typography 
-                    variant={isMobile ? "body1" : "h5"} 
-                    className="hero-subtitle slide-up" 
-                    gutterBottom
-                    sx={{ 
-                        mb: isMobile ? 3 : 5,
-                        maxWidth: '800px',
-                        mx: 'auto'
-                    }}
-                >
-                    {t.mainSubtitle}
-                </Typography>
-                
-                <Box 
-                    className="search-container"
-                    sx={{ 
-                        display: 'flex', 
-                        justifyContent: 'center',
-                        flexDirection: isMobile ? 'column' : 'row',
-                        gap: 2,
-                        maxWidth: '800px',
-                        mx: 'auto'
-                    }}
-                >
-                    <TextField
-                        placeholder={t.searchPlaceholder}
-                        variant="outlined"
-                        fullWidth
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        InputProps={{
-                            startAdornment: (
-                                <InputAdornment position="start">
-                                    <SearchIcon />
-                                </InputAdornment>
-                            ),
-                            sx: { 
-                                backgroundColor: 'white',
-                                borderRadius: 1
-                            }
-                        }}
-                    />
-                    <Button 
-                        variant="contained" 
-                        color="primary" 
-                        size={isMobile ? "medium" : "large"}
-                        sx={{ 
-                            minWidth: isMobile ? '100%' : '150px',
-                            height: isMobile ? '48px' : '56px'
-                        }}
-                        onClick={handleTitleSearch}
-                    >
-                        {t.search}
-                    </Button>
-                </Box>
+        <Box sx={{ 
+            backgroundImage: 'linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.7)), url(https://images.unsplash.com/photo-1507842217343-583bb7270b66?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80)',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            color: 'white',
+            py: { xs: 6, sm: 8, md: 10 },
+            mb: 5,
+            borderRadius: 2
+        }}>
+            <Container maxWidth="xl">
+                <Grid container spacing={4}>
+                    <Grid item xs={12} md={8}>
+                        <Typography 
+                            variant="h2" 
+                            component="h1" 
+                            sx={{ 
+                                fontWeight: 'bold',
+                                mb: 2,
+                                fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' }
+                            }}
+                        >
+                            {t.mainTitle}
+                        </Typography>
+                        
+                        <Typography 
+                            variant="h5" 
+                            sx={{ 
+                                mb: 4,
+                                fontWeight: 400,
+                                fontSize: { xs: '1rem', sm: '1.2rem', md: '1.5rem' }
+                            }}
+                        >
+                            {t.mainSubtitle}
+                        </Typography>
+                        
+                        <Button 
+                            variant="contained" 
+                            size={isMobile ? "medium" : "large"}
+                            component={Link}
+                            to="/categories"
+                            startIcon={<AssessmentIcon />}
+                            endIcon={<ArrowForwardIcon />}
+                            sx={{ 
+                                px: { xs: 2, sm: 3, md: 4 },
+                                py: { xs: 1, sm: 1.2, md: 1.5 },
+                                borderRadius: '8px',
+                                textTransform: 'none',
+                                fontSize: { xs: '0.9rem', sm: '1rem', md: '1.1rem' }
+                            }}
+                        >
+                            {t.startEvaluation}
+                        </Button>
+                    </Grid>
+                    
+                    <Grid item xs={12} md={4} sx={{ mt: { xs: 4, md: 0 } }}>
+                        <Paper sx={{ p: 3, borderRadius: 2, bgcolor: 'rgba(255, 255, 255, 0.95)' }}>
+                            <Typography variant="h6" color="primary.main" fontWeight="bold" mb={2}>
+                                {t.titleSearch}
+                            </Typography>
+                            
+                            <TextField
+                                fullWidth
+                                variant="outlined"
+                                placeholder={t.bookTitle}
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                onKeyPress={(e) => {
+                                    if (e.key === 'Enter' && title.trim()) {
+                                        navigate(`/searchByTitle/${title}`);
+                                    }
+                                }}
+                                sx={{ mb: 2 }}
+                                InputProps={{
+                                    endAdornment: (
+                                        <InputAdornment position="end">
+                                            <IconButton 
+                                                edge="end" 
+                                                onClick={() => {
+                                                    if (title.trim()) navigate(`/searchByTitle/${title}`);
+                                                }}
+                                            >
+                                                <SearchIcon />
+                                            </IconButton>
+                                        </InputAdornment>
+                                    ),
+                                }}
+                            />
+                            
+                            <FormControlLabel
+                                control={
+                                    <Checkbox 
+                                        checked={exactPhraseTitle} 
+                                        onChange={(e) => setExactPhraseTitle(e.target.checked)}
+                                        size="small"
+                                    />
+                                }
+                                label={t.exactMatch}
+                            />
+                        </Paper>
+                    </Grid>
+                </Grid>
             </Container>
         </Box>
     );
 
     const renderAdditionalSearch = () => (
         <Box sx={{ mt: 4, mb: 6 }}>
-            <Typography variant="h4" component="h2" fontWeight="bold" mb={4}>
+            <Typography 
+                variant="h4" 
+                component="h2" 
+                fontWeight="bold" 
+                mb={4}
+                sx={{ fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2rem' } }}
+            >
                 {t.advancedSearch}
             </Typography>
             
@@ -600,7 +632,7 @@ const Home = () => {
                         >
                             <Box sx={{ display: 'flex', alignItems: 'center' }}>
                                 <DescriptionIcon sx={{ mr: 1 }} />
-                                <Typography variant="h6">{t.descriptionSearch}</Typography>
+                                <Typography variant="h6" sx={{ fontSize: { xs: '1rem', md: '1.25rem' } }}>{t.descriptionSearch}</Typography>
                             </Box>
                         </AccordionSummary>
                         <AccordionDetails>
@@ -737,8 +769,13 @@ const Home = () => {
 
     // Добавляем информационный блок о сервисе оценки
     const renderAntiqueBooksValuationInfo = () => (
-        <Paper elevation={3} sx={{ p: 4, borderRadius: '12px', mb: 5, bgcolor: '#f8f9fa' }}>
-            <Typography variant="h5" fontWeight="bold" gutterBottom>
+        <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, borderRadius: '12px', mb: 5, bgcolor: '#f8f9fa' }}>
+            <Typography 
+                variant="h5" 
+                fontWeight="bold" 
+                gutterBottom
+                sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem', md: '1.75rem' } }}
+            >
                 <MenuBookIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
                 {t.howItWorks}
             </Typography>
@@ -748,10 +785,10 @@ const Home = () => {
             </Typography>
             
             <Grid container spacing={3}>
-                <Grid item xs={12} md={4}>
+                <Grid item xs={12} sm={6} md={4}>
                     <Box sx={{ textAlign: 'center', p: 2 }}>
                         <SearchIcon fontSize="large" color="primary" />
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: '1rem', md: '1.25rem' } }}>
                             {t.findAnalogs}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
@@ -760,10 +797,10 @@ const Home = () => {
                     </Box>
                 </Grid>
                 
-                <Grid item xs={12} md={4}>
+                <Grid item xs={12} sm={6} md={4}>
                     <Box sx={{ textAlign: 'center', p: 2 }}>
                         <AssessmentIcon fontSize="large" color="primary" />
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: '1rem', md: '1.25rem' } }}>
                             {t.dataAnalysis}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
@@ -772,10 +809,10 @@ const Home = () => {
                     </Box>
                 </Grid>
                 
-                <Grid item xs={12} md={4}>
+                <Grid item xs={12} sm={6} md={4} sx={{ mx: { xs: 'auto', sm: 'unset' } }}>
                     <Box sx={{ textAlign: 'center', p: 2 }}>
                         <PriceChangeIcon fontSize="large" color="primary" />
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: '1rem', md: '1.25rem' } }}>
                             {t.getEstimate}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
@@ -798,7 +835,7 @@ const Home = () => {
 
     // Основной UI компонент
     return (
-        <Box className="home-container">
+        <Container maxWidth="xl" sx={{ pb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
             {renderHeroSection()}
 
             {!apiConnected && (
@@ -873,7 +910,7 @@ const Home = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
-        </Box>
+        </Container>
     );
 };
 

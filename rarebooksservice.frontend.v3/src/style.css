@@ -13,12 +13,13 @@ body {
     flex-direction: column;
     height: 100vh; /* ������ ������� ��� 100% ������ */
     line-height: 1.5;
+    -webkit-text-size-adjust: 100%; /* Предотвращает автоматическое увеличение текста на iOS */
 }
 
 /* ,    */
 .container {
-    padding: 20px; /* ������� �������� (��� ��������) */
-    box-sizing: border-box; /* ����� padding ���������� � width */
+    padding: 20px; /*   ( ) */
+    box-sizing: border-box; /*  padding  width */
     width: 100%;
     max-width: 1200px;
     margin: 0 auto;
@@ -1043,5 +1044,72 @@ body {
 
 .slide-up {
   animation: slideUp 0.5s ease-out;
+}
+
+/* Новые стили для мобильной адаптации - добавляем после существующего кода */
+/* Общие улучшения для мобильных устройств */
+@media (max-width: 600px) {
+    /* Глобальные настройки для лучшей читаемости на мобильных */
+    html {
+        font-size: 14px; /* Уменьшаем базовый размер шрифта для мобильных */
+    }
+    
+    /* Улучшения для компонента Home */
+    .MuiContainer-root {
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+    }
+    
+    /* Улучшаем отображение карточек в сетке на мобильных */
+    .MuiCard-root {
+        margin-bottom: 16px;
+    }
+    
+    /* Увеличиваем область нажатия для улучшения UX на сенсорных экранах */
+    button, 
+    .MuiButtonBase-root,
+    .MuiChip-root,
+    .MuiIconButton-root {
+        min-height: 44px; /* Рекомендуемый минимум для области касания */
+    }
+    
+    /* Уменьшаем отступы в аккордеонах на мобильных */
+    .MuiAccordionSummary-content {
+        margin: 10px 0 !important;
+    }
+    
+    .MuiAccordionDetails-root {
+        padding: 8px 16px 16px !important;
+    }
+    
+    /* Оптимизация изображений для мобильных устройств */
+    img {
+        max-width: 100%;
+        height: auto;
+    }
+    
+    /* Улучшение отображения диалоговых окон */
+    .MuiDialog-paper {
+        margin: 16px !important;
+        width: calc(100% - 32px) !important;
+        max-height: calc(100% - 32px) !important;
+    }
+}
+
+/* Оптимизации для планшетов */
+@media (min-width: 601px) and (max-width: 960px) {
+    .MuiContainer-root {
+        padding-left: 16px !important;
+        padding-right: 16px !important;
+    }
+}
+
+/* Улучшаем отображение на мобильных в портретной ориентации */
+@media (max-width: 600px) and (orientation: portrait) {
+    /* Настраиваем высоту компонентов для лучшего отображения */ 
+    .hero-section {
+        height: auto !important;
+        min-height: 60vh !important;
+    }
 }
 
