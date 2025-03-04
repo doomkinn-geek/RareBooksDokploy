@@ -1,5 +1,5 @@
 ﻿// src/App.jsx
-import React, { useContext } from 'react';
+import React, { useContext, useState } from 'react';
 import { BrowserRouter as Router, Route, Routes, Link, useNavigate } from 'react-router-dom';
 import { 
     AppBar, 
@@ -15,7 +15,14 @@ import {
     FormControl,
     InputLabel,
     ThemeProvider,
-    CssBaseline
+    CssBaseline,
+    Drawer,
+    List,
+    ListItem,
+    ListItemText,
+    ListItemIcon,
+    useMediaQuery,
+    Divider
 } from '@mui/material';
 import { UserProvider, UserContext } from './context/UserContext';
 import { LanguageProvider, LanguageContext } from './context/LanguageContext';
@@ -40,6 +47,7 @@ import Contacts from './components/Contacts';
 import Categories from './components/Categories';
 import theme from './theme';
 import './style.css';
+import './mobile.css';
 import Cookies from 'js-cookie';
 
 // Иконки
@@ -47,155 +55,291 @@ import SearchIcon from '@mui/icons-material/Search';
 import PersonIcon from '@mui/icons-material/Person';
 import AccessibilityNewIcon from '@mui/icons-material/AccessibilityNew';
 import LanguageIcon from '@mui/icons-material/Language';
+import MenuIcon from '@mui/icons-material/Menu';
+import HomeIcon from '@mui/icons-material/Home';
+import BookIcon from '@mui/icons-material/Book';
+import CategoryIcon from '@mui/icons-material/Category';
+import LoginIcon from '@mui/icons-material/Login';
+import LogoutIcon from '@mui/icons-material/Logout';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import ContactsIcon from '@mui/icons-material/Contacts';
+import DescriptionIcon from '@mui/icons-material/Description';
 
 const NavBar = () => {
-    const { user, setUser } = useContext(UserContext);
+    const { user, setUser, logoutUser } = useContext(UserContext);
     const { language, setLanguage } = useContext(LanguageContext);
-    const navigate = useNavigate();
-    const [anchorEl, setAnchorEl] = React.useState(null);
-    
-    // Получаем переводы для текущего языка
     const t = translations[language];
-
+    const navigate = useNavigate();
+    
+    // Состояние для отслеживания открытия меню пользователя
+    const [anchorEl, setAnchorEl] = useState(null);
+    
+    // Состояние для отслеживания открытия мобильного меню
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    
+    // Определяем, используется ли мобильное устройство
+    const isMobile = useMediaQuery('(max-width:768px)');
+    
     const handleMenu = (event) => {
         setAnchorEl(event.currentTarget);
     };
-
+    
     const handleClose = () => {
         setAnchorEl(null);
     };
-
-    // Реализация функции выхода из системы
+    
     const handleLogout = () => {
-        // Удаляем токен из cookie
+        // Удаляем куки
         Cookies.remove('token');
-        // Очищаем информацию о пользователе в контексте
-        setUser(null);
+        Cookies.remove('isAdmin');
+        Cookies.remove('userId');
+        
+        // Очищаем состояние пользователя
+        logoutUser();
+        
         // Закрываем меню
         handleClose();
-        // Перенаправляем на главную страницу
+        
+        // Переходим на главную
         navigate('/');
     };
-
+    
     const handleLogin = () => {
         navigate('/login');
-        handleClose();
     };
-
+    
     const handleChangeLanguage = (event) => {
         setLanguage(event.target.value);
     };
+    
+    const toggleMobileMenu = () => {
+        setMobileMenuOpen(!mobileMenuOpen);
+    };
+    
+    const handleMobileMenuItemClick = (path) => {
+        setMobileMenuOpen(false);
+        navigate(path);
+    };
+
+    // Компонент мобильного меню
+    const mobileMenu = (
+        <Drawer 
+            anchor="left" 
+            open={mobileMenuOpen} 
+            onClose={toggleMobileMenu}
+            classes={{
+                paper: 'mobile-menu-paper'
+            }}
+        >
+            <Box
+                sx={{ width: 250 }}
+                role="presentation"
+            >
+                <List>
+                    <ListItem className="mobile-menu-item" onClick={() => handleMobileMenuItemClick('/')}>
+                        <ListItemIcon>
+                            <HomeIcon />
+                        </ListItemIcon>
+                        <ListItemText primary={t.home} />
+                    </ListItem>
+                    <ListItem className="mobile-menu-item" onClick={() => handleMobileMenuItemClick('/categories')}>
+                        <ListItemIcon>
+                            <CategoryIcon />
+                        </ListItemIcon>
+                        <ListItemText primary={t.categories} />
+                    </ListItem>
+                    <Divider />
+                    
+                    {!user ? (
+                        <>
+                            <ListItem className="mobile-menu-item" onClick={() => handleMobileMenuItemClick('/login')}>
+                                <ListItemIcon>
+                                    <LoginIcon />
+                                </ListItemIcon>
+                                <ListItemText primary={t.login} />
+                            </ListItem>
+                            <ListItem className="mobile-menu-item" onClick={() => handleMobileMenuItemClick('/register')}>
+                                <ListItemIcon>
+                                    <PersonAddIcon />
+                                </ListItemIcon>
+                                <ListItemText primary={t.register} />
+                            </ListItem>
+                        </>
+                    ) : (
+                        <>
+                            <ListItem className="mobile-menu-item" onClick={() => handleMobileMenuItemClick(`/user/${user.id}`)}>
+                                <ListItemIcon>
+                                    <PersonIcon />
+                                </ListItemIcon>
+                                <ListItemText primary={t.profile} />
+                            </ListItem>
+                            {user.isAdmin && (
+                                <ListItem className="mobile-menu-item" onClick={() => handleMobileMenuItemClick('/admin')}>
+                                    <ListItemIcon>
+                                        <AdminPanelSettingsIcon />
+                                    </ListItemIcon>
+                                    <ListItemText primary={t.adminPanel} />
+                                </ListItem>
+                            )}
+                            <ListItem className="mobile-menu-item" onClick={handleLogout}>
+                                <ListItemIcon>
+                                    <LogoutIcon />
+                                </ListItemIcon>
+                                <ListItemText primary={t.logout} />
+                            </ListItem>
+                        </>
+                    )}
+                    
+                    <Divider />
+                    <ListItem className="mobile-menu-item" onClick={() => handleMobileMenuItemClick('/terms')}>
+                        <ListItemIcon>
+                            <DescriptionIcon />
+                        </ListItemIcon>
+                        <ListItemText primary={t.terms} />
+                    </ListItem>
+                    <ListItem className="mobile-menu-item" onClick={() => handleMobileMenuItemClick('/contacts')}>
+                        <ListItemIcon>
+                            <ContactsIcon />
+                        </ListItemIcon>
+                        <ListItemText primary={t.contacts} />
+                    </ListItem>
+                </List>
+            </Box>
+        </Drawer>
+    );
 
     return (
-        <AppBar position="static" elevation={0} sx={{ backgroundColor: 'white', color: 'black' }}>
-            <Container maxWidth="xl">
-                <Toolbar sx={{ justifyContent: 'space-between' }}>
-                    {/* Левая часть */}
-                    <Box sx={{ display: 'flex' }}>
-                        <Button color="inherit" component={Link} to="/">
-                            {language === 'RU' ? 'Обзор книг' : 'Books Overview'}
+        <AppBar position="static" color="primary">
+            <Container maxWidth="lg" className="header-nav-container">
+                <Toolbar disableGutters>
+                    {isMobile && (
+                        <IconButton
+                            edge="start"
+                            color="inherit"
+                            aria-label="menu"
+                            onClick={toggleMobileMenu}
+                            sx={{ mr: 2 }}
+                            className="nav-icon-button"
+                        >
+                            <MenuIcon />
+                        </IconButton>
+                    )}
+                    
+                    <Typography
+                        variant="h6"
+                        noWrap
+                        component={Link}
+                        to="/"
+                        sx={{
+                            mr: 2,
+                            fontWeight: 700,
+                            color: 'white',
+                            textDecoration: 'none',
+                            flexGrow: isMobile ? 1 : 0
+                        }}
+                    >
+                        {t.siteTitle}
+                    </Typography>
+                    
+                    <Box sx={{ flexGrow: 1, display: { xs: 'none', md: 'flex' } }} className="nav-menu-desktop">
+                        <Button
+                            color="inherit"
+                            component={Link}
+                            to="/"
+                            sx={{ my: 2, display: 'block' }}
+                        >
+                            {t.home}
                         </Button>
-                        <Button color="inherit" component={Link} to="/categories">
-                            {language === 'RU' ? 'Каталог' : 'Catalog'}
+                        <Button
+                            color="inherit"
+                            component={Link}
+                            to="/categories"
+                            sx={{ my: 2, display: 'block' }}
+                        >
+                            {t.categories}
                         </Button>
                     </Box>
-
-                    {/* Центральная часть - логотип */}
-                    <Typography
-                        variant="h4"
-                        component={Link}
-                        to="/"
-                        sx={{
-                            display: { xs: 'none', md: 'flex' },
-                            fontWeight: 'bold',
-                            color: 'primary.main',
-                            textDecoration: 'none',
-                            letterSpacing: '1px'
-                        }}
-                    >
-                        {language === 'RU' ? 'Редкие Книги' : 'Rare Books'}
-                    </Typography>
-
-                    {/* Мобильный логотип */}
-                    <Typography
-                        variant="h5"
-                        component={Link}
-                        to="/"
-                        sx={{
-                            display: { xs: 'flex', md: 'none' },
-                            fontWeight: 'bold',
-                            color: 'primary.main',
-                            textDecoration: 'none',
-                        }}
-                    >
-                        {language === 'RU' ? 'РК' : 'RB'}
-                    </Typography>
-
-                    {/* Правая часть */}
+                    
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <IconButton
-                            color="inherit"
-                            aria-label="account"
-                            aria-controls="menu-appbar"
-                            aria-haspopup="true"
-                            onClick={handleMenu}
-                        >
-                            <PersonIcon />
-                        </IconButton>
-                        <Menu
-                            id="menu-appbar"
-                            anchorEl={anchorEl}
-                            anchorOrigin={{
-                                vertical: 'bottom',
-                                horizontal: 'right',
-                            }}
-                            keepMounted
-                            transformOrigin={{
-                                vertical: 'top',
-                                horizontal: 'right',
-                            }}
-                            open={Boolean(anchorEl)}
-                            onClose={handleClose}
-                        >
-                            {user ? (
-                                [
-                                    <MenuItem key="profile" onClick={() => { navigate(`/user/${user.id}`); handleClose(); }}>
-                                        {language === 'RU' ? 'Мой профиль' : 'My Profile'}
-                                    </MenuItem>,
-                                    <MenuItem key="subscription" onClick={() => { navigate('/subscription'); handleClose(); }}>
-                                        {language === 'RU' ? 'Подписка' : 'Subscription'}
-                                    </MenuItem>,
-                                    user.role && user.role.toLowerCase() === 'admin' && (
-                                        <MenuItem key="admin" onClick={() => { navigate('/admin'); handleClose(); }}>
-                                            {t.adminPanel}
-                                        </MenuItem>
-                                    ),
-                                    <MenuItem key="logout" onClick={handleLogout}>
-                                        {t.logout}
-                                    </MenuItem>
-                                ]
-                            ) : (
-                                <MenuItem onClick={handleLogin}>{t.login}</MenuItem>
-                            )}
-                        </Menu>
-                        <FormControl size="small" sx={{ ml: 1, minWidth: 70 }}>
+                        <FormControl variant="outlined" size="small" sx={{ m: 1, minWidth: 120, backgroundColor: 'white', borderRadius: 1 }}>
                             <Select
                                 value={language}
                                 onChange={handleChangeLanguage}
-                                sx={{ 
-                                    height: '36px',
-                                    '.MuiOutlinedInput-notchedOutline': { 
-                                        border: 'none' 
-                                    }
+                                inputProps={{
+                                    name: 'language',
+                                    id: 'language-select',
                                 }}
                             >
-                                <MenuItem value="RU">RU</MenuItem>
-                                <MenuItem value="EN">EN</MenuItem>
+                                <MenuItem value="ru">Русский</MenuItem>
+                                <MenuItem value="en">English</MenuItem>
                             </Select>
                         </FormControl>
+                        
+                        {!isMobile && !user && (
+                            <Box>
+                                <Button color="inherit" onClick={handleLogin}>
+                                    {t.login}
+                                </Button>
+                                <Button 
+                                    color="inherit" 
+                                    component={Link} 
+                                    to="/register" 
+                                    sx={{ 
+                                        backgroundColor: 'rgba(255,255,255,0.1)',
+                                        '&:hover': {
+                                            backgroundColor: 'rgba(255,255,255,0.2)'
+                                        }
+                                    }}
+                                >
+                                    {t.register}
+                                </Button>
+                            </Box>
+                        )}
+                        
+                        {!isMobile && user && (
+                            <Box>
+                                <IconButton
+                                    size="large"
+                                    aria-label="account of current user"
+                                    aria-controls="menu-appbar"
+                                    aria-haspopup="true"
+                                    onClick={handleMenu}
+                                    color="inherit"
+                                >
+                                    <PersonIcon />
+                                </IconButton>
+                                <Menu
+                                    id="menu-appbar"
+                                    anchorEl={anchorEl}
+                                    anchorOrigin={{
+                                        vertical: 'bottom',
+                                        horizontal: 'right',
+                                    }}
+                                    keepMounted
+                                    transformOrigin={{
+                                        vertical: 'top',
+                                        horizontal: 'right',
+                                    }}
+                                    open={Boolean(anchorEl)}
+                                    onClose={handleClose}
+                                >
+                                    <MenuItem component={Link} to={`/user/${user.id}`} onClick={handleClose}>
+                                        {t.profile}
+                                    </MenuItem>
+                                    {user.isAdmin && (
+                                        <MenuItem component={Link} to="/admin" onClick={handleClose}>
+                                            {t.adminPanel}
+                                        </MenuItem>
+                                    )}
+                                    <MenuItem onClick={handleLogout}>{t.logout}</MenuItem>
+                                </Menu>
+                            </Box>
+                        )}
                     </Box>
                 </Toolbar>
             </Container>
+            {mobileMenu}
         </AppBar>
     );
 };

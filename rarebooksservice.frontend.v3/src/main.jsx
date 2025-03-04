@@ -1,23 +1,41 @@
 //src/main.jsx
 import React from 'react';
-import ReactDOM from 'react-dom/client'; // импорт из 'react-dom/client'
+import ReactDOM from 'react-dom/client'; // пїЅпїЅпїЅпїЅпїЅпїЅ  'react-dom/client'
 import App from './App.jsx';
 import './index.css';
 import './style.css';
 import { UserProvider } from './context/UserContext';
+import { ThemeProvider } from '@mui/material/styles';
+import theme from './theme';
+import { BrowserRouter } from 'react-router-dom';
+import { LanguageProvider } from './context/LanguageContext';
+import CssBaseline from '@mui/material/CssBaseline';
 
-// Найдите контейнер, в который вы хотите рендерить приложение
+//  ,     
 const container = document.getElementById('root');
 
-// Создайте корень
+// пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
 const root = ReactDOM.createRoot(container);
 
-// Теперь используйте root.render для рендеринга приложения
+// Р”РѕР±Р°РІР»СЏРµРј С‚РµРі viewport РґР»СЏ РїСЂР°РІРёР»СЊРЅРѕРіРѕ РјР°СЃС€С‚Р°Р±РёСЂРѕРІР°РЅРёСЏ РЅР° РјРѕР±РёР»СЊРЅС‹С… СѓСЃС‚СЂРѕР№СЃС‚РІР°С…
+const viewport = document.createElement('meta');
+viewport.name = 'viewport';
+viewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+document.head.appendChild(viewport);
+
+//   root.render   
 root.render(
-    //из-за StrictMode методы поиска контроллера вызывались дважды.
-    //<React.StrictMode>
-        <UserProvider>
-            <App />
-        </UserProvider>
-    //</React.StrictMode>
+    //- StrictMode     .
+    <React.StrictMode>
+        <ThemeProvider theme={theme}>
+            <CssBaseline />
+            <BrowserRouter>
+                <LanguageProvider>
+                    <UserProvider>
+                        <App />
+                    </UserProvider>
+                </LanguageProvider>
+            </BrowserRouter>
+        </ThemeProvider>
+    </React.StrictMode>
 );

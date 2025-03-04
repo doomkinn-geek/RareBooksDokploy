@@ -656,51 +656,59 @@ namespace RareBooksService.WebApi.Controllers
             try 
             {
                 // Получаем проданные книги за последние три месяца с ценой больше 5000
-                var recentSales = await _booksRepository.GetQueryable()
+                var eligibleBooks = await _booksRepository.GetQueryable()
                     .Where(b => b.SoldQuantity > 0) // Статус "продано"
                     .Where(b => b.FinalPrice.HasValue && b.FinalPrice.Value >= 5000) // Цена больше или равна 5000
                     .Where(b => b.EndDate >= threeMonthsAgo) // Только продажи за последние три месяца
-                    .OrderByDescending(b => b.EndDate) // Сначала самые свежие
-                    .Take(limit)
-                    .Select(b => new RecentSaleDto
+                    .ToListAsync();
+                
+                List<RecentSaleDto> recentSales = new List<RecentSaleDto>();
+                
+                if (eligibleBooks.Any())
+                {
+                    // Перемешиваем список книг для случайного выбора
+                    var random = new Random();
+                    var randomizedBooks = eligibleBooks.OrderBy(x => random.Next()).Take(limit).ToList();
+                    
+                    recentSales = randomizedBooks.Select(b => new RecentSaleDto
                     {
                         BookId = b.Id,
                         Title = b.Title,
                         FinalPrice = b.FinalPrice.Value,
                         ThumbnailUrl = b.ThumbnailUrls.FirstOrDefault() ?? "",
-                        ImageUrl = b.ImageUrls.FirstOrDefault() ?? "", // Добавляем первое полноформатное изображение
+                        ImageUrl = b.ImageUrls.FirstOrDefault() ?? "",
                         SaleDate = b.EndDate,
                         SellerName = b.SellerName,
                         Category = b.Category.Name
-                    })
-                    .ToListAsync();
-                
-                if (!recentSales.Any())
-                {
-                    // Если не нашли продажи по заданным критериям, попробуем найти без ограничения по дате
-                    recentSales = await _booksRepository.GetQueryable()
-                        .Where(b => b.Status == 2) // Статус "продано"
-                        .Where(b => b.FinalPrice.HasValue && b.FinalPrice.Value >= 5000) // Цена больше или равна 5000
-                        .OrderByDescending(b => b.EndDate) // Сначала самые свежие
-                        .Take(limit)
-                        .Select(b => new RecentSaleDto
-                        {
-                            BookId = b.Id,
-                            Title = b.Title,
-                            FinalPrice = b.FinalPrice.Value,
-                            ThumbnailUrl = b.ThumbnailUrls.FirstOrDefault() ?? "",
-                            ImageUrl = b.ImageUrls.FirstOrDefault() ?? "",
-                            SaleDate = b.EndDate,
-                            SellerName = b.SellerName,
-                            Category = b.Category.Name
-                        })
-                        .ToListAsync();
-
-                    _logger.LogWarning($"Найдено {recentSales.Count} продаж после снятия ограничения по дате");
+                    }).ToList();
+                    
+                    _logger.LogInformation($"Найдено и случайно выбрано {recentSales.Count} продаж за последние три месяца с ценой >= 5000");
                 }
                 else
                 {
-                    _logger.LogInformation($"Найдено {recentSales.Count} продаж за последние три месяца с ценой >= 5000");
+                    // Если не нашли продажи по заданным критериям, попробуем найти без ограничения по дате
+                    var allEligibleBooks = await _booksRepository.GetQueryable()
+                        .Where(b => b.Status == 2) // Статус "продано"
+                        .Where(b => b.FinalPrice.HasValue && b.FinalPrice.Value >= 5000) // Цена больше или равна 5000
+                        .ToListAsync();
+                        
+                    // Перемешиваем список книг для случайного выбора
+                    var random = new Random();
+                    var randomizedBooks = allEligibleBooks.OrderBy(x => random.Next()).Take(limit).ToList();
+                    
+                    recentSales = randomizedBooks.Select(b => new RecentSaleDto
+                    {
+                        BookId = b.Id,
+                        Title = b.Title,
+                        FinalPrice = b.FinalPrice.Value,
+                        ThumbnailUrl = b.ThumbnailUrls.FirstOrDefault() ?? "",
+                        ImageUrl = b.ImageUrls.FirstOrDefault() ?? "",
+                        SaleDate = b.EndDate,
+                        SellerName = b.SellerName,
+                        Category = b.Category.Name
+                    }).ToList();
+
+                    _logger.LogWarning($"Найдено и случайно выбрано {recentSales.Count} продаж после снятия ограничения по дате");
                 }
                 
                 return Ok(recentSales);
