@@ -100,11 +100,25 @@ const Categories = () => {
                         
                         <Divider sx={{ width: '100%', mb: 2 }} />
                         
-                        <Typography variant="body2" color="text.secondary">
-                            {language === 'RU' 
-                                ? `Книг в категории: ${category.bookCount || '0'}` 
-                                : `Books in category: ${category.bookCount || '0'}`}
-                        </Typography>
+                        <Box 
+                            sx={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                bgcolor: 'primary.light', 
+                                color: 'primary.contrastText',
+                                py: 0.8,
+                                px: 1.5,
+                                borderRadius: '20px',
+                                fontWeight: 'bold'
+                            }}
+                        >
+                            <BookIcon sx={{ mr: 1, fontSize: 20 }} />
+                            <Typography variant="subtitle1" fontWeight="bold">
+                                {language === 'RU' 
+                                    ? `${category.bookCount || '0'} книг` 
+                                    : `${category.bookCount || '0'} books`}
+                            </Typography>
+                        </Box>
                         
                         {category.description && (
                             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>

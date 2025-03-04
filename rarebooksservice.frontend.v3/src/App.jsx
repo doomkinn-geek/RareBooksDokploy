@@ -323,18 +323,24 @@ const NavBar = () => {
                             </>
                         )}
                         
-                        {/* Иконка профиля для мобильных устройств (отображается только переключатель языка) */}
+                        {/* Переключатель языка для мобильных устройств */}
                         {isMobile && (
                             <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                <IconButton
-                                    color="inherit"
-                                    aria-label="account"
-                                    aria-controls="menu-appbar"
-                                    aria-haspopup="true"
-                                    onClick={handleMenu}
-                                >
-                                    <PersonIcon />
-                                </IconButton>
+                                <FormControl size="small" sx={{ minWidth: 70 }}>
+                                    <Select
+                                        value={language}
+                                        onChange={handleChangeLanguage}
+                                        sx={{ 
+                                            height: '36px',
+                                            '.MuiOutlinedInput-notchedOutline': { 
+                                                border: 'none' 
+                                            }
+                                        }}
+                                    >
+                                        <MenuItem value="RU">RU</MenuItem>
+                                        <MenuItem value="EN">EN</MenuItem>
+                                    </Select>
+                                </FormControl>
                             </Box>
                         )}
                     </Box>

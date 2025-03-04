@@ -244,18 +244,35 @@ const UserDetailsPage = () => {
     }
 
     return (
-        <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Container maxWidth="lg" sx={{ py: { xs: 2, md: 4 } }}>
             {/* Заголовок и кнопка назад */}
-            <Box sx={{ mb: 4, display: 'flex', alignItems: 'center' }}>
+            <Box sx={{ 
+                mb: { xs: 2, md: 4 }, 
+                display: 'flex', 
+                flexDirection: { xs: 'column', sm: 'row' }, 
+                alignItems: { xs: 'flex-start', sm: 'center' },
+                gap: { xs: 2, sm: 0 }
+            }}>
                 <Button 
                     onClick={() => navigate(-1)} 
                     variant="outlined" 
                     startIcon={<ArrowBackIcon />} 
-                    sx={{ mr: 2, borderRadius: '8px' }}
+                    sx={{ 
+                        mr: { xs: 0, sm: 2 }, 
+                        borderRadius: '8px',
+                        alignSelf: { xs: 'flex-start', sm: 'auto' }
+                    }}
                 >
                     Назад
                 </Button>
-                <Typography variant="h4" component="h1" fontWeight="bold">
+                <Typography 
+                    variant="h4" 
+                    component="h1" 
+                    fontWeight="bold"
+                    sx={{ 
+                        fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' }
+                    }}
+                >
                     {currentUser && userId === currentUser.id ? 'Мой профиль' : 'Информация о пользователе'}
                 </Typography>
             </Box>
@@ -264,28 +281,38 @@ const UserDetailsPage = () => {
             <Paper 
                 elevation={2} 
                 sx={{ 
-                    p: 3, 
-                    mb: 4, 
+                    p: { xs: 2, md: 3 }, 
+                    mb: { xs: 3, md: 4 }, 
                     borderRadius: '12px', 
                     bgcolor: '#f5f8ff' 
                 }}
             >
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                    <PersonIcon sx={{ fontSize: 36, color: 'primary.main', mr: 2 }} />
-                    <Typography variant="h5" fontWeight="bold">
+                <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    mb: { xs: 2, md: 3 }
+                }}>
+                    <PersonIcon sx={{ fontSize: { xs: 28, md: 36 }, color: 'primary.main', mr: 2 }} />
+                    <Typography 
+                        variant="h5" 
+                        fontWeight="bold"
+                        sx={{ fontSize: { xs: '1.25rem', md: '1.5rem' } }}
+                    >
                         Данные пользователя
                     </Typography>
                 </Box>
 
-                <Grid container spacing={3}>
+                <Grid container spacing={2}>
                     <Grid item xs={12} md={6}>
                         <Box sx={{ mb: 2 }}>
                             <Typography variant="subtitle1" color="text.secondary" gutterBottom>
                                 E-mail:
                             </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                <EmailIcon sx={{ mr: 1, color: 'text.secondary' }} />
-                                <Typography variant="h6">{user.email}</Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', wordBreak: 'break-word' }}>
+                                <EmailIcon sx={{ mr: 1, color: 'text.secondary', flexShrink: 0 }} />
+                                <Typography variant="h6" sx={{ fontSize: { xs: '1rem', md: '1.25rem' } }}>
+                                    {user.email}
+                                </Typography>
                             </Box>
                         </Box>
 
@@ -294,7 +321,7 @@ const UserDetailsPage = () => {
                                 Роль:
                             </Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                <BadgeIcon sx={{ mr: 1, color: 'text.secondary' }} />
+                                <BadgeIcon sx={{ mr: 1, color: 'text.secondary', flexShrink: 0 }} />
                                 <Chip 
                                     label={user.role || 'Пользователь'} 
                                     color={user.role === 'Admin' ? 'primary' : 'default'} 
@@ -311,7 +338,11 @@ const UserDetailsPage = () => {
                                 Подписка:
                             </Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                <VerifiedUserIcon sx={{ mr: 1, color: user.hasSubscription ? 'success.main' : 'error.main' }} />
+                                <VerifiedUserIcon sx={{ 
+                                    mr: 1, 
+                                    color: user.hasSubscription ? 'success.main' : 'error.main',
+                                    flexShrink: 0
+                                }} />
                                 <Chip 
                                     label={user.hasSubscription ? 'Активна' : 'Отсутствует'} 
                                     color={user.hasSubscription ? 'success' : 'error'} 
@@ -345,23 +376,57 @@ const UserDetailsPage = () => {
             </Paper>
 
             {/* История поиска */}
-            <Paper elevation={2} sx={{ p: 3, borderRadius: '12px' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                    <HistoryIcon sx={{ fontSize: 36, color: 'primary.main', mr: 2 }} />
-                    <Typography variant="h5" fontWeight="bold">
+            <Paper 
+                elevation={2} 
+                sx={{ 
+                    p: { xs: 2, md: 3 }, 
+                    borderRadius: '12px' 
+                }}
+            >
+                <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    mb: { xs: 2, md: 3 } 
+                }}>
+                    <HistoryIcon sx={{ fontSize: { xs: 28, md: 36 }, color: 'primary.main', mr: 2 }} />
+                    <Typography 
+                        variant="h5" 
+                        fontWeight="bold"
+                        sx={{ fontSize: { xs: '1.25rem', md: '1.5rem' } }}
+                    >
                         История поиска
                     </Typography>
                 </Box>
 
                 {searchHistory.length > 0 ? (
                     <>
-                        <Box sx={{ overflow: 'auto' }}>
-                            <Table sx={{ minWidth: 650 }}>
+                        <Box sx={{ 
+                            overflow: 'auto',
+                            '&::-webkit-scrollbar': {
+                                height: '8px',
+                            },
+                            '&::-webkit-scrollbar-thumb': {
+                                backgroundColor: 'rgba(0,0,0,0.2)',
+                                borderRadius: '4px',
+                            },
+                        }}>
+                            <Table sx={{ 
+                                minWidth: { xs: 300, sm: 500, md: 650 }
+                            }}>
                                 <TableHead>
                                     <TableRow>
-                                        <TableCell sx={{ fontWeight: 'bold' }}>Дата</TableCell>
-                                        <TableCell sx={{ fontWeight: 'bold' }}>Запрос</TableCell>
-                                        <TableCell sx={{ fontWeight: 'bold' }}>Тип поиска</TableCell>
+                                        <TableCell sx={{ 
+                                            fontWeight: 'bold',
+                                            padding: { xs: '8px 6px', md: '16px' }
+                                        }}>Дата</TableCell>
+                                        <TableCell sx={{ 
+                                            fontWeight: 'bold',
+                                            padding: { xs: '8px 6px', md: '16px' }
+                                        }}>Запрос</TableCell>
+                                        <TableCell sx={{ 
+                                            fontWeight: 'bold',
+                                            padding: { xs: '8px 6px', md: '16px' }
+                                        }}>Тип поиска</TableCell>
                                     </TableRow>
                                 </TableHead>
                                 <TableBody>
@@ -372,8 +437,18 @@ const UserDetailsPage = () => {
                                             
                                             return (
                                                 <TableRow key={history.id} hover>
-                                                    <TableCell>{formatDate(history.searchDate)}</TableCell>
-                                                    <TableCell>
+                                                    <TableCell sx={{ 
+                                                        padding: { xs: '8px 6px', md: '16px' },
+                                                        whiteSpace: { xs: 'nowrap', md: 'normal' }
+                                                    }}>
+                                                        {formatDate(history.searchDate)}
+                                                    </TableCell>
+                                                    <TableCell sx={{ 
+                                                        padding: { xs: '8px 6px', md: '16px' },
+                                                        maxWidth: { xs: '120px', sm: '200px', md: 'none' },
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis'
+                                                    }}>
                                                         {searchLink ? (
                                                             <Link 
                                                                 to={searchLink}
@@ -384,7 +459,7 @@ const UserDetailsPage = () => {
                                                                     alignItems: 'center'
                                                                 }}
                                                             >
-                                                                <SearchIcon sx={{ mr: 1, fontSize: 18, color: 'primary.main' }} />
+                                                                <SearchIcon sx={{ mr: 1, fontSize: 18, color: 'primary.main', flexShrink: 0 }} />
                                                                 <Box 
                                                                     component="span" 
                                                                     sx={{ 
@@ -393,25 +468,40 @@ const UserDetailsPage = () => {
                                                                             fontWeight: 'bold'
                                                                         },
                                                                         transition: 'all 0.2s',
-                                                                        borderBottom: '1px dotted #1976d2'
+                                                                        borderBottom: '1px dotted #1976d2',
+                                                                        overflow: 'hidden',
+                                                                        textOverflow: 'ellipsis',
+                                                                        whiteSpace: { xs: 'nowrap', md: 'normal' }
                                                                     }}
                                                                 >
                                                                     {history.query}
                                                                 </Box>
                                                             </Link>
                                                         ) : (
-                                                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                                <SearchIcon sx={{ mr: 1, fontSize: 16, color: 'text.secondary' }} />
-                                                                {history.query}
+                                                            <Box sx={{ 
+                                                                display: 'flex', 
+                                                                alignItems: 'center',
+                                                                overflow: 'hidden',
+                                                                textOverflow: 'ellipsis',
+                                                                whiteSpace: { xs: 'nowrap', md: 'normal' }
+                                                            }}>
+                                                                <SearchIcon sx={{ mr: 1, fontSize: 16, color: 'text.secondary', flexShrink: 0 }} />
+                                                                <span>{history.query}</span>
                                                             </Box>
                                                         )}
                                                     </TableCell>
-                                                    <TableCell>
+                                                    <TableCell sx={{ 
+                                                        padding: { xs: '8px 6px', md: '16px' }
+                                                    }}>
                                                         <Chip 
                                                             label={history.searchType} 
                                                             size="small" 
                                                             variant="outlined" 
                                                             color="primary"
+                                                            sx={{
+                                                                height: { xs: '24px', md: '32px' },
+                                                                fontSize: { xs: '0.75rem', md: '0.875rem' }
+                                                            }}
                                                         />
                                                     </TableCell>
                                                 </TableRow>
@@ -428,8 +518,21 @@ const UserDetailsPage = () => {
                             rowsPerPage={rowsPerPage}
                             onRowsPerPageChange={handleChangeRowsPerPage}
                             rowsPerPageOptions={[5, 10, 25]}
-                            labelRowsPerPage="Записей на странице:"
+                            labelRowsPerPage="Записей:"
                             labelDisplayedRows={({ from, to, count }) => `${from}-${to} из ${count}`}
+                            sx={{
+                                '.MuiTablePagination-toolbar': {
+                                    flexWrap: 'wrap',
+                                    justifyContent: { xs: 'center', sm: 'flex-end' },
+                                    padding: { xs: '8px 0', md: '8px' }
+                                },
+                                '.MuiTablePagination-displayedRows': {
+                                    margin: { xs: '8px 0', md: 0 }
+                                },
+                                '.MuiTablePagination-selectLabel': {
+                                    margin: { xs: '8px 0', md: 0 }
+                                }
+                            }}
                         />
                     </>
                 ) : (
