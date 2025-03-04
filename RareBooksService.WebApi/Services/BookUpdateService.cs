@@ -262,6 +262,9 @@ namespace RareBooksService.WebApi.Services
             {
                 // Сбрасываем для нового запуска
                 _cancellationRequested = false;
+                
+                // Сбрасываем индекс текущего шага для следующего запуска
+                _currentStepIndex = 0;
 
                 if (_isPaused)
                 {
@@ -339,8 +342,7 @@ namespace RareBooksService.WebApi.Services
 
                 // Если дошли сюда, значит выполнили все 4 операции
                 _logger.LogInformation("=== Все 4 операции завершены. ===");
-                // Чтобы при новом запуске начали заново
-                _currentStepIndex = _operations.Length;
+                // Не сбрасываем индекс здесь, это будет сделано в начале следующего выполнения ExecuteAsync
             }
             finally
             {
@@ -422,10 +424,15 @@ namespace RareBooksService.WebApi.Services
             _logger.LogInformation("ForceRunNow: сбрасываем цепочку и запускаем все операции с нуля.");
             _cancellationRequested = false;
             _currentStepIndex = 0; // начинаем заново с первой операции
+            
+            // Обновляем время следующего запуска
+            _nextRunTimeUtc = DateTime.UtcNow.AddDays(1);
+            _logger.LogInformation("Следующий плановый запуск запланирован на {NextRunTimeUtc}", _nextRunTimeUtc);
 
             // Запускаем в фоне
             var token = new CancellationToken();
-            _ = RunAllOperationsAsync(token);
+            _currentRunTask = RunAllOperationsAsync(token);
+            _logger.LogInformation("Запуск операций инициирован принудительно");
         }
 
         // ==================================================================

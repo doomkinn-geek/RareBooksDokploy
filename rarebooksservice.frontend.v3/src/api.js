@@ -5,13 +5,13 @@ import Cookies from 'js-cookie';
 export const API_URL = '/api';
 //export const API_URL = 'https://localhost:7042/api';
 
-// œÓÎÛ˜‡ÂÏ ÚÓÍÂÌ ÚÓÎ¸ÍÓ ËÁ cookies
+// ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩ cookies
 export const getAuthHeaders = () => {
     const token = Cookies.get('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-// ¬ÏÂÒÚÓ Cookies.get('token'):
+// ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ Cookies.get('token'):
 /*export const getAuthHeaders = () => {
     const token = localStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
@@ -105,7 +105,7 @@ export const getUserSearchHistory = (userId) =>
 export const updateUserSubscription = async (userId, hasSubscription) => {
     console.log({ hasSubscription });
     try {
-        // œÂÂ‰‡ÂÏ ÔÓÒÚÓ ·ÛÎÂ‚Ó ÁÌ‡˜ÂÌËÂ ·ÂÁ Ó·˙ÂÍÚ‡
+        // ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ
         const response = await axios.post(`${API_URL}/admin/user/${userId}/subscription`, hasSubscription, {
             headers: {
                 ...getAuthHeaders(),
@@ -122,7 +122,7 @@ export const updateUserSubscription = async (userId, hasSubscription) => {
 export const updateUserRole = async (userId, role) => {
     console.log({ role });
     try {
-        // œÂÂ‰‡ÂÏ ÔÓÒÚÓ ÒÚÓÍÛ ÓÎË ·ÂÁ Ó·˙ÂÍÚ‡
+        // ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ
         const response = await axios.post(`${API_URL}/admin/user/${userId}/role`, role, {
             headers: {
                 ...getAuthHeaders(),
@@ -141,7 +141,7 @@ export const getCaptcha = () =>
     });
 
 
-// -------- ƒŒ¡¿¬À≈ÕÕ€≈ ‘”Õ ÷»» --------
+// -------- ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ --------
 export async function getAdminSettings() {
     const response = await axios.get(`${API_URL}/adminsettings`, {
         headers: getAuthHeaders()
@@ -159,10 +159,10 @@ export async function updateAdminSettings(settingsDto) {
     return response.data;
 }
 
-// ------------------- ‘”Õ ÷»» ƒÀﬂ »ÃœŒ–“¿ -------------------
+// ------------------- ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ -------------------
 
 /**
- * »ÌËˆË‡ÎËÁ‡ˆËˇ Á‡‰‡˜Ë ËÏÔÓÚ‡. —Â‚Â ÓÚ‰‡∏Ú importTaskId
+ * ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ. ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩ importTaskId
  */
 export async function initImport(fileSize = null) {
     const headers = getAuthHeaders();
@@ -171,12 +171,12 @@ export async function initImport(fileSize = null) {
         : `${API_URL}/import/init`;
 
     const response = await axios.post(url, null, { headers });
-    return response.data; // { importTaskId }
+    return response.data.importTaskId; // –í–æ–∑–≤—Ä–∞—â–∞–µ–º —Ç–æ–ª—å–∫–æ importTaskId
 }
 
 /**
- * «‡„ÛÁÍ‡ ÍÛÒÍÓ‚ Ù‡ÈÎ‡ (ËÎË ‚ÒÂ„Ó Ù‡ÈÎ‡ ˆÂÎËÍÓÏ) - application/octet-stream
- * œ‡‡ÏÂÚ onUploadProgress ÔÓÁ‚ÓÎˇÂÚ ÓÚÒÎÂÊË‚‡Ú¸ ÔÓ„ÂÒÒ Ì‡ ÍÎËÂÌÚÂ.
+ *    (   ) - application/octet-stream
+ *  onUploadProgress     .
  */
 export async function uploadImportChunk(importTaskId, fileChunk, onUploadProgress) {
     const headers = {
@@ -184,19 +184,18 @@ export async function uploadImportChunk(importTaskId, fileChunk, onUploadProgres
         'Content-Type': 'application/octet-stream'
     };
 
-    // ËÒÔÓÎ¸ÁÛÂÏ axios ‰Îˇ POST
     return await axios.post(
         `${API_URL}/import/upload?importTaskId=${importTaskId}`,
         fileChunk,
         {
             headers,
-            onUploadProgress, // ÓÚÒÎÂÊË‚‡ÂÏ ÔÓ„ÂÒÒ ÓÚÔ‡‚ÍË chunk'‡
+            onUploadProgress
         }
     );
 }
 
 /**
- * œÓÒÎÂ Á‡„ÛÁÍË Ù‡ÈÎ‡ ‚˚Á‚‡Ú¸ Finish, ˜ÚÓ·˚ ÒÂ‚Â Á‡ÔÛÒÚËÎ ËÏÔÓÚ
+ *     Finish,    
  */
 export async function finishImport(importTaskId) {
     const headers = getAuthHeaders();
@@ -206,28 +205,28 @@ export async function finishImport(importTaskId) {
 }
 
 /**
- * «‡ÔÓÒ ÔÓ„ÂÒÒ‡ ËÏÔÓÚÌÓÈ Á‡‰‡˜Ë
+ *    
  */
 export async function getImportProgress(importTaskId) {
     const headers = getAuthHeaders();
     const response = await axios.get(`${API_URL}/import/progress/${importTaskId}`, { headers });
-    return response.data; // { uploadProgress, importProgress, ... }
+    return response.data; // –í–æ–∑–≤—Ä–∞—â–∞–µ–º –≤–µ—Å—å –æ–±—ä–µ–∫—Ç –ø—Ä–æ–≥—Ä–µ—Å—Å–∞
 }
 
 /**
- * ŒÚÏÂÌ‡
+ * 
  */
 export async function cancelImport(importTaskId) {
     const headers = getAuthHeaders();
     await axios.post(`${API_URL}/import/cancel?importTaskId=${importTaskId}`, null, { headers });
 }
 
-// ŒÚÔ‡‚ÎˇÂÚ ÚÂÍÒÚ ÔÂ‰ÎÓÊÂÌËˇ Ì‡ ˝Ì‰ÔÓËÌÚ /api/feedback
+// ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ /api/feedback
 export const sendFeedback = async (text) => {
     return axios.post(
         `${API_URL}/feedback`,
-        { text }, // ÚÂÎÓ Á‡ÔÓÒ‡
-        { headers: getAuthHeaders() } // ‰Îˇ Bearer-ÚÓÍÂÌ‡
+        { text }, // ÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ
+        { headers: getAuthHeaders() } // ÔøΩÔøΩÔøΩ Bearer-ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ
     );
 }
 
@@ -240,4 +239,110 @@ export function createPayment(subscriptionPlanId, autoRenew) {
         { subscriptionPlanId, autoRenew },
         { headers: getAuthHeaders() }
     );
+}
+
+export function subscribeUser(subscriptionPlanId) {
+    return axios.post(`${API_URL}/subscription/subscribe`, 
+        { subscriptionPlanId },
+        { headers: getAuthHeaders() }
+    );
+}
+
+export function cancelSubscription() {
+    return axios.post(`${API_URL}/subscription/cancel`, 
+        {},
+        { headers: getAuthHeaders() }
+    );
+}
+
+export function checkSubscriptionStatus() {
+    return axios.get(`${API_URL}/subscription/check-status`, 
+        { headers: getAuthHeaders() }
+    );
+}
+
+// –§—É–Ω–∫—Ü–∏–∏ –¥–ª—è –æ—Ü–µ–Ω–∫–∏ —Å—Ç–æ–∏–º–æ—Å—Ç–∏ –∞–Ω—Ç–∏–∫–≤–∞—Ä–Ω—ã—Ö –∫–Ω–∏–≥
+export function getPriceStatistics(categoryId = null) {
+    let url = `${API_URL}/books/price-statistics`;
+    if (categoryId) {
+        url += `?categoryId=${categoryId}`;
+    }
+    return axios.get(url, { headers: getAuthHeaders() });
+}
+
+export function getRecentSales(limit = 5) {
+    const url = `${API_URL}/books/recent-sales?limit=${limit}`;
+    const headers = getAuthHeaders();
+    
+    console.log('API getRecentSales - URL:', url);
+    console.log('API getRecentSales - Headers:', headers);
+    
+    return axios.get(url, { headers });
+}
+
+export function getPriceHistory(bookId) {
+    return axios.get(`${API_URL}/books/${bookId}/price-history`, { headers: getAuthHeaders() });
+}
+
+export function getBookValueEstimate(params) {
+    return axios.post(`${API_URL}/books/estimate-value`, params, { headers: getAuthHeaders() });
+}
+
+// ===== –§—É–Ω–∫—Ü–∏–∏ –¥–ª—è —É–ø—Ä–∞–≤–ª–µ–Ω–∏—è –∫–∞—Ç–µ–≥–æ—Ä–∏—è–º–∏ (–æ—á–∏—Å—Ç–∫–∞ –Ω–µ–∂–µ–ª–∞—Ç–µ–ª—å–Ω—ã—Ö –∫–∞—Ç–µ–≥–æ—Ä–∏–π) =====
+export function getAllCategoriesWithBooksCount() {
+    const token = Cookies.get('token');
+    console.log('–í—ã–∑–æ–≤ getAllCategoriesWithBooksCount. –¢–æ–∫–µ–Ω:', token ? '–ü—Ä–∏—Å—É—Ç—Å—Ç–≤—É–µ—Ç' : '–û—Ç—Å—É—Ç—Å—Ç–≤—É–µ—Ç');
+    
+    if (!token) {
+        console.error('–¢–æ–∫–µ–Ω –∞–≤—Ç–æ—Ä–∏–∑–∞—Ü–∏–∏ –æ—Ç—Å—É—Ç—Å—Ç–≤—É–µ—Ç!');
+        return Promise.reject(new Error('–¢–æ–∫–µ–Ω –∞–≤—Ç–æ—Ä–∏–∑–∞—Ü–∏–∏ –æ—Ç—Å—É—Ç—Å—Ç–≤—É–µ—Ç'));
+    }
+    
+    // –ù–µ –ø—ã—Ç–∞–µ–º—Å—è –∞–Ω–∞–ª–∏–∑–∏—Ä–æ–≤–∞—Ç—å —Ç–æ–∫–µ–Ω, –∞ –ø—Ä–æ—Å—Ç–æ –∏—Å–ø–æ–ª—å–∑—É–µ–º –µ–≥–æ –¥–ª—è –∞–≤—Ç–æ—Ä–∏–∑–∞—Ü–∏–∏
+    const headers = { Authorization: `Bearer ${token}` };
+    console.log('–ó–∞–≥–æ–ª–æ–≤–∫–∏ –∑–∞–ø—Ä–æ—Å–∞:', headers);
+    
+    return axios.get(`${API_URL}/CategoryCleanup/categories`, { headers })
+        .catch(error => {
+            console.error('–û—à–∏–±–∫–∞ –∑–∞–ø—Ä–æ—Å–∞ –∫ CategoryCleanup/categories:', error);
+            console.log('–°—Ç–∞—Ç—É—Å –æ—à–∏–±–∫–∏:', error.response?.status);
+            console.log('–î–∞–Ω–Ω—ã–µ –æ—à–∏–±–∫–∏:', error.response?.data);
+            
+            if (error.response?.status === 403) {
+                console.error('–î–æ—Å—Ç—É–ø –∑–∞–ø—Ä–µ—â–µ–Ω. –ü—Ä–æ–≤–µ—Ä—å—Ç–µ –ø—Ä–∞–≤–∞ –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—è.');
+            }
+            
+            throw error;
+        });
+}
+
+export function analyzeCategoriesByNames(categoryNames) {
+    return axios.post(`${API_URL}/CategoryCleanup/analyze`, categoryNames, {
+        headers: {
+            ...getAuthHeaders(),
+            'Content-Type': 'application/json'
+        }
+    });
+}
+
+export function analyzeUnwantedCategories() {
+    return axios.get(`${API_URL}/CategoryCleanup/analyze-unwanted`, {
+        headers: getAuthHeaders()
+    });
+}
+
+export function deleteCategoriesByNames(categoryNames) {
+    return axios.delete(`${API_URL}/CategoryCleanup/byNames`, {
+        headers: {
+            ...getAuthHeaders(),
+            'Content-Type': 'application/json'
+        },
+        data: categoryNames
+    });
+}
+
+export function deleteUnwantedCategories() {
+    return axios.delete(`${API_URL}/CategoryCleanup/unwanted`, {
+        headers: getAuthHeaders()
+    });
 }

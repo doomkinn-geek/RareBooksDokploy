@@ -147,6 +147,99 @@ namespace RareBooksService.WebApi.Controllers
             var subsDto = await _subscriptionService.GetUserSubscriptionsAsync(user.Id);
             return Ok(subsDto);
         }
+
+        /// <summary>
+        /// Проверить статус подписки текущего пользователя и вернуть подробную информацию
+        /// </summary>
+        [HttpGet("check-status")]
+        public async Task<IActionResult> CheckSubscriptionStatus()
+        {
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized("Не удалось определить идентификатор пользователя");
+
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null)
+                    return Unauthorized("Пользователь в базе не найден");
+
+                // Получаем активную подписку пользователя
+                var activeSubscription = await _subscriptionService.GetActiveSubscriptionForUser(userId);
+                
+                // Проверяем, соответствует ли флаг hasSubscription наличию активной подписки
+                bool hasActiveSubscription = activeSubscription != null;
+                bool flagMatchesSubscription = user.HasSubscription == hasActiveSubscription;
+                
+                // Если флаг не соответствует фактическому наличию подписки, исправляем
+                if (!flagMatchesSubscription)
+                {
+                    _logger.LogWarning("Несоответствие флага HasSubscription для пользователя {UserId}: " +
+                                      "HasSubscription={HasSubscription}, но активная подписка {HasActiveSubscription}", 
+                                      userId, user.HasSubscription, hasActiveSubscription ? "существует" : "отсутствует");
+                    
+                    // Обновляем флаг пользователя
+                    user.HasSubscription = hasActiveSubscription;
+                    await _userManager.UpdateAsync(user);
+                    
+                    _logger.LogInformation("Флаг HasSubscription для пользователя {UserId} исправлен на {Value}", 
+                                          userId, hasActiveSubscription);
+                }
+                
+                // Переменная для отслеживания изменений в подписке
+                bool subscriptionUpdated = false;
+                
+                // Проверяем, есть ли у нас активная подписка, которая требует корректировки
+                if (activeSubscription != null && !activeSubscription.IsActive && activeSubscription.EndDate > DateTime.UtcNow)
+                {
+                    _logger.LogWarning("Найдена подписка для пользователя {UserId} с неактивным статусом, но сроком действия в будущем", userId);
+                    
+                    // Получаем подписку из контекста для обновления
+                    var subscriptionToUpdate = await _context.Subscriptions
+                        .FirstOrDefaultAsync(s => s.Id == activeSubscription.Id);
+                        
+                    if (subscriptionToUpdate != null)
+                    {
+                        // Исправляем флаг IsActive
+                        subscriptionToUpdate.IsActive = true;
+                        await _context.SaveChangesAsync();
+                        
+                        // Отмечаем, что была выполнена коррекция подписки
+                        subscriptionUpdated = true;
+                        
+                        _logger.LogInformation("Статус подписки {SubscriptionId} скорректирован на активный", subscriptionToUpdate.Id);
+                        
+                        // После исправления флага, обновляем данные об активной подписке
+                        activeSubscription = await _subscriptionService.GetActiveSubscriptionForUser(userId);
+                    }
+                }
+                
+                // Формируем ответ с подробной информацией
+                var subscriptionStatus = new
+                {
+                    HasSubscription = user.HasSubscription,
+                    ActiveSubscription = activeSubscription,
+                    Now = DateTime.UtcNow,
+                    FlagCorrected = !flagMatchesSubscription || subscriptionUpdated,
+                    // Добавляем дополнительные данные для диагностики
+                    DiagnosticInfo = new
+                    {
+                        UserId = userId,
+                        HasSubscriptionFlagInUserEntity = user.HasSubscription,
+                        HasActiveSubscriptionInDatabase = hasActiveSubscription,
+                        SubscriptionWasUpdated = subscriptionUpdated,
+                        UserFlagWasUpdated = !flagMatchesSubscription
+                    }
+                };
+                
+                return Ok(subscriptionStatus);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при проверке статуса подписки");
+                return StatusCode(500, "Произошла ошибка при проверке статуса подписки");
+            }
+        }
     }
 
     public class CreatePaymentRequest

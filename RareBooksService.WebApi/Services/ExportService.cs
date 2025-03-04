@@ -259,31 +259,34 @@ namespace RareBooksService.WebApi.Services
                         extendedContext.Categories.AddRange(newCats);
                         await extendedContext.SaveChangesAsync(token);
 
-                        // 7) Построим словарь, который сопоставляет "старый PK" -> "новый PK"
-                        //    Чтобы для каждой категории oldCat.Id узнать newCat.Id
-                        //    Для этого нужно идти «параллельно» по спискам allCategories и newCats,
-                        //    так как мы вставляли их в одинаковом порядке.
-                        var catMap = new Dictionary<int, int>(newCats.Count);
-                        for (int i = 0; i < allCategories.Count; i++)
+                        // 7) Создаем словарь для сопоставления CategoryId (meshok.net) с Id (PK) в новой базе
+                        // Этот словарь сопоставляет meshok.net ID категории (oldCat.CategoryId) с новым PK (newCat.Id)
+                        var categoryIdToPkMap = new Dictionary<int, int>();
+                        foreach (var newCat in newCats)
                         {
-                            int oldId = allCategories[i].Id;    // Старый PK
-                            int newId = newCats[i].Id;         // Новый PK (в SQLite)
-                            catMap[oldId] = newId;
+                            categoryIdToPkMap[newCat.CategoryId] = newCat.Id;
                         }
 
                         // 8) Конвертируем книги чанка под новую модель ExtendedBookInfo
-                        //    и главное — подставляем правильный newCat.Id в поле CategoryId
+                        //    и подставляем правильный newCat.Id в поле CategoryId
                         //    (поскольку BookInfo.CategoryId ссылается на Category.Id)
                         var extendedBooks = new List<ExtendedBookInfo>(booksChunk.Count);
                         foreach (var oldBook in booksChunk)
                         {
                             token.ThrowIfCancellationRequested();
 
-                            // Если в старой базе oldBook.CategoryId указывает на несуществующий id,
-                            // нужно либо пропустить, либо подставить заглушку:
-                            if (!catMap.TryGetValue(oldBook.CategoryId, out int newCatId))
+                            // Сначала найдем категорию в исходной базе, чтобы получить ее CategoryId (meshok.net)
+                            var oldCategory = allCategories.FirstOrDefault(c => c.Id == oldBook.CategoryId);
+                            if (oldCategory == null)
                             {
-                                // Пропустим книгу (или можно newCatId = 0)
+                                _logger.LogWarning($"Книга {oldBook.Id} ссылается на несуществующую категорию с Id={oldBook.CategoryId}");
+                                continue;
+                            }
+
+                            // Теперь найдем соответствующий PK в новой базе по CategoryId (meshok.net)
+                            if (!categoryIdToPkMap.TryGetValue(oldCategory.CategoryId, out int newCatId))
+                            {
+                                _logger.LogWarning($"Не удалось найти соответствующую категорию для meshok.net CategoryId={oldCategory.CategoryId}");
                                 continue;
                             }
 
@@ -315,7 +318,7 @@ namespace RareBooksService.WebApi.Services
                                 ImageArchiveUrl = oldBook.ImageArchiveUrl,
                                 IsLessValuable = oldBook.IsLessValuable,
 
-                                // Самое главное: CategoryId = новый PK
+                                // Устанавливаем CategoryId как PK новой категории
                                 CategoryId = newCatId
                             };
 

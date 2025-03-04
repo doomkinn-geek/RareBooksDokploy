@@ -33,5 +33,7 @@ namespace RareBooksService.Common.Models.Dto
 
         public List<string> ImageUrls { get; set; } = new List<string>();
         public List<string> ThumbnailUrls { get; set; } = new List<string>();
+        public string NormalizedTitle { get; set; }
+        public int CategoryId { get; set; }
     }
 }

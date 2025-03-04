@@ -1,25 +1,23 @@
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
   color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color: #333333;
+  background-color: #ffffff;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
 body {
@@ -31,7 +29,7 @@ body {
 }
 
 h1 {
-  font-size: 3.2em;
+  font-size: 2.5em;
   line-height: 1.1;
 }
 
@@ -42,27 +40,68 @@ button {
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
+  background-color: #E72B3D;
+  color: white;
   cursor: pointer;
-  transition: border-color 0.25s;
+  transition: border-color 0.25s, background-color 0.25s;
 }
+
 button:hover {
-  border-color: #646cff;
+  background-color: #c4242f;
 }
+
 button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+a {
+  text-decoration: none;
+  color: #E72B3D;
+}
+
+a:hover {
+  text-decoration: underline;
+  color: #c4242f;
+}
+
+/* Адаптивность для небольших экранов */
+@media (max-width: 768px) {
+  h1 {
+    font-size: 1.8em;
   }
-  a:hover {
-    color: #747bff;
-  }
+  
   button {
-    background-color: #f9f9f9;
+    padding: 0.5em 1em;
+    font-size: 0.9em;
   }
+}
+
+/* Дополнительные стили для таблиц в стиле скриншота */
+.info-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.info-table th, 
+.info-table td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.info-table th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+}
+
+.info-table tr:last-child td {
+  border-bottom: none;
+}
+
+.info-table tr:hover {
+  background-color: #f8f9fa;
 }

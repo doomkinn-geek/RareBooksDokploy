@@ -289,13 +289,18 @@ namespace RareBooksService.Data
 
         public async Task<List<CategoryDto>> GetCategoriesAsync()
         {
-            return await _context.Categories
+            // Получаем категории с количеством книг, у которых SoldQuantity > 0
+            var categoriesWithBooks = await _context.Categories
                 .Select(c => new CategoryDto
                 {
                     Id = c.Id,
-                    Name = c.Name
+                    Name = c.Name,
+                    BookCount = c.Books.Count(b => b.SoldQuantity > 0)
                 })
+                .Where(c => c.BookCount > 0)  // Фильтруем только категории с проданными книгами
                 .ToListAsync();
+
+            return categoriesWithBooks;
         }
 
         public async Task<CategoryDto> GetCategoryByIdAsync(int id)
@@ -305,7 +310,8 @@ namespace RareBooksService.Data
                 .Select(c => new CategoryDto
                 {
                     Id = c.Id,
-                    Name = c.Name
+                    Name = c.Name,
+                    BookCount = c.Books.Count(b => b.SoldQuantity > 0)
                 })
                 .FirstOrDefaultAsync();
         }
@@ -329,6 +335,32 @@ namespace RareBooksService.Data
             {
                 // Логирование или обработка ошибки по необходимости
             }
+        }
+
+        /// <summary>
+        /// Возвращает IQueryable с книгами для построения сложных запросов
+        /// </summary>
+        public IQueryable<RegularBaseBook> GetQueryable()
+        {
+            return _context.BooksInfo.Include(b => b.Category);
+        }
+
+        /// <summary>
+        /// Возвращает сущность книги по идентификатору
+        /// </summary>
+        public async Task<RegularBaseBook> GetBookEntityByIdAsync(int id)
+        {
+            return await _context.BooksInfo
+                .Include(b => b.Category)
+                .FirstOrDefaultAsync(b => b.Id == id);
+        }
+
+        /// <summary>
+        /// Возвращает сущность категории по идентификатору
+        /// </summary>
+        public async Task<RegularBaseCategory> GetCategoryEntityByIdAsync(int id)
+        {
+            return await _context.Categories.FindAsync(id);
         }
     }
 }

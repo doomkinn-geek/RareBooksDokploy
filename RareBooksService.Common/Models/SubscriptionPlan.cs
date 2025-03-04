@@ -1,4 +1,4 @@
-﻿namespace RareBooksService.Common.Models
+namespace RareBooksService.Common.Models
 {
     /// <summary>
     /// План подписки (тариф). Например, "500 руб/мес, 50 запросов" и т.д.
@@ -11,6 +11,11 @@
         /// Название плана, отображается пользователю.
         /// </summary>
         public string Name { get; set; }
+
+        /// <summary>
+        /// Описание плана, отображается пользователю.
+        /// </summary>
+        public string Description { get; set; }
 
         /// <summary>
         /// Стоимость плана (в рублях) в месяц.

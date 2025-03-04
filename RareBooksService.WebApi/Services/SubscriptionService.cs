@@ -259,14 +259,36 @@ namespace RareBooksService.WebApi.Services
         public async Task<SubscriptionDto?> GetActiveSubscriptionForUser(string userId)
         {
             var now = DateTime.UtcNow;
+            
+            // 1. Сначала ищем подписку, которая отмечена как активная и не истекла
             var sub = await _db.Subscriptions
                 .Include(s => s.SubscriptionPlan)
                 .Where(s => s.UserId == userId && s.IsActive && s.EndDate > now)
                 .OrderByDescending(s => s.StartDate)
                 .FirstOrDefaultAsync();
-            if (sub == null) return null;
-
-            return ToDto(sub, sub.SubscriptionPlan);
+            
+            if (sub != null) 
+                return ToDto(sub, sub.SubscriptionPlan);
+            
+            // 2. Если активной подписки не найдено, проверяем есть ли подписка, 
+            // которая не истекла, но помечена как неактивная (возможный баг)
+            var potentialActiveSub = await _db.Subscriptions
+                .Include(s => s.SubscriptionPlan)
+                .Where(s => s.UserId == userId && !s.IsActive && s.EndDate > now)
+                .OrderByDescending(s => s.StartDate)
+                .FirstOrDefaultAsync();
+            
+            // Не возвращаем такую подписку как активную, но логируем для диагностики
+            if (potentialActiveSub != null)
+            {
+                _logger.LogWarning(
+                    "GetActiveSubscriptionForUser: Найдена подписка с действительным сроком, но статусом IsActive=false. " +
+                    "UserId: {UserId}, SubscriptionId: {SubId}, EndDate: {EndDate}", 
+                    userId, potentialActiveSub.Id, potentialActiveSub.EndDate
+                );
+            }
+            
+            return null;
         }
 
         public async Task<bool> AssignSubscriptionPlanAsync(string userId, int planId, bool autoRenew)
@@ -371,6 +393,7 @@ namespace RareBooksService.WebApi.Services
             {
                 Id = plan.Id,
                 Name = plan.Name,
+                Description = plan.Description,
                 Price = plan.Price,
                 MonthlyRequestLimit = plan.MonthlyRequestLimit,
                 IsActive = plan.IsActive

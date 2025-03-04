@@ -1,0 +1,242 @@
+import React, { useState, useEffect } from 'react';
+import {
+    Box, Typography, Paper, Button,
+    LinearProgress, Alert, CircularProgress
+} from '@mui/material';
+import axios from 'axios';
+import { API_URL } from '../../api';
+import Cookies from 'js-cookie';
+
+const Export = () => {
+    const [exportTaskId, setExportTaskId] = useState(null);
+    const [progress, setProgress] = useState(null);
+    const [exportError, setExportError] = useState(null);
+    const [exportInternalError, setExportInternalError] = useState(null);
+    const [isExporting, setIsExporting] = useState(false);
+    const [intervalId, setIntervalId] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+
+    // Проверяем текущий статус экспорта при загрузке компонента
+    useEffect(() => {
+        checkExportStatus();
+    }, []);
+
+    // Очищаем интервал при размонтировании компонента
+    useEffect(() => {
+        return () => {
+            if (intervalId) {
+                clearInterval(intervalId);
+            }
+        };
+    }, [intervalId]);
+
+    // Проверка, есть ли активный экспорт
+    const checkExportStatus = async () => {
+        setIsLoading(true);
+        try {
+            const token = Cookies.get('token');
+            const response = await axios.get(
+                `${API_URL}/admin/export-status`,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            
+            if (response.data && response.data.isExporting) {
+                setIsExporting(true);
+                setExportTaskId(response.data.taskId);
+                setProgress(response.data.progress);
+                startPollingProgress(response.data.taskId);
+            }
+        } catch (err) {
+            console.error('Error checking export status:', err);
+            // Если не удалось получить статус, предполагаем, что экспорт не выполняется
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const startExport = async () => {
+        setExportError(null);
+        setExportInternalError(null);
+        setProgress(null);
+        setIsExporting(true);
+
+        try {
+            const token = Cookies.get('token');
+            const response = await axios.post(
+                `${API_URL}/admin/export-data`,
+                null,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            
+            const taskId = response.data.taskId;
+            setExportTaskId(taskId);
+            startPollingProgress(taskId);
+        } catch (err) {
+            console.error('Error starting export:', err);
+            setExportInternalError('Ошибка при запуске экспорта: ' + (err.response?.data || err.message));
+            setIsExporting(false);
+        }
+    };
+
+    const startPollingProgress = (taskId) => {
+        // Остановим предыдущий интервал, если он существует
+        if (intervalId) {
+            clearInterval(intervalId);
+        }
+
+        const newIntervalId = setInterval(async () => {
+            try {
+                if (!taskId) {
+                    console.error('No export task ID available');
+                    clearInterval(newIntervalId);
+                    setIsExporting(false);
+                    return;
+                }
+
+                const token = Cookies.get('token');
+                const response = await axios.get(
+                    `${API_URL}/admin/export-progress/${taskId}`,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+
+                const { progress: currentProgress, isError, errorDetails } = response.data;
+                
+                setProgress(currentProgress);
+                if (isError) {
+                    setExportError(errorDetails || 'Произошла ошибка при экспорте');
+                    clearInterval(newIntervalId);
+                    setIsExporting(false);
+                    return;
+                }
+
+                // Если прогресс 100%, завершаем
+                if (currentProgress === 100) {
+                    clearInterval(newIntervalId);
+                    setIsExporting(false);
+                    downloadExportFile(taskId);
+                }
+            } catch (err) {
+                console.error('Error polling export progress:', err);
+                setExportInternalError('Ошибка при получении прогресса экспорта: ' + (err.response?.data || err.message));
+                clearInterval(newIntervalId);
+                setIsExporting(false);
+            }
+        }, 2000); // Увеличиваем интервал до 2 секунд, чтобы снизить нагрузку
+        
+        setIntervalId(newIntervalId);
+    };
+
+    const downloadExportFile = async (taskId) => {
+        try {
+            const token = Cookies.get('token');
+            const downloadTaskId = taskId || exportTaskId; // Используем переданный taskId или сохраненный
+            
+            if (!downloadTaskId) {
+                setExportInternalError('ID задачи экспорта не найден');
+                return;
+            }
+            
+            const response = await axios.get(
+                `${API_URL}/admin/download-exported-file/${downloadTaskId}`,
+                {
+                    headers: { Authorization: `Bearer ${token}` },
+                    responseType: 'blob'
+                }
+            );
+
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `export_${downloadTaskId}.zip`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('Error downloading export file:', err);
+            setExportInternalError('Ошибка при скачивании файла экспорта: ' + (err.response?.data || err.message));
+        }
+    };
+
+    const cancelExport = async () => {
+        if (exportTaskId) {
+            try {
+                const token = Cookies.get('token');
+                await axios.post(
+                    `${API_URL}/Export/cancel/${exportTaskId}`,
+                    null,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+                
+                if (intervalId) {
+                    clearInterval(intervalId);
+                }
+                
+                setIsExporting(false);
+                setProgress(null);
+                setExportTaskId(null);
+            } catch (err) {
+                console.error('Error cancelling export:', err);
+                setExportInternalError('Ошибка при отмене экспорта');
+            }
+        }
+    };
+
+    return (
+        <Box>
+            <Typography variant="h6" gutterBottom>
+                Экспорт данных
+            </Typography>
+
+            {(exportError || exportInternalError) && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                    {exportError || exportInternalError}
+                </Alert>
+            )}
+
+            <Paper sx={{ p: 2, mb: 2 }}>
+                <Box sx={{ mb: 2 }}>
+                    <Button
+                        variant="contained"
+                        onClick={startExport}
+                        disabled={isExporting || isLoading}
+                        sx={{ mr: 1 }}
+                    >
+                        {isLoading ? 'Загрузка...' : 'Начать экспорт'}
+                    </Button>
+                    <Button
+                        variant="outlined"
+                        onClick={cancelExport}
+                        disabled={!isExporting}
+                        color="error"
+                    >
+                        Отменить
+                    </Button>
+                </Box>
+
+                {isExporting && (
+                    <Box sx={{ mt: 2 }}>
+                        <Typography variant="subtitle2" gutterBottom>
+                            Прогресс экспорта: {progress !== null ? `${Math.round(progress)}%` : 'Инициализация...'}
+                        </Typography>
+                        {progress !== null && (
+                            <LinearProgress 
+                                variant="determinate" 
+                                value={progress} 
+                                sx={{ mb: 2 }}
+                            />
+                        )}
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <CircularProgress size={20} />
+                            <Typography variant="body2">
+                                Экспорт в процессе...
+                            </Typography>
+                        </Box>
+                    </Box>
+                )}
+            </Paper>
+        </Box>
+    );
+};
+
+export default Export; 

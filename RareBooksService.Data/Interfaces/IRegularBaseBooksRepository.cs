@@ -17,8 +17,15 @@ namespace RareBooksService.Data.Interfaces
         Task<(int totalFound, List<string> firstTwoTitles)> GetPartialInfoByPriceRangeAsync(double minPrice, double maxPrice);
         Task<PagedResultDto<BookSearchResultDto>> GetBooksBySellerAsync(string sellerName, int page, int pageSize);
         Task<BookDetailDto> GetBookByIdAsync(int id);
+        Task<RegularBaseBook> GetBookEntityByIdAsync(int id);
         Task<List<CategoryDto>> GetCategoriesAsync();
         Task<CategoryDto> GetCategoryByIdAsync(int id);
+        Task<RegularBaseCategory> GetCategoryEntityByIdAsync(int id);
         Task SaveSearchHistoryAsync(string userId, string query, string searchType);
+        
+        /// <summary>
+        /// Возвращает QueryAble коллекцию книг для создания сложных запросов
+        /// </summary>
+        IQueryable<RegularBaseBook> GetQueryable();
     }
 }

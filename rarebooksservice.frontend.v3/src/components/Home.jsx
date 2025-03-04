@@ -1,5 +1,5 @@
 ﻿// src/components/Home.jsx
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
     Button,
@@ -11,63 +11,157 @@ import {
     DialogTitle,
     DialogContent,
     DialogActions,
-    CircularProgress
+    CircularProgress,
+    Card,
+    CardContent,
+    CardMedia,
+    Box,
+    Paper,
+    Chip,
+    Grid,
+    Divider,
+    Container,
+    Alert,
+    Snackbar,
+    IconButton,
+    Tooltip,
+    useMediaQuery,
+    useTheme,
+    InputAdornment,
+    Accordion,
+    AccordionSummary,
+    AccordionDetails
 } from '@mui/material';
 import axios from 'axios';
 import Cookies from 'js-cookie';
-import { getCategories, sendFeedback as sendFeedbackApi, API_URL } from '../api';
+import { getCategories, sendFeedback as sendFeedbackApi, API_URL, searchBooksByPriceRange, searchBooksByTitle, getPriceStatistics } from '../api';
 import { UserContext } from '../context/UserContext';
-import ErrorMessage from './ErrorMessage'; // если нужно, используйте свой компонент для ошибок
+import { LanguageContext } from '../context/LanguageContext';
+import translations from '../translations';
+import ErrorMessage from './ErrorMessage';
+import RecentSales from './RecentSales'; // Импорт компонента RecentSales
+
+// Импорт иконок
+import SearchIcon from '@mui/icons-material/Search';
+import CategoryIcon from '@mui/icons-material/Category';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import InfoIcon from '@mui/icons-material/Info';
+import HistoryIcon from '@mui/icons-material/History';
+import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import PriceChangeIcon from '@mui/icons-material/PriceChange';
+import BookmarkAddedIcon from '@mui/icons-material/BookmarkAdded';
+import CloseIcon from '@mui/icons-material/Close';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import DescriptionIcon from '@mui/icons-material/Description';
+import EuroIcon from '@mui/icons-material/Euro';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import AssessmentIcon from '@mui/icons-material/Assessment';
+import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 
 const Home = () => {
     const { user, setUser, loading } = useContext(UserContext);
+    const { language } = useContext(LanguageContext);
+    const navigate = useNavigate();
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    
+    // Получаем переводы для текущего языка
+    const t = translations[language];
 
-    // --- Состояния для поиска ---
+    // Состояния компонента
     const [title, setTitle] = useState('');
+    const [exactPhraseTitle, setExactPhraseTitle] = useState(false);
     const [description, setDescription] = useState('');
+    const [exactPhraseDescription, setExactPhraseDescription] = useState(false);
     const [minPrice, setMinPrice] = useState('');
     const [maxPrice, setMaxPrice] = useState('');
-    const [bookId, setBookId] = useState('');
     const [categories, setCategories] = useState([]);
-    const [exactPhraseTitle, setExactPhraseTitle] = useState(false);
-    const [exactPhraseDescription, setExactPhraseDescription] = useState(false);
-
-    // --- Состояния для логина (встроенная форма) ---
-    const [loginEmail, setLoginEmail] = useState('');
-    const [loginPassword, setLoginPassword] = useState('');
-    const [loginError, setLoginError] = useState('');
-
-    // --- Состояния для feedback (предложение) ---
+    const [selectedCategory, setSelectedCategory] = useState('');
+    
+    // Состояния API
+    const [apiConnected, setApiConnected] = useState(false);
+    const [apiStatus, setApiStatus] = useState(t.checkingApiConnection);
+    
+    // Состояния статистики цен
+    const [priceStatistics, setPriceStatistics] = useState(null);
+    const [loadingStats, setLoadingStats] = useState(false);
+    
+    // Состояния диалога обратной связи
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
     const [feedbackText, setFeedbackText] = useState('');
     const [feedbackError, setFeedbackError] = useState('');
     const [feedbackLoading, setFeedbackLoading] = useState(false);
+    
+    // Состояния snackbar
+    const [snackbarOpen, setSnackbarOpen] = useState(false);
+    const [snackbarMessage, setSnackbarMessage] = useState('');
+    const [snackbarSeverity, setSnackbarSeverity] = useState('info');
+    
+    // Флаг для отслеживания монтирования компонента
+    const isMounted = useRef(true);
 
-    // --- Прочие ---
-    const [apiStatus, setApiStatus] = useState('Checking API connection...');
-    const navigate = useNavigate();
-
-    // Загрузка категорий
+    // Обновляем тексты при изменении языка
     useEffect(() => {
-        const fetchCategories = async () => {
+        setApiStatus(apiConnected ? t.apiConnected : t.apiConnectionError);
+    }, [language, apiConnected, t]);
+
+    // Загрузка категорий и статистики
+    useEffect(() => {
+        const fetchInitialData = async () => {
             try {
-                const response = await getCategories();
-                setCategories(response.data);
-                setApiStatus(''); // Успешно
+                setLoadingStats(true);
+                
+                // Загрузка категорий
+                const categoriesResponse = await getCategories();
+                setCategories(categoriesResponse.data);
+                setApiConnected(true);
+                setApiStatus(t.apiConnected);
+                
+                // Загрузка статистики цен
+                await fetchPriceStatistics();
             } catch (error) {
-                console.error('Ошибка при загрузке категорий:', error);
-                setApiStatus('Failed to connect to API');
+                console.error("Ошибка загрузки данных:", error);
+                setApiConnected(false);
+                setApiStatus(t.apiConnectionError);
+            } finally {
+                setLoadingStats(false);
             }
         };
-        fetchCategories();
+        
+        fetchInitialData();
+    }, [t]);
+
+    // useEffect для отслеживания монтирования/размонтирования компонента
+    useEffect(() => {
+        // При монтировании isMounted = true
+        isMounted.current = true;
+        
+        // Очистка при размонтировании компонента
+        return () => {
+            isMounted.current = false;
+        };
     }, []);
+
+    // Функция для получения статистики цен
+    const fetchPriceStatistics = async () => {
+        setLoadingStats(true);
+        try {
+            const response = await getPriceStatistics();
+            setPriceStatistics(response.data);
+        } catch (error) {
+            console.error('Ошибка при загрузке статистики цен:', error);
+        } finally {
+            setLoadingStats(false);
+        }
+    };
 
     // --- Поиск ---
 
     // Обёртка, чтобы проверять авторизацию перед поиском
     const checkAuthBeforeSearch = (searchFn) => {
         if (!user) {
-            alert('Сначала авторизуйтесь, чтобы выполнять поиск.');
+            alert(t.authRequired);
             return;
         }
         // Если авторизован, запускаем реальный поиск
@@ -97,421 +191,698 @@ const Home = () => {
             }
         });
     };
-
-    const handleIdSearch = () => {
-        checkAuthBeforeSearch(() => {
-            if (bookId.trim()) {
-                navigate(`/books/${bookId}`);
+    
+    // Форматирование даты
+    const formatDate = (dateString) => {
+        try {
+            if (!dateString) return 'Дата не указана';
+            
+            const date = new Date(dateString);
+            
+            // Проверка валидности даты
+            if (isNaN(date.getTime())) {
+                return 'Некорректная дата';
             }
-        });
+            
+            return new Intl.DateTimeFormat('ru-RU', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            }).format(date);
+        } catch (error) {
+            console.error('Ошибка форматирования даты:', error);
+            return 'Ошибка даты';
+        }
     };
 
-    // --- Логаут ---
+    // Функция для выхода из системы
     const handleLogout = () => {
-        document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-        //localStorage.removeItem('token');
+        // Удаляем токен из cookie
+        Cookies.remove('token');
+        // Очищаем информацию о пользователе в контексте
         setUser(null);
+        // Показываем сообщение об успешном выходе
+        showSnackbar(t.logoutSuccess, 'success');
+        // Опционально можно перенаправить на главную страницу
         navigate('/');
     };
 
-
-    // --- Обратная связь ---
-    const openFeedback = () => {
-        setIsFeedbackOpen(true);
+    // Функция для перехода на страницу администратора
+    const goToAdminPanel = () => {
+        navigate('/admin');
     };
 
-    const closeFeedback = () => {
-        setIsFeedbackOpen(false);
-        setFeedbackText('');
-        setFeedbackError('');
-    };
+    // Отображение статуса подписки
+    const renderSubscriptionStatus = () => {
+        if (!user) return null;
 
-    const sendFeedback = async () => {
-        setFeedbackError('');
-        if (!feedbackText.trim()) {
-            setFeedbackError('Нельзя отправить пустое предложение!');
-            return;
-        }
+        // Проверяем наличие свойства hasSubscription
+        const hasSubscription = user.hasSubscription || false;
 
-        setFeedbackLoading(true);
-        try {
-            await sendFeedbackApi(feedbackText);
-            closeFeedback();
-            alert('Спасибо за предложение! Мы учтём его.');
-        } catch (err) {
-            console.error('Ошибка при отправке предложения:', err);
-            setFeedbackError(
-                err.response?.data ?? 'Ошибка при отправке предложения. Попробуйте позже.'
-            );
-        } finally {
-            setFeedbackLoading(false);
-        }
-    };
-
-    // --- Логин прямо на главной ---
-    const handleLogin = async () => {
-        setLoginError('');
-        try {
-            // отправляем запрос
-            const response = await axios.post(`${API_URL}/auth/login`, {
-                email: loginEmail,
-                password: loginPassword
-            });
-
-            Cookies.set('token', response.data.token, { expires: 7 });
-            // Вместо Cookies — localStorage:
-            //localStorage.setItem('token', response.data.token);
-
-            // Сразу прописываем пользователя в контекст
-            setUser(response.data.user);
-
-            // чистим поля формы
-            setLoginEmail('');
-            setLoginPassword('');
-
-            // переход или просто обновить UI
-            // navigate('/');
-        } catch (err) {
-            console.error('Ошибка входа:', err);
-            setLoginError('Неверные учётные данные или ошибка сервера.');
-        }
-    };   
-
-    // Пока UserContext грузит данные (например, проверку токена)
-    if (loading) {
-        return <div>Загрузка пользователя...</div>;
-    }
-
-    return (
-        <div className="container">
-            {/* Статус API */}
-            <Typography
-                variant="h6"
-                color={apiStatus.includes('Failed') ? 'error' : 'primary'}
-                align="center"
-                sx={{ marginBottom: 2 }}
-            >
-                {apiStatus}
-            </Typography>
-
-            {/* Блок описания сервиса */}
-            <div style={{ marginBottom: 20, textAlign: 'center' }}>
-                <Typography variant="h4" gutterBottom>
-                    Добро пожаловать в Сервис Редких Книг
-                </Typography>
-                <Typography variant="body1">
-                    Сервис редких книг — это платформа, которая помогает любителям редких
-                    книг находить, описывать и приобретать уникальные экземпляры.
-                    У нас вы можете искать книги по названию, описанию, ценовому
-                    диапазону. Полная версия поиска доступна по подписке.
-                </Typography>
-                <Typography variant="body1">
-                    <b>Мы открыты к предложениям!</b>. Если у вас есть вопросы или предложения по дополнениям к нашему сервису, пишите через форму обратной связи. 
-                </Typography>
-            </div>
-
-            {user && (
-                <>
-                    {!user.hasSubscription && (
-                        <div
-                            className="subscription-warning"
-                            style={{ textAlign: 'center', marginBottom: 20 }}
-                        >
-                            <Typography color="error">
-                                У вас нет подписки. Оформите подписку, чтобы получить доступ к полной версии поиска.{' '}
-                                <Link to="/subscription">Подписаться сейчас</Link>
-                            </Typography>
-                        </div>
-                    )}
-                </>
-            )}
-
-            {/* Если пользователь не авторизован — показываем форму логина */}
-            {!user && (
-                <div
-                    style={{
-                        border: '1px solid #ccc',
-                        padding: '16px',
-                        marginBottom: '20px',
-                        maxWidth: '400px',
-                        margin: '0 auto'
-                    }}
-                >
-                    <Typography variant="h5" gutterBottom align="center">
-                        Авторизация
-                    </Typography>
-                    <TextField
-                        type="email"
-                        label="Email"
-                        variant="outlined"
-                        value={loginEmail}
-                        onChange={(e) => setLoginEmail(e.target.value)}
-                        autoComplete="username"
-                        fullWidth
-                        sx={{ mb: 2 }}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                                handleLogin();
-                            }
-                        }}
-                    />
-                    <TextField
-                        type="password"
-                        label="Пароль"
-                        variant="outlined"
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                        autoComplete="current-password"
-                        fullWidth
-                        sx={{ mb: 2 }}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                                handleLogin();
-                            }
-                        }}
-                    />
-                    {loginError && <ErrorMessage message={loginError} />}
-                    <div style={{ textAlign: 'center', marginTop: '10px' }}>
-                        <Button variant="contained" onClick={handleLogin}>
-                            Войти
-                        </Button>
-                    </div>
-                    <div style={{ textAlign: 'center', marginTop: '10px' }}>
-                        <Typography variant="body2">
-                            Нет аккаунта?{' '}
-                            <Link to="/register">Зарегистрироваться</Link>
-                        </Typography>
-                    </div>
-                </div>
-            )}
-
-            {/* Блоки поиска доступны всегда, но реально работать будут только для авторизованного пользователя */}
-            <div className="search-box">
-                <Typography variant="h6">Поиск по названию</Typography>
-                <TextField
-                    label="Название"
-                    variant="outlined"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleTitleSearch();
-                    }}
-                    fullWidth
-                />
-                <div className="search-row">
-                    <FormControlLabel
-                        control={
-                            <Checkbox
-                                checked={exactPhraseTitle}
-                                onChange={(e) => setExactPhraseTitle(e.target.checked)}
-                            />
-                        }
-                        label="Точная фраза"
-                        className="search-checkbox"
-                    />
-                    <Button
-                        variant="contained"
-                        className="search-button-right"
-                        style={{ backgroundColor: '#ffcc00', color: '#000' }}
-                        onClick={handleTitleSearch}
-                    >
-                        Поиск
-                    </Button>
-                </div>
-            </div>
-
-            <div className="search-box">
-                <Typography variant="h6">Поиск по описанию</Typography>
-                <TextField
-                    label="Описание"
-                    variant="outlined"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleDescriptionSearch();
-                    }}
-                    fullWidth
-                />
-                <div className="search-row">
-                    <FormControlLabel
-                        control={
-                            <Checkbox
-                                checked={exactPhraseDescription}
-                                onChange={(e) =>
-                                    setExactPhraseDescription(e.target.checked)
-                                }
-                            />
-                        }
-                        label="Точная фраза"
-                        className="search-checkbox"
-                    />
-                    <Button
-                        variant="contained"
-                        className="search-button-right"
-                        style={{ backgroundColor: '#ffcc00', color: '#000' }}
-                        onClick={handleDescriptionSearch}
-                    >
-                        Поиск
-                    </Button>
-                </div>
-            </div>
-
-            <div className="search-box">
-                <Typography variant="h6">Поиск по диапазону цен</Typography>
-                <div className="price-inputs-row">
-                    <TextField
-                        label="Мин. цена"
-                        variant="outlined"
-                        type="number"
-                        value={minPrice}
-                        onChange={(e) => setMinPrice(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') handlePriceRangeSearch();
-                        }}
-                        sx={{ flex: 1 }}
-                    />
-                    <TextField
-                        label="Макс. цена"
-                        variant="outlined"
-                        type="number"
-                        value={maxPrice}
-                        onChange={(e) => setMaxPrice(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') handlePriceRangeSearch();
-                        }}
-                        sx={{ flex: 1 }}
-                    />
-                </div>
-                <div className="search-row" style={{ justifyContent: 'flex-end' }}>
-                    <Button
-                        variant="contained"
-                        className="search-button-right"
-                        style={{ backgroundColor: '#ffcc00', color: '#000' }}
-                        onClick={handlePriceRangeSearch}
-                    >
-                        Поиск
-                    </Button>
-                </div>
-            </div>
-
-            {/* Для админа: поиск по ID + список категорий */}
-            {user && user.role === 'Admin' && (
-                <>
-                    <div className="search-box">
-                        <Typography variant="h6">
-                            Поиск по ID (только для администратора)
-                        </Typography>
-                        <div className="price-inputs-row">
-                            <TextField
-                                label="ID книги"
-                                variant="outlined"
-                                value={bookId}
-                                onChange={(e) => setBookId(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleIdSearch();
-                                }}
-                                sx={{ flex: 1 }}
-                            />
-                        </div>
-                        <div className="search-row" style={{ justifyContent: 'flex-end' }}>
-                            <Button
-                                variant="contained"
-                                className="search-button-right"
-                                style={{ backgroundColor: '#ffcc00', color: '#000' }}
-                                onClick={handleIdSearch}
-                            >
-                                Поиск по ID
-                            </Button>
-                        </div>
-                    </div>
-
-                    <div className="categories">
-                        <Typography variant="h6">Категории</Typography>
-                        <ul>
-                            {Array.isArray(categories) ? (
-                                categories.map((category) => (
-                                    <li key={category.id}>
-                                        <Link to={`/searchByCategory/${category.id}`}>
-                                            {category.name}
-                                        </Link>
-                                    </li>
-                                ))
+        return (
+            <Paper elevation={3} sx={{ padding: 2, mb: 4, bgcolor: '#f5f8ff', borderRadius: '12px' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box>
+                        <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
+                            {t.subscriptionStatus}: {hasSubscription ? (
+                                <Chip 
+                                    label={t.active} 
+                                    color="success" 
+                                    size="small" 
+                                    sx={{ ml: 1 }} 
+                                />
                             ) : (
-                                <li>Категории не найдены</li>
+                                <Chip 
+                                    label={t.inactive} 
+                                    color="error" 
+                                    size="small" 
+                                    sx={{ ml: 1 }} 
+                                />
                             )}
-                        </ul>
-                    </div>
-                </>
-            )}
-
-            {/* Если пользователь авторизован, показываем доп. функционал (подписка и т.д.) */}
-            {user && (
-                <>
-                    {/* Ссылка на панель админа (для Admin) */}
-                    {user.role === 'Admin' && (
-                        <div className="admin-link" style={{ textAlign: 'center', marginBottom: 20 }}>
-                            <Typography>
-                                <Link to="/admin">Перейти в панель администратора</Link>
-                            </Typography>
-                        </div>
-                    )}
-
-                    <div className="search-box">
-                        <div className="user-info-row">
-                            <Typography variant="subtitle1" sx={{ flex: 1 }}>
-                                Добро пожаловать, <strong>{user.userName}</strong>!
-                            </Typography>
-                            <Button
-                                variant="contained"
-                                color="secondary"
-                                onClick={handleLogout}
-                            >
-                                Выйти
-                            </Button>
-                        </div>
-                    </div>
-
-                    {/* Кнопка "Оставить предложение" */}
-                    <div style={{ marginTop: 20, textAlign: 'center' }}>
-                        <Button variant="outlined" onClick={openFeedback}>
-                            Оставить предложение
-                        </Button>
-                    </div>
-                </>
-            )}
-
-            {/* Диалог обратной связи */}
-            <Dialog open={isFeedbackOpen} onClose={closeFeedback}>
-                <DialogTitle>Оставить предложение</DialogTitle>
-                <DialogContent>
-                    {feedbackError && (
-                        <Typography color="error" sx={{ mb: 1 }}>
-                            {feedbackError}
                         </Typography>
-                    )}
+                        
+                        {hasSubscription && (
+                            <Typography variant="body2" color="text.secondary">
+                                {t.subscriptionType}: <strong>{user.subscriptionType || t.standard}</strong><br />
+                                {t.validUntil}: <strong>{formatDate(user.subscriptionExpiryDate)}</strong>
+                            </Typography>
+                        )}
+                    </Box>
+                    
+                    <Box sx={{ display: 'flex', gap: 2 }}>
+                        {!hasSubscription && (
+                            <Button 
+                                variant="contained" 
+                                color="primary" 
+                                component={Link} 
+                                to="/subscription"
+                                sx={{ 
+                                    borderRadius: '8px', 
+                                    textTransform: 'none',
+                                    fontWeight: 'bold'
+                                }}
+                            >
+                                {t.getSubscription}
+                            </Button>
+                        )}
+                        
+                        {/* Кнопка для администраторов */}
+                        {user && user.role && user.role.toLowerCase() === 'admin' && (
+                            <Button 
+                                variant="contained" 
+                                color="secondary" 
+                                component={Link} 
+                                to="/admin"
+                                sx={{ 
+                                    borderRadius: '8px', 
+                                    textTransform: 'none',
+                                    fontWeight: 'bold'
+                                }}
+                            >
+                                {t.adminPanel}
+                            </Button>
+                        )}
+                        
+                        <Button 
+                            variant="outlined" 
+                            color="error" 
+                            onClick={handleLogout}
+                            sx={{ 
+                                borderRadius: '8px', 
+                                textTransform: 'none',
+                                fontWeight: 'bold'
+                            }}
+                        >
+                            {t.logout}
+                        </Button>
+                    </Box>
+                </Box>
+            </Paper>
+        );
+    };
+
+    // Функция для отображения уведомлений
+    const showSnackbar = (message, severity = 'info') => {
+        setSnackbarMessage(message);
+        setSnackbarSeverity(severity);
+        setSnackbarOpen(true);
+    };
+
+    // Компонент статистики цен
+    const PriceStatistics = () => {
+        if (loadingStats) {
+            return (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                    <CircularProgress />
+                </Box>
+            );
+        }
+        
+        if (!user) {
+            return (
+                <Paper elevation={2} sx={{ p: 3, borderRadius: '12px', mb: 3 }}>
+                    <Typography variant="h6" fontWeight="bold" gutterBottom>
+                        Статистика цен на антикварные книги
+                    </Typography>
+                    <Typography variant="body1" paragraph>
+                        Для доступа к статистике цен необходимо авторизоваться и оформить подписку.
+                    </Typography>
+                    <Button 
+                        variant="contained" 
+                        color="primary" 
+                        onClick={() => navigate('/login')}
+                        sx={{ mr: 2, borderRadius: '8px', textTransform: 'none' }}
+                    >
+                        {t.login}
+                    </Button>
+                    <Button 
+                        variant="outlined" 
+                        onClick={() => navigate('/register')}
+                        sx={{ borderRadius: '8px', textTransform: 'none' }}
+                    >
+                        {t.register}
+                    </Button>
+                </Paper>
+            );
+        }
+        
+        if (!priceStatistics && user.subscription?.status === 'Active') {
+            return (
+                <Paper elevation={2} sx={{ p: 3, borderRadius: '12px', mb: 3 }}>
+                    <Typography variant="h6" fontWeight="bold" gutterBottom>
+                        Статистика цен на антикварные книги
+                    </Typography>
+                    <Typography variant="body1" color="text.secondary">
+                        Данные статистики временно недоступны. Пожалуйста, попробуйте позже.
+                    </Typography>
+                </Paper>
+            );
+        }
+        
+        if (!user.subscription || user.subscription.status !== 'Active') {
+            return (
+                <Paper elevation={2} sx={{ p: 3, borderRadius: '12px', mb: 3 }}>
+                    <Typography variant="h6" fontWeight="bold" gutterBottom>
+                        Статистика цен на антикварные книги
+                    </Typography>
+                    <Typography variant="body1" paragraph>
+                        Для доступа к статистике цен необходимо оформить подписку.
+                    </Typography>
+                    <Button 
+                        variant="contained" 
+                        color="secondary" 
+                        onClick={() => navigate('/subscription')}
+                        sx={{ borderRadius: '8px', textTransform: 'none' }}
+                    >
+                        {t.getSubscription}
+                    </Button>
+                </Paper>
+            );
+        }
+        
+        return (
+            <Paper elevation={2} sx={{ p: 3, borderRadius: '12px', mb: 3 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <TrendingUpIcon />
+                    <Typography variant="h6" fontWeight="bold">
+                        Статистика цен на антикварные книги
+                    </Typography>
+                </Box>
+                
+                <Grid container spacing={3}>
+                    <Grid item xs={12} md={4}>
+                        <Card sx={{ height: '100%', bgcolor: 'rgba(69, 39, 160, 0.05)', borderRadius: '8px' }}>
+                            <CardContent>
+                                <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                                    Средняя цена
+                                </Typography>
+                                <Typography variant="h4" color="primary" fontWeight="bold">
+                                    {formatPrice(priceStatistics.averagePrice)}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    По всем категориям
+                                </Typography>
+                            </CardContent>
+                        </Card>
+                    </Grid>
+                    
+                    <Grid item xs={12} md={4}>
+                        <Card sx={{ height: '100%', bgcolor: 'rgba(69, 39, 160, 0.05)', borderRadius: '8px' }}>
+                            <CardContent>
+                                <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                                    Максимальная цена
+                                </Typography>
+                                <Typography variant="h4" color="error" fontWeight="bold">
+                                    {formatPrice(priceStatistics.maxPrice)}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    {priceStatistics.maxPriceCategory}
+                                </Typography>
+                            </CardContent>
+                        </Card>
+                    </Grid>
+                    
+                    <Grid item xs={12} md={4}>
+                        <Card sx={{ height: '100%', bgcolor: 'rgba(69, 39, 160, 0.05)', borderRadius: '8px' }}>
+                            <CardContent>
+                                <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                                    Минимальная цена
+                                </Typography>
+                                <Typography variant="h4" color="success.main" fontWeight="bold">
+                                    {formatPrice(priceStatistics.minPrice)}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    {priceStatistics.minPriceCategory}
+                                </Typography>
+                            </CardContent>
+                        </Card>
+                    </Grid>
+                </Grid>
+                
+                <Box sx={{ mt: 3 }}>
+                    <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                        Популярные категории
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                        {priceStatistics.topCategories.map((category, index) => (
+                            <Chip 
+                                key={index}
+                                label={`${category.name} (${formatPrice(category.averagePrice)})`}
+                                onClick={() => navigate(`/searchByCategory/${category.id}`)}
+                                color="primary"
+                                variant="outlined"
+                                clickable
+                            />
+                        ))}
+                    </Box>
+                </Box>
+            </Paper>
+        );
+    };
+
+    // Форматирование цены
+    const formatPrice = (price) => {
+        return new Intl.NumberFormat(language === 'RU' ? 'ru-RU' : 'en-US', {
+            style: 'currency',
+            currency: language === 'RU' ? 'RUB' : 'USD',
+            maximumFractionDigits: 0
+        }).format(price);
+    };
+
+    const renderHeroSection = () => (
+        <Box sx={{ 
+            backgroundImage: 'linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.7)), url(https://images.unsplash.com/photo-1507842217343-583bb7270b66?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80)',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            color: 'white',
+            py: 10,
+            mb: 5,
+            borderRadius: 2
+        }}>
+            <Container maxWidth="xl">
+                <Grid container spacing={4}>
+                    <Grid item xs={12} md={8}>
+                        <Typography 
+                            variant="h2" 
+                            component="h1" 
+                            sx={{ 
+                                fontWeight: 'bold',
+                                mb: 2
+                            }}
+                        >
+                            {t.mainTitle}
+                        </Typography>
+                        
+                        <Typography 
+                            variant="h5" 
+                            sx={{ 
+                                mb: 4,
+                                fontWeight: 400
+                            }}
+                        >
+                            {t.mainSubtitle}
+                        </Typography>
+                        
+                        <Button 
+                            variant="contained" 
+                            size="large"
+                            component={Link}
+                            to="/categories"
+                            startIcon={<AssessmentIcon />}
+                            endIcon={<ArrowForwardIcon />}
+                            sx={{ 
+                                px: 4,
+                                py: 1.5,
+                                borderRadius: '8px',
+                                textTransform: 'none',
+                                fontSize: '1.1rem'
+                            }}
+                        >
+                            {t.startEvaluation}
+                        </Button>
+                    </Grid>
+                    
+                    <Grid item xs={12} md={4}>
+                        <Paper sx={{ p: 3, borderRadius: 2, bgcolor: 'rgba(255, 255, 255, 0.95)' }}>
+                            <Typography variant="h6" color="primary.main" fontWeight="bold" mb={2}>
+                                {t.titleSearch}
+                            </Typography>
+                            
+                            <TextField
+                                fullWidth
+                                variant="outlined"
+                                placeholder={t.bookTitle}
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                onKeyPress={(e) => {
+                                    if (e.key === 'Enter' && title.trim()) {
+                                        navigate(`/searchByTitle/${title}`);
+                                    }
+                                }}
+                                sx={{ mb: 2 }}
+                                InputProps={{
+                                    endAdornment: (
+                                        <InputAdornment position="end">
+                                            <IconButton 
+                                                edge="end" 
+                                                onClick={() => {
+                                                    if (title.trim()) navigate(`/searchByTitle/${title}`);
+                                                }}
+                                            >
+                                                <SearchIcon />
+                                            </IconButton>
+                                        </InputAdornment>
+                                    ),
+                                }}
+                            />
+                            
+                            <FormControlLabel
+                                control={
+                                    <Checkbox 
+                                        checked={exactPhraseTitle} 
+                                        onChange={(e) => setExactPhraseTitle(e.target.checked)}
+                                        size="small"
+                                    />
+                                }
+                                label={t.exactMatch}
+                            />
+                        </Paper>
+                    </Grid>
+                </Grid>
+            </Container>
+        </Box>
+    );
+
+    const renderAdditionalSearch = () => (
+        <Box sx={{ mt: 4, mb: 6 }}>
+            <Typography variant="h4" component="h2" fontWeight="bold" mb={4}>
+                {t.advancedSearch}
+            </Typography>
+            
+            <Grid container spacing={3}>
+                <Grid item xs={12} md={6}>
+                    <Accordion>
+                        <AccordionSummary
+                            expandIcon={<ExpandMoreIcon />}
+                            aria-controls="description-search-content"
+                            id="description-search-header"
+                        >
+                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                <DescriptionIcon sx={{ mr: 1 }} />
+                                <Typography variant="h6">{t.descriptionSearch}</Typography>
+                            </Box>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                {t.descriptionSearchHint}
+                            </Typography>
+                            <TextField
+                                fullWidth
+                                variant="outlined"
+                                placeholder={t.keywordsPlaceholder}
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                onKeyPress={(e) => {
+                                    if (e.key === 'Enter' && description.trim()) {
+                                        handleDescriptionSearch();
+                                    }
+                                }}
+                                sx={{ mb: 2 }}
+                            />
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <FormControlLabel
+                                    control={
+                                        <Checkbox 
+                                            checked={exactPhraseDescription} 
+                                            onChange={(e) => setExactPhraseDescription(e.target.checked)}
+                                            size="small"
+                                        />
+                                    }
+                                    label={t.exactMatch}
+                                />
+                                <Button 
+                                    variant="contained" 
+                                    onClick={handleDescriptionSearch}
+                                    disabled={!description.trim()}
+                                    startIcon={<SearchIcon />}
+                                >
+                                    {t.search}
+                                </Button>
+                            </Box>
+                        </AccordionDetails>
+                    </Accordion>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                    <Accordion>
+                        <AccordionSummary
+                            expandIcon={<ExpandMoreIcon />}
+                            aria-controls="price-range-search-content"
+                            id="price-range-search-header"
+                        >
+                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                <MonetizationOnIcon sx={{ mr: 1 }} />
+                                <Typography variant="h6">{t.priceRangeSearch}</Typography>
+                            </Box>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                {t.priceRangeSearchHint}
+                            </Typography>
+                            <Grid container spacing={2} sx={{ mb: 2 }}>
+                                <Grid item xs={6}>
+                                    <TextField
+                                        fullWidth
+                                        variant="outlined"
+                                        label={t.minPrice}
+                                        type="number"
+                                        value={minPrice}
+                                        onChange={(e) => setMinPrice(e.target.value)}
+                                        onKeyPress={(e) => {
+                                            if (e.key === 'Enter' && minPrice.trim() && maxPrice.trim()) {
+                                                handlePriceRangeSearch();
+                                            }
+                                        }}
+                                        inputProps={{ 
+                                            inputMode: 'numeric', 
+                                            pattern: '[0-9]*',
+                                            step: "any" 
+                                        }}
+                                        InputProps={{
+                                            startAdornment: (
+                                                <InputAdornment position="start">
+                                                    ₽
+                                                </InputAdornment>
+                                            ),
+                                            disableUnderline: true
+                                        }}
+                                    />
+                                </Grid>
+                                <Grid item xs={6}>
+                                    <TextField
+                                        fullWidth
+                                        variant="outlined"
+                                        label={t.maxPrice}
+                                        type="number"
+                                        value={maxPrice}
+                                        onChange={(e) => setMaxPrice(e.target.value)}
+                                        onKeyPress={(e) => {
+                                            if (e.key === 'Enter' && minPrice.trim() && maxPrice.trim()) {
+                                                handlePriceRangeSearch();
+                                            }
+                                        }}
+                                        inputProps={{ 
+                                            inputMode: 'numeric', 
+                                            pattern: '[0-9]*',
+                                            step: "any" 
+                                        }}
+                                        InputProps={{
+                                            startAdornment: (
+                                                <InputAdornment position="start">
+                                                    ₽
+                                                </InputAdornment>
+                                            ),
+                                            disableUnderline: true
+                                        }}
+                                    />
+                                </Grid>
+                            </Grid>
+                            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                <Button 
+                                    variant="contained" 
+                                    onClick={handlePriceRangeSearch}
+                                    disabled={!minPrice.trim() || !maxPrice.trim()}
+                                    startIcon={<SearchIcon />}
+                                >
+                                    {t.search}
+                                </Button>
+                            </Box>
+                        </AccordionDetails>
+                    </Accordion>
+                </Grid>
+            </Grid>
+        </Box>
+    );
+
+    // Добавляем информационный блок о сервисе оценки
+    const renderAntiqueBooksValuationInfo = () => (
+        <Paper elevation={3} sx={{ p: 4, borderRadius: '12px', mb: 5, bgcolor: '#f8f9fa' }}>
+            <Typography variant="h5" fontWeight="bold" gutterBottom>
+                <MenuBookIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                {t.howItWorks}
+            </Typography>
+            
+            <Typography variant="body1" paragraph sx={{ mb: 3 }}>
+                {t.serviceDescription}
+            </Typography>
+            
+            <Grid container spacing={3}>
+                <Grid item xs={12} md={4}>
+                    <Box sx={{ textAlign: 'center', p: 2 }}>
+                        <SearchIcon fontSize="large" color="primary" />
+                        <Typography variant="h6" gutterBottom>
+                            {t.findAnalogs}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            {t.findAnalogsDesc}
+                        </Typography>
+                    </Box>
+                </Grid>
+                
+                <Grid item xs={12} md={4}>
+                    <Box sx={{ textAlign: 'center', p: 2 }}>
+                        <AssessmentIcon fontSize="large" color="primary" />
+                        <Typography variant="h6" gutterBottom>
+                            {t.dataAnalysis}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            {t.dataAnalysisDesc}
+                        </Typography>
+                    </Box>
+                </Grid>
+                
+                <Grid item xs={12} md={4}>
+                    <Box sx={{ textAlign: 'center', p: 2 }}>
+                        <PriceChangeIcon fontSize="large" color="primary" />
+                        <Typography variant="h6" gutterBottom>
+                            {t.getEstimate}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            {t.getEstimateDesc}
+                        </Typography>
+                    </Box>
+                </Grid>
+            </Grid>
+            
+            <Divider sx={{ my: 3 }} />
+            
+            <Typography variant="body1" sx={{ fontStyle: 'italic' }}>
+                {t.subscriptionPromo}
+                <Link to="/subscription" style={{ textDecoration: 'none', ml: 1 }}>
+                    {t.getSubscription}
+                </Link>.
+            </Typography>
+        </Paper>
+    );
+
+    // Основной UI компонент
+    return (
+        <Container maxWidth="xl" sx={{ pb: 4 }}>
+            {renderHeroSection()}
+
+            {!apiConnected && (
+                <Alert severity="error" sx={{ mb: 3 }}>
+                    {apiStatus}
+                </Alert>
+            )}
+            
+            {/* Информация об оценке антикварных книг */}
+            {renderAntiqueBooksValuationInfo()}
+            
+            {/* Секция статуса подписки для авторизованных пользователей */}
+            {user && renderSubscriptionStatus()}
+            
+            {/* Дополнительные опции поиска */}
+            {renderAdditionalSearch()}
+            
+            {/* Компонент недавних продаж */}
+            <RecentSales />
+            
+            <Snackbar
+                open={snackbarOpen}
+                autoHideDuration={6000}
+                onClose={() => setSnackbarOpen(false)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+            >
+                <Alert 
+                    onClose={() => setSnackbarOpen(false)} 
+                    severity={snackbarSeverity}
+                    sx={{ width: '100%' }}
+                >
+                    {snackbarMessage}
+                </Alert>
+            </Snackbar>
+            
+            {/* Диалог обратной связи */}
+            <Dialog open={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} fullWidth maxWidth="sm">
+                <DialogTitle>
+                    {t.feedback}
+                    <IconButton
+                        aria-label="close"
+                        onClick={() => setIsFeedbackOpen(false)}
+                        sx={{ position: 'absolute', right: 8, top: 8 }}
+                    >
+                        <CloseIcon />
+                    </IconButton>
+                </DialogTitle>
+                <DialogContent>
                     <TextField
-                        label="Ваше предложение"
+                        autoFocus
+                        margin="dense"
+                        label={t.feedbackPlaceholder}
+                        fullWidth
                         multiline
                         rows={4}
                         value={feedbackText}
                         onChange={(e) => setFeedbackText(e.target.value)}
-                        variant="outlined"
-                        fullWidth
+                        error={!!feedbackError}
+                        helperText={feedbackError}
                     />
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={closeFeedback}>Отмена</Button>
-                    <Button
-                        variant="contained"
-                        style={{ backgroundColor: '#ffcc00', color: '#000' }}
-                        onClick={sendFeedback}
-                        disabled={feedbackLoading}
+                    <Button onClick={() => setIsFeedbackOpen(false)} color="primary">
+                        {t.cancel}
+                    </Button>
+                    <Button 
+                        onClick={() => {}} 
+                        color="primary"
+                        disabled={feedbackLoading || !feedbackText.trim()}
                     >
-                        {feedbackLoading ? <CircularProgress size={24} /> : 'Отправить'}
+                        {feedbackLoading ? <CircularProgress size={24} /> : t.send}
                     </Button>
                 </DialogActions>
             </Dialog>
-        </div>
+        </Container>
     );
 };
 

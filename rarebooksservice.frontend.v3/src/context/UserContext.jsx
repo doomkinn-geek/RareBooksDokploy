@@ -40,16 +40,28 @@ export const UserProvider = ({ children }) => {
 
         try {
             const token = Cookies.get('token');
+            console.log('refreshUser - Token:', token ? 'Токен есть' : 'Токен отсутствует');
+            
             if (!token) {
+                console.log('refreshUser - Нет токена, устанавливаем пользователя null');
                 setUser(null);
                 return;
             }
+            
+            console.log('refreshUser - Отправка запроса на получение данных пользователя');
             const response = await axios.get(`${API_URL}/auth/user`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
+            
+            console.log('refreshUser - Полученные данные пользователя:', response.data);
+            // Проверяем наличие hasSubscription
+            console.log('refreshUser - hasSubscription:', response.data.hasSubscription);
+            
             setUser(response.data);
+            console.log('refreshUser - Пользователь успешно установлен в контекст');
         } catch (error) {
             console.error('Ошибка при получении данных пользователя:', error);
+            console.error('Детали ошибки:', error.response);
             setUser(null);
         } finally {
             if (!initialLoading) {

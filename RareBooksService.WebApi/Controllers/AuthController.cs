@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection; // Добавлено для GetRequiredService
 using Microsoft.Extensions.Logging; // Добавлено для ILogger
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
@@ -82,6 +83,33 @@ namespace RareBooksService.WebApi.Controllers
             if (result.Succeeded)
             {
                 _logger.LogInformation("Пользователь {Email} успешно зарегистрирован", model.Email);
+                
+                // Если у пользователя задана роль в свойстве Role, добавляем ее также в Identity
+                if (!string.IsNullOrEmpty(user.Role))
+                {
+                    _logger.LogInformation("Добавление роли {Role} в Identity для пользователя {Email}", user.Role, model.Email);
+                    
+                    // Проверяем, существует ли роль, и если нет - создаем ее
+                    var roleManager = HttpContext.RequestServices.GetRequiredService<RoleManager<IdentityRole>>();
+                    if (!await roleManager.RoleExistsAsync(user.Role))
+                    {
+                        _logger.LogInformation("Роль {Role} не существует, создаем ее", user.Role);
+                        await roleManager.CreateAsync(new IdentityRole(user.Role));
+                    }
+                    
+                    // Добавляем пользователя в роль
+                    var addToRoleResult = await _userManager.AddToRoleAsync(user, user.Role);
+                    if (!addToRoleResult.Succeeded)
+                    {
+                        _logger.LogWarning("Не удалось добавить пользователя {Email} в роль {Role}: {Errors}", 
+                            model.Email, user.Role, string.Join(", ", addToRoleResult.Errors.Select(e => e.Description)));
+                    }
+                    else
+                    {
+                        _logger.LogInformation("Пользователь {Email} успешно добавлен в роль {Role}", model.Email, user.Role);
+                    }
+                }
+                
                 await _signInManager.SignInAsync(user, isPersistent: false);
                 var token = await GenerateJwtTokenAsync(user);
                 _logger.LogInformation("JWT токен сгенерирован для пользователя {Email}", model.Email);
@@ -105,6 +133,12 @@ namespace RareBooksService.WebApi.Controllers
                 if (result.Succeeded)
                 {
                     var user = await _userManager.FindByEmailAsync(model.Email);
+                    
+                    // Логируем роль пользователя для отладки
+                    _logger.LogInformation("Пользователь {Email} имеет роль в модели: {Role}", user.Email, user.Role);
+                    var identityRoles = await _userManager.GetRolesAsync(user);
+                    _logger.LogInformation("Пользователь {Email} имеет роли в Identity: {Roles}", user.Email, string.Join(", ", identityRoles));
+                    
                     var token = await GenerateJwtTokenAsync(user);
                     _logger.LogInformation("Пользователь {Email} успешно вошел в систему", model.Email);
                     return Ok(new { Token = token, User = new { user.Email, user.UserName, user.HasSubscription, user.Role } });
@@ -164,10 +198,20 @@ namespace RareBooksService.WebApi.Controllers
                 new Claim(ClaimTypes.Email, user.Email)
             };
 
-            // Добавление роли пользователя к утверждениям
+            // Добавление роли пользователя к утверждениям из Identity
             var roles = await _userManager.GetRolesAsync(user);
+            _logger.LogInformation("Роли пользователя {Email} из Identity: {Roles}", user.Email, string.Join(", ", roles));
             claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
-            _logger.LogInformation("Добавлены роли для пользователя {Email}: {Roles}", user.Email, string.Join(", ", roles));
+            
+            // Проверка и добавление роли из свойства ApplicationUser.Role, если она не присутствует в Identity
+            if (!string.IsNullOrEmpty(user.Role) && !roles.Contains(user.Role))
+            {
+                _logger.LogInformation("Добавление роли из свойства ApplicationUser.Role: {Role}", user.Role);
+                claims.Add(new Claim(ClaimTypes.Role, user.Role));
+            }
+            
+            _logger.LogInformation("Все роли для пользователя {Email}: {Roles}", user.Email, 
+                string.Join(", ", claims.Where(c => c.Type == ClaimTypes.Role).Select(c => c.Value)));
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

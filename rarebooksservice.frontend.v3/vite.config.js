@@ -9,7 +9,7 @@ export default defineConfig({
             external: [
                 //'lightbox.js-react', 
                 //'dompurify',
-                // Убедитесь, что @emotion/react отсутствует здесь
+                // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ, пїЅпїЅпїЅ @emotion/react пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ
             ]
         }
     },
@@ -17,8 +17,8 @@ export default defineConfig({
         include: [
             'js-cookie',
             '@mui/styled-engine',
-            'lightbox.js-react', 
-            //'@emotion/react',  // Оставьте здесь
+            'yet-another-react-lightbox', 
+            //'@emotion/react',  //  
             //'@emotion/styled',
             'dompurify'
         ]

@@ -6,3 +6,5 @@ Add-Migration UsersInitialCreate -Context UsersDbContext
 Add-Migration UsersAddSubRenew -Context UsersDbContext
 
 Remove-Migration -Context BooksDbContext
+
+Add-Migration PlansDescriptionAdded -Context UsersDbContext

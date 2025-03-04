@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using NLog.Web;
-using RareBooksService.Common.Models;            // <-- Для YandexCloudSettings
+using RareBooksService.Common.Models;            // <-- пїЅпїЅпїЅ YandexCloudSettings
 using RareBooksService.Common.Models.Settings;
 using RareBooksService.Data;
 using RareBooksService.Data.Interfaces;
@@ -35,7 +35,7 @@ namespace RareBooksService.WebApi
 
                 builder.Host.ConfigureAppConfiguration((hostingContext, config) =>
                 {
-                    // Сбрасываем базовый путь для конфигурации
+                    // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
                     config.SetBasePath(AppContext.BaseDirectory);
 
                     if (System.IO.File.Exists(AppContext.BaseDirectory + "\\appsettings.json"))
@@ -44,14 +44,14 @@ namespace RareBooksService.WebApi
                     }
                 });
 
-                // Убираем дефолтных провайдеров логов и подключаем NLog
+                // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ NLog
                 builder.Logging.ClearProviders();
                 builder.Host.UseNLog();
 
-                // 1) Добавляем контроллеры
+                // 1) пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
                 builder.Services.AddControllers();
 
-                // 2) Настройка DbContext
+                // 2) пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ DbContext
                 builder.Services.AddSingleton<NullToZeroMaterializationInterceptor>();
                 builder.Services.AddDbContext<BooksDbContext>((serviceProvider, options) =>
                 {
@@ -69,19 +69,19 @@ namespace RareBooksService.WebApi
                     .AddEntityFrameworkStores<UsersDbContext>()
                     .AddDefaultTokenProviders();
 
-                // 4) Если у вас есть отдельные настройки YandexKassa, TypeOfAccessImages – ок
-                //    Добавим РОВНО так же "YandexCloud" -> YandexCloudSettings:
+                // 4) пїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ YandexKassa, TypeOfAccessImages пїЅ пїЅпїЅ
+                //    пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅ "YandexCloud" -> YandexCloudSettings:
                 builder.Services.Configure<YandexKassaSettings>(builder.Configuration.GetSection("YandexKassa"));
 
                 
                 builder.Services.Configure<TypeOfAccessImages>(options =>
                 {
-                    // Пытаемся взять секцию
+                    // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
                     var section = builder.Configuration.GetSection("TypeOfAccessImages");
-                    // Если секция не существует или пуста — можно пропустить
+                    // пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
                     if (!section.Exists())
                     {
-                        // задать значения по умолчанию
+                        // пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
                         options.UseLocalFiles = false;
                         options.LocalPathOfImages = "default_path";
                         return;
@@ -93,8 +93,8 @@ namespace RareBooksService.WebApi
                     }
                     catch (Exception ex)
                     {
-                        // логируем, ставим default
-                        Console.WriteLine("Ошибка при конфигурации TypeOfAccessImages: " + ex.Message);
+                        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ, пїЅпїЅпїЅпїЅпїЅпїЅ default
+                        Console.WriteLine("пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ TypeOfAccessImages: " + ex.Message);
                         options.UseLocalFiles = false;
                         options.LocalPathOfImages = "default_path";
                     }
@@ -105,7 +105,7 @@ namespace RareBooksService.WebApi
                 builder.Services.Configure<YandexCloudSettings>(builder.Configuration.GetSection("YandexCloud"));
                 builder.Services.Configure<YandexKassaSettings>(builder.Configuration.GetSection("YandexKassa"));
                 //                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                // Так мы гарантируем, что при обращении к IOptions<YandexCloudSettings> будут значения из appsettings.json
+                // пїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ, пїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ IOptions<YandexCloudSettings> пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ appsettings.json
 
                 // 5) JWT
                 var jwtKey = builder.Configuration["Jwt:Key"];
@@ -159,7 +159,7 @@ namespace RareBooksService.WebApi
                 builder.Services.AddHostedService<CacheCleanupService>();
 
 
-                // 7) Разные scoped-сервисы
+                // 7) пїЅпїЅпїЅпїЅпїЅпїЅ scoped-пїЅпїЅпїЅпїЅпїЅпїЅпїЅ
                 builder.Services.AddScoped<IRegularBaseBooksRepository, RegularBaseBooksRepository>();
                 builder.Services.AddScoped<IUserService, UserService>();
                 builder.Services.AddScoped<ISearchHistoryService, SearchHistoryService>();
@@ -168,9 +168,11 @@ namespace RareBooksService.WebApi
                 builder.Services.AddScoped<IBookImagesService, BookImagesService>();
                 //builder.Services.AddScoped<ISearchSignatureStore, RedisSearchSignatureStore>();
                 builder.Services.AddScoped<MigrationService>();
+                // Р РµРіРёСЃС‚СЂР°С†РёСЏ СЃРµСЂРІРёСЃР° РѕС‡РёСЃС‚РєРё РєР°С‚РµРіРѕСЂРёР№
+                builder.Services.AddScoped<ICategoryCleanupService, CategoryCleanupService>();
 
-                // 8) Регистрируем YandexStorageService теперь ТОЛЬКО через AddScoped<IYandexStorageService, YandexStorageService>()
-                //    и в самом YandexStorageService используем IOptions<YandexCloudSettings>
+                // 8)  YandexStorageService пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ AddScoped<IYandexStorageService, YandexStorageService>()
+                //    пїЅ пїЅ пїЅпїЅпїЅпїЅпїЅ YandexStorageService пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ IOptions<YandexCloudSettings>
                 builder.Services.AddScoped<IYandexStorageService, YandexStorageService>();
 
                 // 9) IdentityOptions
@@ -193,17 +195,17 @@ namespace RareBooksService.WebApi
                 builder.Services.AddScoped<ISubscriptionService, Services.SubscriptionService>();    
                 builder.Services.AddScoped<IYandexKassaPaymentService, YandexKassaPaymentService>();
 
-                // 11) Прочие singletons
+                // 11) пїЅпїЅпїЅпїЅпїЅпїЅ singletons
                 builder.Services.AddSingleton<ICaptchaService, CaptchaService>();
                 builder.Services.AddSingleton<ISetupStateService, SetupStateService>();                
 
-                // 12) BookUpdateService – singleton + HostedService
+                // 12) BookUpdateService пїЅ singleton + HostedService
                 builder.Services.AddSingleton<IBookUpdateService, BookUpdateService>();
 
-                // Добавим, чтобы IProgressReporter -> BookUpdateService:
+                // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ, пїЅпїЅпїЅпїЅпїЅ IProgressReporter -> BookUpdateService:
                 builder.Services.AddSingleton<IProgressReporter>(sp =>
                 {
-                    // Используем тот же самый singleton, что и для IBookUpdateService:
+                    // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅ singleton, пїЅпїЅпїЅ пїЅ пїЅпїЅпїЅ IBookUpdateService:
                     return (IProgressReporter)sp.GetRequiredService<IBookUpdateService>();
                 });
 
@@ -216,7 +218,7 @@ namespace RareBooksService.WebApi
                 builder.Services.AddMemoryCache();
                 builder.Services.AddAutoMapper(typeof(AutoMapperProfile));
 
-                // 14) Optionally: ещё раз – не нужно, т. к. уже выше
+                // 14) Optionally: пїЅпїЅпїЅ пїЅпїЅпїЅ пїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅ, пїЅ. пїЅ. пїЅпїЅпїЅ пїЅпїЅпїЅпїЅ
                 // builder.Services.AddHostedService<BookUpdateService>();
 
                 // Swagger
@@ -254,10 +256,10 @@ namespace RareBooksService.WebApi
                     });
                 });
 
-                // Строим приложение
+                // пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
                 var app = builder.Build();
 
-                // Проверяем, нужно ли показывать InitialSetup
+                // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ, пїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ InitialSetup
                 ISetupStateService setupService;
 
                 using (var scope = app.Services.CreateScope())
@@ -265,7 +267,7 @@ namespace RareBooksService.WebApi
                     setupService = scope.ServiceProvider.GetRequiredService<ISetupStateService>();
                     setupService.DetermineIfSetupNeeded();
 
-                    // 1) Если система НЕ требует initial setup -> просто мигрируем базы
+                    // 1) пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ initial setup -> пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ
                     if (!setupService.IsInitialSetupNeeded)
                     {
                         var booksDb = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
@@ -276,11 +278,11 @@ namespace RareBooksService.WebApi
                     }
                 }
 
-                // Middleware: если IsInitialSetupNeeded == true – отдаём InitialSetup
+                // Middleware: пїЅпїЅпїЅпїЅ IsInitialSetupNeeded == true пїЅ пїЅпїЅпїЅпїЅпїЅ InitialSetup
                 app.Use(async (context, next) =>
                 
                 {
-                    // Разрешаем /api/setup/ и /api/setupcheck/
+                    // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ /api/setup/ пїЅ /api/setupcheck/
                     if (context.Request.Path.StartsWithSegments("/api/setup") ||
                         context.Request.Path.StartsWithSegments("/api/setupcheck"))
                     {
@@ -288,7 +290,7 @@ namespace RareBooksService.WebApi
                         return;
                     }
 
-                    // Если IsInitialSetupNeeded
+                    // пїЅпїЅпїЅпїЅ IsInitialSetupNeeded
                     if (setupService.IsInitialSetupNeeded)
                     {
                         if (context.Request.Path.StartsWithSegments("/api"))
@@ -311,7 +313,7 @@ namespace RareBooksService.WebApi
                         return;
                     }
 
-                    // Иначе – всё ок
+                    // пїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅ пїЅпїЅ
                     await next.Invoke();
                 });
 
@@ -319,7 +321,7 @@ namespace RareBooksService.WebApi
                 app.UseSwagger();
                 app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "RareBooksService.WebApi v1"));
 
-                // и т. д.
+                // пїЅ пїЅ. пїЅ.
                 app.UseHttpsRedirection();
                 app.UseRouting();
                 app.UseCors("AllowAll");
