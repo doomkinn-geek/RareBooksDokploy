@@ -11,7 +11,7 @@ export const getAuthHeaders = () => {
     return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-// ������ Cookies.get('token'):
+//     Cookies.get('token'):
 /*export const getAuthHeaders = () => {
     const token = localStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
@@ -128,7 +128,7 @@ export const getCurrentUserProfile = () =>
 export const updateUserSubscription = async (userId, hasSubscription) => {
     console.log({ hasSubscription });
     try {
-        //      �������
+        //      
         const response = await axios.post(`${API_URL}/admin/user/${userId}/subscription`, hasSubscription, {
             headers: {
                 ...getAuthHeaders(),
@@ -145,7 +145,7 @@ export const updateUserSubscription = async (userId, hasSubscription) => {
 export const updateUserRole = async (userId, role) => {
     console.log({ role });
     try {
-        // �������� ������ ������ ���� ��� �������
+        //  
         const response = await axios.post(`${API_URL}/admin/user/${userId}/role`, role, {
             headers: {
                 ...getAuthHeaders(),
@@ -164,7 +164,7 @@ export const getCaptcha = () =>
     });
 
 
-// -------- ����������� ������� --------
+// -------- 
 export async function getAdminSettings() {
     const response = await axios.get(`${API_URL}/adminsettings`, {
         headers: getAuthHeaders()
@@ -182,10 +182,10 @@ export async function updateAdminSettings(settingsDto) {
     return response.data;
 }
 
-// ------------------- ������� ��� ������� -------------------
+// ------------------- 
 
 /**
- * ������������� ������ �������. ������ ����� importTaskId
+ * 
  */
 export async function initImport(fileSize = null) {
     const headers = getAuthHeaders();
@@ -244,12 +244,12 @@ export async function cancelImport(importTaskId) {
     await axios.post(`${API_URL}/import/cancel?importTaskId=${importTaskId}`, null, { headers });
 }
 
-// ���������� ����� ����������� �� �������� /api/feedback
+// 
 export const sendFeedback = async (text) => {
     return axios.post(
         `${API_URL}/feedback`,
-        { text }, // ���� �������
-        { headers: getAuthHeaders() } // ��� Bearer-������
+        { text }, // 
+        { headers: getAuthHeaders() } // 
     );
 }
 
@@ -265,10 +265,18 @@ export function createPayment(subscriptionPlanId, autoRenew) {
 }
 
 export function subscribeUser(subscriptionPlanId) {
-    return axios.post(`${API_URL}/subscription/subscribe`, 
-        { subscriptionPlanId },
-        { headers: getAuthHeaders() }
-    );
+    const token = Cookies.get('token');
+    return axios.post(
+        `${API_URL}/subscription/create-payment`,
+        { subscriptionPlanId, autoRenew: false },
+        { headers: { Authorization: `Bearer ${token}` } }
+    ).then(response => {
+        // Если API возвращает URL для редиректа, перенаправляем пользователя
+        if (response.data && response.data.redirectUrl) {
+            window.location.href = response.data.redirectUrl;
+        }
+        return response;
+    });
 }
 
 export function cancelSubscription() {

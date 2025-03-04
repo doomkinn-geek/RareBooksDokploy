@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <!-- Главная страница -->
+  <url>
+    <loc>https://rarebooks.ru/</loc>
+    <lastmod>2023-03-04</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  
+  <!-- Страница категорий -->
+  <url>
+    <loc>https://rarebooks.ru/categories</loc>
+    <lastmod>2023-03-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+  <!-- Страница поиска по заголовку -->
+  <url>
+    <loc>https://rarebooks.ru/searchByTitle</loc>
+    <lastmod>2023-03-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+  <!-- Страница поиска по описанию -->
+  <url>
+    <loc>https://rarebooks.ru/searchByDescription</loc>
+    <lastmod>2023-03-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+  <!-- Страница поиска по ценовому диапазону -->
+  <url>
+    <loc>https://rarebooks.ru/searchByPrice</loc>
+    <lastmod>2023-03-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+  <!-- Страница с условиями использования -->
+  <url>
+    <loc>https://rarebooks.ru/terms</loc>
+    <lastmod>2023-03-04</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  
+  <!-- Страница с контактами -->
+  <url>
+    <loc>https://rarebooks.ru/contacts</loc>
+    <lastmod>2023-03-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  
+  <!-- Страница подписки -->
+  <url>
+    <loc>https://rarebooks.ru/subscription</loc>
+    <lastmod>2023-03-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+</urlset> 

@@ -15,6 +15,7 @@ import 'yet-another-react-lightbox/styles.css';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
 import DOMPurify from 'dompurify';
 import Cookies from 'js-cookie';
+import { Helmet } from 'react-helmet';
 
 const BookDetail = () => {
     const { id } = useParams();
@@ -254,108 +255,162 @@ const BookDetail = () => {
 
     // Рендеринг содержимого компонента
     return (
-        <Container maxWidth="lg" sx={{ py: 4 }}>
-            {error ? (
-                <Alert severity="error" sx={{ mb: 3 }}>
-                    {error}
-                </Alert>
+        <Container maxWidth="lg" sx={{ py: 5 }}>
+            {/* Helmet для добавления метаданных страницы и структурированных данных */}
+            {book && (
+                <Helmet>
+                    <title>{book.title || 'Антикварная книга'} | Rare Books Service</title>
+                    <meta name="description" content={`${book.title || 'Антикварная книга'} - ${book.author || 'Неизвестный автор'}. Год издания: ${book.year || 'Не указан'}. Детальная информация и оценка стоимости.`} />
+                    <meta name="keywords" content={`${book.title}, ${book.author}, антикварная книга, редкое издание, оценка стоимости, ${book.year}, ${book.type}`} />
+                    
+                    {/* Schema.org микроразметка для Product */}
+                    <script type="application/ld+json">
+                        {JSON.stringify({
+                            "@context": "https://schema.org",
+                            "@type": "Product",
+                            "name": book.title || 'Антикварная книга',
+                            "description": book.description ? DOMPurify.sanitize(book.description, { ALLOWED_TAGS: [] }) : 'Антикварная книга',
+                            "image": bookImages.length > 0 ? bookImages[0].imageUrl : '',
+                            "offers": {
+                                "@type": "Offer",
+                                "priceCurrency": "RUB",
+                                "price": book.finalPrice || book.price || 0,
+                                "availability": "https://schema.org/InStock",
+                                "seller": {
+                                    "@type": "Organization",
+                                    "name": book.sellerName || "Антикварный салон"
+                                }
+                            },
+                            "brand": {
+                                "@type": "Brand",
+                                "name": book.author || "Неизвестный автор"
+                            },
+                            "category": book.type || "Антикварная книга",
+                            "productionDate": book.year || ""
+                        })}
+                    </script>
+                    
+                    {/* Schema.org микроразметка для Book */}
+                    <script type="application/ld+json">
+                        {JSON.stringify({
+                            "@context": "https://schema.org",
+                            "@type": "Book",
+                            "name": book.title || 'Антикварная книга',
+                            "author": {
+                                "@type": "Person",
+                                "name": book.author || "Неизвестный автор"
+                            },
+                            "datePublished": book.year || "",
+                            "publisher": book.publisher || "Неизвестное издательство",
+                            "inLanguage": book.language || "ru",
+                            "image": bookImages.length > 0 ? bookImages[0].imageUrl : '',
+                            "description": book.description ? DOMPurify.sanitize(book.description, { ALLOWED_TAGS: [] }) : 'Антикварная книга'
+                        })}
+                    </script>
+                </Helmet>
+            )}
+            
+            {/* Остальной код компонента */}
+            {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+                    <CircularProgress />
+                </Box>
             ) : (
                 <>
-                    {/* Основная информация о книге */}
-                    {loadingBook ? (
-                        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-                            <CircularProgress />
-                        </Box>
-                    ) : book ? (
+                    {error && (
+                        <Alert severity="error" sx={{ mb: 4 }}>
+                            {error}
+                        </Alert>
+                    )}
+                    
+                    {book ? (
                         <>
-                            <Box sx={{ mb: 4, display: 'flex', alignItems: 'center' }}>
-                                <Button 
-                                    onClick={() => navigate(-1)} 
-                                    variant="outlined" 
-                                    sx={{ mr: 2, borderRadius: '8px' }}
-                                >
-                                    Назад
-                                </Button>
-                                <Typography variant="h4" component="h1" fontWeight="bold">
-                                    Информация о книге
-                                </Typography>
-                            </Box>
-
-                            <Paper elevation={2} sx={{ p: 3, borderRadius: '12px', mb: 4 }}>
+                            <Paper elevation={3} sx={{ p: { xs: 2, md: 4 }, borderRadius: '12px', mb: 4 }}>
                                 <Grid container spacing={4}>
                                     {/* Галерея изображений */}
                                     <Grid item xs={12} md={6}>
-                                        {/* Основное изображение */}
-                                        <Box
-                                            sx={{ 
-                                                height: 400, 
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                bgcolor: '#f5f5f5',
-                                                borderRadius: '8px',
-                                                mb: 2,
-                                                overflow: 'hidden',
-                                                position: 'relative'
-                                            }}
-                                        >
-                                            {loadingImages && bookImages.length === 0 ? (
-                                                <CircularProgress />
-                                            ) : bookImages.length > 0 && bookImages[selectedImageIndex] ? (
-                                                <img
-                                                    src={bookImages[selectedImageIndex].imageUrl}
-                                                    alt={book.title || 'Изображение книги'}
-                                                    style={{ 
-                                                        maxWidth: '100%', 
-                                                        maxHeight: '100%', 
-                                                        objectFit: 'contain',
-                                                        cursor: 'pointer'
-                                                    }}
-                                                    onClick={() => setOpen(true)}
-                                                />
-                                            ) : (
-                                                <Typography variant="body1" color="text.secondary">
-                                                    Изображение отсутствует
-                                                </Typography>
-                                            )}
-                                        </Box>
-                                        
-                                        {/* Миниатюры - отображаем по мере загрузки */}
-                                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', minHeight: 70 }}>
-                                            {bookImages.length > 1 && bookImages.map((image, index) => (
-                                                <Box
-                                                    key={index}
-                                                    sx={{
-                                                        width: 70,
-                                                        height: 70,
-                                                        borderRadius: '8px',
-                                                        overflow: 'hidden',
-                                                        cursor: 'pointer',
-                                                        border: index === selectedImageIndex ? '2px solid var(--primary-color)' : '2px solid transparent',
-                                                        transition: 'all 0.2s'
-                                                    }}
-                                                    onClick={() => setSelectedImageIndex(index)}
-                                                >
-                                                    <img
-                                                        src={image.thumbnailUrl || image.imageUrl}
-                                                        alt={`${book.title || 'Книга'} - миниатюра ${index + 1}`}
-                                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                                    />
+                                        <Box sx={{ mb: { xs: 2, md: 0 } }}>
+                                            {loadingImages ? (
+                                                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
+                                                    <CircularProgress />
                                                 </Box>
-                                            ))}
-                                            {loadingImages && bookImages.length > 0 && (
-                                                <Box
-                                                    sx={{
-                                                        width: 70,
-                                                        height: 70,
-                                                        borderRadius: '8px',
+                                            ) : bookImages.length > 0 ? (
+                                                <Box>
+                                                    {/* Основное изображение */}
+                                                    <Box 
+                                                        sx={{ 
+                                                            width: '100%', 
+                                                            height: '300px',
+                                                            display: 'flex',
+                                                            justifyContent: 'center',
+                                                            alignItems: 'center',
+                                                            backgroundColor: '#f5f5f5',
+                                                            borderRadius: '8px',
+                                                            mb: 2,
+                                                            overflow: 'hidden',
+                                                            cursor: 'pointer'
+                                                        }}
+                                                        onClick={() => handleImageClick(0)}
+                                                    >
+                                                        <img 
+                                                            src={bookImages[0].imageUrl} 
+                                                            alt={book.title || 'Изображение книги'} 
+                                                            style={{ 
+                                                                maxWidth: '100%', 
+                                                                maxHeight: '100%', 
+                                                                objectFit: 'contain'
+                                                            }}
+                                                        />
+                                                    </Box>
+                                                    
+                                                    {/* Миниатюры */}
+                                                    {bookImages.length > 1 && (
+                                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                                            {bookImages.map((img, index) => (
+                                                                <Box 
+                                                                    key={index}
+                                                                    sx={{ 
+                                                                        width: '60px', 
+                                                                        height: '60px',
+                                                                        display: 'flex',
+                                                                        justifyContent: 'center',
+                                                                        alignItems: 'center',
+                                                                        backgroundColor: '#f5f5f5',
+                                                                        borderRadius: '4px',
+                                                                        cursor: 'pointer',
+                                                                        border: index === selectedImageIndex ? '2px solid #1976d2' : '2px solid transparent'
+                                                                    }}
+                                                                    onClick={() => handleImageClick(index)}
+                                                                >
+                                                                    <img 
+                                                                        src={img.thumbnailUrl} 
+                                                                        alt={`Миниатюра ${index + 1}`} 
+                                                                        style={{ 
+                                                                            maxWidth: '100%', 
+                                                                            maxHeight: '100%', 
+                                                                            objectFit: 'contain'
+                                                                        }}
+                                                                    />
+                                                                </Box>
+                                                            ))}
+                                                        </Box>
+                                                    )}
+                                                </Box>
+                                            ) : (
+                                                <Box 
+                                                    sx={{ 
+                                                        width: '100%', 
+                                                        height: '300px',
                                                         display: 'flex',
-                                                        alignItems: 'center',
                                                         justifyContent: 'center',
-                                                        backgroundColor: '#f5f5f5'
+                                                        alignItems: 'center',
+                                                        backgroundColor: '#f5f5f5',
+                                                        borderRadius: '8px'
                                                     }}
                                                 >
-                                                    <CircularProgress size={30} />
+                                                    <Typography variant="body1" color="text.secondary">
+                                                        Изображения отсутствуют
+                                                    </Typography>
                                                 </Box>
                                             )}
                                         </Box>

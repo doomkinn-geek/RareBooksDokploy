@@ -171,19 +171,25 @@ const SubscriptionPage = () => {
 
         try {
             setSubscribing(true);
+            // Вызов subscribeUser теперь может перенаправить пользователя на страницу оплаты
+            // при успешном ответе от сервера
             await subscribeUser(planId);
             
+            // Эта часть кода может не выполниться, если произошло перенаправление
             // Сбрасываем флаг initialLoad, чтобы при перезагрузке компонента данные обновились
             initialLoadRef.current = true;
             
             await refreshUser(true);
-            showSnackbar('Подписка успешно оформлена!', 'success');
+            showSnackbar('Переход к оплате подписки...', 'success');
             
             // Вызываем логирование после обновления данных пользователя
             logSubscriptionDiagnosticInfo();
         } catch (err) {
             console.error('Ошибка при оформлении подписки:', err);
-            showSnackbar('Не удалось оформить подписку. Пожалуйста, попробуйте позже.', 'error');
+            const errorMessage = err.response?.data?.message || 
+                                err.message || 
+                                'Не удалось оформить подписку. Пожалуйста, попробуйте позже.';
+            showSnackbar(errorMessage, 'error');
         } finally {
             setSubscribing(false);
         }

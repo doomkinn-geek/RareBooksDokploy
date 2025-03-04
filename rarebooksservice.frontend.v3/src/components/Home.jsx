@@ -771,65 +771,119 @@ const Home = () => {
     const renderAntiqueBooksValuationInfo = () => (
         <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, borderRadius: '12px', mb: 5, bgcolor: '#f8f9fa' }}>
             <Typography 
-                variant="h5" 
+                variant="h2" 
                 fontWeight="bold" 
                 gutterBottom
-                sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem', md: '1.75rem' } }}
+                sx={{ fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2rem' } }}
             >
                 <MenuBookIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                {t.howItWorks}
+                Профессиональная оценка антикварных книг
             </Typography>
             
             <Typography variant="body1" paragraph sx={{ mb: 3 }}>
-                {t.serviceDescription}
+                Rare Books Service — это специализированный сервис для точной оценки стоимости антикварных и редких книг на основе актуальных рыночных данных. Мы помогаем коллекционерам, букинистам и владельцам редких изданий определить справедливую рыночную стоимость книг, используя обширную базу данных реальных продаж с аукционов и специализированных площадок.
+            </Typography>
+
+            <Typography variant="h3" gutterBottom sx={{ fontSize: { xs: '1.25rem', sm: '1.4rem', md: '1.5rem' }, mt: 4, mb: 2 }}>
+                <AssessmentIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                Наша методика оценки антикварных книг
+            </Typography>
+
+            <Typography variant="body1" paragraph>
+                Мы используем комплексный подход к оценке антикварных книг, учитывая множество факторов, влияющих на их стоимость. Наша система анализирует следующие критерии:
+            </Typography>
+
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+                <Grid item xs={12} md={6}>
+                    <Box sx={{ mb: 2 }}>
+                        <Typography variant="h6" fontWeight="bold" gutterBottom>
+                            Исторические данные
+                        </Typography>
+                        <Typography variant="body2">
+                            Анализ исторических данных о продажах аналогичных изданий за последние годы позволяет увидеть динамику изменения цен и текущие тренды рынка.
+                        </Typography>
+                    </Box>
+                    <Box sx={{ mb: 2 }}>
+                        <Typography variant="h6" fontWeight="bold" gutterBottom>
+                            Редкость издания
+                        </Typography>
+                        <Typography variant="body2">
+                            Тираж, сохранность экземпляров и история издания — ключевые факторы, определяющие ценность книги на рынке антиквариата.
+                        </Typography>
+                    </Box>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                    <Box sx={{ mb: 2 }}>
+                        <Typography variant="h6" fontWeight="bold" gutterBottom>
+                            Состояние книги
+                        </Typography>
+                        <Typography variant="body2">
+                            Сохранность переплета, качество бумаги, отсутствие пятен, пометок и повреждений существенно влияют на окончательную оценку.
+                        </Typography>
+                    </Box>
+                    <Box sx={{ mb: 2 }}>
+                        <Typography variant="h6" fontWeight="bold" gutterBottom>
+                            Культурная и историческая ценность
+                        </Typography>
+                        <Typography variant="body2">
+                            Значимость автора, культурная и историческая важность произведения в контексте своего времени определяют интерес коллекционеров.
+                        </Typography>
+                    </Box>
+                </Grid>
+            </Grid>
+
+            <Typography variant="h3" gutterBottom sx={{ fontSize: { xs: '1.25rem', sm: '1.4rem', md: '1.5rem' }, mt: 4, mb: 2 }}>
+                <MonetizationOnIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                Почему стоит использовать наш сервис для оценки книг
             </Typography>
             
             <Grid container spacing={3}>
                 <Grid item xs={12} sm={6} md={4}>
                     <Box sx={{ textAlign: 'center', p: 2 }}>
                         <SearchIcon fontSize="large" color="primary" />
-                        <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: '1rem', md: '1.25rem' } }}>
-                            {t.findAnalogs}
+                        <Typography variant="h6" gutterBottom>
+                            {t.stepOneTitle}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                            {t.findAnalogsDesc}
+                            {t.stepOneDesc}
                         </Typography>
                     </Box>
                 </Grid>
-                
                 <Grid item xs={12} sm={6} md={4}>
                     <Box sx={{ textAlign: 'center', p: 2 }}>
-                        <AssessmentIcon fontSize="large" color="primary" />
-                        <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: '1rem', md: '1.25rem' } }}>
-                            {t.dataAnalysis}
+                        <TrendingUpIcon fontSize="large" color="secondary" />
+                        <Typography variant="h6" gutterBottom>
+                            {t.stepTwoTitle}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                            {t.dataAnalysisDesc}
+                            {t.stepTwoDesc}
                         </Typography>
                     </Box>
                 </Grid>
-                
-                <Grid item xs={12} sm={6} md={4} sx={{ mx: { xs: 'auto', sm: 'unset' } }}>
+                <Grid item xs={12} sm={6} md={4}>
                     <Box sx={{ textAlign: 'center', p: 2 }}>
-                        <PriceChangeIcon fontSize="large" color="primary" />
-                        <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: '1rem', md: '1.25rem' } }}>
-                            {t.getEstimate}
+                        <VerifiedUserIcon fontSize="large" color="success" />
+                        <Typography variant="h6" gutterBottom>
+                            {t.stepThreeTitle}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                            {t.getEstimateDesc}
+                            {t.stepThreeDesc}
                         </Typography>
                     </Box>
                 </Grid>
             </Grid>
-            
-            <Divider sx={{ my: 3 }} />
-            
-            <Typography variant="body1" sx={{ fontStyle: 'italic' }}>
-                {t.subscriptionPromo}
-                <Link to="/subscription" style={{ textDecoration: 'none', ml: 1 }}>
-                    {t.getSubscription}
-                </Link>.
-            </Typography>
+
+            <Box sx={{ textAlign: 'center', mt: 4 }}>
+                <Button 
+                    component={Link} 
+                    to="/subscription" 
+                    variant="contained" 
+                    color="primary"
+                    size="large"
+                >
+                    Начать оценку антикварных книг
+                </Button>
+            </Box>
         </Paper>
     );
 

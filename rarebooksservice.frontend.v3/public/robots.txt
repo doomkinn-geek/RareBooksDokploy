@@ -1,0 +1,12 @@
+# Разрешаем индексацию всем поисковым роботам
+User-agent: *
+Allow: /
+
+# Запрещаем индексацию технических страниц и папок
+Disallow: /admin/
+Disallow: /login
+Disallow: /register
+Disallow: /api/
+
+# Указываем расположение карты сайта
+Sitemap: https://rarebooks.ru/sitemap.xml 
