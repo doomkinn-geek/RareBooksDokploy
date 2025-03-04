@@ -12,6 +12,7 @@ import {
 import { Card, CardContent, Typography, Box, Button, Container, Paper, Grid, Divider, Chip, CircularProgress, Alert } from '@mui/material';
 import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
+import Zoom from 'yet-another-react-lightbox/plugins/zoom';
 import DOMPurify from 'dompurify';
 import Cookies from 'js-cookie';
 
@@ -25,14 +26,11 @@ const BookDetail = () => {
     const [error, setError] = useState(null);
     const [open, setOpen] = useState(false);
     const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-    const [priceHistory, setPriceHistory] = useState([]);
 
     // Отслеживание загрузки деталей книги
     const [loadingBook, setLoadingBook] = useState(true);
     // Отслеживание загрузки изображений
     const [loadingImages, setLoadingImages] = useState(true);
-    // Отслеживание загрузки истории цен
-    const [loadingPriceHistory, setLoadingPriceHistory] = useState(true);
 
     useEffect(() => {
         const fetchBookData = async () => {
@@ -48,7 +46,6 @@ const BookDetail = () => {
                 setLoadingBook(false);
                 // Инициируем загрузку связанных данных
                 fetchBookImages();
-                fetchPriceHistory(id);
             }
         };
 
@@ -131,44 +128,6 @@ const BookDetail = () => {
         // основные данные книги (наиболее важные)
         setLoading(loadingBook);
     }, [loadingBook]);
-
-    const fetchPriceHistory = async (bookId) => {
-        setLoadingPriceHistory(true);
-        try {
-            const response = await getPriceHistory(bookId);
-            console.log('История цен (полный ответ):', response);
-            console.log('История цен (данные):', response?.data);
-            
-            // Проверяем оба варианта названия свойства (с учетом регистра)
-            console.log('PricePoints в истории цен:', response?.data?.PricePoints);
-            console.log('pricePoints (нижний регистр) в истории цен:', response?.data?.pricePoints);
-            
-            const pricePoints = response?.data?.PricePoints || response?.data?.pricePoints;
-            console.log('Объединенные точки истории цен:', pricePoints);
-            console.log('Количество точек в истории цен:', pricePoints?.length || 0);
-            
-            // Обработка данных с учетом возможной разницы в регистре имен свойств
-            if (response?.data) {
-                const processedData = {
-                    ...response.data,
-                    // Используем свойство независимо от регистра
-                    PricePoints: response.data.PricePoints || response.data.pricePoints || [],
-                    KeywordsUsed: response.data.KeywordsUsed || response.data.keywordsUsed || []
-                };
-                
-                console.log('Обработанные данные истории цен:', processedData);
-                setPriceHistory(processedData);
-            } else {
-                console.log('История цен пуста или имеет неправильный формат');
-                setPriceHistory([]);
-            }
-        } catch (error) {
-            console.error('Ошибка при загрузке истории цен:', error);
-            setPriceHistory([]);
-        } finally {
-            setLoadingPriceHistory(false);
-        }
-    };
 
     const handleImageClick = (index) => {
         setSelectedImageIndex(index);
@@ -468,149 +427,6 @@ const BookDetail = () => {
                                     </Grid>
                                 </Grid>
                             </Paper>
-                            
-                            {/* Блок для истории цен и графика */}
-                            <Grid container spacing={4}>
-                                <Grid item xs={12} md={12}>
-                                    <Paper elevation={2} sx={{ p: 3, borderRadius: '12px', mb: 4 }}>
-                                        <Typography variant="h5" gutterBottom fontWeight="bold">
-                                            История цен
-                                        </Typography>
-                                        
-                                        {loadingPriceHistory ? (
-                                            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
-                                                <CircularProgress />
-                                            </Box>
-                                        ) : priceHistory && (priceHistory.PricePoints || priceHistory.pricePoints) && 
-                                           ((priceHistory.PricePoints && priceHistory.PricePoints.length > 0) || 
-                                            (priceHistory.pricePoints && priceHistory.pricePoints.length > 0)) ? (
-                                            <div>
-                                                <Typography variant="body2" color="text.secondary" gutterBottom>
-                                                    Средняя цена: {formatPrice(priceHistory.AveragePrice || priceHistory.averagePrice)}
-                                                </Typography>
-                                                
-                                                {(priceHistory.KeywordsUsed || priceHistory.keywordsUsed) && 
-                                                 ((priceHistory.KeywordsUsed && priceHistory.KeywordsUsed.length > 0) || 
-                                                  (priceHistory.keywordsUsed && priceHistory.keywordsUsed.length > 0)) && (
-                                                    <Box sx={{ mb: 2 }}>
-                                                        <Typography variant="body2" color="text.secondary">
-                                                            Ключевые слова для поиска: 
-                                                        </Typography>
-                                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                                                            {(priceHistory.KeywordsUsed || priceHistory.keywordsUsed || []).map((keyword, idx) => (
-                                                                <Chip 
-                                                                    key={idx} 
-                                                                    label={keyword} 
-                                                                    size="small" 
-                                                                    color="primary" 
-                                                                    variant="outlined"
-                                                                />
-                                                            ))}
-                                                        </Box>
-                                                    </Box>
-                                                )}
-                                                
-                                                <Grid container spacing={2} sx={{ mt: 2 }}>
-                                                    {(priceHistory.PricePoints || priceHistory.pricePoints || []).map((point, index) => (
-                                                        <Grid item xs={12} sm={6} md={4} key={index}>
-                                                            <Card 
-                                                                elevation={1} 
-                                                                sx={{ 
-                                                                    height: '100%', 
-                                                                    borderRadius: '8px',
-                                                                    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                                                                    '&:hover': {
-                                                                        transform: 'translateY(-4px)',
-                                                                        boxShadow: '0 8px 24px rgba(0,0,0,0.12)'
-                                                                    },
-                                                                    cursor: (point.BookId || point.bookId) ? 'pointer' : 'default'
-                                                                }}
-                                                                onClick={() => {
-                                                                    const pointId = point.BookId || point.bookId;
-                                                                    const bookId = book?.id || book?.Id;
-                                                                    if (pointId && pointId !== bookId) {
-                                                                        navigate(`/books/${pointId}`);
-                                                                    }
-                                                                }}
-                                                            >
-                                                                <Box 
-                                                                    sx={{ 
-                                                                        height: 180, 
-                                                                        bgcolor: '#f5f5f5',
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center',
-                                                                        overflow: 'hidden'
-                                                                    }}
-                                                                >
-                                                                    {(point.FirstImageName || point.firstImageName) ? (
-                                                                        <img
-                                                                            src={getSafeImageUrl(point.FirstImageName || point.firstImageName, point.BookId || point.bookId)}
-                                                                            alt={(point.Title || point.title) || (priceHistory.Title || priceHistory.title) || 'Книга'}
-                                                                            style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }}
-                                                                            onError={(e) => {
-                                                                                // При ошибке загрузки отключаем повторные попытки
-                                                                                e.target.onerror = null;
-                                                                                e.target.src = '/placeholder-book.png';
-                                                                            }}
-                                                                        />
-                                                                    ) : (
-                                                                        <Typography variant="body2" color="text.secondary">
-                                                                            Изображение недоступно
-                                                                        </Typography>
-                                                                    )}
-                                                                </Box>
-                                                                <CardContent>
-                                                                    <Typography variant="h6" component="h3" gutterBottom>
-                                                                        {(point.Title || point.title) || (priceHistory.Title || priceHistory.title) || 'Книга'}
-                                                                    </Typography>
-                                                                    <Typography variant="body2" color="text.secondary" gutterBottom>
-                                                                        Дата продажи: {formatDate(point.Date || point.date)}
-                                                                    </Typography>
-                                                                    <Typography variant="h5" color="primary" fontWeight="bold">
-                                                                        {formatPrice(point.Price || point.price)}
-                                                                    </Typography>
-                                                                    <Typography variant="body2" color="text.secondary">
-                                                                        {point.Source || point.source}
-                                                                    </Typography>
-                                                                </CardContent>
-                                                            </Card>
-                                                        </Grid>
-                                                    ))}
-                                                </Grid>
-                                            </div>
-                                        ) : (
-                                            <div>
-                                                <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
-                                                    История цен недоступна для этой книги
-                                                </Typography>
-                                                
-                                                <Box sx={{ 
-                                                    p: 3, 
-                                                    bgcolor: '#f5f5f5', 
-                                                    borderRadius: '8px',
-                                                    textAlign: 'center'
-                                                }}>
-                                                    <Typography variant="h6" color="text.secondary" gutterBottom>
-                                                        Отладочная информация
-                                                    </Typography>
-                                                    <Typography variant="body2" color="text.secondary">
-                                                        priceHistory доступен: {priceHistory ? 'Да' : 'Нет'}
-                                                    </Typography>
-                                                    <Typography variant="body2" color="text.secondary">
-                                                        PricePoints доступны: {priceHistory?.PricePoints ? 'Да' : 'Нет'} 
-                                                        (размер: {priceHistory?.PricePoints?.length || 0})
-                                                    </Typography>
-                                                    <Typography variant="body2" color="text.secondary">
-                                                        pricePoints доступны: {priceHistory?.pricePoints ? 'Да' : 'Нет'} 
-                                                        (размер: {priceHistory?.pricePoints?.length || 0})
-                                                    </Typography>
-                                                </Box>
-                                            </div>
-                                        )}
-                                    </Paper>
-                                </Grid>
-                            </Grid>
                         </>
                     ) : (
                         <Typography variant="h6" color="text.secondary" sx={{ textAlign: 'center', py: 5 }}>
@@ -627,6 +443,15 @@ const BookDetail = () => {
                     close={() => setOpen(false)}
                     slides={bookImages.map(img => ({ src: img.imageUrl }))}
                     index={selectedImageIndex}
+                    plugins={[Zoom]}
+                    zoom={{
+                        maxZoomPixelRatio: 3,
+                        zoomInMultiplier: 1.2,
+                        doubleTapDelay: 300,
+                        doubleClickDelay: 300,
+                        keyboardMoveDistance: 50,
+                        wheelZoomDistanceFactor: 100,
+                    }}
                 />
             )}
         </Container>
