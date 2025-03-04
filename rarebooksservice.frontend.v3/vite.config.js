@@ -6,11 +6,7 @@ export default defineConfig({
     plugins: [react()],
     build: {
         rollupOptions: {
-            external: [
-                //'lightbox.js-react', 
-                //'dompurify',
-                // ���������, ��� @emotion/react ����������� �����
-            ]
+            // Не указываем как external, чтобы библиотека была включена в сборку
         }
     },
     optimizeDeps: {
@@ -18,9 +14,12 @@ export default defineConfig({
             'js-cookie',
             '@mui/styled-engine',
             'yet-another-react-lightbox', 
-            //'@emotion/react',  //  
-            //'@emotion/styled',
             'dompurify'
         ]
+    },
+    resolve: {
+        alias: {
+            // Можно добавить алиасы, если нужно
+        }
     }
 });

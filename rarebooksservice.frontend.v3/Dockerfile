@@ -1,23 +1,26 @@
-# 1) Этап сборки React-приложения
+# 1) Р­С‚Р°Рї СЃР±РѕСЂРєРё React-РїСЂРёР»РѕР¶РµРЅРёСЏ
 FROM node:18-alpine AS build
 WORKDIR /app
 
-# Копируем package.json, package-lock.json
+# РљРѕРїРёСЂСѓРµРј package.json, package-lock.json
 COPY package*.json ./
+# РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј РІСЃРµ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё СЏРІРЅРѕ, РІРєР»СЋС‡Р°СЏ yet-another-react-lightbox
 RUN npm install
+# Р”Р»СЏ РіР°СЂР°РЅС‚РёРё СѓСЃС‚Р°РЅРѕРІРєРё РєСЂРёС‚РёС‡РµСЃРєРѕР№ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё
+RUN npm install yet-another-react-lightbox@3.16.0 --save
 
-# Копируем исходники
+# РљРѕРїРёСЂСѓРµРј РёСЃС…РѕРґРЅРёРєРё
 COPY . .
-# Собираем проект (в Vite учитываем VITE_API_URL и т.д.)
+# РЎРѕР·РґР°РЅРёРµ СЃР±РѕСЂРєРё (РІ Vite РїРµСЂРµРґР°РµС‚СЃСЏ VITE_API_URL Рё С‚.Рґ.)
 RUN npm run build
 
-# 2) Этап "runtime": nginx + статика
+# 2) Р­С‚Р°Рї "runtime": nginx + СЃРѕР±СЂР°РЅРЅРѕРµ РїСЂРёР»РѕР¶РµРЅРёРµ
 FROM nginx:stable-alpine
 
-# Копируем статические файлы после сборки
+# РљРѕРїРёСЂСѓРµРј СЃРѕР±СЂР°РЅРЅС‹Рµ С„Р°Р№Р»С‹ РїРѕСЃР»Рµ СЃР±РѕСЂРєРё
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Копируем кастомный конфиг nginx, где прописан fallback на index.html
+# РљРѕРїРёСЂСѓРµРј РєР°СЃС‚РѕРјРЅС‹Р№ РєРѕРЅС„РёРі nginx, РґР»СЏ СЂРµРґРёСЂРµРєС‚Р° fallback РЅР° index.html
 COPY ./nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
