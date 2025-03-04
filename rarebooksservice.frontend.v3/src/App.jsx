@@ -374,6 +374,7 @@ const AppContent = () => {
                             <Route path="/searchByCategory/:categoryId" element={<SearchByCategory />} />
                             <Route path="/searchBySeller/:sellerName" element={<SearchBySeller />} />
                             <Route path="/searchByPriceRange/:minPrice/:maxPrice" element={<SearchBooksByPriceRange />} />
+                            {/* Страница профиля пользователя - доступна всем авторизованным пользователям для своего профиля и админам для всех профилей */}
                             <Route path="/user/:userId" element={<UserDetailsPage />} />
                             <Route path="/initial-setup" element={<InitialSetupPage />} />
                         </Route>

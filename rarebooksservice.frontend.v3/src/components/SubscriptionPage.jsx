@@ -66,19 +66,26 @@ const SubscriptionPage = () => {
             await refreshUser(true);
             
             // Если активная подписка есть на сервере, но не в объекте пользователя - исправляем это
-            if (response.data.activeSubscription && user && !user.subscription) {
-                // Создаем обновленный объект пользователя с данными подписки
-                const updatedUser = {
-                    ...user,
-                    subscription: response.data.activeSubscription,
-                    hasSubscription: true
-                };
+            if (response.data.activeSubscription && user) {
+                // Определяем, нужно ли обновлять данные пользователя
+                const needsUpdate = !user.subscription || 
+                                   user.hasSubscription !== true ||
+                                   response.data.activeSubscription.id !== user.subscription.id;
                 
-                // Обновляем состояние пользователя вручную
-                console.log('Обновляем данные пользователя вручную:', updatedUser);
-                setUser(updatedUser);
-                
-                showSnackbar('Данные о подписке обновлены', 'success');
+                if (needsUpdate) {
+                    // Создаем обновленный объект пользователя с данными подписки
+                    const updatedUser = {
+                        ...user,
+                        subscription: response.data.activeSubscription,
+                        hasSubscription: true
+                    };
+                    
+                    // Обновляем состояние пользователя вручную
+                    console.log('Обновляем данные пользователя вручную:', updatedUser);
+                    setUser(updatedUser);
+                    
+                    showSnackbar('Данные о подписке обновлены', 'success');
+                }
             }
             
             // Если сервер вернул исправленный флаг, показываем уведомление
@@ -108,12 +115,34 @@ const SubscriptionPage = () => {
             try {
                 setLoading(true);
                 const response = await getSubscriptionPlans();
-                setPlans(response.data);
                 
-                // Проверяем статус подписки только при первой загрузке
-                if (user && initialLoadRef.current) {
-                    initialLoadRef.current = false; // Отмечаем, что первая загрузка выполнена
-                    await checkStatus();
+                // Проверяем, что полученные данные являются массивом
+                if (response && response.data) {
+                    console.log('Получены данные о планах:', response.data);
+                    
+                    // Если response.data это массив, используем его,
+                    // если это объект с полем plans, которое является массивом, используем его,
+                    // иначе - используем пустой массив
+                    let plansData;
+                    if (Array.isArray(response.data)) {
+                        plansData = response.data;
+                    } else if (response.data.plans && Array.isArray(response.data.plans)) {
+                        plansData = response.data.plans;
+                    } else {
+                        console.warn('Данные о планах не являются массивом:', response.data);
+                        plansData = [];
+                    }
+                    
+                    setPlans(plansData);
+                    
+                    // Проверяем статус подписки при первой загрузке или если у пользователя должна быть активная подписка, но она не определена
+                    if (user && (initialLoadRef.current || (user.hasSubscription === true && !user.subscription))) {
+                        initialLoadRef.current = false; // Отмечаем, что первая загрузка выполнена
+                        await checkStatus();
+                    }
+                } else {
+                    console.warn('Не получены данные о планах подписки:', response);
+                    setPlans([]);
                 }
             } catch (err) {
                 console.error('Error fetching subscription plans:', err);
@@ -259,6 +288,14 @@ const SubscriptionPage = () => {
             });
         }
         
+        // Если у пользователя явно установлен флаг hasSubscription в true, считаем подписку активной
+        if (user.hasSubscription === true) {
+            if (process.env.NODE_ENV !== 'production') {
+                console.log('Подписка активна по флагу hasSubscription');
+            }
+            return true;
+        }
+        
         // Проверяем сначала статус
         if (subscription.status && subscription.status !== 'Active') {
             if (process.env.NODE_ENV !== 'production') {
@@ -267,7 +304,8 @@ const SubscriptionPage = () => {
             return false;
         }
         
-        // Затем проверяем явно заданный флаг isActive
+        // Проверка isActive только если явно установлен в false
+        // Если isActive не определен или равен true, не учитываем этот флаг
         if (subscription.isActive === false) {
             if (process.env.NODE_ENV !== 'production') {
                 console.warn('Подписка явно помечена как неактивная (isActive: false)');
@@ -307,6 +345,15 @@ const SubscriptionPage = () => {
                     <Typography variant="body2" color="text.secondary">
                         Выберите подходящий план подписки ниже.
                     </Typography>
+                    <Button 
+                        variant="outlined" 
+                        color="primary" 
+                        onClick={checkStatus}
+                        disabled={isCheckingStatus}
+                        sx={{ mt: 2, borderRadius: '8px', textTransform: 'none' }}
+                    >
+                        {isCheckingStatus ? <CircularProgress size={24} /> : 'Проверить статус подписки'}
+                    </Button>
                 </Paper>
             );
         }
@@ -359,6 +406,16 @@ const SubscriptionPage = () => {
                                         {displayReason}
                                     </Typography>
                                 )}
+                                <Button
+                                    size="small"
+                                    variant="text"
+                                    color="primary"
+                                    onClick={checkStatus}
+                                    disabled={isCheckingStatus}
+                                    sx={{ ml: 1, minWidth: 'auto', textTransform: 'none' }}
+                                >
+                                    {isCheckingStatus ? <CircularProgress size={16} /> : 'Обновить статус'}
+                                </Button>
                             </Box>
                         </Box>
                         
@@ -431,6 +488,11 @@ const SubscriptionPage = () => {
     const getSubscriptionDisplayReason = () => {
         if (!user || !user.subscription) return "Подписка отсутствует";
         
+        // Если у пользователя явно установлен флаг hasSubscription в true, считаем подписку активной
+        if (user.hasSubscription === true) {
+            return ""; // Подписка активна, причина не требуется
+        }
+        
         const { subscription } = user;
         const now = new Date();
         const endDate = new Date(subscription.endDate);
@@ -442,7 +504,7 @@ const SubscriptionPage = () => {
             reasons.push(`Статус подписки не активен (${subscription.status || 'не указан'})`);
         }
         
-        if (!subscription.isActive) {
+        if (subscription.isActive === false) {
             reasons.push("Подписка помечена как неактивная в системе");
         }
         
@@ -487,29 +549,26 @@ const SubscriptionPage = () => {
     const renderPlans = () => {
         if (loading) {
             return (
-                <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}>
+                <Box sx={{ 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center', 
+                    minHeight: 300 
+                }}>
                     <CircularProgress />
                 </Box>
             );
         }
-
-        if (error) {
+        
+        if (!plans || !Array.isArray(plans) || plans.length === 0) {
+            console.warn('Планы подписки не являются массивом или пусты:', plans);
             return (
-                <Alert severity="error" sx={{ mb: 4 }}>
-                    {error}
+                <Alert severity="info" sx={{ marginTop: 2 }}>
+                    Информация о планах подписки временно недоступна. Пожалуйста, попробуйте позже.
                 </Alert>
             );
         }
         
-        // Если планы не загружены или их нет, показываем сообщение
-        if (!plans || plans.length === 0) {
-            return (
-                <Alert severity="info" sx={{ mb: 4 }}>
-                    В данный момент нет доступных планов подписки. Пожалуйста, попробуйте позже.
-                </Alert>
-            );
-        }
-
         // Стандартные функции для каждого плана, если они не указаны в описании
         const defaultPlanFeatures = {
             'Минимальный': [
@@ -551,25 +610,25 @@ const SubscriptionPage = () => {
                 </Box>
                 
                 <Grid container spacing={3} id="subscription-plans">
-                    {plans.map((plan) => {
+                    {Array.isArray(plans) && plans.map((plan) => {
                         // Определяем, является ли этот план текущим для пользователя
-                        const isCurrentPlan = user?.subscription?.subscriptionPlanId === plan.id;
+                        const isCurrentPlan = user?.subscription?.subscriptionPlanId === plan?.id;
                         
                         // Получаем функции для плана из стандартного набора или используем общие
-                        const features = defaultPlanFeatures[plan.name] || [
-                            `Лимит запросов: ${plan.monthlyRequestLimit} в месяц`,
+                        const features = defaultPlanFeatures[plan?.name] || [
+                            `Лимит запросов: ${plan?.monthlyRequestLimit || 'не указан'} в месяц`,
                             'Доступ к оценке стоимости книг',
                             'Поиск по базе данных антикварных книг'
                         ];
                         
                         // Получаем иконку для плана или используем стандартную
-                        const featureIcon = featureIcons[plan.name] || <StarIcon />;
+                        const featureIcon = featureIcons[plan?.name] || <StarIcon />;
                         
                         // Определяем, является ли план премиальным
-                        const isPremium = plan.name.toLowerCase().includes('премиум');
+                        const isPremium = plan?.name.toLowerCase().includes('премиум');
                         
                         return (
-                            <Grid item xs={12} md={4} key={plan.id}>
+                            <Grid item xs={12} md={4} key={plan?.id}>
                                 <Card 
                                     elevation={3} 
                                     sx={{ 
@@ -606,19 +665,19 @@ const SubscriptionPage = () => {
                                         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                                             {featureIcon}
                                             <Typography variant="h5" component="h2" fontWeight="bold" sx={{ ml: 1 }}>
-                                                {plan.name}
+                                                {plan?.name}
                                             </Typography>
                                         </Box>
                                         
                                         <Typography variant="h4" color="primary" fontWeight="bold" sx={{ mb: 2 }}>
-                                            {plan.price} ₽
+                                            {plan?.price} ₽
                                             <Typography variant="body2" component="span" color="text.secondary" sx={{ ml: 1 }}>
                                                 / месяц
                                             </Typography>
                                         </Typography>
                                         
                                         <Typography variant="body2" color="text.secondary" paragraph>
-                                            {plan.description || `План "${plan.name}" для оценки стоимости антикварных книг. Лимит запросов: ${plan.monthlyRequestLimit} в месяц.`}
+                                            {plan?.description || `План "${plan?.name}" для оценки стоимости антикварных книг. Лимит запросов: ${plan?.monthlyRequestLimit || 'не указан'} в месяц.`}
                                         </Typography>
                                         
                                         <Box sx={{ 
@@ -630,7 +689,7 @@ const SubscriptionPage = () => {
                                             borderRadius: 1 
                                         }}>
                                             <Typography variant="body2" fontWeight="bold">
-                                                Лимит запросов: <span style={{ color: 'var(--primary-color)' }}>{plan.monthlyRequestLimit}</span> в месяц
+                                                Лимит запросов: <span style={{ color: 'var(--primary-color)' }}>{plan?.monthlyRequestLimit || 'не указан'}</span> в месяц
                                             </Typography>
                                         </Box>
                                         
@@ -649,7 +708,7 @@ const SubscriptionPage = () => {
                                             color={isCurrentPlan ? "success" : "primary"}
                                             fullWidth
                                             disabled={subscribing || (isCurrentPlan && user?.subscription?.isActive)}
-                                            onClick={() => handleSubscribe(plan.id)}
+                                            onClick={() => handleSubscribe(plan?.id)}
                                             sx={{ 
                                                 py: 1.5,
                                                 fontWeight: 'bold',

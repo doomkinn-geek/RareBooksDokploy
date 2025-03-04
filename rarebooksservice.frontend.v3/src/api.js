@@ -5,7 +5,7 @@ import Cookies from 'js-cookie';
 export const API_URL = '/api';
 //export const API_URL = 'https://localhost:7042/api';
 
-// �������� ����� ������ �� cookies
+// получаем токен доступа из cookies
 export const getAuthHeaders = () => {
     const token = Cookies.get('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
@@ -87,25 +87,48 @@ export const registerUser = (userData) =>
 export const loginUser = (userData) =>
     axios.post(`${API_URL}/auth/login`, userData);
 
+// Методы для AdminController (требуют права администратора)
 export const getUsers = () =>
     axios.get(`${API_URL}/admin/users`, {
         headers: getAuthHeaders(),
     });
 
+// Получение профиля пользователя через AdminController (требует права администратора)
 export const getUserById = (userId) =>
     axios.get(`${API_URL}/admin/user/${userId}`, {
         headers: getAuthHeaders(),
     });
 
+// Получение истории поиска через AdminController (требует права администратора)
 export const getUserSearchHistory = (userId) =>
     axios.get(`${API_URL}/admin/user/${userId}/searchHistory`, {
+        headers: getAuthHeaders(),
+    });
+
+// Методы для UserController (работают для всех авторизованных пользователей)
+
+// Получение профиля пользователя (работает для своего профиля или для администратора)
+export const getUserProfile = (userId) =>
+    axios.get(`${API_URL}/user/${userId}`, {
+        headers: getAuthHeaders(),
+    });
+
+// Получение истории поиска пользователя (работает для своей истории или для администратора)
+export const getUserSearchHistoryNew = (userId) =>
+    axios.get(`${API_URL}/user/${userId}/searchHistory`, {
+        headers: getAuthHeaders(),
+    });
+
+// Получение профиля текущего пользователя
+export const getCurrentUserProfile = () =>
+    axios.get(`${API_URL}/user/profile`, {
         headers: getAuthHeaders(),
     });
 
 export const updateUserSubscription = async (userId, hasSubscription) => {
     console.log({ hasSubscription });
     try {
-        // �������� ������ ������ �������� ��� �������
+        //      �������
         const response = await axios.post(`${API_URL}/admin/user/${userId}/subscription`, hasSubscription, {
             headers: {
                 ...getAuthHeaders(),

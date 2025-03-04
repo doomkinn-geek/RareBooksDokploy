@@ -13,13 +13,21 @@ import {
     Grid,
     Alert,
     useMediaQuery,
-    useTheme
+    useTheme,
+    IconButton,
+    Skeleton,
+    Divider,
+    Tooltip
 } from '@mui/material';
 import Cookies from 'js-cookie';
 import { getRecentSales } from '../api';
 import { UserContext } from '../context/UserContext';
 import { LanguageContext } from '../context/LanguageContext';
 import HistoryIcon from '@mui/icons-material/History';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import TodayIcon from '@mui/icons-material/Today';
 
 const RecentSales = () => {
     const { user } = useContext(UserContext);
@@ -27,11 +35,21 @@ const RecentSales = () => {
     const navigate = useNavigate();
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isTablet = useMediaQuery(theme.breakpoints.down('md'));
     
     const [recentSales, setRecentSales] = useState([]);
     const [loadingRecentSales, setLoadingRecentSales] = useState(false);
     const [recentSalesError, setRecentSalesError] = useState(null);
+    const [refreshing, setRefreshing] = useState(false);
     const isMounted = useRef(true);
+    
+    // Защита от ошибок: убедиться, что recentSales всегда массив
+    useEffect(() => {
+        if (!Array.isArray(recentSales)) {
+            console.warn('recentSales не является массивом, сбрасываем в пустой массив');
+            setRecentSales([]);
+        }
+    }, [recentSales]);
     
     // Эффект для отслеживания монтирования компонента
     useEffect(() => {
@@ -48,39 +66,38 @@ const RecentSales = () => {
     // Функция для получения недавних продаж
     const fetchRecentSales = async () => {
         console.log('Вызвана функция fetchRecentSales в компоненте RecentSales');
-        console.log('Состояние пользователя:', user);
         
         try {
             setLoadingRecentSales(true);
             setRecentSalesError(null);
-            
-            // Получаем токен аутентификации
-            const token = Cookies.get('token');
-            console.log('Токен аутентификации:', token ? 'Токен существует' : 'Токен отсутствует');
+            setRefreshing(true);
             
             // Используем импортированную функцию API
-            console.log('Отправка запроса getRecentSales...');
             const response = await getRecentSales(5);
-            console.log('Полученные данные о недавних продажах:', response.data);
+            console.log('Полученные данные о продажах:', response.data);
+            
+            // Проверяем, что данные являются массивом
+            const salesData = Array.isArray(response.data) ? response.data : [];
             
             // Проверяем, смонтирован ли компонент перед обновлением состояния
             if (isMounted.current) {
-                setRecentSales(response.data);
+                setRecentSales(salesData); // Устанавливаем массив или пустой массив
             }
         } catch (error) {
             console.error('Ошибка при загрузке недавних продаж:', error);
-            console.error('Код ошибки:', error.response?.status);
-            console.error('Сообщение ошибки:', error.response?.data?.message);
             
             // Проверяем, смонтирован ли компонент перед обновлением состояния
             if (isMounted.current) {
                 setRecentSalesError(error.response?.data?.message || 'Ошибка при загрузке недавних продаж');
-                setRecentSales([]);
+                setRecentSales([]); // Устанавливаем пустой массив при ошибке
             }
         } finally {
             // Проверяем, смонтирован ли компонент перед обновлением состояния
             if (isMounted.current) {
                 setLoadingRecentSales(false);
+                setTimeout(() => {
+                    setRefreshing(false);
+                }, 300);
             }
         }
     };
@@ -129,45 +146,132 @@ const RecentSales = () => {
         return null;
     }
     
+    // Компонент-скелетон для загрузки карточек
+    const LoadingSkeleton = () => (
+        <Grid container spacing={isMobile ? 1 : 2}>
+            {[1, 2, 3].map((item) => (
+                <Grid item xs={12} sm={6} md={4} key={item}>
+                    <Card sx={{ height: '100%', borderRadius: '8px' }}>
+                        <Skeleton variant="rectangular" height={isMobile ? 120 : 140} />
+                        <CardContent>
+                            <Skeleton variant="text" width="80%" height={24} />
+                            <Skeleton variant="text" width="40%" height={20} sx={{ mt: 1 }} />
+                            <Skeleton variant="text" width="60%" height={16} sx={{ mt: 1 }} />
+                            <Skeleton variant="text" width="30%" height={30} sx={{ mt: 1 }} />
+                        </CardContent>
+                    </Card>
+                </Grid>
+            ))}
+        </Grid>
+    );
+    
     return (
-        <Paper elevation={2} sx={{ p: { xs: 2, sm: 3 }, borderRadius: '12px', mb: 3 }}>
+        <Paper 
+            elevation={2} 
+            sx={{ 
+                p: { xs: 2, sm: 3 }, 
+                borderRadius: '12px', 
+                mb: 3,
+                transition: 'all 0.3s ease'
+            }}
+            className="recent-sales-paper"
+        >
             <Box sx={{ 
                 display: 'flex', 
                 flexDirection: { xs: 'column', sm: 'row' },
                 justifyContent: 'space-between', 
                 alignItems: { xs: 'flex-start', sm: 'center' }, 
                 mb: 2,
-                gap: { xs: 2, sm: 0 }
+                gap: { xs: 1.5, sm: 0 }
             }}>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <HistoryIcon sx={{ mr: 1 }} color="primary" />
-                    <Typography variant="h6" fontWeight="bold" sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' } }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', width: { xs: '100%', sm: 'auto' } }}>
+                    <HistoryIcon 
+                        sx={{ 
+                            mr: 1, 
+                            fontSize: { xs: '1.3rem', md: '1.5rem' } 
+                        }} 
+                        color="primary" 
+                    />
+                    <Typography 
+                        variant="h6" 
+                        fontWeight="bold" 
+                        sx={{ 
+                            fontSize: { xs: '1.1rem', md: '1.25rem' },
+                            flex: 1
+                        }}
+                    >
                         Недавние продажи
                     </Typography>
+                    
+                    {/* Мобильная кнопка обновления */}
+                    {isMobile && (
+                        <Tooltip title="Обновить данные">
+                            <IconButton 
+                                color="primary" 
+                                onClick={fetchRecentSales}
+                                disabled={refreshing}
+                                size="small"
+                                sx={{ ml: 'auto' }}
+                            >
+                                <RefreshIcon 
+                                    sx={{ 
+                                        animation: refreshing ? 'spin 1s linear infinite' : 'none',
+                                        '@keyframes spin': {
+                                            '0%': { transform: 'rotate(0deg)' },
+                                            '100%': { transform: 'rotate(360deg)' }
+                                        }
+                                    }} 
+                                />
+                            </IconButton>
+                        </Tooltip>
+                    )}
                 </Box>
                 
-                {/* Кнопка для обновления данных */}
-                <Button 
-                    variant="outlined" 
-                    size="small" 
-                    onClick={fetchRecentSales}
-                    fullWidth={isMobile}
-                >
-                    Обновить данные
-                </Button>
+                {/* Кнопка для обновления данных - только для планшетов и десктопов */}
+                {!isMobile && (
+                    <Button 
+                        variant="outlined" 
+                        size="small" 
+                        onClick={fetchRecentSales}
+                        disabled={refreshing}
+                        startIcon={
+                            <RefreshIcon 
+                                sx={{ 
+                                    animation: refreshing ? 'spin 1s linear infinite' : 'none',
+                                    '@keyframes spin': {
+                                        '0%': { transform: 'rotate(0deg)' },
+                                        '100%': { transform: 'rotate(360deg)' }
+                                    }
+                                }} 
+                            />
+                        }
+                    >
+                        Обновить данные
+                    </Button>
+                )}
             </Box>
             
             {!user.hasSubscription && (
                 <Alert 
                     severity="warning" 
-                    sx={{ mb: 2 }}
+                    sx={{ 
+                        mb: 2,
+                        fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                        '& .MuiAlert-icon': {
+                            fontSize: { xs: '1.2rem', sm: '1.5rem' }
+                        }
+                    }}
                     action={
                         <Button 
                             component={Link} 
                             to="/subscription" 
                             color="primary" 
                             size="small"
-                            sx={{ ml: { xs: 0, sm: 1 }, mt: { xs: 1, sm: 0 } }}
+                            sx={{ 
+                                ml: { xs: 0, sm: 1 }, 
+                                mt: { xs: 1, sm: 0 },
+                                fontSize: { xs: '0.7rem', sm: '0.8rem' }
+                            }}
                         >
                             Оформить подписку
                         </Button>
@@ -177,18 +281,29 @@ const RecentSales = () => {
                 </Alert>
             )}
             
-            {loadingRecentSales ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-                    <CircularProgress size={40} />
-                </Box>
+            {loadingRecentSales && (!Array.isArray(recentSales) || recentSales.length === 0) ? (
+                <LoadingSkeleton />
             ) : recentSalesError ? (
-                <Alert severity="error" sx={{ mt: 2 }}>
+                <Alert 
+                    severity="error" 
+                    sx={{ 
+                        mt: 2,
+                        fontSize: { xs: '0.8rem', sm: '0.875rem' }
+                    }}
+                >
                     {recentSalesError}
                 </Alert>
-            ) : recentSales && recentSales.length > 0 ? (
-                <Grid container spacing={isMobile ? 1 : 2}>
+            ) : Array.isArray(recentSales) && recentSales.length > 0 ? (
+                <Grid 
+                    container 
+                    spacing={isMobile ? 1 : 2}
+                    sx={{ 
+                        opacity: refreshing ? 0.7 : 1,
+                        transition: 'opacity 0.3s ease'
+                    }}
+                >
                     {recentSales.map((book) => (
-                        <Grid item xs={12} sm={6} md={4} key={book.bookId}>
+                        <Grid item xs={12} sm={6} md={4} key={book?.bookId || Math.random()}>
                             <Card 
                                 sx={{ 
                                     height: '100%', 
@@ -203,27 +318,30 @@ const RecentSales = () => {
                                     display: 'flex',
                                     flexDirection: 'column',
                                     width: '100%',
-                                    maxWidth: '100%'
+                                    maxWidth: '100%',
+                                    position: 'relative'
                                 }}
-                                onClick={() => navigate(`/books/${book.bookId}`)}
+                                onClick={() => book?.bookId && navigate(`/books/${book.bookId}`)}
                                 className="recent-sales-card"
                             >
                                 {/* Контейнер для изображения с фиксированной высотой */}
-                                <Box sx={{ 
-                                    height: isMobile ? 120 : 140, 
-                                    bgcolor: '#f5f5f5',
-                                    display: 'flex',
-                                    justifyContent: 'center',
-                                    alignItems: 'center',
-                                    overflow: 'hidden'
-                                }}
-                                className="book-image-container"
+                                <Box 
+                                    sx={{ 
+                                        height: isMobile ? 120 : 140, 
+                                        bgcolor: '#f5f5f5',
+                                        display: 'flex',
+                                        justifyContent: 'center',
+                                        alignItems: 'center',
+                                        overflow: 'hidden',
+                                        position: 'relative'
+                                    }}
+                                    className="book-image-container"
                                 >
                                     {/* Изображения с обработчиком ошибок */}
-                                    {book.imageUrl ? (
+                                    {book?.imageUrl ? (
                                         <img
                                             src={book.imageUrl}
-                                            alt={book.title}
+                                            alt={book.title || 'Книга'}
                                             onError={handleImageError}
                                             style={{ 
                                                 maxWidth: '100%',
@@ -231,10 +349,10 @@ const RecentSales = () => {
                                                 objectFit: 'contain'
                                             }}
                                         />
-                                    ) : book.thumbnailUrl ? (
+                                    ) : book?.thumbnailUrl ? (
                                         <img
                                             src={book.thumbnailUrl}
-                                            alt={book.title}
+                                            alt={book.title || 'Книга'}
                                             onError={handleImageError}
                                             style={{ 
                                                 maxWidth: '100%',
@@ -243,53 +361,99 @@ const RecentSales = () => {
                                             }}
                                         />
                                     ) : (
-                                        <Typography variant="body2" color="text.secondary">
-                                            Нет изображения
-                                        </Typography>
+                                        <img
+                                            src="https://via.placeholder.com/200x150?text=Нет+изображения"
+                                            alt="Нет изображения"
+                                            style={{ 
+                                                maxWidth: '100%',
+                                                maxHeight: '100%',
+                                                objectFit: 'contain'
+                                            }}
+                                        />
                                     )}
                                 </Box>
-                                <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
-                                    <Typography 
-                                        variant="subtitle1" 
-                                        fontWeight="bold" 
-                                        noWrap 
-                                        title={book.title}
-                                        sx={{ fontSize: { xs: '0.9rem', md: '1rem' } }}
-                                    >
-                                        {book.title}
-                                    </Typography>
-                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                                        <Chip 
-                                            label={book.category || 'Без категории'} 
-                                            size="small" 
-                                            color="primary" 
-                                            variant="outlined"
-                                            sx={{ fontSize: '0.75rem' }}
-                                        />
-                                    </Box>
-                                    <Typography 
-                                        variant="body2" 
-                                        color="text.secondary" 
-                                        gutterBottom
-                                        sx={{ fontSize: { xs: '0.75rem', md: '0.875rem' } }}
-                                    >
-                                        Дата продажи: {formatDate(book.saleDate)}
-                                    </Typography>
+                                
+                                {/* Содержимое карточки */}
+                                <CardContent sx={{ 
+                                    p: isMobile ? 2 : 3,
+                                    '&:last-child': { pb: isMobile ? 2 : 3 } 
+                                }}>
                                     <Typography 
                                         variant="h6" 
-                                        color="primary" 
-                                        fontWeight="bold"
-                                        sx={{ fontSize: { xs: '1rem', md: '1.25rem' } }}
+                                        component="div" 
+                                        sx={{ 
+                                            mb: 1,
+                                            fontSize: { xs: '0.9rem', sm: '1rem' },
+                                            fontWeight: 'bold',
+                                            lineHeight: 1.2,
+                                            maxHeight: '2.4em',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            display: '-webkit-box',
+                                            WebkitLineClamp: 2,
+                                            WebkitBoxOrient: 'vertical'
+                                        }}
                                     >
-                                        {formatPrice(book.finalPrice || book.price)}
+                                        {book?.title || 'Название отсутствует'}
                                     </Typography>
+                                    
+                                    {book?.category && (
+                                        <Box sx={{ mb: 1 }}>
+                                            <Chip 
+                                                label={book.category} 
+                                                size="small" 
+                                                sx={{ fontSize: '0.7rem' }}
+                                            />
+                                        </Box>
+                                    )}
+                                    
+                                    <Box sx={{ 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        mb: 0.5,
+                                        fontSize: { xs: '0.75rem', sm: '0.8rem' },
+                                        color: 'text.secondary'
+                                    }}>
+                                        <TodayIcon sx={{ fontSize: '0.9rem', mr: 0.5 }} />
+                                        Продана: {formatDate(book?.saleDate)}
+                                    </Box>
+                                    
+                                    <Box sx={{ 
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        mt: 1
+                                    }}>
+                                        <Typography 
+                                            variant="h6" 
+                                            color="primary"
+                                            sx={{ 
+                                                fontWeight: 'bold',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                fontSize: { xs: '1rem', sm: '1.1rem' }
+                                            }}
+                                        >
+                                            <AttachMoneyIcon sx={{ 
+                                                fontSize: { xs: '1.1rem', sm: '1.2rem' },
+                                                mr: 0.3
+                                            }} />
+                                            {formatPrice(book?.salePrice || 0)}
+                                        </Typography>
+                                    </Box>
                                 </CardContent>
                             </Card>
                         </Grid>
                     ))}
                 </Grid>
             ) : (
-                <Alert severity="info" sx={{ mt: 2 }}>
+                <Alert 
+                    severity="info" 
+                    sx={{ 
+                        mt: 2,
+                        fontSize: { xs: '0.8rem', sm: '0.875rem' }
+                    }}
+                >
                     В настоящее время нет данных о недавних продажах. Попробуйте зайти позже.
                 </Alert>
             )}

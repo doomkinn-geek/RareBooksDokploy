@@ -320,16 +320,26 @@ namespace RareBooksService.Data
         {
             try
             {
-                var searchHistory = new UserSearchHistory
+                // Проверяем, существует ли уже такая запись в истории поиска
+                var existingRecord = await _usersContext.UserSearchHistories
+                    .FirstOrDefaultAsync(h => h.UserId == userId && 
+                                             h.Query == query && 
+                                             h.SearchType == searchType);
+                
+                // Добавляем запись только если такой еще нет
+                if (existingRecord == null)
                 {
-                    UserId = userId,
-                    Query = query,
-                    SearchDate = DateTime.UtcNow,
-                    SearchType = searchType
-                };
+                    var searchHistory = new UserSearchHistory
+                    {
+                        UserId = userId,
+                        Query = query,
+                        SearchDate = DateTime.UtcNow,
+                        SearchType = searchType
+                    };
 
-                _usersContext.UserSearchHistories.Add(searchHistory);
-                await _usersContext.SaveChangesAsync();
+                    _usersContext.UserSearchHistories.Add(searchHistory);
+                    await _usersContext.SaveChangesAsync();
+                }
             }
             catch (Exception ex)
             {

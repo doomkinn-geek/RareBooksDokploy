@@ -1,7 +1,8 @@
 ﻿//src/components/UserDetailsPage.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useContext } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { getUserById, getUserSearchHistory } from '../api';
+import { getUserProfile, getUserSearchHistoryNew, getUserById, getUserSearchHistory } from '../api';
+import { UserContext } from '../context/UserContext';
 import { 
   Typography, 
   Table, 
@@ -41,27 +42,72 @@ const UserDetailsPage = () => {
     const [error, setError] = useState(null);
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
+    const { user: currentUser } = useContext(UserContext);
 
     useEffect(() => {
         const fetchUserData = async () => {
+            // Если контекст пользователя еще загружается, просто ждем
+            if (currentUser === null) {
+                // Не меняем статус загрузки, если это первый рендер
+                return;
+            }
+            
             try {
                 setLoading(true);
-                const userResponse = await getUserById(userId);
-                setUser(userResponse.data);
+                
+                // Проверяем валидность userId
+                if (!userId) {
+                    console.error('UserId is undefined');
+                    setError('Идентификатор пользователя не указан');
+                    setLoading(false);
+                    return;
+                }
 
-                const historyResponse = await getUserSearchHistory(userId);
+                // Проверяем права доступа
+                const isAdmin = currentUser && currentUser.role && currentUser.role.toLowerCase() === 'admin';
+                const isCurrentUser = currentUser && userId === currentUser.id;
+                
+                // Если пользователь не админ и пытается просмотреть чужой профиль
+                if (!isAdmin && !isCurrentUser) {
+                    console.error('Access denied: trying to view another user profile without admin rights');
+                    setError('У вас нет доступа к этой информации. Вы можете просматривать только свой профиль.');
+                    setLoading(false);
+                    return;
+                }
+
+                let userResponse;
+                let historyResponse;
+
+                // Используем новые методы API для обычных пользователей и старые для администраторов
+                if (isAdmin) {
+                    // Администратор может использовать старые методы
+                    console.log('Using admin methods for userId:', userId);
+                    userResponse = await getUserById(userId);
+                    historyResponse = await getUserSearchHistory(userId);
+                } else {
+                    // Обычные пользователи используют новые методы
+                    console.log('Using regular methods for userId:', userId);
+                    userResponse = await getUserProfile(userId);
+                    historyResponse = await getUserSearchHistoryNew(userId);
+                }
+                
+                setUser(userResponse.data);
                 setSearchHistory(historyResponse.data);
                 setError(null);
             } catch (error) {
                 console.error('Error fetching user data:', error);
-                setError('Не удалось загрузить данные пользователя. Пожалуйста, попробуйте позже.');
+                if (error.response && error.response.status === 403) {
+                    setError('У вас нет доступа к этой информации. Вы можете просматривать только свой профиль.');
+                } else {
+                    setError('Не удалось загрузить данные пользователя. Пожалуйста, попробуйте позже.');
+                }
             } finally {
                 setLoading(false);
             }
         };
 
         fetchUserData();
-    }, [userId]);
+    }, [userId, currentUser]); // Добавляем currentUser в зависимости
 
     const handleChangePage = (event, newPage) => {
         setPage(newPage);
@@ -210,7 +256,7 @@ const UserDetailsPage = () => {
                     Назад
                 </Button>
                 <Typography variant="h4" component="h1" fontWeight="bold">
-                    Информация о пользователе
+                    {currentUser && userId === currentUser.id ? 'Мой профиль' : 'Информация о пользователе'}
                 </Typography>
             </Box>
 
