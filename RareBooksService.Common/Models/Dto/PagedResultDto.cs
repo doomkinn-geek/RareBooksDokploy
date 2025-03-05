@@ -10,5 +10,6 @@ namespace RareBooksService.Common.Models.Dto
     {
         public List<T> Items { get; set; }
         public int TotalPages { get; set; }
+        public int? RemainingRequests { get; set; }
     }
 }

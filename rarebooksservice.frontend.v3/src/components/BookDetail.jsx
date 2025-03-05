@@ -33,6 +33,23 @@ const BookDetail = () => {
     // Отслеживание загрузки изображений
     const [loadingImages, setLoadingImages] = useState(true);
 
+    // Эффект для прокрутки страницы в начало после загрузки данных
+    useEffect(() => {
+        // Прокручиваем страницу в начало при монтировании компонента
+        window.scrollTo(0, 0);
+    }, []);
+    
+    // Дополнительный эффект для прокрутки страницы в начало после загрузки данных
+    useEffect(() => {
+        // Если данные загружены (книга или ошибка), прокручиваем страницу в начало
+        if (!loadingBook) {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth' // добавляем плавную прокрутку
+            });
+        }
+    }, [loadingBook]);
+
     useEffect(() => {
         const fetchBookData = async () => {
             setLoadingBook(true);
@@ -112,12 +129,14 @@ const BookDetail = () => {
 
         fetchBookData();
         
-        // Очистка URL объектов при размонтировании компонента
+        // Функция очистки для освобождения URL объектов при размонтировании
         return () => {
-            // Очистка URL для основных изображений
             bookImages.forEach(img => {
-                if (img.imageUrl && img.imageUrl.startsWith('blob:')) {
+                if (img.imageUrl && typeof img.imageUrl === 'string' && img.imageUrl.startsWith('blob:')) {
                     URL.revokeObjectURL(img.imageUrl);
+                }
+                if (img.thumbnailUrl && typeof img.thumbnailUrl === 'string' && img.thumbnailUrl.startsWith('blob:')) {
+                    URL.revokeObjectURL(img.thumbnailUrl);
                 }
             });
         };

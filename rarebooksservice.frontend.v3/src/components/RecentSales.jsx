@@ -72,6 +72,7 @@ const RecentSales = () => {
             setRefreshing(true);
             
             // Используем импортированную функцию API
+            // Теперь API доступно для всех пользователей, независимо от наличия подписки
             const response = await getRecentSales(5);
             console.log('Полученные данные о продажах:', response.data);
             
@@ -147,12 +148,6 @@ const RecentSales = () => {
             return 'Ошибка цены';
         }
     };
-    
-    // Проверяем авторизацию пользователя
-    if (!user) {
-        console.log('Пользователь не авторизован. Компонент RecentSales не будет отображен.');
-        return null;
-    }
     
     // Компонент-скелетон для загрузки карточек
     const LoadingSkeleton = () => (
@@ -275,42 +270,6 @@ const RecentSales = () => {
                     </Button>
                 )}
             </Box>
-            
-            {!user.hasSubscription && (
-                <Alert 
-                    severity="warning" 
-                    sx={{ 
-                        mb: 2,
-                        fontSize: { xs: '0.8rem', sm: '0.875rem' },
-                        '& .MuiAlert-icon': {
-                            fontSize: { xs: '1.2rem', sm: '1.5rem' }
-                        },
-                        bgcolor: '#fef7e7',
-                        border: '1px solid #f7dfad'
-                    }}
-                    action={
-                        <Button 
-                            component={Link} 
-                            to="/subscription" 
-                            variant="contained"
-                            size="small"
-                            sx={{ 
-                                ml: { xs: 0, sm: 1 }, 
-                                mt: { xs: 1, sm: 0 },
-                                fontSize: { xs: '0.7rem', sm: '0.8rem' },
-                                bgcolor: '#d32f2f',
-                                '&:hover': {
-                                    bgcolor: '#b71c1c'
-                                }
-                            }}
-                        >
-                            Оформить подписку
-                        </Button>
-                    }
-                >
-                    Для просмотра недавних продаж требуется активная подписка.
-                </Alert>
-            )}
             
             {loadingRecentSales && (!Array.isArray(recentSales) || recentSales.length === 0) ? (
                 <LoadingSkeleton />
@@ -497,6 +456,41 @@ const RecentSales = () => {
                     }}
                 >
                     В настоящее время нет данных о недавних продажах. Попробуйте зайти позже.
+                </Alert>
+            )}
+            
+            {/* Информационная карточка для неавторизованных пользователей */}
+            {!user && (
+                <Alert 
+                    severity="info" 
+                    sx={{ 
+                        mt: 2,
+                        fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                        bgcolor: '#f5f5f5',
+                        border: '1px solid #e0e0e0',
+                        color: '#333'
+                    }}
+                    action={
+                        <Button 
+                            component={Link} 
+                            to="/login" 
+                            variant="contained"
+                            size="small"
+                            sx={{ 
+                                ml: { xs: 0, sm: 1 }, 
+                                mt: { xs: 1, sm: 0 },
+                                fontSize: { xs: '0.7rem', sm: '0.8rem' },
+                                bgcolor: '#d32f2f',
+                                '&:hover': {
+                                    bgcolor: '#b71c1c'
+                                }
+                            }}
+                        >
+                            Вход / Регистрация
+                        </Button>
+                    }
+                >
+                    Зарегистрируйтесь, чтобы получить доступ к расширенным функциям и персональным рекомендациям книг.
                 </Alert>
             )}
         </Paper>

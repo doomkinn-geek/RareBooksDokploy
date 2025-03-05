@@ -170,6 +170,7 @@ namespace RareBooksService.WebApi
                 builder.Services.AddScoped<MigrationService>();
                 // Регистрация сервиса очистки категорий
                 builder.Services.AddScoped<ICategoryCleanupService, CategoryCleanupService>();
+                builder.Services.AddScoped<IBooksService, BooksService>();
 
                 // 8)  YandexStorageService ������ ������ ����� AddScoped<IYandexStorageService, YandexStorageService>()
                 //    � � ����� YandexStorageService ���������� IOptions<YandexCloudSettings>

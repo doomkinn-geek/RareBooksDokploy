@@ -307,10 +307,29 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                                                     justifyContent: 'center',
                                                     backgroundColor: 'rgba(69, 39, 160, 0.05)'
                                                 }}>
-                                                    <BookIcon sx={{ fontSize: 60, color: 'rgba(69, 39, 160, 0.2)', mb: 1 }} />
-                                                    <Typography variant="body2" color="text.secondary" align="center">
-                                                        Изображение недоступно
-                                                    </Typography>
+                                                    {book.firstImageName ? (
+                                                        // Индикатор загрузки, если изображение загружается
+                                                        <React.Fragment>
+                                                            <CircularProgress 
+                                                                size={50} 
+                                                                sx={{ 
+                                                                    color: theme.palette.primary.main,
+                                                                    mb: 1 
+                                                                }} 
+                                                            />
+                                                            <Typography variant="body2" color="text.secondary" align="center">
+                                                                Загрузка изображения...
+                                                            </Typography>
+                                                        </React.Fragment>
+                                                    ) : (
+                                                        // Если у книги вообще нет изображения
+                                                        <React.Fragment>
+                                                            <BookIcon sx={{ fontSize: 60, color: 'rgba(69, 39, 160, 0.2)', mb: 1 }} />
+                                                            <Typography variant="body2" color="text.secondary" align="center">
+                                                                Изображение отсутствует
+                                                            </Typography>
+                                                        </React.Fragment>
+                                                    )}
                                                 </Box>
                                             )}
                                         </Grid>
