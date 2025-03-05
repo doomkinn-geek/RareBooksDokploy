@@ -5,7 +5,8 @@ import {
     TableRow, Chip, CircularProgress, Card, CardContent,
     Divider, Grid, Dialog, DialogActions, DialogContent,
     DialogContentText, DialogTitle, TablePagination, Tooltip,
-    IconButton
+    IconButton, useMediaQuery, List, ListItem, ListItemText,
+    Accordion, AccordionSummary, AccordionDetails, Collapse
 } from '@mui/material';
 import { getAllCategoriesWithBooksCount, analyzeCategoriesByNames, analyzeUnwantedCategories, 
     deleteCategoriesByNames, deleteUnwantedCategories } from '../../api';
@@ -21,6 +22,9 @@ import LockIcon from '@mui/icons-material/Lock';
 import Cookies from 'js-cookie';
 import axios from 'axios';
 import { API_URL } from '../../api';
+import { useTheme } from '@mui/material/styles';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import InfoIcon from '@mui/icons-material/Info';
 
 // Функция для декодирования JWT токена
 const parseJwt = (token) => {
@@ -65,6 +69,13 @@ const CategoryCleanup = () => {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [showOnlyUnwanted, setShowOnlyUnwanted] = useState(false);
 
+    // Добавляем определение мобильного устройства
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+    
+    // Добавляем состояние для раскрытых элементов на мобильном
+    const [expandedCategory, setExpandedCategory] = useState(null);
+    
     // Загрузка списка категорий при монтировании компонента
     useEffect(() => {
         // Проверяем и анализируем токен, затем проверяем права через API
@@ -323,6 +334,154 @@ const CategoryCleanup = () => {
         return date.toLocaleString('ru-RU');
     };
 
+    // Функция для обработки нажатий на категорию в мобильном представлении
+    const handleCategoryExpand = (categoryId) => {
+        setExpandedCategory(expandedCategory === categoryId ? null : categoryId);
+    };
+
+    // Мобильное представление категории
+    const renderMobileCategoryItem = (category) => {
+        const isExpanded = expandedCategory === category.id;
+        
+        return (
+            <Paper 
+                elevation={1} 
+                sx={{ 
+                    mb: 1, 
+                    overflow: 'hidden',
+                    borderLeft: category.isUnwanted ? '4px solid #f44336' : '4px solid #4caf50'
+                }}
+                key={category.id}
+            >
+                <ListItem 
+                    button 
+                    onClick={() => handleCategoryExpand(category.id)}
+                    sx={{ 
+                        p: 2, 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'flex-start'
+                    }}
+                >
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', mb: 1 }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
+                            {category.name}
+                        </Typography>
+                        <Box>
+                            {category.isUnwanted ? (
+                                <Chip 
+                                    label="Нежелательная" 
+                                    color="error" 
+                                    size="small" 
+                                    icon={<WarningIcon />} 
+                                />
+                            ) : (
+                                <Chip 
+                                    label="Обычная" 
+                                    color="success" 
+                                    size="small" 
+                                />
+                            )}
+                        </Box>
+                    </Box>
+                    
+                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', width: '100%' }}>
+                        <Chip 
+                            label={`ID: ${category.id}`}
+                            size="small" 
+                            variant="outlined"
+                        />
+                        <Chip 
+                            label={`Книг: ${category.booksCount}`} 
+                            color={category.booksCount > 0 ? "primary" : "default"} 
+                            size="small" 
+                        />
+                    </Box>
+                </ListItem>
+                
+                <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                    <Box sx={{ p: 2, pt: 0, bgcolor: 'background.default' }}>
+                        <List dense disablePadding>
+                            <ListItem>
+                                <ListItemText 
+                                    primary="Уникальные" 
+                                    secondary={
+                                        <Chip 
+                                            label={category.uniqueBooksCount}
+                                            color={category.uniqueBooksCount < category.booksCount ? "warning" : "success"}
+                                            size="small"
+                                        />
+                                    }
+                                />
+                            </ListItem>
+                            <ListItem>
+                                <ListItemText 
+                                    primary="Эксклюзивные" 
+                                    secondary={
+                                        <Chip 
+                                            label={category.exclusiveBooksCount}
+                                            color={category.exclusiveBooksCount === 0 ? "default" : 
+                                                  category.exclusiveBooksCount < category.uniqueBooksCount ? "warning" : "success"}
+                                            size="small"
+                                        />
+                                    }
+                                />
+                            </ListItem>
+                            <ListItem>
+                                <ListItemText 
+                                    primary="Дубликаты" 
+                                    secondary={
+                                        category.hasDuplicates ? (
+                                            <Chip 
+                                                label={category.duplicateCount}
+                                                color="warning"
+                                                size="small"
+                                                icon={<ContentCopyIcon />}
+                                            />
+                                        ) : (
+                                            <Chip 
+                                                label="Уникальная"
+                                                color="default"
+                                                size="small"
+                                            />
+                                        )
+                                    }
+                                />
+                            </ListItem>
+                            <ListItem>
+                                <ListItemText 
+                                    primary="Создана" 
+                                    secondary={formatDate(category.createdDate)}
+                                />
+                            </ListItem>
+                            <ListItem>
+                                <ListItemText 
+                                    primary="Обновлена" 
+                                    secondary={formatDate(category.lastUpdatedDate)}
+                                />
+                            </ListItem>
+                        </List>
+                        
+                        <Button
+                            variant="contained"
+                            color="error"
+                            fullWidth
+                            onClick={() => {
+                                openConfirmDialog('deleteCategories', [category.name]);
+                            }}
+                            startIcon={<DeleteIcon />}
+                            sx={{ mt: 2 }}
+                        >
+                            {category.hasDuplicates 
+                                ? `Удалить все с именем "${category.name}" (${category.duplicateCount} шт.)`
+                                : "Удалить категорию"}
+                        </Button>
+                    </Box>
+                </Collapse>
+            </Paper>
+        );
+    };
+
     // Если доступ запрещен, показываем соответствующее сообщение и отладочную информацию
     if (accessDenied) {
         return (
@@ -394,7 +553,7 @@ const CategoryCleanup = () => {
                 </Alert>
             )}
 
-            {/* Таблица категорий */}
+            {/* Таблица категорий (для десктопа) или список (для мобильного) */}
             <Card elevation={3} sx={{ borderRadius: '12px', mb: 3 }}>
                 <CardContent>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -421,156 +580,202 @@ const CategoryCleanup = () => {
                         </Box>
                     </Box>
 
-                    <TableContainer component={Paper} elevation={0} sx={{ borderRadius: '8px' }}>
-                        <Table size="small">
-                            <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
-                                <TableRow>
-                                    <TableCell width="50">ID</TableCell>
-                                    <TableCell>Название</TableCell>
-                                    <TableCell align="right">Книги</TableCell>
-                                    <TableCell align="right">Уникальные</TableCell>
-                                    <TableCell align="right">Эксклюзивные</TableCell>
-                                    <TableCell>Статус</TableCell>
-                                    <TableCell>Дубликаты</TableCell>
-                                    <TableCell>Создана</TableCell>
-                                    <TableCell>Обновлена</TableCell>
-                                    <TableCell align="right">Действия</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {loadingCategories ? (
+                    {/* Десктопная версия - таблица */}
+                    {!isMobile && (
+                        <TableContainer component={Paper} elevation={0} sx={{ borderRadius: '8px' }}>
+                            <Table size="small">
+                                <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
                                     <TableRow>
-                                        <TableCell colSpan={10} align="center" sx={{ py: 3 }}>
-                                            <CircularProgress size={30} />
-                                        </TableCell>
+                                        <TableCell width="50">ID</TableCell>
+                                        <TableCell>Название</TableCell>
+                                        <TableCell align="right">Книги</TableCell>
+                                        <TableCell align="right">Уникальные</TableCell>
+                                        <TableCell align="right">Эксклюзивные</TableCell>
+                                        <TableCell>Статус</TableCell>
+                                        <TableCell>Дубликаты</TableCell>
+                                        <TableCell>Создана</TableCell>
+                                        <TableCell>Обновлена</TableCell>
+                                        <TableCell align="right">Действия</TableCell>
                                     </TableRow>
-                                ) : filteredCategories.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={10} align="center" sx={{ py: 3 }}>
-                                            <Typography variant="body2" color="text.secondary">
-                                                {showOnlyUnwanted 
-                                                    ? 'Нежелательные категории не найдены' 
-                                                    : 'Категории не найдены'}
-                                            </Typography>
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    filteredCategories
-                                        .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                        .map((category) => (
-                                            <TableRow key={category.id} hover>
-                                                <TableCell>{category.id}</TableCell>
-                                                <TableCell>{category.name}</TableCell>
-                                                <TableCell align="right">
-                                                    <Tooltip title="Общее количество книг в категории">
-                                                        <Chip 
-                                                            label={category.booksCount} 
-                                                            color={category.booksCount > 0 ? "primary" : "default"} 
-                                                            size="small" 
-                                                        />
-                                                    </Tooltip>
-                                                </TableCell>
-                                                <TableCell align="right">
-                                                    <Tooltip title="Количество уникальных книг (без дубликатов)">
-                                                        <Chip 
-                                                            label={category.uniqueBooksCount}
-                                                            color={category.uniqueBooksCount < category.booksCount ? "warning" : "success"}
-                                                            size="small"
-                                                        />
-                                                    </Tooltip>
-                                                </TableCell>
-                                                <TableCell align="right">
-                                                    <Tooltip title="Книги, присутствующие только в этой категории">
-                                                        <Chip 
-                                                            label={category.exclusiveBooksCount}
-                                                            color={category.exclusiveBooksCount === 0 ? "default" : 
-                                                                  category.exclusiveBooksCount < category.uniqueBooksCount ? "warning" : "success"}
-                                                            size="small"
-                                                        />
-                                                    </Tooltip>
-                                                </TableCell>
-                                                <TableCell>
-                                                    {category.isUnwanted ? (
-                                                        <Chip 
-                                                            label="Нежелательная" 
-                                                            color="error" 
-                                                            size="small" 
-                                                            icon={<WarningIcon />} 
-                                                        />
-                                                    ) : (
-                                                        <Chip 
-                                                            label="Обычная" 
-                                                            color="success" 
-                                                            size="small" 
-                                                        />
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {category.hasDuplicates ? (
-                                                        <Tooltip title={`Найдено ${category.duplicateCount} категорий с таким именем`}>
+                                </TableHead>
+                                <TableBody>
+                                    {loadingCategories ? (
+                                        <TableRow>
+                                            <TableCell colSpan={10} align="center" sx={{ py: 3 }}>
+                                                <CircularProgress size={30} />
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : filteredCategories.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={10} align="center" sx={{ py: 3 }}>
+                                                <Typography variant="body2" color="text.secondary">
+                                                    {showOnlyUnwanted 
+                                                        ? 'Нежелательные категории не найдены' 
+                                                        : 'Категории не найдены'}
+                                                </Typography>
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        filteredCategories
+                                            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                            .map((category) => (
+                                                <TableRow key={category.id} hover>
+                                                    <TableCell>{category.id}</TableCell>
+                                                    <TableCell>{category.name}</TableCell>
+                                                    <TableCell align="right">
+                                                        <Tooltip title="Общее количество книг в категории">
                                                             <Chip 
-                                                                label={category.duplicateCount}
-                                                                color="warning"
-                                                                size="small"
-                                                                icon={<ContentCopyIcon />}
+                                                                label={category.booksCount} 
+                                                                color={category.booksCount > 0 ? "primary" : "default"} 
+                                                                size="small" 
                                                             />
                                                         </Tooltip>
-                                                    ) : (
-                                                        <Chip 
-                                                            label="Уникальная"
-                                                            color="default"
-                                                            size="small"
-                                                        />
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>{formatDate(category.createdDate)}</TableCell>
-                                                <TableCell>{formatDate(category.lastUpdatedDate)}</TableCell>
-                                                <TableCell align="right">
-                                                    <Tooltip title={
-                                                        category.hasDuplicates 
-                                                            ? `Удалить все категории с именем "${category.name}" (${category.duplicateCount} шт.)`
-                                                            : "Удалить категорию"
-                                                    }>
-                                                        <IconButton 
-                                                            size="small" 
-                                                            color="error"
-                                                            onClick={() => {
-                                                                openConfirmDialog('deleteCategories', [category.name]);
-                                                            }}
-                                                        >
-                                                            <DeleteIcon fontSize="small" />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
-                                )}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
+                                                    </TableCell>
+                                                    <TableCell align="right">
+                                                        <Tooltip title="Количество уникальных книг (без дубликатов)">
+                                                            <Chip 
+                                                                label={category.uniqueBooksCount}
+                                                                color={category.uniqueBooksCount < category.booksCount ? "warning" : "success"}
+                                                                size="small"
+                                                            />
+                                                        </Tooltip>
+                                                    </TableCell>
+                                                    <TableCell align="right">
+                                                        <Tooltip title="Книги, присутствующие только в этой категории">
+                                                            <Chip 
+                                                                label={category.exclusiveBooksCount}
+                                                                color={category.exclusiveBooksCount === 0 ? "default" : 
+                                                                      category.exclusiveBooksCount < category.uniqueBooksCount ? "warning" : "success"}
+                                                                size="small"
+                                                            />
+                                                        </Tooltip>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {category.isUnwanted ? (
+                                                            <Chip 
+                                                                label="Нежелательная" 
+                                                                color="error" 
+                                                                size="small" 
+                                                                icon={<WarningIcon />} 
+                                                            />
+                                                        ) : (
+                                                            <Chip 
+                                                                label="Обычная" 
+                                                                color="success" 
+                                                                size="small" 
+                                                            />
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {category.hasDuplicates ? (
+                                                            <Tooltip title={`Найдено ${category.duplicateCount} категорий с таким именем`}>
+                                                                <Chip 
+                                                                    label={category.duplicateCount}
+                                                                    color="warning"
+                                                                    size="small"
+                                                                    icon={<ContentCopyIcon />}
+                                                                />
+                                                            </Tooltip>
+                                                        ) : (
+                                                            <Chip 
+                                                                label="Уникальная"
+                                                                color="default"
+                                                                size="small"
+                                                            />
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>{formatDate(category.createdDate)}</TableCell>
+                                                    <TableCell>{formatDate(category.lastUpdatedDate)}</TableCell>
+                                                    <TableCell align="right">
+                                                        <Tooltip title={
+                                                            category.hasDuplicates 
+                                                                ? `Удалить все категории с именем "${category.name}" (${category.duplicateCount} шт.)`
+                                                                : "Удалить категорию"
+                                                        }>
+                                                            <IconButton 
+                                                                size="small" 
+                                                                color="error"
+                                                                onClick={() => {
+                                                                    openConfirmDialog('deleteCategories', [category.name]);
+                                                                }}
+                                                            >
+                                                                <DeleteIcon fontSize="small" />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
+                    
+                    {/* Мобильная версия - список */}
+                    {isMobile && (
+                        <Box>
+                            {loadingCategories ? (
+                                <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                                    <CircularProgress size={30} />
+                                </Box>
+                            ) : filteredCategories.length === 0 ? (
+                                <Box sx={{ textAlign: 'center', p: 3 }}>
+                                    <Typography variant="body2" color="text.secondary">
+                                        {showOnlyUnwanted 
+                                            ? 'Нежелательные категории не найдены' 
+                                            : 'Категории не найдены'}
+                                    </Typography>
+                                </Box>
+                            ) : (
+                                <Box>
+                                    {filteredCategories
+                                        .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                        .map(category => renderMobileCategoryItem(category))
+                                    }
+                                </Box>
+                            )}
+                        </Box>
+                    )}
 
                     <TablePagination
-                        rowsPerPageOptions={[5, 10, 25, 50]}
+                        rowsPerPageOptions={isMobile ? [5, 10, 25] : [5, 10, 25, 50]}
                         component="div"
                         count={filteredCategories.length}
                         rowsPerPage={rowsPerPage}
                         page={page}
                         onPageChange={handleChangePage}
                         onRowsPerPageChange={handleChangeRowsPerPage}
-                        labelRowsPerPage="Строк на странице:"
+                        labelRowsPerPage={isMobile ? "Строк:" : "Строк на странице:"}
                         labelDisplayedRows={({ from, to, count }) => `${from}-${to} из ${count}`}
                     />
                 </CardContent>
             </Card>
 
-            <Grid container spacing={3}>
-                {/* Секция для произвольных категорий */}
-                <Grid item xs={12} md={6}>
-                    <Card elevation={3} sx={{ borderRadius: '12px', height: '100%' }}>
-                        <CardContent>
-                            <Typography variant="h6" component="h3" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
+            {/* Секции "Произвольные категории" и "Нежелательные категории" */}
+            {isMobile ? (
+                // Мобильная версия - аккордеоны друг под другом
+                <Box>
+                    {/* Произвольные категории */}
+                    <Accordion 
+                        elevation={3} 
+                        sx={{ 
+                            borderRadius: '12px !important', 
+                            mb: 2,
+                            '&:before': { display: 'none' } // Убираем линию сверху
+                        }}
+                    >
+                        <AccordionSummary
+                            expandIcon={<ExpandMoreIcon />}
+                            sx={{ 
+                                borderRadius: '12px',
+                                backgroundColor: '#f9f9f9' 
+                            }}
+                        >
+                            <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
                                 Произвольные категории
                             </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
                             <Typography variant="body2" color="text.secondary" paragraph>
                                 Анализируйте и удаляйте категории по названиям, указав их вручную
                             </Typography>
@@ -584,151 +789,350 @@ const CategoryCleanup = () => {
                                     variant="outlined"
                                     value={categoryNames}
                                     onChange={(e) => setCategoryNames(e.target.value)}
-                                    placeholder="Введите названия категорий через запятую"
+                                    placeholder="Введите названия через запятую"
                                     helperText="Например: unknown, interested, draft"
                                     disabled={loading}
                                     sx={{ mb: 2 }}
                                 />
                                 
-                                <Button
-                                    variant="contained"
-                                    color="primary"
-                                    onClick={handleAnalyzeCategories}
-                                    disabled={loading || !categoryNames.trim()}
-                                    startIcon={loading ? <CircularProgress size={20} /> : <AnalyticsIcon />}
-                                    sx={{ mr: 1 }}
-                                >
-                                    Анализировать
-                                </Button>
-                                
-                                <Button
-                                    variant="contained"
-                                    color="error"
-                                    onClick={() => {
-                                        if (categoryNames) {
-                                            const namesToDelete = categoryNames.split(',').map(name => name.trim());
-                                            openConfirmDialog('deleteCategories', namesToDelete);
-                                        }
-                                    }}
-                                    disabled={loading || !categoryNames.trim()}
-                                    startIcon={<DeleteIcon />}
-                                >
-                                    Удалить
-                                </Button>
-                            </Box>
-                            
-                            {analysisResult && (
-                                <Paper elevation={1} sx={{ p: 2, borderRadius: '8px', backgroundColor: '#f8f9fa' }}>
-                                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
-                                        Результаты анализа:
-                                    </Typography>
-                                    <Typography variant="body2">
-                                        Категорий: <Chip label={analysisResult.categoriesCount} color="primary" size="small" sx={{ ml: 1 }} />
-                                    </Typography>
-                                    <Typography variant="body2">
-                                        Всего книг: <Chip label={analysisResult.booksCount} color="secondary" size="small" sx={{ ml: 1 }} />
-                                    </Typography>
-                                    <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
-                                        * Общее количество книг может включать дубликаты, если книги присутствуют в нескольких категориях
-                                    </Typography>
+                                <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        onClick={handleAnalyzeCategories}
+                                        disabled={loading || !categoryNames.trim()}
+                                        fullWidth
+                                        startIcon={loading ? <CircularProgress size={20} /> : <AnalyticsIcon />}
+                                    >
+                                        Анализ
+                                    </Button>
                                     
-                                    {analysisResult.categoriesCount > 0 && (
-                                        <Button
-                                            variant="outlined"
-                                            color="error"
-                                            size="small"
-                                            onClick={() => {
+                                    <Button
+                                        variant="contained"
+                                        color="error"
+                                        onClick={() => {
+                                            if (categoryNames) {
                                                 const namesToDelete = categoryNames.split(',').map(name => name.trim());
                                                 openConfirmDialog('deleteCategories', namesToDelete);
-                                            }}
-                                            startIcon={<DeleteIcon />}
-                                            sx={{ mt: 2 }}
-                                        >
-                                            Удалить найденные категории
-                                        </Button>
-                                    )}
-                                </Paper>
-                            )}
-                        </CardContent>
-                    </Card>
-                </Grid>
+                                            }
+                                        }}
+                                        disabled={loading || !categoryNames.trim()}
+                                        fullWidth
+                                        startIcon={<DeleteIcon />}
+                                    >
+                                        Удалить
+                                    </Button>
+                                </Box>
+                                
+                                {analysisResult && (
+                                    <Paper elevation={1} sx={{ p: 2, borderRadius: '8px', backgroundColor: '#f8f9fa' }}>
+                                        <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
+                                            Результаты анализа:
+                                        </Typography>
+                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                                            <Box>
+                                                <Typography variant="body2">
+                                                    Категорий: <Chip label={analysisResult.categoriesCount} color="primary" size="small" sx={{ ml: 1 }} />
+                                                </Typography>
+                                            </Box>
+                                            <Box>
+                                                <Typography variant="body2">
+                                                    Всего книг: <Chip label={analysisResult.booksCount} color="secondary" size="small" sx={{ ml: 1 }} />
+                                                </Typography>
+                                            </Box>
+                                        </Box>
+                                        <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary', fontSize: '0.75rem' }}>
+                                            * Общее количество книг может включать дубликаты
+                                        </Typography>
+                                        
+                                        {analysisResult.categoriesCount > 0 && (
+                                            <Button
+                                                variant="outlined"
+                                                color="error"
+                                                size="small"
+                                                onClick={() => {
+                                                    const namesToDelete = categoryNames.split(',').map(name => name.trim());
+                                                    openConfirmDialog('deleteCategories', namesToDelete);
+                                                }}
+                                                startIcon={<DeleteIcon />}
+                                                sx={{ mt: 2 }}
+                                                fullWidth
+                                            >
+                                                Удалить найденные категории
+                                            </Button>
+                                        )}
+                                    </Paper>
+                                )}
+                            </Box>
+                        </AccordionDetails>
+                    </Accordion>
 
-                {/* Секция для нежелательных категорий */}
-                <Grid item xs={12} md={6}>
-                    <Card elevation={3} sx={{ borderRadius: '12px', height: '100%' }}>
-                        <CardContent>
-                            <Typography variant="h6" component="h3" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                    {/* Нежелательные категории */}
+                    <Accordion 
+                        elevation={3} 
+                        sx={{ 
+                            borderRadius: '12px !important', 
+                            mb: 2,
+                            '&:before': { display: 'none' } // Убираем линию сверху
+                        }}
+                    >
+                        <AccordionSummary
+                            expandIcon={<ExpandMoreIcon />}
+                            sx={{ 
+                                borderRadius: '12px',
+                                backgroundColor: '#f9f9f9' 
+                            }}
+                        >
+                            <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
                                 Нежелательные категории
                             </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
                             <Typography variant="body2" color="text.secondary" paragraph>
                                 Анализируйте и удаляйте стандартные нежелательные категории ("unknown" и "interested")
                             </Typography>
                             
                             <Divider sx={{ my: 2 }} />
                             
-                            <Box sx={{ mb: 3, display: 'flex', gap: 1 }}>
-                                <Button
-                                    variant="contained"
-                                    color="primary"
-                                    onClick={handleAnalyzeUnwantedCategories}
-                                    disabled={unwantedLoading}
-                                    startIcon={unwantedLoading ? <CircularProgress size={20} /> : <AnalyticsIcon />}
-                                    fullWidth
-                                >
-                                    Анализировать нежелательные
-                                </Button>
-                                
-                                <Button
-                                    variant="contained"
-                                    color="error"
-                                    onClick={() => openConfirmDialog('deleteUnwantedCategories')}
-                                    disabled={unwantedLoading}
-                                    startIcon={<DeleteIcon />}
-                                    fullWidth
-                                >
-                                    Удалить нежелательные
-                                </Button>
-                            </Box>
-                            
-                            {unwantedAnalysisResult && (
-                                <Paper elevation={1} sx={{ p: 2, borderRadius: '8px', backgroundColor: '#f8f9fa' }}>
-                                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
-                                        Результаты анализа нежелательных категорий:
-                                    </Typography>
-                                    <Typography variant="body2">
-                                        Категорий: <Chip label={unwantedAnalysisResult.categoriesCount} color="primary" size="small" sx={{ ml: 1 }} />
-                                    </Typography>
-                                    <Typography variant="body2">
-                                        Книг: <Chip label={unwantedAnalysisResult.booksCount} color="secondary" size="small" sx={{ ml: 1 }} />
-                                    </Typography>
+                            <Box sx={{ mb: 3 }}>
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}>
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        onClick={handleAnalyzeUnwantedCategories}
+                                        disabled={unwantedLoading}
+                                        startIcon={unwantedLoading ? <CircularProgress size={20} /> : <AnalyticsIcon />}
+                                        fullWidth
+                                    >
+                                        Анализировать нежелательные
+                                    </Button>
                                     
-                                    {unwantedAnalysisResult.categoriesCount > 0 && (
-                                        <Button
-                                            variant="outlined"
-                                            color="error"
-                                            size="small"
-                                            onClick={() => openConfirmDialog('deleteUnwantedCategories')}
-                                            startIcon={<DeleteIcon />}
-                                            sx={{ mt: 2 }}
-                                        >
-                                            Удалить нежелательные категории
-                                        </Button>
-                                    )}
-                                </Paper>
-                            )}
-                            
-                            <Alert severity="warning" sx={{ mt: 3 }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                    <WarningIcon sx={{ mr: 1 }} />
-                                    <Typography variant="body2">
-                                        Нежелательные категории: <strong>unknown</strong> и <strong>interested</strong> часто создаются автоматически и содержат книги, которые могут быть некорректно классифицированы.
-                                    </Typography>
+                                    <Button
+                                        variant="contained"
+                                        color="error"
+                                        onClick={() => openConfirmDialog('deleteUnwantedCategories')}
+                                        disabled={unwantedLoading}
+                                        startIcon={<DeleteIcon />}
+                                        fullWidth
+                                    >
+                                        Удалить нежелательные
+                                    </Button>
                                 </Box>
-                            </Alert>
-                        </CardContent>
-                    </Card>
+                                
+                                {unwantedAnalysisResult && (
+                                    <Paper elevation={1} sx={{ p: 2, borderRadius: '8px', backgroundColor: '#f8f9fa' }}>
+                                        <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
+                                            Результаты анализа:
+                                        </Typography>
+                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                                            <Box>
+                                                <Typography variant="body2">
+                                                    Категорий: <Chip label={unwantedAnalysisResult.categoriesCount} color="primary" size="small" sx={{ ml: 1 }} />
+                                                </Typography>
+                                            </Box>
+                                            <Box>
+                                                <Typography variant="body2">
+                                                    Книг: <Chip label={unwantedAnalysisResult.booksCount} color="secondary" size="small" sx={{ ml: 1 }} />
+                                                </Typography>
+                                            </Box>
+                                        </Box>
+                                        
+                                        {unwantedAnalysisResult.categoriesCount > 0 && (
+                                            <Button
+                                                variant="outlined"
+                                                color="error"
+                                                size="small"
+                                                onClick={() => openConfirmDialog('deleteUnwantedCategories')}
+                                                startIcon={<DeleteIcon />}
+                                                sx={{ mt: 2 }}
+                                            >
+                                                Удалить нежелательные категории
+                                            </Button>
+                                        )}
+                                    </Paper>
+                                )}
+                                
+                                <Alert severity="warning" sx={{ mt: 2 }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
+                                        <WarningIcon sx={{ mr: 1, mt: 0.5 }} fontSize="small" />
+                                        <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
+                                            Нежелательные категории: <strong>unknown</strong> и <strong>interested</strong> часто создаются автоматически и могут содержать некорректно классифицированные книги.
+                                        </Typography>
+                                    </Box>
+                                </Alert>
+                            </Box>
+                        </AccordionDetails>
+                    </Accordion>
+                </Box>
+            ) : (
+                // Десктопная версия - сетка с двумя колонками
+                <Grid container spacing={3}>
+                    {/* Секция для произвольных категорий */}
+                    <Grid item xs={12} md={6}>
+                        <Card elevation={3} sx={{ borderRadius: '12px', height: '100%' }}>
+                            <CardContent>
+                                <Typography variant="h6" component="h3" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                                    Произвольные категории
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary" paragraph>
+                                    Анализируйте и удаляйте категории по названиям, указав их вручную
+                                </Typography>
+                                
+                                <Divider sx={{ my: 2 }} />
+                                
+                                <Box sx={{ mb: 3 }}>
+                                    <TextField
+                                        fullWidth
+                                        label="Названия категорий"
+                                        variant="outlined"
+                                        value={categoryNames}
+                                        onChange={(e) => setCategoryNames(e.target.value)}
+                                        placeholder="Введите названия категорий через запятую"
+                                        helperText="Например: unknown, interested, draft"
+                                        disabled={loading}
+                                        sx={{ mb: 2 }}
+                                    />
+                                    
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        onClick={handleAnalyzeCategories}
+                                        disabled={loading || !categoryNames.trim()}
+                                        startIcon={loading ? <CircularProgress size={20} /> : <AnalyticsIcon />}
+                                        sx={{ mr: 1 }}
+                                    >
+                                        Анализировать
+                                    </Button>
+                                    
+                                    <Button
+                                        variant="contained"
+                                        color="error"
+                                        onClick={() => {
+                                            if (categoryNames) {
+                                                const namesToDelete = categoryNames.split(',').map(name => name.trim());
+                                                openConfirmDialog('deleteCategories', namesToDelete);
+                                            }
+                                        }}
+                                        disabled={loading || !categoryNames.trim()}
+                                        startIcon={<DeleteIcon />}
+                                    >
+                                        Удалить
+                                    </Button>
+                                </Box>
+                                
+                                {analysisResult && (
+                                    <Paper elevation={1} sx={{ p: 2, borderRadius: '8px', backgroundColor: '#f8f9fa' }}>
+                                        <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
+                                            Результаты анализа:
+                                        </Typography>
+                                        <Typography variant="body2">
+                                            Категорий: <Chip label={analysisResult.categoriesCount} color="primary" size="small" sx={{ ml: 1 }} />
+                                        </Typography>
+                                        <Typography variant="body2">
+                                            Всего книг: <Chip label={analysisResult.booksCount} color="secondary" size="small" sx={{ ml: 1 }} />
+                                        </Typography>
+                                        <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
+                                            * Общее количество книг может включать дубликаты, если книги присутствуют в нескольких категориях
+                                        </Typography>
+                                        
+                                        {analysisResult.categoriesCount > 0 && (
+                                            <Button
+                                                variant="outlined"
+                                                color="error"
+                                                size="small"
+                                                onClick={() => {
+                                                    const namesToDelete = categoryNames.split(',').map(name => name.trim());
+                                                    openConfirmDialog('deleteCategories', namesToDelete);
+                                                }}
+                                                startIcon={<DeleteIcon />}
+                                                sx={{ mt: 2 }}
+                                            >
+                                                Удалить найденные категории
+                                            </Button>
+                                        )}
+                                    </Paper>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </Grid>
+
+                    {/* Секция для нежелательных категорий */}
+                    <Grid item xs={12} md={6}>
+                        <Card elevation={3} sx={{ borderRadius: '12px', height: '100%' }}>
+                            <CardContent>
+                                <Typography variant="h6" component="h3" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                                    Нежелательные категории
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary" paragraph>
+                                    Анализируйте и удаляйте стандартные нежелательные категории ("unknown" и "interested")
+                                </Typography>
+                                
+                                <Divider sx={{ my: 2 }} />
+                                
+                                <Box sx={{ mb: 3, display: 'flex', gap: 1 }}>
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        onClick={handleAnalyzeUnwantedCategories}
+                                        disabled={unwantedLoading}
+                                        startIcon={unwantedLoading ? <CircularProgress size={20} /> : <AnalyticsIcon />}
+                                        fullWidth
+                                    >
+                                        Анализировать нежелательные
+                                    </Button>
+                                    
+                                    <Button
+                                        variant="contained"
+                                        color="error"
+                                        onClick={() => openConfirmDialog('deleteUnwantedCategories')}
+                                        disabled={unwantedLoading}
+                                        startIcon={<DeleteIcon />}
+                                        fullWidth
+                                    >
+                                        Удалить нежелательные
+                                    </Button>
+                                </Box>
+                                
+                                {unwantedAnalysisResult && (
+                                    <Paper elevation={1} sx={{ p: 2, borderRadius: '8px', backgroundColor: '#f8f9fa' }}>
+                                        <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
+                                            Результаты анализа нежелательных категорий:
+                                        </Typography>
+                                        <Typography variant="body2">
+                                            Категорий: <Chip label={unwantedAnalysisResult.categoriesCount} color="primary" size="small" sx={{ ml: 1 }} />
+                                        </Typography>
+                                        <Typography variant="body2">
+                                            Книг: <Chip label={unwantedAnalysisResult.booksCount} color="secondary" size="small" sx={{ ml: 1 }} />
+                                        </Typography>
+                                        
+                                        {unwantedAnalysisResult.categoriesCount > 0 && (
+                                            <Button
+                                                variant="outlined"
+                                                color="error"
+                                                size="small"
+                                                onClick={() => openConfirmDialog('deleteUnwantedCategories')}
+                                                startIcon={<DeleteIcon />}
+                                                sx={{ mt: 2 }}
+                                            >
+                                                Удалить нежелательные категории
+                                            </Button>
+                                        )}
+                                    </Paper>
+                                )}
+                                
+                                <Alert severity="warning" sx={{ mt: 3 }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                        <WarningIcon sx={{ mr: 1 }} />
+                                        <Typography variant="body2">
+                                            Нежелательные категории: <strong>unknown</strong> и <strong>interested</strong> часто создаются автоматически и содержат книги, которые могут быть некорректно классифицированы.
+                                        </Typography>
+                                    </Box>
+                                </Alert>
+                            </CardContent>
+                        </Card>
+                    </Grid>
                 </Grid>
-            </Grid>
+            )}
         </Box>
     );
 };
