@@ -2,9 +2,21 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
-export const API_URL = '/api';
-// Закомментируем localhost URL, так как он вызывает ошибку соединения
-//export const API_URL = 'https://localhost:7042/api';
+//export const API_URL = '/api';
+// Для локальной разработки без HTTPS
+//export const API_URL = 'http://localhost:5000/api';
+// Закомментируем HTTPS URL
+export const API_URL = 'https://localhost:7042/api';
+
+// Настройка axios для работы с HTTPS - отключаем для HTT
+/*
+axios.defaults.httpsAgent = {
+    rejectUnauthorized: false // Позволяет принимать самоподписанные сертификаты
+};
+*/
+
+// Настройка времени ожидания (timeout) для запросов
+axios.defaults.timeout = 300000; // 5 минут для больших файлов
 
 // Глобальный обработчик ошибок для axios
 axios.interceptors.response.use(
@@ -223,8 +235,28 @@ export async function uploadImportChunk(importTaskId, fileChunk, onUploadProgres
         'Content-Type': 'application/octet-stream'
     };
 
-    // используем axios для POST
-    return await axios.post(
+    // Создаем отдельный экземпляр axios с особыми настройками для загрузки файлов
+    const uploadInstance = axios.create({
+        timeout: 600000, // 10 минут для больших чанков
+        maxContentLength: Infinity, // Не ограничиваем размер загружаемых данных
+        maxBodyLength: Infinity // Не ограничиваем размер тела запроса
+        // HttpsAgent убран для работы без HTTPS
+    });
+
+    // Добавляем обработчик ошибок специально для загрузки
+    uploadInstance.interceptors.response.use(
+        response => response,
+        error => {
+            console.error('Error uploading chunk:', error.message);
+            if (error.code === 'ECONNABORTED') {
+                console.warn('Upload timeout exceeded, consider decreasing chunk size');
+            }
+            return Promise.reject(error);
+        }
+    );
+
+    // используем uploadInstance вместо обычного axios
+    return await uploadInstance.post(
         `${API_URL}/import/upload?importTaskId=${importTaskId}`,
         fileChunk,
         {

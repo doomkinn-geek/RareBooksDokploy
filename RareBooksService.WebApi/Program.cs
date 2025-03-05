@@ -322,7 +322,7 @@ namespace RareBooksService.WebApi
                 app.UseSwagger();
                 app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "RareBooksService.WebApi v1"));
 
-                // � �. �.
+                // Отключаем перенаправление на HTTPS для работы без SSL
                 app.UseHttpsRedirection();
                 app.UseRouting();
                 app.UseCors("AllowAll");

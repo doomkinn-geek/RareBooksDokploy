@@ -51,7 +51,7 @@ namespace RareBooksService.WebApi.Services
         public Guid StartImport(long expectedFileSize = 0)
         {
             // Проверка на количество активных импортов
-            if (_tasks.Count(t => !t.Value.IsCompleted && !t.Value.IsCancelledOrError) >= MAX_CONCURRENT_IMPORTS)
+                if (_tasks.Count(t => !t.Value.IsCompleted && !t.Value.IsCancelledOrError) >= MAX_CONCURRENT_IMPORTS)
             {
                 throw new InvalidOperationException($"Достигнут лимит одновременных импортов ({MAX_CONCURRENT_IMPORTS}). Пожалуйста, дождитесь завершения текущих задач.");
             }

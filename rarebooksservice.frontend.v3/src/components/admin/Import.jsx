@@ -50,9 +50,19 @@ const Import = () => {
     const [serverResponded, setServerResponded] = useState(true);
     const [serverCrashInfo, setServerCrashInfo] = useState(null);
     
-    // Новые состояния для разделения логики инициализации и загрузки
+    // Состояния для процесса импорта
     const [isInitialized, setIsInitialized] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+    // Новое состояние для отслеживания результата импорта
+    const [importCompleted, setImportCompleted] = useState(false);
+    const [importResult, setImportResult] = useState({
+        success: false,
+        totalRecords: 0,
+        importedRecords: 0,
+        errors: [],
+        timeElapsed: 0,
+        finishTime: null
+    });
 
     useEffect(() => {
         return () => {
@@ -197,9 +207,17 @@ const Import = () => {
         setIsUploading(true);
         
         try {
-            // Загрузка файла по частям
-            const chunkSize = 1024 * 256; // 256KB chunks как в старой версии
+            // Загрузка файла по частям с меньшим размером чанка для HTTPS
+            const chunkSize = 1024 * 128; // Уменьшаем до 128KB для более стабильной работы с HTTPS
             let offset = 0;
+            let retryCount = 0;
+            const maxRetries = 3; // Максимальное количество попыток повторной отправки чанка
+            
+            logDiagnostic('UPLOAD_STARTED', { 
+                fileSize: importFile.size, 
+                chunkSize: chunkSize, 
+                chunksCount: Math.ceil(importFile.size / chunkSize) 
+            });
 
             while (offset < importFile.size) {
                 const endOffset = Math.min(offset + chunkSize, importFile.size);
@@ -207,23 +225,58 @@ const Import = () => {
                 
                 logDiagnostic('CHUNK_UPLOAD_START', { offset, size: endOffset - offset });
                 
-                // Отправка чанка
-                await uploadImportChunk(
-                    importTaskId, 
-                    chunk, 
-                    (progressEvent) => {
-                        if (progressEvent.total) {
-                            const progress = Math.round((progressEvent.loaded / progressEvent.total) * 100);
-                            if (progress % 25 === 0) {
-                                logDiagnostic('CHUNK_UPLOAD_PROGRESS', { progress });
+                let chunkUploaded = false;
+                retryCount = 0;
+                
+                // Повторяем попытки загрузки до успеха или превышения лимита попыток
+                while (!chunkUploaded && retryCount <= maxRetries) {
+                    try {
+                        // Задержка перед повторной попыткой (кроме первой попытки)
+                        if (retryCount > 0) {
+                            const delay = retryCount * 1000; // Увеличиваем задержку с каждой попыткой
+                            logDiagnostic('CHUNK_UPLOAD_RETRY', { retryCount, delay });
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                        }
+                        
+                        // Отправка чанка
+                        await uploadImportChunk(
+                            importTaskId, 
+                            chunk, 
+                            (progressEvent) => {
+                                if (progressEvent.total) {
+                                    const progress = Math.round((progressEvent.loaded / progressEvent.total) * 100);
+                                    if (progress % 25 === 0) {
+                                        logDiagnostic('CHUNK_UPLOAD_PROGRESS', { progress });
+                                    }
+                                }
                             }
+                        );
+                        
+                        chunkUploaded = true;
+                        logDiagnostic('CHUNK_UPLOAD_SUCCESS', { offset, size: endOffset - offset });
+                    } catch (chunkError) {
+                        retryCount++;
+                        
+                        logDiagnostic('CHUNK_UPLOAD_ERROR', { 
+                            retryCount, 
+                            maxRetries,
+                            error: chunkError.message,
+                            offset
+                        });
+                        
+                        // Если превысили лимит попыток - выбрасываем исключение
+                        if (retryCount > maxRetries) {
+                            throw new Error(`Не удалось загрузить чанк после ${maxRetries} попыток: ${chunkError.message}`);
                         }
                     }
-                );
+                }
                 
                 // Инкрементируем смещение и обновляем прогресс
                 offset = endOffset;
                 setImportUploadProgress((offset / importFile.size) * 100);
+                
+                // Небольшая задержка между чанками для стабильности
+                await new Promise(resolve => setTimeout(resolve, 200));
             }
 
             // Завершение загрузки и начало импорта
@@ -239,7 +292,7 @@ const Import = () => {
         } catch (err) {
             console.error('Error during file upload:', err);
             
-            // Если возникла ошибка, попробуем отменить импорт
+            // Если возникла ошибка, пробуем отменить импорт
             try {
                 await cancelImport(importTaskId);
                 logDiagnostic('IMPORT_CANCELLED', { taskId: importTaskId, reason: err.message });
@@ -250,7 +303,32 @@ const Import = () => {
                 });
             }
             
-            setError('Ошибка при загрузке файла: ' + (err.response?.data || err.message));
+            // Анализируем детали ошибки для более точного диагноза
+            const errorDetails = {
+                message: err.message,
+                code: err.code || 'NO_CODE',
+                name: err.name || 'Unknown',
+                response: err.response ? {
+                    status: err.response.status,
+                    statusText: err.response.statusText,
+                    data: err.response.data
+                } : 'No response'
+            };
+            
+            logDiagnostic('UPLOAD_DETAILED_ERROR', errorDetails);
+            
+            // Проверяем, связана ли ошибка с SSL
+            if (
+                err.message.includes('SSL') || 
+                err.message.includes('certificate') || 
+                err.code === 'DEPTH_ZERO_SELF_SIGNED_CERT' ||
+                err.code === 'CERT_HAS_EXPIRED'
+            ) {
+                setError('Ошибка SSL-сертификата при загрузке файла. Проверьте настройки сертификата на сервере или в браузере.');
+            } else {
+                setError('Ошибка при загрузке файла: ' + (err.response?.data || err.message));
+            }
+            
             setIsImporting(false);
             setIsUploading(false);
             setImportTaskId(null);
@@ -272,6 +350,7 @@ const Import = () => {
     };
 
     const startPollingProgress = (taskId) => {
+        const startTime = new Date().getTime();
         const intervalId = setInterval(async () => {
             try {
                 logDiagnostic('POLLING_PROGRESS_START', { taskId });
@@ -296,13 +375,28 @@ const Import = () => {
                     setImportMessage(progressResponse.message);
 
                     if (progressResponse.isFinished || progressResponse.isCancelledOrError) {
-                    clearInterval(intervalId);
-                    setIsImporting(false);
-                    setImportTaskId(null);
-                    setImportFile(null);
-                    
+                        clearInterval(intervalId);
+                        setIsImporting(false);
+                        setImportTaskId(null);
+                        setImportFile(null);
+                        setIsInitialized(false);
+                        
                         if (progressResponse.isFinished) {
                             logDiagnostic('IMPORT_FINISHED', { taskId, message: progressResponse.message });
+                            
+                            // Устанавливаем результат импорта
+                            const endTime = new Date();
+                            const timeElapsed = Math.round((endTime.getTime() - startTime) / 1000);
+                            
+                            setImportCompleted(true);
+                            setImportResult({
+                                success: true,
+                                totalRecords: progressResponse.totalRecords || 0,
+                                importedRecords: progressResponse.importedRecords || 0,
+                                errors: progressResponse.errors || [],
+                                timeElapsed: timeElapsed,
+                                finishTime: endTime.toLocaleString()
+                            });
                         }
                         
                         if (progressResponse.isCancelledOrError) {
@@ -311,6 +405,15 @@ const Import = () => {
                                 error: progressResponse.message || 'Импорт был отменен или произошла ошибка'
                             });
                             setError(progressResponse.message || 'Импорт был отменен или произошла ошибка');
+                            
+                            // Устанавливаем результат с ошибкой
+                            setImportCompleted(true);
+                            setImportResult({
+                                success: false,
+                                errors: [progressResponse.message || 'Неизвестная ошибка'],
+                                timeElapsed: Math.round((new Date().getTime() - startTime) / 1000),
+                                finishTime: new Date().toLocaleString()
+                            });
                         }
                     }
                 } catch (pollError) {
@@ -357,7 +460,7 @@ const Import = () => {
                     setError('Сервер не отвечает. Импорт мог быть запущен, но не удалось получить статус.');
                 }
             }
-        }, 2000); // Увеличиваем интервал с 1000 до 2000 мс для снижения нагрузки
+        }, 2000);
         setImportPollIntervalId(intervalId);
     };
 
@@ -538,6 +641,68 @@ const Import = () => {
         );
     };
 
+    // Функция для отображения результатов импорта
+    const renderImportResults = () => {
+        if (!importCompleted) return null;
+        
+        return (
+            <Box sx={{ mt: 3, mb: 2 }}>
+                <Alert 
+                    severity={importResult.success ? "success" : "error"} 
+                    sx={{ mb: 2 }}
+                >
+                    <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                        {importResult.success 
+                            ? "Импорт успешно завершен" 
+                            : "Импорт завершен с ошибками"}
+                    </Typography>
+                    
+                    <Box sx={{ mb: 1 }}>
+                        <Typography variant="body2">
+                            <strong>Время завершения:</strong> {importResult.finishTime}
+                        </Typography>
+                        <Typography variant="body2">
+                            <strong>Затраченное время:</strong> {importResult.timeElapsed} сек.
+                        </Typography>
+                        {importResult.success && (
+                            <>
+                                <Typography variant="body2">
+                                    <strong>Всего записей:</strong> {importResult.totalRecords}
+                                </Typography>
+                                <Typography variant="body2">
+                                    <strong>Импортировано записей:</strong> {importResult.importedRecords}
+                                </Typography>
+                            </>
+                        )}
+                    </Box>
+                    
+                    {importResult.errors && importResult.errors.length > 0 && (
+                        <Box sx={{ mt: 2 }}>
+                            <Typography variant="body2" fontWeight="bold" gutterBottom>
+                                Ошибки:
+                            </Typography>
+                            <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                                {importResult.errors.map((err, idx) => (
+                                    <li key={idx}>{err}</li>
+                                ))}
+                            </ul>
+                        </Box>
+                    )}
+                    
+                    <Box sx={{ mt: 2 }}>
+                        <Button 
+                            size="small" 
+                            variant="outlined"
+                            onClick={() => setImportCompleted(false)}
+                        >
+                            Начать новый импорт
+                        </Button>
+                    </Box>
+                </Alert>
+            </Box>
+        );
+    };
+
     return (
         <Box>
             <Typography variant="h6" gutterBottom>
@@ -571,102 +736,91 @@ const Import = () => {
             )}
 
             <Paper sx={{ p: 2, mb: 2 }}>
-                <Box sx={{ mb: 2 }}>
-                    <input
-                        type="file"
-                        accept=".zip"
-                        onChange={handleFileSelect}
-                        disabled={isImporting}
-                        style={{ display: 'none' }}
-                        id="import-file-input"
-                    />
-                    <label htmlFor="import-file-input">
-                        <Button
-                            variant="contained"
-                            component="span"
-                            disabled={isImporting}
-                        >
-                            Выбрать файл
-                        </Button>
-                    </label>
-                    {importFile && (
-                        <Typography variant="body2" sx={{ mt: 1 }}>
-                            Выбран файл: {importFile.name}
-                        </Typography>
-                    )}
-                </Box>
-
-                <Box sx={{ mb: 2 }}>
-                    <Button
-                        variant="contained"
-                        onClick={initializeImport}
-                        disabled={!importFile || isImporting || isInitialized}
-                        sx={{ mr: 1 }}
-                    >
-                        Инициализировать импорт
-                    </Button>
-                    <Button
-                        variant="contained"
-                        onClick={startFileUpload}
-                        disabled={!isInitialized || isImporting || isUploading}
-                        sx={{ mr: 1 }}
-                        color="primary"
-                    >
-                        Начать загрузку
-                    </Button>
-                    <Button
-                        variant="contained"
-                        onClick={startImport}
-                        disabled={!importFile || isImporting}
-                        sx={{ mr: 1 }}
-                    >
-                        Начать полный импорт
-                    </Button>
-                    <Button
-                        variant="outlined"
-                        onClick={handleCancel}
-                        disabled={!isImporting && !isInitialized}
-                        color="error"
-                        sx={{ mr: 1 }}
-                    >
-                        Отменить
-                    </Button>
-                    <Button
-                        variant="outlined"
-                        onClick={() => setShowDiagnostics(!showDiagnostics)}
-                        color="info"
-                    >
-                        {showDiagnostics ? 'Скрыть диагностику' : 'Показать диагностику'}
-                    </Button>
-                </Box>
-
-                {isImporting && (
-                    <Box sx={{ mt: 2 }}>
-                        <Typography variant="subtitle2" gutterBottom>
-                            Загрузка файла: {Math.round(importUploadProgress)}%
-                        </Typography>
-                        <LinearProgress 
-                            variant="determinate" 
-                            value={importUploadProgress} 
-                            sx={{ mb: 2 }}
-                        />
-
-                        <Typography variant="subtitle2" gutterBottom>
-                            Прогресс импорта: {Math.round(importProgress)}%
-                        </Typography>
-                        <LinearProgress 
-                            variant="determinate" 
-                            value={importProgress} 
-                            sx={{ mb: 2 }}
-                        />
-
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            <CircularProgress size={20} />
-                            <Typography variant="body2">
-                                {importMessage || 'Импорт в процессе...'}
-                            </Typography>
+                {!importCompleted ? (
+                    <>
+                        <Box sx={{ mb: 2 }}>
+                            <input
+                                type="file"
+                                accept=".zip"
+                                onChange={handleFileSelect}
+                                disabled={isImporting}
+                                style={{ display: 'none' }}
+                                id="import-file-input"
+                            />
+                            <label htmlFor="import-file-input">
+                                <Button
+                                    variant="contained"
+                                    component="span"
+                                    disabled={isImporting}
+                                >
+                                    Выбрать файл
+                                </Button>
+                            </label>
+                            {importFile && (
+                                <Typography variant="body2" sx={{ mt: 1 }}>
+                                    Выбран файл: {importFile.name}
+                                </Typography>
+                            )}
                         </Box>
-                    </Box>
+
+                        <Box sx={{ mb: 2 }}>
+                            <Button
+                                variant="contained"
+                                onClick={startImport}
+                                disabled={!importFile || isImporting}
+                                sx={{ mr: 1 }}
+                            >
+                                Начать импорт
+                            </Button>
+                            <Button
+                                variant="outlined"
+                                onClick={handleCancel}
+                                disabled={!isImporting && !isInitialized}
+                                color="error"
+                                sx={{ mr: 1 }}
+                            >
+                                Отменить
+                            </Button>
+                            <Button
+                                variant="outlined"
+                                onClick={() => setShowDiagnostics(!showDiagnostics)}
+                                color="info"
+                            >
+                                {showDiagnostics ? 'Скрыть диагностику' : 'Показать диагностику'}
+                            </Button>
+                        </Box>
+
+                        {isImporting && (
+                            <Box sx={{ mt: 2 }}>
+                                <Typography variant="subtitle2" gutterBottom>
+                                    Загрузка файла: {Math.round(importUploadProgress)}%
+                                </Typography>
+                                <LinearProgress 
+                                    variant="determinate" 
+                                    value={importUploadProgress} 
+                                    sx={{ mb: 2 }}
+                                />
+
+                                <Typography variant="subtitle2" gutterBottom>
+                                    Прогресс импорта: {Math.round(importProgress)}%
+                                </Typography>
+                                <LinearProgress 
+                                    variant="determinate" 
+                                    value={importProgress} 
+                                    sx={{ mb: 2 }}
+                                />
+
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                    <CircularProgress size={20} />
+                                    <Typography variant="body2">
+                                        {importMessage || 'Импорт в процессе...'}
+                                    </Typography>
+                                </Box>
+                            </Box>
+                        )}
+                    </>
+                ) : (
+                    renderImportResults()
                 )}
                 
                 {/* Отображение диагностических данных */}
