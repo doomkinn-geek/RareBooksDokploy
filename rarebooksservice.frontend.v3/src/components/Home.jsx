@@ -34,7 +34,7 @@ import {
 } from '@mui/material';
 import axios from 'axios';
 import Cookies from 'js-cookie';
-import { getCategories, sendFeedback as sendFeedbackApi, API_URL, searchBooksByPriceRange, searchBooksByTitle, getPriceStatistics } from '../api';
+import { getCategories, sendFeedback as sendFeedbackApi, API_URL, searchBooksByPriceRange, searchBooksByTitle } from '../api';
 import { UserContext } from '../context/UserContext';
 import { LanguageContext } from '../context/LanguageContext';
 import translations from '../translations';
@@ -85,10 +85,6 @@ const Home = () => {
     const [apiConnected, setApiConnected] = useState(false);
     const [apiStatus, setApiStatus] = useState(t.checkingApiConnection);
     
-    // Состояния статистики цен
-    const [priceStatistics, setPriceStatistics] = useState(null);
-    const [loadingStats, setLoadingStats] = useState(false);
-    
     // Состояния диалога обратной связи
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
     const [feedbackText, setFeedbackText] = useState('');
@@ -108,31 +104,47 @@ const Home = () => {
         setApiStatus(apiConnected ? t.apiConnected : t.apiConnectionError);
     }, [language, apiConnected, t]);
 
-    // Загрузка категорий и статистики
+    // Загрузка категорий
     useEffect(() => {
         const fetchInitialData = async () => {
-            try {
-                setLoadingStats(true);
+            try {                
+                console.log("Начало загрузки данных на главной странице");
                 
                 // Загрузка категорий
-                const categoriesResponse = await getCategories();
-                setCategories(categoriesResponse.data);
-                setApiConnected(true);
-                setApiStatus(t.apiConnected);
+                try {
+                    console.log("Начало запроса категорий");
+                    const categoriesResponse = await getCategories();
+                    setCategories(categoriesResponse.data);
+                    setApiConnected(true);
+                    setApiStatus(t.apiConnected);
+                    console.log("Успешно загружены категории:", categoriesResponse.data);
+                } catch (categoryError) {
+                    console.error("Ошибка загрузки категорий:", categoryError);
+                    setApiConnected(false);
+                    setApiStatus(t.apiConnectionError);
+                    
+                    // Диагностика ошибки категорий
+                    let errorDetails = "Неизвестная ошибка";
+                    if (categoryError.response) {
+                        errorDetails = `Сервер ответил с ошибкой ${categoryError.response.status}: ${JSON.stringify(categoryError.response.data)}`;
+                    } else if (categoryError.request) {
+                        errorDetails = "Нет ответа от сервера. Возможно, сервер недоступен или отклонил запрос.";
+                    } else {
+                        errorDetails = categoryError.message || "Неизвестная ошибка";
+                    }
+                    console.error("Детали ошибки категорий:", errorDetails);
+                }
                 
-                // Загрузка статистики цен
-                await fetchPriceStatistics();
+                console.log("Завершена попытка загрузки данных на главной странице");
             } catch (error) {
-                console.error("Ошибка загрузки данных:", error);
+                console.error("Общая ошибка загрузки данных:", error);
                 setApiConnected(false);
                 setApiStatus(t.apiConnectionError);
-            } finally {
-                setLoadingStats(false);
             }
         };
         
         fetchInitialData();
-    }, [t]);
+    }, [t, apiConnected]);
 
     // useEffect для отслеживания монтирования/размонтирования компонента
     useEffect(() => {
@@ -144,19 +156,6 @@ const Home = () => {
             isMounted.current = false;
         };
     }, []);
-
-    // Функция для получения статистики цен
-    const fetchPriceStatistics = async () => {
-        setLoadingStats(true);
-        try {
-            const response = await getPriceStatistics();
-            setPriceStatistics(response.data);
-        } catch (error) {
-            console.error('Ошибка при загрузке статистики цен:', error);
-        } finally {
-            setLoadingStats(false);
-        }
-    };
 
     // --- Поиск ---
 
@@ -342,158 +341,6 @@ const Home = () => {
         setSnackbarMessage(message);
         setSnackbarSeverity(severity);
         setSnackbarOpen(true);
-    };
-
-    // Компонент статистики цен
-    const PriceStatistics = () => {
-        if (loadingStats) {
-            return (
-                <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-                    <CircularProgress />
-                </Box>
-            );
-        }
-        
-        if (!user) {
-            return (
-                <Paper elevation={2} sx={{ p: 3, borderRadius: '12px', mb: 3 }}>
-                    <Typography variant="h6" fontWeight="bold" gutterBottom>
-                        Статистика цен на антикварные книги
-                    </Typography>
-                    <Typography variant="body1" paragraph>
-                        Для доступа к статистике цен необходимо авторизоваться и оформить подписку.
-                    </Typography>
-                    <Button 
-                        variant="contained" 
-                        color="primary" 
-                        onClick={() => navigate('/login')}
-                        sx={{ mr: 2, borderRadius: '8px', textTransform: 'none' }}
-                    >
-                        {t.login}
-                    </Button>
-                    <Button 
-                        variant="outlined" 
-                        onClick={() => navigate('/register')}
-                        sx={{ borderRadius: '8px', textTransform: 'none' }}
-                    >
-                        {t.register}
-                    </Button>
-                </Paper>
-            );
-        }
-        
-        if (!priceStatistics && user.subscription?.status === 'Active') {
-            return (
-                <Paper elevation={2} sx={{ p: 3, borderRadius: '12px', mb: 3 }}>
-                    <Typography variant="h6" fontWeight="bold" gutterBottom>
-                        Статистика цен на антикварные книги
-                    </Typography>
-                    <Typography variant="body1" color="text.secondary">
-                        Данные статистики временно недоступны. Пожалуйста, попробуйте позже.
-                    </Typography>
-                </Paper>
-            );
-        }
-        
-        if (!user.subscription || user.subscription.status !== 'Active') {
-            return (
-                <Paper elevation={2} sx={{ p: 3, borderRadius: '12px', mb: 3 }}>
-                    <Typography variant="h6" fontWeight="bold" gutterBottom>
-                        Статистика цен на антикварные книги
-                    </Typography>
-                    <Typography variant="body1" paragraph>
-                        Для доступа к статистике цен необходимо оформить подписку.
-                    </Typography>
-                    <Button 
-                        variant="contained" 
-                        color="secondary" 
-                        onClick={() => navigate('/subscription')}
-                        sx={{ borderRadius: '8px', textTransform: 'none' }}
-                    >
-                        {t.getSubscription}
-                    </Button>
-                </Paper>
-            );
-        }
-        
-        return (
-            <Paper elevation={2} sx={{ p: 3, borderRadius: '12px', mb: 3 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <TrendingUpIcon />
-                    <Typography variant="h6" fontWeight="bold">
-                        Статистика цен на антикварные книги
-                    </Typography>
-                </Box>
-                
-                <Grid container spacing={3}>
-                    <Grid item xs={12} md={4}>
-                        <Card sx={{ height: '100%', bgcolor: 'rgba(69, 39, 160, 0.05)', borderRadius: '8px' }}>
-                            <CardContent>
-                                <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                                    Средняя цена
-                                </Typography>
-                                <Typography variant="h4" color="primary" fontWeight="bold">
-                                    {formatPrice(priceStatistics.averagePrice)}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                    По всем категориям
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    
-                    <Grid item xs={12} md={4}>
-                        <Card sx={{ height: '100%', bgcolor: 'rgba(69, 39, 160, 0.05)', borderRadius: '8px' }}>
-                            <CardContent>
-                                <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                                    Максимальная цена
-                                </Typography>
-                                <Typography variant="h4" color="error" fontWeight="bold">
-                                    {formatPrice(priceStatistics.maxPrice)}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                    {priceStatistics.maxPriceCategory}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    
-                    <Grid item xs={12} md={4}>
-                        <Card sx={{ height: '100%', bgcolor: 'rgba(69, 39, 160, 0.05)', borderRadius: '8px' }}>
-                            <CardContent>
-                                <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                                    Минимальная цена
-                                </Typography>
-                                <Typography variant="h4" color="success.main" fontWeight="bold">
-                                    {formatPrice(priceStatistics.minPrice)}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                    {priceStatistics.minPriceCategory}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                </Grid>
-                
-                <Box sx={{ mt: 3 }}>
-                    <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                        Популярные категории
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                        {priceStatistics.topCategories.map((category, index) => (
-                            <Chip 
-                                key={index}
-                                label={`${category.name} (${formatPrice(category.averagePrice)})`}
-                                onClick={() => navigate(`/searchByCategory/${category.id}`)}
-                                color="primary"
-                                variant="outlined"
-                                clickable
-                            />
-                        ))}
-                    </Box>
-                </Box>
-            </Paper>
-        );
     };
 
     // Форматирование цены
@@ -784,6 +631,117 @@ const Home = () => {
             <Typography variant="body1" paragraph sx={{ mb: 3, fontWeight: 'bold', fontSize: '1.1rem' }}>
                 Коллекционируете редкие книги или занимаетесь антиквариатом? Теперь у вас есть инструмент, который раскрывает реальную рыночную стоимость редких книг!
             </Typography>
+            
+            <Typography variant="h3" gutterBottom sx={{ fontSize: { xs: '1.25rem', sm: '1.4rem', md: '1.5rem' }, mt: 4, mb: 2 }}>
+                <MonetizationOnIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                Как это работает
+            </Typography>
+            
+            <Grid container spacing={3} sx={{ mb: 3 }}>
+                <Grid item xs={12} md={6}>
+                    <Paper elevation={2} sx={{ p: 2, height: '100%', position: 'relative', borderLeft: '4px solid #2196f3' }}>
+                        <Box sx={{ position: 'absolute', top: 10, right: 10, bgcolor: 'primary.main', color: 'white', width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            1
+                        </Box>
+                        <Typography variant="h6" gutterBottom fontWeight="bold">
+                            <SearchIcon sx={{ mr: 1, verticalAlign: 'middle', color: 'primary.main' }} />
+                            База данных реальных продаж
+                        </Typography>
+                        <Typography variant="body2" paragraph>
+                            Наш сервис — это уникальная база данных продаж антикварных и редких книг, 
+                            собранная с одного из популярнейших порталов торговли редкими изданиями России.
+                        </Typography>
+                        <Typography variant="body2">
+                            В базе содержатся историческая информация о 
+                            <Chip 
+                                label="230 000+ продаж" 
+                                size="small" 
+                                color="primary"
+                                sx={{ mx: 1, fontWeight: 'bold' }} 
+                            />
+                            с реальными ценами и подробным описанием каждого лота.
+                        </Typography>
+                    </Paper>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                    <Paper elevation={2} sx={{ p: 2, height: '100%', position: 'relative', borderLeft: '4px solid #ff9800' }}>
+                        <Box sx={{ position: 'absolute', top: 10, right: 10, bgcolor: 'warning.main', color: 'white', width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            2
+                        </Box>
+                        <Typography variant="h6" gutterBottom fontWeight="bold">
+                            <BookmarkAddedIcon sx={{ mr: 1, verticalAlign: 'middle', color: 'warning.main' }} />
+                            Оформление подписки
+                        </Typography>
+                        <Typography variant="body2" paragraph>
+                            Для доступа к полной базе данных и инструментам оценки необходимо 
+                            оформить подписку. Это обеспечивает точность результатов и постоянное обновление информации.
+                        </Typography>
+                        <Typography variant="body2">
+                            Доступны различные тарифы подписки с 
+                            <Chip 
+                                label="от 50₽/месяц" 
+                                size="small" 
+                                color="warning"
+                                sx={{ mx: 1, fontWeight: 'bold' }} 
+                            />
+                            в зависимости от ваших потребностей.
+                        </Typography>
+                    </Paper>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                    <Paper elevation={2} sx={{ p: 2, height: '100%', position: 'relative', borderLeft: '4px solid #4caf50' }}>
+                        <Box sx={{ position: 'absolute', top: 10, right: 10, bgcolor: 'success.main', color: 'white', width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            3
+                        </Box>
+                        <Typography variant="h6" gutterBottom fontWeight="bold">
+                            <DescriptionIcon sx={{ mr: 1, verticalAlign: 'middle', color: 'success.main' }} />
+                            Поиск по вашим параметрам
+                        </Typography>
+                        <Typography variant="body2" paragraph>
+                            Для точной оценки введите всю имеющуюся у вас информацию о книге: 
+                            название, год издания, автора, особенности издания.
+                        </Typography>
+                        <Typography variant="body2">
+                            Чем больше деталей вы укажете, тем точнее будет 
+                            <Chip 
+                                label="результат оценки" 
+                                size="small" 
+                                color="success"
+                                sx={{ mx: 1, fontWeight: 'bold' }} 
+                            />
+                            и подбор аналогичных изданий.
+                        </Typography>
+                    </Paper>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                    <Paper elevation={2} sx={{ p: 2, height: '100%', position: 'relative', borderLeft: '4px solid #9c27b0' }}>
+                        <Box sx={{ position: 'absolute', top: 10, right: 10, bgcolor: 'secondary.main', color: 'white', width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            4
+                        </Box>
+                        <Typography variant="h6" gutterBottom fontWeight="bold">
+                            <PriceChangeIcon sx={{ mr: 1, verticalAlign: 'middle', color: 'secondary.main' }} />
+                            Самостоятельная оценка
+                        </Typography>
+                        <Typography variant="body2" paragraph>
+                            Анализируйте результаты поиска — изучайте аналогичные издания, 
+                            которые были проданы ранее, их состояние, даты продаж и фактические цены.
+                        </Typography>
+                        <Typography variant="body2">
+                            На основе представленных данных вы можете 
+                            <Chip 
+                                label="самостоятельно определить" 
+                                size="small" 
+                                color="secondary"
+                                sx={{ mx: 1, fontWeight: 'bold' }} 
+                            />
+                            справедливую рыночную стоимость вашей книги.
+                        </Typography>
+                    </Paper>
+                </Grid>
+            </Grid>
 
             <Typography variant="h3" gutterBottom sx={{ fontSize: { xs: '1.25rem', sm: '1.4rem', md: '1.5rem' }, mt: 4, mb: 2 }}>
                 <AssessmentIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
@@ -832,47 +790,23 @@ const Home = () => {
                     </Box>
                 </Grid>
             </Grid>
-
-            <Typography variant="h3" gutterBottom sx={{ fontSize: { xs: '1.25rem', sm: '1.4rem', md: '1.5rem' }, mt: 4, mb: 2 }}>
-                <MonetizationOnIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                Как это работает
-            </Typography>
             
-            <Grid container spacing={3}>
-                <Grid item xs={12} sm={6} md={4}>
-                    <Box sx={{ textAlign: 'center', p: 2 }}>
-                        <SearchIcon fontSize="large" color="primary" />
-                        <Typography variant="h6" gutterBottom>
-                            {t.stepOneTitle}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                            {t.stepOneDesc}
-                        </Typography>
-                    </Box>
-                </Grid>
-                <Grid item xs={12} sm={6} md={4}>
-                    <Box sx={{ textAlign: 'center', p: 2 }}>
-                        <TrendingUpIcon fontSize="large" color="secondary" />
-                        <Typography variant="h6" gutterBottom>
-                            {t.stepTwoTitle}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                            {t.stepTwoDesc}
-                        </Typography>
-                    </Box>
-                </Grid>
-                <Grid item xs={12} sm={6} md={4}>
-                    <Box sx={{ textAlign: 'center', p: 2 }}>
-                        <VerifiedUserIcon fontSize="large" color="success" />
-                        <Typography variant="h6" gutterBottom>
-                            {t.stepThreeTitle}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                            {t.stepThreeDesc}
-                        </Typography>
-                    </Box>
-                </Grid>
-            </Grid>
+            <Paper elevation={3} sx={{ p: 3, mb: 3, bgcolor: '#f5f5f5', borderRadius: '8px' }}>
+                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+                    <InfoIcon sx={{ mr: 1, color: 'info.main' }} />
+                    Важная информация
+                </Typography>
+                <Typography variant="body2" paragraph>
+                    Наш сервис предоставляет детальные <strong>исторические данные о реальных продажах</strong>, 
+                    но не делает автоматическую оценку вашей книги. Рыночная стоимость антикварных и редких изданий 
+                    зависит от множества факторов: состояния экземпляра, редкости издания, исторической ценности, 
+                    наличия автографов, иллюстраций и других особенностей.
+                </Typography>
+                <Typography variant="body2">
+                    Сопоставляя вашу книгу с аналогичными проданными экземплярами, вы можете сформировать наиболее 
+                    объективное представление о ее реальной рыночной стоимости на текущий момент.
+                </Typography>
+            </Paper>
 
             <Box sx={{ 
                 textAlign: 'center', 

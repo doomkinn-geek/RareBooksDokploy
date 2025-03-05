@@ -294,11 +294,66 @@ export function checkSubscriptionStatus() {
 
 // Функции для оценки стоимости антикварных книг
 export function getPriceStatistics(categoryId = null) {
-    let url = `${API_URL}/books/price-statistics`;
-    if (categoryId) {
-        url += `?categoryId=${categoryId}`;
+    console.log(`[API] Начало запроса getPriceStatistics с categoryId=${categoryId}`);
+    
+    // URL с поддержкой обоих эндпоинтов (старого и нового)
+    let url;
+    try {
+        // Сначала пробуем новый endpoint (Statistics контроллер)
+        url = `${API_URL}/statistics/prices`;
+        if (categoryId) {
+            url += `?categoryId=${categoryId}`;
+        }
+        
+        console.log(`[API] Запрос к endpoint: ${url}`);
+        
+        return axios.get(url, {
+            headers: getAuthHeaders(),
+            timeout: 10000
+        })
+        .then(response => {
+            console.log(`[API] Успешно получены данные статистики цен:`, response.data);
+            return response;
+        })
+        .catch(error => {
+            console.warn(`[API] Ошибка при обращении к новому endpoint, пробуем старый:`, error.message);
+            
+            // Если новый эндпоинт недоступен - пробуем старый
+            url = `${API_URL}/books/price-statistics`;
+            if (categoryId) {
+                url += `?categoryId=${categoryId}`;
+            }
+            
+            console.log(`[API] Запрос к запасному endpoint: ${url}`);
+            
+            return axios.get(url, { 
+                headers: getAuthHeaders(),
+                timeout: 10000
+            })
+            .then(response => {
+                console.log(`[API] Успешно получены данные статистики цен через запасной endpoint:`, response.data);
+                return response;
+            })
+            .catch(secondError => {
+                // Детальное логирование ошибок при второй попытке
+                console.error(`[API] Ошибка при получении статистики цен через запасной endpoint:`, secondError);
+                
+                if (secondError.response) {
+                    console.error(`[API] Статус ответа: ${secondError.response.status}`);
+                    console.error(`[API] Данные ответа:`, secondError.response.data);
+                } else if (secondError.request) {
+                    console.error('[API] Нет ответа от сервера:', secondError.request);
+                } else {
+                    console.error('[API] Ошибка при настройке запроса:', secondError.message);
+                }
+                
+                throw secondError;
+            });
+        });
+    } catch (error) {
+        console.error(`[API] Критическая ошибка в getPriceStatistics:`, error);
+        return Promise.reject(error);
     }
-    return axios.get(url, { headers: getAuthHeaders() });
 }
 
 export function getRecentSales(limit = 5) {

@@ -26,7 +26,6 @@ import { LanguageContext } from '../context/LanguageContext';
 import HistoryIcon from '@mui/icons-material/History';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
-import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import TodayIcon from '@mui/icons-material/Today';
 
 const RecentSales = () => {
@@ -443,10 +442,6 @@ const RecentSales = () => {
                                                 fontSize: { xs: '1rem', sm: '1.1rem' }
                                             }}
                                         >
-                                            <AttachMoneyIcon sx={{ 
-                                                fontSize: { xs: '1.1rem', sm: '1.2rem' },
-                                                mr: 0.3
-                                            }} />
                                             Цена: {formatPrice(book?.finalPrice || 0)}
                                         </Typography>
                                     </Box>

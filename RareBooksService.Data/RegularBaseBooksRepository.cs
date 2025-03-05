@@ -5,6 +5,7 @@ using RareBooksService.Common.Models;
 using RareBooksService.Common.Models.Dto;
 using RareBooksService.Data.Interfaces;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 
 namespace RareBooksService.Data
 {
@@ -13,6 +14,7 @@ namespace RareBooksService.Data
         private readonly BooksDbContext _context;
         private readonly UsersDbContext _usersContext;
         private readonly Dictionary<string, IStemmer> _stemmers;
+        private readonly ILogger<RegularBaseBooksRepository> _logger;
 
         // Создаём статический экземпляр детектора языка один раз
         private static readonly LanguageDetector _languageDetector;
@@ -23,10 +25,11 @@ namespace RareBooksService.Data
             _languageDetector.AddAllLanguages();
         }
 
-        public RegularBaseBooksRepository(BooksDbContext context, UsersDbContext usersContext)
+        public RegularBaseBooksRepository(BooksDbContext context, UsersDbContext usersContext, ILogger<RegularBaseBooksRepository> logger)
         {
             _context = context;
             _usersContext = usersContext;
+            _logger = logger;
 
             _stemmers = new Dictionary<string, IStemmer>
             {
@@ -289,18 +292,90 @@ namespace RareBooksService.Data
 
         public async Task<List<CategoryDto>> GetCategoriesAsync()
         {
-            // Получаем категории с количеством книг, у которых SoldQuantity > 0
-            var categoriesWithBooks = await _context.Categories
-                .Select(c => new CategoryDto
+            try
+            {
+                _logger.LogInformation("Начало выполнения метода GetCategoriesAsync");
+                
+                // Проверяем доступность контекста БД
+                if (_context == null)
                 {
-                    Id = c.Id,
-                    Name = c.Name,
-                    BookCount = c.Books.Count(b => b.SoldQuantity > 0)
-                })
-                .Where(c => c.BookCount > 0)  // Фильтруем только категории с проданными книгами
-                .ToListAsync();
-
-            return categoriesWithBooks;
+                    _logger.LogError("Контекст БД (_context) не инициализирован");
+                    throw new InvalidOperationException("Контекст БД не инициализирован");
+                }
+                
+                _logger.LogInformation("Проверяем доступность DbSet Categories");
+                if (_context.Categories == null)
+                {
+                    _logger.LogError("DbSet Categories не инициализирован");
+                    throw new InvalidOperationException("DbSet Categories не инициализирован");
+                }
+                
+                _logger.LogDebug("Формируем запрос для получения категорий");
+                var query = _context.Categories
+                    .Select(c => new CategoryDto
+                    {
+                        Id = c.Id,
+                        Name = c.Name,
+                        BookCount = c.Books.Count(b => b.SoldQuantity > 0)
+                    })
+                    .Where(c => c.BookCount > 0);
+                
+                _logger.LogDebug("Выполняем запрос к БД для получения категорий");
+                
+                try
+                {
+                    var categoriesWithBooks = await query.ToListAsync();
+                    _logger.LogInformation("Запрос категорий выполнен успешно. Получено {count} записей", categoriesWithBooks.Count);
+                    return categoriesWithBooks;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Ошибка при выполнении запроса к БД: {Message}", ex.Message);
+                    
+                    // Пытаемся получить SQL-запрос для отладки
+                    try
+                    {
+                        var queryString = query.ToQueryString();
+                        _logger.LogError("SQL запрос: {sql}", queryString);
+                    }
+                    catch (Exception sqlEx)
+                    {
+                        _logger.LogError(sqlEx, "Не удалось получить SQL запрос: {Message}", sqlEx.Message);
+                    }
+                    
+                    throw;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Критическая ошибка в методе GetCategoriesAsync: {Message}", ex.Message);
+                
+                if (ex.InnerException != null)
+                {
+                    _logger.LogError("Inner Exception: {InnerMessage}", ex.InnerException.Message);
+                    _logger.LogError("Inner Stack Trace: {InnerStackTrace}", ex.InnerException.StackTrace);
+                }
+                
+                // Проверяем состояние подключения к БД
+                try
+                {
+                    _logger.LogWarning("Проверка состояния подключения к БД");
+                    var canConnect = _context.Database.CanConnect();
+                    _logger.LogInformation("Подключение к БД доступно: {canConnect}", canConnect);
+                    
+                    if (!canConnect)
+                    {
+                        _logger.LogError("Не удалось подключиться к БД. Строка подключения: {connectionString}", 
+                            _context.Database.GetConnectionString()?.Replace("Password=", "Password=***"));
+                    }
+                }
+                catch (Exception dbEx)
+                {
+                    _logger.LogError(dbEx, "Ошибка при проверке подключения к БД: {Message}", dbEx.Message);
+                }
+                
+                throw;
+            }
         }
 
         public async Task<CategoryDto> GetCategoryByIdAsync(int id)
