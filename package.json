@@ -1,5 +1,8 @@
 {
   "dependencies": {
     "yet-another-react-lightbox": "^3.21.7"
+  },
+  "devDependencies": {
+    "eslint": "^9.21.0"
   }
 }

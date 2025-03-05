@@ -56,6 +56,7 @@ namespace RareBooksService.WebApi.Controllers
         /// <summary>
         /// 2) Загрузка кусков файла (или всего файла целиком) для указанного importTaskId
         /// </summary>
+        [DisableRequestSizeLimit]
         [HttpPost("upload")]
         public async Task<IActionResult> UploadFileChunk([FromQuery] Guid importTaskId)
         {

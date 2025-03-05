@@ -15,6 +15,9 @@ const Export = () => {
     const [isExporting, setIsExporting] = useState(false);
     const [intervalId, setIntervalId] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    // Новые состояния для отслеживания прогресса загрузки файла
+    const [isDownloading, setIsDownloading] = useState(false);
+    const [downloadProgress, setDownloadProgress] = useState(0);
 
     // Проверяем текущий статус экспорта при загрузке компонента
     useEffect(() => {
@@ -136,11 +139,21 @@ const Export = () => {
                 return;
             }
             
+            // Устанавливаем состояние загрузки
+            setIsDownloading(true);
+            setDownloadProgress(0);
+            
             const response = await axios.get(
                 `${API_URL}/admin/download-exported-file/${downloadTaskId}`,
                 {
                     headers: { Authorization: `Bearer ${token}` },
-                    responseType: 'blob'
+                    responseType: 'blob',
+                    onDownloadProgress: (progressEvent) => {
+                        if (progressEvent.total) {
+                            const progress = Math.round((progressEvent.loaded / progressEvent.total) * 100);
+                            setDownloadProgress(progress);
+                        }
+                    }
                 }
             );
 
@@ -152,9 +165,17 @@ const Export = () => {
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
+            
+            // Сбрасываем состояние загрузки после небольшой задержки,
+            // чтобы пользователь успел увидеть 100%
+            setTimeout(() => {
+                setIsDownloading(false);
+                setDownloadProgress(0);
+            }, 1000);
         } catch (err) {
             console.error('Error downloading export file:', err);
             setExportInternalError('Ошибка при скачивании файла экспорта: ' + (err.response?.data || err.message));
+            setIsDownloading(false);
         }
     };
 
@@ -163,7 +184,7 @@ const Export = () => {
             try {
                 const token = Cookies.get('token');
                 await axios.post(
-                    `${API_URL}/Export/cancel/${exportTaskId}`,
+                    `${API_URL}/admin/cancel-export/${exportTaskId}`,
                     null,
                     { headers: { Authorization: `Bearer ${token}` } }
                 );
@@ -199,7 +220,7 @@ const Export = () => {
                     <Button
                         variant="contained"
                         onClick={startExport}
-                        disabled={isExporting || isLoading}
+                        disabled={isExporting || isLoading || isDownloading}
                         sx={{ mr: 1 }}
                     >
                         {isLoading ? 'Загрузка...' : 'Начать экспорт'}
@@ -207,7 +228,7 @@ const Export = () => {
                     <Button
                         variant="outlined"
                         onClick={cancelExport}
-                        disabled={!isExporting}
+                        disabled={!isExporting || isDownloading}
                         color="error"
                     >
                         Отменить
@@ -230,6 +251,35 @@ const Export = () => {
                             <CircularProgress size={20} />
                             <Typography variant="body2">
                                 Экспорт в процессе...
+                            </Typography>
+                        </Box>
+                    </Box>
+                )}
+                
+                {/* Визуализация загрузки файла */}
+                {isDownloading && (
+                    <Box sx={{ mt: 2 }}>
+                        <Typography variant="subtitle2" gutterBottom>
+                            Загрузка файла: {Math.round(downloadProgress)}%
+                        </Typography>
+                        <LinearProgress 
+                            variant="determinate" 
+                            value={downloadProgress} 
+                            sx={{ 
+                                mb: 2,
+                                height: 10,
+                                borderRadius: 5,
+                                backgroundColor: '#e0e0e0',
+                                '& .MuiLinearProgress-bar': {
+                                    backgroundColor: '#2e7d32', // зелёный цвет для загрузки
+                                    borderRadius: 5
+                                }
+                            }}
+                        />
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <CircularProgress size={20} color="success" />
+                            <Typography variant="body2">
+                                Скачивание файла экспорта...
                             </Typography>
                         </Box>
                     </Box>

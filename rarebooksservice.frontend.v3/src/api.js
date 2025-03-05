@@ -3,7 +3,21 @@ import axios from 'axios';
 import Cookies from 'js-cookie';
 
 export const API_URL = '/api';
+// Закомментируем localhost URL, так как он вызывает ошибку соединения
 //export const API_URL = 'https://localhost:7042/api';
+
+// Глобальный обработчик ошибок для axios
+axios.interceptors.response.use(
+    response => response,
+    error => {
+        // Проверка на ошибки соединения
+        if (!error.response) {
+            console.error('Network error detected:', error.message);
+            // Можно добавить глобальное уведомление о проблемах с соединением
+        }
+        return Promise.reject(error);
+    }
+);
 
 // получаем токен доступа из cookies
 export const getAuthHeaders = () => {
@@ -184,8 +198,10 @@ export async function updateAdminSettings(settingsDto) {
 
 // ------------------- 
 
+// ------------------- ФУНКЦИИ ДЛЯ ИМПОРТА -------------------
+
 /**
- * 
+ * Инициализация задачи импорта. Сервер отдаёт importTaskId
  */
 export async function initImport(fileSize = null) {
     const headers = getAuthHeaders();
@@ -194,12 +210,12 @@ export async function initImport(fileSize = null) {
         : `${API_URL}/import/init`;
 
     const response = await axios.post(url, null, { headers });
-    return response.data.importTaskId; // Возвращаем только importTaskId
+    return response.data; // { importTaskId }
 }
 
 /**
- *    (   ) - application/octet-stream
- *  onUploadProgress     .
+ * Загрузка кусков файла (или всего файла целиком) - application/octet-stream
+ * Параметр onUploadProgress позволяет отслеживать прогресс на клиенте.
  */
 export async function uploadImportChunk(importTaskId, fileChunk, onUploadProgress) {
     const headers = {
@@ -207,18 +223,19 @@ export async function uploadImportChunk(importTaskId, fileChunk, onUploadProgres
         'Content-Type': 'application/octet-stream'
     };
 
+    // используем axios для POST
     return await axios.post(
         `${API_URL}/import/upload?importTaskId=${importTaskId}`,
         fileChunk,
         {
             headers,
-            onUploadProgress
+            onUploadProgress, // отслеживаем прогресс отправки chunk'а
         }
     );
 }
 
 /**
- *     Finish,    
+ * После загрузки файла вызвать Finish, чтобы сервер запустил импорт
  */
 export async function finishImport(importTaskId) {
     const headers = getAuthHeaders();
@@ -228,16 +245,16 @@ export async function finishImport(importTaskId) {
 }
 
 /**
- *    
+ * Запрос прогресса импортной задачи
  */
 export async function getImportProgress(importTaskId) {
     const headers = getAuthHeaders();
     const response = await axios.get(`${API_URL}/import/progress/${importTaskId}`, { headers });
-    return response.data; // Возвращаем весь объект прогресса
+    return response.data; // { uploadProgress, importProgress, ... }
 }
 
 /**
- * 
+ * Отмена
  */
 export async function cancelImport(importTaskId) {
     const headers = getAuthHeaders();
