@@ -49,6 +49,10 @@ const Import = () => {
     const [lastRequestDetails, setLastRequestDetails] = useState(null);
     const [serverResponded, setServerResponded] = useState(true);
     const [serverCrashInfo, setServerCrashInfo] = useState(null);
+    
+    // Новые состояния для разделения логики инициализации и загрузки
+    const [isInitialized, setIsInitialized] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
 
     useEffect(() => {
         return () => {
@@ -87,6 +91,7 @@ const Import = () => {
             setImportFile(file);
             setImportMessage('');
             setError('');
+            setIsInitialized(false); // Сбрасываем флаг инициализации при выборе нового файла
                 
                 // Используем простую диагностику без сетевых запросов
                 logDiagnostic('FILE_SELECTED', {
@@ -127,7 +132,8 @@ const Import = () => {
         return crashInfo;
     };
 
-    const startImport = async () => {
+    // Новая функция только для инициализации импорта
+    const initializeImport = async () => {
         if (!importFile) {
             setError('Пожалуйста, выберите файл для импорта');
             return;
@@ -150,23 +156,48 @@ const Import = () => {
         }
 
         setError('');
-        setIsImporting(true);
         setServerResponded(true);
         setServerCrashInfo(null);
-        let taskId = null;
         
         try {
-            // Инициализация импорта - максимально простой подход
+            // Инициализация импорта
             logDiagnostic('IMPORT_INIT_START', { fileSize: importFile.size });
             
             const response = await initImport(importFile.size);
-            taskId = response.importTaskId;
+            const taskId = response.importTaskId;
             
             logDiagnostic('IMPORT_INIT_SUCCESS', { taskId });
             setImportTaskId(taskId);
+            setIsInitialized(true); // Отмечаем, что инициализация успешна
+            setImportMessage('Импорт инициализирован. Нажмите "Начать загрузку" для продолжения.');
+            
+        } catch (err) {
+            console.error('Error during import initialization:', err);
+            setError('Ошибка при инициализации импорта: ' + (err.response?.data || err.message));
+            logDiagnostic('IMPORT_INIT_ERROR', { 
+                error: err.message,
+                response: err.response ? {
+                    status: err.response.status,
+                    statusText: err.response.statusText,
+                    data: err.response.data
+                } : 'No response'
+            });
+        }
+    };
 
+    // Загрузка файла после инициализации
+    const startFileUpload = async () => {
+        if (!importTaskId || !isInitialized) {
+            setError('Импорт не был инициализирован');
+            return;
+        }
+        
+        setError('');
+        setIsImporting(true);
+        setIsUploading(true);
+        
+        try {
             // Загрузка файла по частям
-            // Используем тот же размер чанков, что и в старой версии
             const chunkSize = 1024 * 256; // 256KB chunks как в старой версии
             let offset = 0;
 
@@ -176,15 +207,14 @@ const Import = () => {
                 
                 logDiagnostic('CHUNK_UPLOAD_START', { offset, size: endOffset - offset });
                 
-                // Отправка чанка по старой схеме без сложной обработки
+                // Отправка чанка
                 await uploadImportChunk(
-                    taskId, 
+                    importTaskId, 
                     chunk, 
                     (progressEvent) => {
-                        // Можно отслеживать прогресс, но не логируем слишком много
                         if (progressEvent.total) {
                             const progress = Math.round((progressEvent.loaded / progressEvent.total) * 100);
-                            if (progress % 25 === 0) { // логируем только 0%, 25%, 50%, 75%, 100%
+                            if (progress % 25 === 0) {
                                 logDiagnostic('CHUNK_UPLOAD_PROGRESS', { progress });
                             }
                         }
@@ -194,38 +224,50 @@ const Import = () => {
                 // Инкрементируем смещение и обновляем прогресс
                 offset = endOffset;
                 setImportUploadProgress((offset / importFile.size) * 100);
-                
-                // Без дополнительных задержек между чанками, как в старой версии
             }
 
-            // Завершение загрузки и начало импорта - максимально простой подход
-            logDiagnostic('IMPORT_FINISH_START', { taskId });
+            // Завершение загрузки и начало импорта
+            logDiagnostic('IMPORT_FINISH_START', { taskId: importTaskId });
 
-            await finishImport(taskId);
+            await finishImport(importTaskId);
             
-            logDiagnostic('IMPORT_FINISH_SUCCESS', { taskId });
+            logDiagnostic('IMPORT_FINISH_SUCCESS', { taskId: importTaskId });
+            setIsUploading(false);
             
-            startPollingProgress(taskId);
+            startPollingProgress(importTaskId);
             
         } catch (err) {
-            console.error('Error during import process:', err);
+            console.error('Error during file upload:', err);
             
-            // Если возникла ошибка и у нас есть taskId, попробуем отменить импорт
-            if (taskId) {
-                try {
-                    await cancelImport(taskId);
-                    logDiagnostic('IMPORT_CANCELLED', { taskId, reason: err.message });
-                } catch (cancelErr) {
-                    logDiagnostic('IMPORT_CANCEL_ERROR', { 
-                        taskId, 
-                        error: cancelErr.message 
-                    });
-                }
+            // Если возникла ошибка, попробуем отменить импорт
+            try {
+                await cancelImport(importTaskId);
+                logDiagnostic('IMPORT_CANCELLED', { taskId: importTaskId, reason: err.message });
+            } catch (cancelErr) {
+                logDiagnostic('IMPORT_CANCEL_ERROR', { 
+                    taskId: importTaskId, 
+                    error: cancelErr.message 
+                });
             }
             
-            setError('Ошибка при импорте: ' + (err.response?.data || err.message));
+            setError('Ошибка при загрузке файла: ' + (err.response?.data || err.message));
             setIsImporting(false);
+            setIsUploading(false);
             setImportTaskId(null);
+            setIsInitialized(false);
+        }
+    };
+
+    // Полная последовательность импорта (для обратной совместимости)
+    const startImport = async () => {
+        if (!importFile) {
+            setError('Пожалуйста, выберите файл для импорта');
+            return;
+        }
+
+        await initializeImport();
+        if (isInitialized) {
+            await startFileUpload();
         }
     };
 
@@ -557,16 +599,33 @@ const Import = () => {
                 <Box sx={{ mb: 2 }}>
                     <Button
                         variant="contained"
+                        onClick={initializeImport}
+                        disabled={!importFile || isImporting || isInitialized}
+                        sx={{ mr: 1 }}
+                    >
+                        Инициализировать импорт
+                    </Button>
+                    <Button
+                        variant="contained"
+                        onClick={startFileUpload}
+                        disabled={!isInitialized || isImporting || isUploading}
+                        sx={{ mr: 1 }}
+                        color="primary"
+                    >
+                        Начать загрузку
+                    </Button>
+                    <Button
+                        variant="contained"
                         onClick={startImport}
                         disabled={!importFile || isImporting}
                         sx={{ mr: 1 }}
                     >
-                        Начать импорт
+                        Начать полный импорт
                     </Button>
                     <Button
                         variant="outlined"
                         onClick={handleCancel}
-                        disabled={!isImporting}
+                        disabled={!isImporting && !isInitialized}
                         color="error"
                         sx={{ mr: 1 }}
                     >
