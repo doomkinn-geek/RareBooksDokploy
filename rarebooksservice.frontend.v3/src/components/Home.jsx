@@ -51,7 +51,6 @@ import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import PriceChangeIcon from '@mui/icons-material/PriceChange';
 import BookmarkAddedIcon from '@mui/icons-material/BookmarkAdded';
 import CloseIcon from '@mui/icons-material/Close';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import DescriptionIcon from '@mui/icons-material/Description';
 import EuroIcon from '@mui/icons-material/Euro';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -387,24 +386,6 @@ const Home = () => {
                         >
                             {t.mainSubtitle}
                         </Typography>
-                        
-                        <Button 
-                            variant="contained" 
-                            size={isMobile ? "medium" : "large"}
-                            component={Link}
-                            to="/categories"
-                            startIcon={<AssessmentIcon />}
-                            endIcon={<ArrowForwardIcon />}
-                            sx={{ 
-                                px: { xs: 2, sm: 3, md: 4 },
-                                py: { xs: 1, sm: 1.2, md: 1.5 },
-                                borderRadius: '8px',
-                                textTransform: 'none',
-                                fontSize: { xs: '0.9rem', sm: '1rem', md: '1.1rem' }
-                            }}
-                        >
-                            {t.startEvaluation}
-                        </Button>
                     </Grid>
                     
                     <Grid item xs={12} md={4} sx={{ mt: { xs: 4, md: 0 } }}>
