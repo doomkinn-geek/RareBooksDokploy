@@ -2,11 +2,11 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
-//export const API_URL = '/api';
+export const API_URL = '/api';
 // Для локальной разработки без HTTPS
 //export const API_URL = 'http://localhost:5000/api';
 // Закомментируем HTTPS URL
-export const API_URL = 'https://localhost:7042/api';
+//export const API_URL = 'https://localhost:7042/api';
 
 // Настройка axios для работы с HTTPS - отключаем для HTT
 /*
