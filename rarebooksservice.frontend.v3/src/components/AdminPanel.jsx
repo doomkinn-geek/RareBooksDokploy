@@ -1,8 +1,6 @@
 // src/components/AdminPanel.jsx
 import React, { useEffect, useState } from 'react';
 import {
-    getUsers, updateUserSubscription, updateUserRole, getUserById,
-    getAdminSettings, updateAdminSettings,
     initImport, uploadImportChunk, finishImport, getImportProgress, cancelImport
 } from '../api';
 import { useNavigate } from 'react-router-dom';
@@ -16,20 +14,24 @@ import {
     Card, CardContent, LinearProgress, MenuItem, Select, 
     FormControl, FormControlLabel, InputLabel, Checkbox, Dialog,
     DialogTitle, DialogContent, DialogActions, Divider,
-    useMediaQuery, useTheme
+    useMediaQuery, useTheme, Drawer, List, ListItem, ListItemText,
+    IconButton, AppBar, Toolbar
 } from '@mui/material';
-import { CategoryCleanup, SubPlans, BookUpdate, Import, Export } from './admin';
+import { CategoryCleanup, SubPlans, BookUpdate, Import, Export, UsersPanel, SettingsPanel } from './admin';
+import MenuIcon from '@mui/icons-material/Menu';
 
 const AdminPanel = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const isTablet = useMediaQuery(theme.breakpoints.down('md'));
     
+    // Состояние для drawer (бокового меню)
+    const [drawerOpen, setDrawerOpen] = useState(false);
+    
     // Вкладки: 'users' | 'export' | 'settings' | 'import' | 'bookupdate' | 'subplans' | 'categories'
     const [currentTab, setCurrentTab] = useState('users');
 
     // ----- Состояния пользователей
-    const [users, setUsers] = useState([]);
     const [error, setError] = useState('');
 
     // Состояния для экспорта
@@ -39,37 +41,6 @@ const AdminPanel = () => {
     const [exportInternalError, setExportInternalError] = useState(null);  
     const [isExporting, setIsExporting] = useState(false);
     const [intervalId, setIntervalId] = useState(null);
-
-    // ----- Настройки
-    const [yandexKassa, setYandexKassa] = useState({
-        shopId: '',
-        secretKey: '',
-        returnUrl: '',
-        webhookUrl: ''
-    });
-    const [yandexDisk, setYandexDisk] = useState({ token: '' });
-    const [typeOfAccessImages, setTypeOfAccessImages] = useState({
-        useLocalFiles: 'false',
-        localPathOfImages: ''
-    });
-    const [yandexCloud, setYandexCloud] = useState({
-        accessKey: '',
-        secretKey: '',
-        serviceUrl: '',
-        bucketName: ''
-    });
-    const [smtp, setSmtp] = useState({
-        host: '',
-        port: '',
-        user: '',
-        pass: ''
-    });
-
-    const [cacheSettings, setCacheSettings] = useState({
-        localCachePath: '',
-        daysToKeep: 30,
-        maxCacheSizeMB: 200
-    });
 
     // ----- Сервис обновления книг
     const [bookUpdateStatus, setBookUpdateStatus] = useState({
@@ -83,7 +54,6 @@ const AdminPanel = () => {
         lastProcessedLotTitle: '',
         logs: []  // <-- можно добавить сюда дефолтное пустое поле
     });
-
 
     // ----- Импорт
     const [importTaskId, setImportTaskId] = useState(null);
@@ -108,74 +78,10 @@ const AdminPanel = () => {
         isActive: true
     });
 
-    // --- Модалка для назначения плана ---
-    const [showSubModal, setShowSubModal] = useState(false);
-    const [selectedUserForSub, setSelectedUserForSub] = useState(null);
-    const [selectedPlanForSub, setSelectedPlanForSub] = useState(0);
-    const [autoRenewForSub, setAutoRenewForSub] = useState(false);
-
-
     const navigate = useNavigate();
 
     useEffect(() => {
         loadSubscriptionPlans(); // Загрузим планы при первом рендере
-    }, []);
-    // ====================== Загрузка пользователей ======================
-    // Вынесем эту функцию наружу
-    const loadUsers = async () => {
-        try {
-            const response = await getUsers();
-            setUsers(response.data);
-        } catch (err) {
-            console.error('Error fetching users:', err);
-            setError('Ошибка при загрузке пользователей');
-        }
-    };
-    useEffect(() => {
-        loadUsers();
-    }, []);
-
-    // ====================== Загрузка настроек ======================
-    useEffect(() => {
-        const fetchSettings = async () => {
-            try {
-                const data = await getAdminSettings();
-                setYandexKassa({
-                    shopId: data.yandexKassa?.ShopId ?? '',
-                    secretKey: data.yandexKassa?.SecretKey ?? '',
-                    returnUrl: data.yandexKassa?.ReturnUrl ?? '',
-                    webhookUrl: data.yandexKassa?.WebhookUrl ?? ''
-                });
-                setYandexDisk({
-                    token: data.yandexDisk?.Token ?? ''
-                });
-                setTypeOfAccessImages({
-                    useLocalFiles: data.typeOfAccessImages?.UseLocalFiles ?? 'false',
-                    localPathOfImages: data.typeOfAccessImages?.LocalPathOfImages ?? ''
-                });
-                setYandexCloud({
-                    accessKey: data.yandexCloud?.AccessKey ?? '',
-                    secretKey: data.yandexCloud?.SecretKey ?? '',
-                    serviceUrl: data.yandexCloud?.ServiceUrl ?? '',
-                    bucketName: data.yandexCloud?.BucketName ?? ''
-                });
-                setSmtp({
-                    host: data.smtp?.Host ?? '',
-                    port: data.smtp?.Port ?? '587',
-                    user: data.smtp?.User ?? '',
-                    pass: data.smtp?.Pass ?? ''
-                });
-                setCacheSettings({
-                    localCachePath: data.cacheSettings?.LocalCachePath || 'image_cache',
-                    daysToKeep: data.cacheSettings?.DaysToKeep || 30,
-                    maxCacheSizeMB: data.cacheSettings?.MaxCacheSizeMB || 200
-                });
-            } catch (err) {
-                console.error('Error fetching admin settings:', err);
-                setError('Ошибка при загрузке настроек');
-            }
-        };
-        fetchSettings();
     }, []);
 
     // ====================== Загрузка планов подписки (при переходе на вкладку subplans) ======================
@@ -201,80 +107,6 @@ const AdminPanel = () => {
             setError('Не удалось загрузить планы подписки.');
         } finally {
             setLoadingPlans(false);
-        }
-    };
-
-    // Открываем модалку
-    function openSubscriptionModal(user) {
-        setSelectedUserForSub(user);
-        const activePlanId = user.currentSubscription?.subscriptionPlanId || 0;
-        setSelectedPlanForSub(activePlanId);
-        setAutoRenewForSub(user.currentSubscription?.autoRenew || false);
-        setShowSubModal(true);
-    }
-
-    async function handleAssignSubscriptionPlan() {
-        try {
-            const token = Cookies.get('token');
-            const userId = selectedUserForSub.id;
-
-            const requestBody = {
-                planId: Number(selectedPlanForSub),
-                autoRenew: autoRenewForSub
-            };
-
-            await axios.post(`${API_URL}/admin/user/${userId}/assign-subscription-plan`,
-                requestBody,
-                { headers: { Authorization: `Bearer ${token}` }
-            });
-
-            alert('Подписка обновлена');
-            setShowSubModal(false);
-
-            // Обновим список пользователей, чтобы увидеть новые данные
-            loadUsers();
-        } catch (err) {
-            console.error('Ошибка при назначении плана подписки:', err);
-            alert('Ошибка при назначении плана');
-        }
-    }
-
-    // ====================== Методы работы с пользователями ======================
-    const handleUpdateUserSubscription = async (userId, hasSubscription) => {
-        if (isExporting || isImporting) return;
-        try {
-            await updateUserSubscription(userId, hasSubscription);
-            setUsers((prev) =>
-                prev.map((user) =>
-                    user.id === userId ? { ...user, hasSubscription } : user
-                )
-            );
-        } catch (err) {
-            console.error('Error updating subscription:', err);
-            setError('Ошибка при обновлении подписки');
-        }
-    };
-
-    const handleUpdateUserRole = async (userId, role) => {
-        if (isExporting || isImporting) return;
-        try {
-            await updateUserRole(userId, role);
-            setUsers((prev) =>
-                prev.map((user) => (user.id === userId ? { ...user, role } : user))
-            );
-        } catch (err) {
-            console.error('Error updating role:', err);
-            setError('Ошибка при обновлении роли');
-        }
-    };
-
-    const handleViewDetails = async (userId) => {
-        if (isExporting || isImporting) return;
-        try {
-            await getUserById(userId);
-            navigate(`/user/${userId}`);
-        } catch (err) {
-            console.error('Error fetching user details:', err);
         }
     };
 
@@ -405,50 +237,6 @@ const AdminPanel = () => {
         } catch (err) {
             console.error('Error downloading file:', err);
             setError('Ошибка при скачивании файла.');
-        }
-    };
-
-    // ====================== Сохранение настроек ======================
-    const handleSaveSettings = async () => {
-        try {
-            const settings = {
-                yandexKassa: {
-                    ShopId: yandexKassa.shopId,
-                    SecretKey: yandexKassa.secretKey,
-                    ReturnUrl: yandexKassa.returnUrl,
-                    WebhookUrl: yandexKassa.webhookUrl
-                },
-                yandexDisk: {
-                    Token: yandexDisk.token
-                },
-                typeOfAccessImages: {
-                    UseLocalFiles: typeOfAccessImages.useLocalFiles,
-                    LocalPathOfImages: typeOfAccessImages.localPathOfImages
-                },
-                yandexCloud: {
-                    AccessKey: yandexCloud.accessKey,
-                    SecretKey: yandexCloud.secretKey,
-                    ServiceUrl: yandexCloud.serviceUrl,
-                    BucketName: yandexCloud.bucketName
-                },
-                smtp: {
-                    Host: smtp.host,
-                    Port: smtp.port,
-                    User: smtp.user,
-                    Pass: smtp.pass
-                },
-                cacheSettings: {
-                    LocalCachePath: cacheSettings.localCachePath,
-                    DaysToKeep: cacheSettings.daysToKeep,
-                    MaxCacheSizeMB: cacheSettings.maxCacheSizeMB
-                }
-            };
-
-            await updateAdminSettings(settings);
-            setError('');
-        } catch (err) {
-            console.error('Error updating settings:', err);
-            setError('Ошибка при сохранении настроек');
         }
     };
 
@@ -670,19 +458,48 @@ const AdminPanel = () => {
     // Обработка смены вкладки
     const handleTabChange = (event, newValue) => {
         setCurrentTab(newValue);
+        // Закрываем drawer, если открыто на мобильном
+        if (isMobile && drawerOpen) {
+            setDrawerOpen(false);
+        }
+    };
+
+    // Объект с названиями вкладок для отображения в drawer
+    const tabLabels = {
+        users: 'Пользователи',
+        export: 'Экспорт данных',
+        settings: 'Настройки',
+        import: 'Импорт данных',
+        bookupdate: 'Обновление книг',
+        subplans: 'Планы подписки',
+        categories: 'Управление категориями'
     };
 
     // ====================== Рендер контента по вкладкам ======================
     return (
         <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 1, sm: 2, md: 3 } }}>
             <Paper elevation={3} sx={{ p: { xs: 1, sm: 2, md: 3 }, borderRadius: '12px', mb: 4, overflow: 'hidden' }}>
-                <Typography variant="h4" component="h1" gutterBottom sx={{ 
-                    fontWeight: 'bold', 
-                    color: '#2c3e50',
-                    fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2rem' }
-                }}>
-                    Панель администратора
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    {isMobile && (
+                        <IconButton
+                            edge="start"
+                            color="inherit"
+                            aria-label="menu"
+                            onClick={() => setDrawerOpen(true)}
+                            sx={{ mr: 2 }}
+                        >
+                            <MenuIcon />
+                        </IconButton>
+                    )}
+                    <Typography variant="h4" component="h1" gutterBottom sx={{ 
+                        fontWeight: 'bold', 
+                        color: '#2c3e50',
+                        fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2rem' },
+                        my: 0
+                    }}>
+                        Панель администратора
+                    </Typography>
+                </Box>
                 
                 {error && (
                     <Alert severity="error" sx={{ mb: 3 }}>
@@ -690,35 +507,93 @@ const AdminPanel = () => {
                     </Alert>
                 )}
 
-                <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-                    <Tabs 
-                        value={currentTab} 
-                        onChange={handleTabChange} 
-                        variant="scrollable"
-                        scrollButtons="auto"
-                        allowScrollButtonsMobile
-                        sx={{
-                            '& .MuiTab-root': {
-                                fontWeight: 'bold',
-                                fontSize: { xs: '0.8rem', sm: '0.9rem', md: '1rem' },
-                                minWidth: { xs: 80, sm: 100, md: 120 },
-                                py: { xs: 1, md: 1.5 },
-                                px: { xs: 1, sm: 1.5, md: 2 }
-                            },
-                            '.MuiTabs-scrollButtons': {
-                                '&.Mui-disabled': { opacity: 0.3 },
-                            }
+                {/* Drawer для мобильных устройств */}
+                <Drawer
+                    anchor="left"
+                    open={isMobile && drawerOpen}
+                    onClose={() => setDrawerOpen(false)}
+                >
+                    <Box
+                        sx={{ width: 280 }}
+                        role="presentation"
+                    >
+                        <List>
+                            <ListItem sx={{ borderBottom: 1, borderColor: 'divider', py: 2 }}>
+                                <Typography variant="h6">Панель администратора</Typography>
+                            </ListItem>
+                            {Object.entries(tabLabels).map(([key, label]) => (
+                                <ListItem 
+                                    button 
+                                    key={key}
+                                    onClick={() => {
+                                        setCurrentTab(key);
+                                        setDrawerOpen(false);
+                                    }}
+                                    selected={currentTab === key}
+                                    sx={{
+                                        bgcolor: currentTab === key ? 'rgba(0, 0, 0, 0.08)' : 'transparent',
+                                        '&:hover': {
+                                            bgcolor: 'rgba(0, 0, 0, 0.04)'
+                                        }
+                                    }}
+                                >
+                                    <ListItemText primary={label} />
+                                </ListItem>
+                            ))}
+                        </List>
+                    </Box>
+                </Drawer>
+
+                {/* Вкладки для десктопа */}
+                {!isMobile && (
+                    <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+                        <Tabs 
+                            value={currentTab} 
+                            onChange={handleTabChange} 
+                            variant="scrollable"
+                            scrollButtons="auto"
+                            allowScrollButtonsMobile
+                            sx={{
+                                '& .MuiTab-root': {
+                                    fontWeight: 'bold',
+                                    fontSize: { xs: '0.8rem', sm: '0.9rem', md: '1rem' },
+                                    minWidth: { xs: 80, sm: 100, md: 120 },
+                                    py: { xs: 1, md: 1.5 },
+                                    px: { xs: 1, sm: 1.5, md: 2 }
+                                },
+                                '.MuiTabs-scrollButtons': {
+                                    '&.Mui-disabled': { opacity: 0.3 },
+                                }
+                            }}
+                        >
+                            <Tab label="Пользователи" value="users" />
+                            <Tab label="Экспорт данных" value="export" />
+                            <Tab label="Настройки" value="settings" />
+                            <Tab label="Импорт данных" value="import" />
+                            <Tab label="Обновление книг" value="bookupdate" />
+                            <Tab label="Планы подписки" value="subplans" />
+                            <Tab label="Категории" value="categories" />
+                        </Tabs>
+                    </Box>
+                )}
+
+                {/* Отображение заголовка активной вкладки для мобильных устройств */}
+                {isMobile && (
+                    <Typography 
+                        variant="h5" 
+                        component="h2" 
+                        gutterBottom 
+                        sx={{ 
+                            fontWeight: 'bold', 
+                            color: '#2c3e50',
+                            mb: 3,
+                            borderBottom: '1px solid rgba(0, 0, 0, 0.1)',
+                            pb: 1
                         }}
                     >
-                        <Tab label="Пользователи" value="users" />
-                        <Tab label="Экспорт данных" value="export" />
-                        <Tab label="Настройки" value="settings" />
-                        <Tab label="Импорт данных" value="import" />
-                        <Tab label="Обновление книг" value="bookupdate" />
-                        <Tab label="Планы подписки" value="subplans" />
-                        <Tab label="Категории" value="categories" />
-                    </Tabs>
-                </Box>
+                        {tabLabels[currentTab]}
+                    </Typography>
+                )}
 
                 <Box sx={{ 
                     overflowX: 'auto',
@@ -732,191 +607,17 @@ const AdminPanel = () => {
                     
                 {/* ============ Вкладка "users" ============ */}
                 {currentTab === 'users' && (
-                    <Box>
-                        <Typography variant="h5" component="h2" gutterBottom sx={{ 
-                            fontWeight: 'bold', 
-                            color: '#2c3e50', 
-                            mb: 3,
-                            fontSize: { xs: '1.2rem', sm: '1.4rem', md: '1.5rem' }
-                        }}>
-                            Управление пользователями
-                        </Typography>
-                        
-                        {/* Desktop view - полная таблица для десктопа */}
-                        {!isMobile && (
-                            <TableContainer component={Paper} elevation={2} sx={{ mb: 4, borderRadius: '8px' }}>
-                                <Table sx={{ minWidth: 650 }}>
-                                    <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
-                                        <TableRow>
-                                            <TableCell>Email</TableCell>
-                                            <TableCell>Роль</TableCell>
-                                            <TableCell>Активна?</TableCell>
-                                            <TableCell>План</TableCell>
-                                            <TableCell>Автопродление</TableCell>
-                                            <TableCell>Лимит запросов</TableCell>
-                                            <TableCell>Действия</TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {users.map((user) => {
-                                            const sub = user.currentSubscription;
-                                            return (
-                                                <TableRow key={user.id} hover>
-                                                    <TableCell>{user.email}</TableCell>
-                                                    <TableCell>{user.role || '-'}</TableCell>
-                                                    <TableCell>{sub ? 'Да' : 'Нет'}</TableCell>
-                                                    <TableCell>{sub?.subscriptionPlan?.name || '-'}</TableCell>
-                                                    <TableCell>{sub?.autoRenew ? 'Да' : 'Нет'}</TableCell>
-                                                    <TableCell>{sub?.subscriptionPlan?.monthlyRequestLimit ?? '-'}</TableCell>
-                                                    <TableCell>
-                                                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                                            <Button 
-                                                                variant="contained" 
-                                                                size="small"
-                                                                onClick={() => openSubscriptionModal(user)}
-                                                                sx={{ 
-                                                                    backgroundColor: '#E72B3D',
-                                                                    '&:hover': { backgroundColor: '#c4242f' }
-                                                                }}
-                                                            >
-                                                                Изменить подписку
-                                                            </Button>
-                                                            
-                                                            <Button 
-                                                                variant="outlined" 
-                                                                size="small"
-                                                                onClick={() => handleViewDetails(user.id)}
-                                                                sx={{ borderColor: '#E72B3D', color: '#E72B3D' }}
-                                                            >
-                                                                Детали
-                                                            </Button>
-                                                            
-                                                            {(!user.role || user.role.toLowerCase() !== 'admin') && (
-                                                                <Button 
-                                                                    variant="outlined" 
-                                                                    size="small"
-                                                                    onClick={() => handleUpdateUserRole(user.id, 'admin')}
-                                                                    sx={{ borderColor: '#2196f3', color: '#2196f3' }}
-                                                                >
-                                                                    Сделать админом
-                                                                </Button>
-                                                            )}
-                                                            
-                                                            {user.role && user.role.toLowerCase() === 'admin' && user.email !== 'test@test.com' && (
-                                                                <Button 
-                                                                    variant="outlined" 
-                                                                    size="small"
-                                                                    onClick={() => handleUpdateUserRole(user.id, 'user')}
-                                                                    sx={{ borderColor: '#f44336', color: '#f44336' }}
-                                                                >
-                                                                    Снять админа
-                                                                </Button>
-                                                            )}
-                                                        </Box>
-                                                    </TableCell>
-                                                </TableRow>
-                                            );
-                                        })}
-                                    </TableBody>
-                                </Table>
-                            </TableContainer>
-                        )}
-                        
-                        {/* Mobile view - карточки вместо таблицы для мобильных */}
-                        {isMobile && (
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 4 }}>
-                                {users.map((user) => {
-                                    const sub = user.currentSubscription;
-                                    return (
-                                        <Card key={user.id} sx={{ mb: 2, overflow: 'visible' }}>
-                                            <CardContent sx={{ p: 2 }}>
-                                                <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                                                    {user.email}
-                                                </Typography>
-                                                
-                                                <Grid container spacing={1} sx={{ mb: 2 }}>
-                                                    <Grid item xs={6}>
-                                                        <Typography variant="body2" color="text.secondary">Роль:</Typography>
-                                                        <Typography variant="body1">{user.role || '-'}</Typography>
-                                                    </Grid>
-                                                    <Grid item xs={6}>
-                                                        <Typography variant="body2" color="text.secondary">Активна:</Typography>
-                                                        <Typography variant="body1">{sub ? 'Да' : 'Нет'}</Typography>
-                                                    </Grid>
-                                                    <Grid item xs={6}>
-                                                        <Typography variant="body2" color="text.secondary">План:</Typography>
-                                                        <Typography variant="body1">{sub?.subscriptionPlan?.name || '-'}</Typography>
-                                                    </Grid>
-                                                    <Grid item xs={6}>
-                                                        <Typography variant="body2" color="text.secondary">Автопродление:</Typography>
-                                                        <Typography variant="body1">{sub?.autoRenew ? 'Да' : 'Нет'}</Typography>
-                                                    </Grid>
-                                                    <Grid item xs={12}>
-                                                        <Typography variant="body2" color="text.secondary">Лимит запросов:</Typography>
-                                                        <Typography variant="body1">{sub?.subscriptionPlan?.monthlyRequestLimit ?? '-'}</Typography>
-                                                    </Grid>
-                                                </Grid>
-                                                
-                                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                                                    <Button 
-                                                        variant="contained" 
-                                                        size="small"
-                                                        onClick={() => openSubscriptionModal(user)}
-                                                        sx={{ 
-                                                            backgroundColor: '#E72B3D',
-                                                            '&:hover': { backgroundColor: '#c4242f' },
-                                                            flexGrow: 1
-                                                        }}
-                                                    >
-                                                        Изменить подписку
-                                                    </Button>
-                                                    
-                                                    <Button 
-                                                        variant="outlined" 
-                                                        size="small"
-                                                        onClick={() => handleViewDetails(user.id)}
-                                                        sx={{ borderColor: '#E72B3D', color: '#E72B3D', flexGrow: 1 }}
-                                                    >
-                                                        Детали
-                                                    </Button>
-                                                    
-                                                    {(!user.role || user.role.toLowerCase() !== 'admin') && (
-                                                        <Button 
-                                                            variant="outlined" 
-                                                            size="small"
-                                                            onClick={() => handleUpdateUserRole(user.id, 'admin')}
-                                                            sx={{ borderColor: '#2196f3', color: '#2196f3', flexGrow: 1 }}
-                                                        >
-                                                            Сделать админом
-                                                        </Button>
-                                                    )}
-                                                    
-                                                    {user.role && user.role.toLowerCase() === 'admin' && user.email !== 'test@test.com' && (
-                                                        <Button 
-                                                            variant="outlined" 
-                                                            size="small"
-                                                            onClick={() => handleUpdateUserRole(user.id, 'user')}
-                                                            sx={{ borderColor: '#f44336', color: '#f44336', flexGrow: 1 }}
-                                                        >
-                                                            Снять админа
-                                                        </Button>
-                                                    )}
-                                                </Box>
-                                            </CardContent>
-                                        </Card>
-                                    );
-                                })}
-                            </Box>
-                        )}
-                    </Box>
+                    <UsersPanel />
                 )}
 
                 {/* ============ Вкладка "import" ============ */}
                 {currentTab === 'import' && (
                     <Box>
-                        <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50', mb: 3 }}>
-                            Импорт данных
-                        </Typography>
+                        {!isMobile && (
+                            <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50', mb: 3 }}>
+                                Импорт данных
+                            </Typography>
+                        )}
                         <Import />
                     </Box>
                 )}
@@ -924,361 +625,18 @@ const AdminPanel = () => {
                 {/* ============ Вкладка "export" ============ */}
                 {currentTab === 'export' && (
                     <Box>
-                        <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50', mb: 3 }}>
-                            Экспорт данных
-                        </Typography>
+                        {!isMobile && (
+                            <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50', mb: 3 }}>
+                                Экспорт данных
+                            </Typography>
+                        )}
                         <Export />
                     </Box>
                 )}
 
                 {/* ============ Вкладка "settings" ============ */}
                 {currentTab === 'settings' && (
-                    <Box>
-                        <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50', mb: 3 }}>
-                            Редактирование настроек (appsettings.json)
-                        </Typography>
-
-                        {/* YandexKassa */}
-                        <Card variant="outlined" sx={{ mb: 3, borderRadius: '8px' }}>
-                            <CardContent>
-                                <Typography variant="h6" gutterBottom fontWeight="bold">YandexKassa</Typography>
-                                <Grid container spacing={2}>
-                                    <Grid item xs={12} sm={6} md={3}>
-                                        <TextField
-                                            fullWidth
-                                            label="ShopId"
-                                            variant="outlined"
-                                            size="small"
-                                            value={yandexKassa.shopId}
-                                            onChange={(e) =>
-                                                setYandexKassa({
-                                                    ...yandexKassa,
-                                                    shopId: e.target.value
-                                                })
-                                            }
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} sm={6} md={3}>
-                                        <TextField
-                                            fullWidth
-                                            label="SecretKey"
-                                            variant="outlined"
-                                            size="small"
-                                            value={yandexKassa.secretKey}
-                                            onChange={(e) =>
-                                                setYandexKassa({
-                                                    ...yandexKassa,
-                                                    secretKey: e.target.value
-                                                })
-                                            }
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} sm={6} md={3}>
-                                        <TextField
-                                            fullWidth
-                                            label="ReturnUrl"
-                                            variant="outlined"
-                                            size="small"
-                                            value={yandexKassa.returnUrl}
-                                            onChange={(e) =>
-                                                setYandexKassa({
-                                                    ...yandexKassa,
-                                                    returnUrl: e.target.value
-                                                })
-                                            }
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} sm={6} md={3}>
-                                        <TextField
-                                            fullWidth
-                                            label="WebhookUrl"
-                                            variant="outlined"
-                                            size="small"
-                                            value={yandexKassa.webhookUrl}
-                                            onChange={(e) =>
-                                                setYandexKassa({
-                                                    ...yandexKassa,
-                                                    webhookUrl: e.target.value
-                                                })
-                                            }
-                                        />
-                                    </Grid>
-                                </Grid>
-                            </CardContent>
-                        </Card>
-
-                        {/* YandexDisk */}
-                        <Card variant="outlined" sx={{ mb: 3, borderRadius: '8px' }}>
-                            <CardContent>
-                                <Typography variant="h6" gutterBottom fontWeight="bold">YandexDisk</Typography>
-                                <Grid container spacing={2}>
-                                    <Grid item xs={12} sm={6}>
-                                        <TextField
-                                            fullWidth
-                                            label="Token"
-                                            variant="outlined"
-                                            size="small"
-                                            value={yandexDisk.token}
-                                            onChange={(e) =>
-                                                setYandexDisk({
-                                                    ...yandexDisk,
-                                                    token: e.target.value
-                                                })
-                                            }
-                                        />
-                                    </Grid>
-                                </Grid>
-                            </CardContent>
-                        </Card>
-
-                        {/* Настройки доступа к изображениям */}
-                        <Card variant="outlined" sx={{ mb: 3, borderRadius: '8px' }}>
-                            <CardContent>
-                                <Typography variant="h6" gutterBottom fontWeight="bold">Настройки доступа к изображениям</Typography>
-                                <Grid container spacing={2}>
-                                    <Grid item xs={12}>
-                                        <FormControlLabel
-                                            control={
-                                                <Switch
-                                                    checked={typeOfAccessImages.useLocalFiles === 'true'}
-                                                    onChange={(e) =>
-                                                        setTypeOfAccessImages({
-                                                            ...typeOfAccessImages,
-                                                            useLocalFiles: e.target.checked ? 'true' : 'false'
-                                                        })
-                                                    }
-                                                />
-                                            }
-                                            label="Использовать локальные файлы"
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12}>
-                                        <TextField
-                                            fullWidth
-                                            label="Путь к локальным изображениям"
-                                            variant="outlined"
-                                            size="small"
-                                            value={typeOfAccessImages.localPathOfImages}
-                                            onChange={(e) =>
-                                                setTypeOfAccessImages({
-                                                    ...typeOfAccessImages,
-                                                    localPathOfImages: e.target.value
-                                                })
-                                            }
-                                        />
-                                    </Grid>
-                                </Grid>
-                            </CardContent>
-                        </Card>
-
-                        {/* YandexCloud */}
-                        <Card variant="outlined" sx={{ mb: 3, borderRadius: '8px' }}>
-                            <CardContent>
-                                <Typography variant="h6" gutterBottom fontWeight="bold">YandexCloud</Typography>
-                                <Grid container spacing={2}>
-                                    <Grid item xs={12} sm={6}>
-                                        <TextField
-                                            fullWidth
-                                            label="AccessKey"
-                                            variant="outlined"
-                                            size="small"
-                                            value={yandexCloud.accessKey}
-                                            onChange={(e) =>
-                                                setYandexCloud({
-                                                    ...yandexCloud,
-                                                    accessKey: e.target.value
-                                                })
-                                            }
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} sm={6}>
-                                        <TextField
-                                            fullWidth
-                                            label="SecretKey"
-                                            variant="outlined"
-                                            size="small"
-                                            value={yandexCloud.secretKey}
-                                            onChange={(e) =>
-                                                setYandexCloud({
-                                                    ...yandexCloud,
-                                                    secretKey: e.target.value
-                                                })
-                                            }
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} sm={6}>
-                                        <TextField
-                                            fullWidth
-                                            label="ServiceUrl"
-                                            variant="outlined"
-                                            size="small"
-                                            value={yandexCloud.serviceUrl}
-                                            onChange={(e) =>
-                                                setYandexCloud({
-                                                    ...yandexCloud,
-                                                    serviceUrl: e.target.value
-                                                })
-                                            }
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} sm={6}>
-                                        <TextField
-                                            fullWidth
-                                            label="BucketName"
-                                            variant="outlined"
-                                            size="small"
-                                            value={yandexCloud.bucketName}
-                                            onChange={(e) =>
-                                                setYandexCloud({
-                                                    ...yandexCloud,
-                                                    bucketName: e.target.value
-                                                })
-                                            }
-                                        />
-                                    </Grid>
-                                </Grid>
-                            </CardContent>
-                        </Card>
-
-                        {/* SMTP */}
-                        <Card variant="outlined" sx={{ mb: 3, borderRadius: '8px' }}>
-                            <CardContent>
-                                <Typography variant="h6" gutterBottom fontWeight="bold">SMTP</Typography>
-                                <Grid container spacing={2}>
-                                    <Grid item xs={12} sm={6}>
-                                        <TextField
-                                            fullWidth
-                                            label="Host"
-                                            variant="outlined"
-                                            size="small"
-                                            value={smtp.host}
-                                            onChange={(e) =>
-                                                setSmtp({
-                                                    ...smtp,
-                                                    host: e.target.value
-                                                })
-                                            }
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} sm={6}>
-                                        <TextField
-                                            fullWidth
-                                            label="Port"
-                                            variant="outlined"
-                                            size="small"
-                                            value={smtp.port}
-                                            onChange={(e) =>
-                                                setSmtp({
-                                                    ...smtp,
-                                                    port: e.target.value
-                                                })
-                                            }
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} sm={6}>
-                                        <TextField
-                                            fullWidth
-                                            label="User"
-                                            variant="outlined"
-                                            size="small"
-                                            value={smtp.user}
-                                            onChange={(e) =>
-                                                setSmtp({
-                                                    ...smtp,
-                                                    user: e.target.value
-                                                })
-                                            }
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} sm={6}>
-                                        <TextField
-                                            fullWidth
-                                            label="Password"
-                                            type="password"
-                                            variant="outlined"
-                                            size="small"
-                                            value={smtp.pass}
-                                            onChange={(e) =>
-                                                setSmtp({
-                                                    ...smtp,
-                                                    pass: e.target.value
-                                                })
-                                            }
-                                        />
-                                    </Grid>
-                                </Grid>
-                            </CardContent>
-                        </Card>
-
-                        {/* Cache Settings */}
-                        <Card variant="outlined" sx={{ mb: 3, borderRadius: '8px' }}>
-                            <CardContent>
-                                <Typography variant="h6" gutterBottom fontWeight="bold">Настройки кэша</Typography>
-                                <Grid container spacing={2}>
-                                    <Grid item xs={12}>
-                                        <TextField
-                                            fullWidth
-                                            label="Путь к локальному кэшу"
-                                            variant="outlined"
-                                            size="small"
-                                            value={cacheSettings.localCachePath}
-                                            onChange={(e) =>
-                                                setCacheSettings({
-                                                    ...cacheSettings,
-                                                    localCachePath: e.target.value
-                                                })
-                                            }
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} sm={6}>
-                                        <TextField
-                                            fullWidth
-                                            label="Дней хранения"
-                                            type="number"
-                                            variant="outlined"
-                                            size="small"
-                                            value={cacheSettings.daysToKeep}
-                                            onChange={(e) =>
-                                                setCacheSettings({
-                                                    ...cacheSettings,
-                                                    daysToKeep: parseInt(e.target.value) || 0
-                                                })
-                                            }
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} sm={6}>
-                                        <TextField
-                                            fullWidth
-                                            label="Максимальный размер кэша (МБ)"
-                                            type="number"
-                                            variant="outlined"
-                                            size="small"
-                                            value={cacheSettings.maxCacheSizeMB}
-                                            onChange={(e) =>
-                                                setCacheSettings({
-                                                    ...cacheSettings,
-                                                    maxCacheSizeMB: parseInt(e.target.value) || 0
-                                                })
-                                            }
-                                        />
-                                    </Grid>
-                                </Grid>
-                            </CardContent>
-                        </Card>
-
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-                            <Button
-                                variant="contained"
-                                onClick={handleSaveSettings}
-                                sx={{ 
-                                    backgroundColor: '#E72B3D',
-                                    '&:hover': { backgroundColor: '#c4242f' }
-                                }}
-                            >
-                                Сохранить настройки
-                            </Button>
-                        </Box>
-                    </Box>
+                    <SettingsPanel />
                 )}
 
                 {/* ============ Вкладка "bookupdate" ============ */}
@@ -1294,71 +652,14 @@ const AdminPanel = () => {
                 {/* ============ Вкладка "categories" ============ */}
                 {currentTab === 'categories' && (
                     <Box>
-                        <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50', mb: 3 }}>
-                            Управление категориями
-                        </Typography>
+                        {!isMobile && (
+                            <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50', mb: 3 }}>
+                                Управление категориями
+                            </Typography>
+                        )}
                         <CategoryCleanup />
                     </Box>
                 )}
-
-                {/* Модалка назначения плана */}
-                <Dialog 
-                    open={showSubModal} 
-                    onClose={() => setShowSubModal(false)}
-                    maxWidth="sm"
-                    fullWidth
-                >
-                    <DialogTitle sx={{ fontWeight: 'bold' }}>
-                        Изменить подписку пользователя {selectedUserForSub?.email}
-                    </DialogTitle>
-                    <DialogContent>
-                        <Box sx={{ pt: 1 }}>
-                            <FormControl fullWidth sx={{ mb: 2 }}>
-                                <InputLabel>План подписки</InputLabel>
-                                <Select
-                                    value={selectedPlanForSub}
-                                    label="План подписки"
-                                    onChange={(e) => setSelectedPlanForSub(e.target.value)}
-                                >
-                                    <MenuItem value={0}> -- Отключить подписку -- </MenuItem>
-                                    {subPlans.map(plan => (
-                                        <MenuItem key={plan.id} value={plan.id}>
-                                            {plan.name} (лимит запросов: {plan.monthlyRequestLimit})
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-
-                            <FormControlLabel
-                                control={
-                                    <Checkbox
-                                        checked={autoRenewForSub}
-                                        onChange={(e) => setAutoRenewForSub(e.target.checked)}
-                                    />
-                                }
-                                label="Автопродление"
-                            />
-                        </Box>
-                    </DialogContent>
-                    <DialogActions sx={{ px: 3, pb: 3 }}>
-                        <Button 
-                            onClick={() => setShowSubModal(false)} 
-                            color="inherit"
-                        >
-                            Отмена
-                        </Button>
-                        <Button 
-                            onClick={handleAssignSubscriptionPlan}
-                            variant="contained"
-                            sx={{ 
-                                backgroundColor: '#E72B3D',
-                                '&:hover': { backgroundColor: '#c4242f' }
-                            }}
-                        >
-                            Сохранить
-                        </Button>
-                    </DialogActions>
-                </Dialog>
             </Box>
             </Paper>
         </Container>
