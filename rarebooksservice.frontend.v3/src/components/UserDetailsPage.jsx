@@ -55,12 +55,19 @@ const UserDetailsPage = () => {
             try {
                 setLoading(true);
                 
-                // Проверяем валидность userId
+                // Проверяем валидность userId и перенаправляем на профиль пользователя, если не указан
                 if (!userId) {
-                    console.error('UserId is undefined');
-                    setError('Идентификатор пользователя не указан');
-                    setLoading(false);
-                    return;
+                    console.log('UserId is undefined, redirecting to current user profile');
+                    
+                    // Если текущий пользователь уже загружен, перенаправляем на его профиль
+                    if (currentUser && currentUser.id) {
+                        navigate(`/user/${currentUser.id}`);
+                        return;
+                    } else {
+                        setError('Идентификатор пользователя не указан');
+                        setLoading(false);
+                        return;
+                    }
                 }
 
                 // Проверяем права доступа
@@ -107,7 +114,7 @@ const UserDetailsPage = () => {
         };
 
         fetchUserData();
-    }, [userId, currentUser]); // Добавляем currentUser в зависимости
+    }, [userId, currentUser, navigate]);
 
     const handleChangePage = (event, newPage) => {
         setPage(newPage);
@@ -201,7 +208,7 @@ const UserDetailsPage = () => {
         return (
             <Container maxWidth="lg">
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px' }}>
-                    <CircularProgress />
+                    <CircularProgress sx={{ color: '#d32f2f' }} />
                 </Box>
             </Container>
         );
@@ -210,14 +217,28 @@ const UserDetailsPage = () => {
     if (error) {
         return (
             <Container maxWidth="lg" sx={{ mt: 4 }}>
-                <Alert severity="error" sx={{ mb: 3, borderRadius: '12px' }}>
+                <Alert severity="error" sx={{ 
+                    mb: 3, 
+                    borderRadius: '12px',
+                    bgcolor: '#fde9e9',
+                    border: '1px solid #f9c6c6',
+                    color: '#7f1f1f' 
+                }}>
                     {error}
                 </Alert>
                 <Button 
                     variant="contained" 
                     startIcon={<ArrowBackIcon />} 
                     onClick={() => navigate(-1)}
-                    sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 'bold' }}
+                    sx={{ 
+                        borderRadius: '8px', 
+                        textTransform: 'none', 
+                        fontWeight: 'bold',
+                        bgcolor: '#d32f2f',
+                        '&:hover': {
+                            bgcolor: '#b71c1c'
+                        }
+                    }}
                 >
                     Вернуться назад
                 </Button>
@@ -228,14 +249,27 @@ const UserDetailsPage = () => {
     if (!user) {
         return (
             <Container maxWidth="lg" sx={{ mt: 4 }}>
-                <Alert severity="warning" sx={{ mb: 3, borderRadius: '12px' }}>
+                <Alert severity="warning" sx={{ 
+                    mb: 3, 
+                    borderRadius: '12px',
+                    bgcolor: '#fef7e7',
+                    border: '1px solid #f7dfad'
+                }}>
                     Пользователь не найден или у вас нет прав для просмотра информации об этом пользователе.
                 </Alert>
                 <Button 
                     variant="contained" 
                     startIcon={<ArrowBackIcon />} 
                     onClick={() => navigate(-1)}
-                    sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 'bold' }}
+                    sx={{ 
+                        borderRadius: '8px', 
+                        textTransform: 'none', 
+                        fontWeight: 'bold',
+                        bgcolor: '#d32f2f',
+                        '&:hover': {
+                            bgcolor: '#b71c1c'
+                        }
+                    }}
                 >
                     Вернуться назад
                 </Button>
@@ -260,7 +294,13 @@ const UserDetailsPage = () => {
                     sx={{ 
                         mr: { xs: 0, sm: 2 }, 
                         borderRadius: '8px',
-                        alignSelf: { xs: 'flex-start', sm: 'auto' }
+                        alignSelf: { xs: 'flex-start', sm: 'auto' },
+                        borderColor: '#d32f2f',
+                        color: '#d32f2f',
+                        '&:hover': {
+                            borderColor: '#b71c1c',
+                            backgroundColor: 'rgba(211, 47, 47, 0.04)'
+                        }
                     }}
                 >
                     Назад
@@ -270,7 +310,8 @@ const UserDetailsPage = () => {
                     component="h1" 
                     fontWeight="bold"
                     sx={{ 
-                        fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' }
+                        fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' },
+                        color: '#333'
                     }}
                 >
                     {currentUser && userId === currentUser.id ? 'Мой профиль' : 'Информация о пользователе'}
@@ -279,12 +320,12 @@ const UserDetailsPage = () => {
 
             {/* Информация о пользователе */}
             <Paper 
-                elevation={2} 
+                elevation={3} 
                 sx={{ 
-                    p: { xs: 2, md: 3 }, 
+                    p: { xs: 2, sm: 3, md: 4 }, 
                     mb: { xs: 3, md: 4 }, 
                     borderRadius: '12px', 
-                    bgcolor: '#f5f8ff' 
+                    bgcolor: 'white' 
                 }}
             >
                 <Box sx={{ 
@@ -292,11 +333,11 @@ const UserDetailsPage = () => {
                     alignItems: 'center', 
                     mb: { xs: 2, md: 3 }
                 }}>
-                    <PersonIcon sx={{ fontSize: { xs: 28, md: 36 }, color: 'primary.main', mr: 2 }} />
+                    <PersonIcon sx={{ fontSize: { xs: 28, md: 36 }, color: '#d32f2f', mr: 2 }} />
                     <Typography 
                         variant="h5" 
                         fontWeight="bold"
-                        sx={{ fontSize: { xs: '1.25rem', md: '1.5rem' } }}
+                        sx={{ fontSize: { xs: '1.25rem', md: '1.5rem' }, color: '#333' }}
                     >
                         Данные пользователя
                     </Typography>
@@ -305,28 +346,31 @@ const UserDetailsPage = () => {
                 <Grid container spacing={2}>
                     <Grid item xs={12} md={6}>
                         <Box sx={{ mb: 2 }}>
-                            <Typography variant="subtitle1" color="text.secondary" gutterBottom>
+                            <Typography variant="subtitle1" sx={{ color: '#555' }} gutterBottom>
                                 E-mail:
                             </Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center', wordBreak: 'break-word' }}>
-                                <EmailIcon sx={{ mr: 1, color: 'text.secondary', flexShrink: 0 }} />
-                                <Typography variant="h6" sx={{ fontSize: { xs: '1rem', md: '1.25rem' } }}>
+                                <EmailIcon sx={{ mr: 1, color: '#888', flexShrink: 0 }} />
+                                <Typography variant="h6" sx={{ fontSize: { xs: '1rem', md: '1.25rem' }, color: '#333' }}>
                                     {user.email}
                                 </Typography>
                             </Box>
                         </Box>
 
                         <Box sx={{ mb: 2 }}>
-                            <Typography variant="subtitle1" color="text.secondary" gutterBottom>
+                            <Typography variant="subtitle1" sx={{ color: '#555' }} gutterBottom>
                                 Роль:
                             </Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                <BadgeIcon sx={{ mr: 1, color: 'text.secondary', flexShrink: 0 }} />
+                                <BadgeIcon sx={{ mr: 1, color: '#888', flexShrink: 0 }} />
                                 <Chip 
                                     label={user.role || 'Пользователь'} 
-                                    color={user.role === 'Admin' ? 'primary' : 'default'} 
-                                    variant="outlined"
-                                    sx={{ fontWeight: 'medium' }}
+                                    variant="filled"
+                                    sx={{ 
+                                        fontWeight: 'medium',
+                                        bgcolor: user.role === 'Admin' ? '#d32f2f' : '#888',
+                                        color: 'white'
+                                    }}
                                 />
                             </Box>
                         </Box>
@@ -334,29 +378,32 @@ const UserDetailsPage = () => {
                     
                     <Grid item xs={12} md={6}>
                         <Box sx={{ mb: 2 }}>
-                            <Typography variant="subtitle1" color="text.secondary" gutterBottom>
+                            <Typography variant="subtitle1" sx={{ color: '#555' }} gutterBottom>
                                 Подписка:
                             </Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center' }}>
                                 <VerifiedUserIcon sx={{ 
                                     mr: 1, 
-                                    color: user.hasSubscription ? 'success.main' : 'error.main',
+                                    color: user.hasSubscription ? '#d32f2f' : '#888',
                                     flexShrink: 0
                                 }} />
                                 <Chip 
                                     label={user.hasSubscription ? 'Активна' : 'Отсутствует'} 
-                                    color={user.hasSubscription ? 'success' : 'error'} 
-                                    sx={{ fontWeight: 'medium' }}
+                                    sx={{ 
+                                        fontWeight: 'medium',
+                                        bgcolor: user.hasSubscription ? '#d32f2f' : '#888',
+                                        color: 'white'
+                                    }}
                                 />
                             </Box>
                         </Box>
                         
                         {user.hasSubscription && user.subscription && (
                             <Box sx={{ mb: 2 }}>
-                                <Typography variant="subtitle1" color="text.secondary" gutterBottom>
+                                <Typography variant="subtitle1" sx={{ color: '#555' }} gutterBottom>
                                     Действительна до:
                                 </Typography>
-                                <Typography variant="body1">
+                                <Typography variant="body1" sx={{ color: '#333' }}>
                                     {formatDate(user.subscription.endDate)}
                                 </Typography>
                             </Box>
@@ -368,7 +415,7 @@ const UserDetailsPage = () => {
                 {user.registrationDate && (
                     <Box sx={{ mt: 3 }}>
                         <Divider sx={{ my: 2 }} />
-                        <Typography variant="body2" color="text.secondary">
+                        <Typography variant="body2" sx={{ color: '#555' }}>
                             Зарегистрирован: {formatDate(user.registrationDate)}
                         </Typography>
                     </Box>
@@ -377,10 +424,11 @@ const UserDetailsPage = () => {
 
             {/* История поиска */}
             <Paper 
-                elevation={2} 
+                elevation={3} 
                 sx={{ 
-                    p: { xs: 2, md: 3 }, 
-                    borderRadius: '12px' 
+                    p: { xs: 2, sm: 3, md: 4 }, 
+                    borderRadius: '12px',
+                    bgcolor: 'white' 
                 }}
             >
                 <Box sx={{ 
@@ -388,11 +436,11 @@ const UserDetailsPage = () => {
                     alignItems: 'center', 
                     mb: { xs: 2, md: 3 } 
                 }}>
-                    <HistoryIcon sx={{ fontSize: { xs: 28, md: 36 }, color: 'primary.main', mr: 2 }} />
+                    <HistoryIcon sx={{ fontSize: { xs: 28, md: 36 }, color: '#d32f2f', mr: 2 }} />
                     <Typography 
                         variant="h5" 
                         fontWeight="bold"
-                        sx={{ fontSize: { xs: '1.25rem', md: '1.5rem' } }}
+                        sx={{ fontSize: { xs: '1.25rem', md: '1.5rem' }, color: '#333' }}
                     >
                         История поиска
                     </Typography>
@@ -414,18 +462,21 @@ const UserDetailsPage = () => {
                                 minWidth: { xs: 300, sm: 500, md: 650 }
                             }}>
                                 <TableHead>
-                                    <TableRow>
+                                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
                                         <TableCell sx={{ 
                                             fontWeight: 'bold',
-                                            padding: { xs: '8px 6px', md: '16px' }
+                                            padding: { xs: '8px 6px', md: '16px' },
+                                            color: '#333'
                                         }}>Дата</TableCell>
                                         <TableCell sx={{ 
                                             fontWeight: 'bold',
-                                            padding: { xs: '8px 6px', md: '16px' }
+                                            padding: { xs: '8px 6px', md: '16px' },
+                                            color: '#333'
                                         }}>Запрос</TableCell>
                                         <TableCell sx={{ 
                                             fontWeight: 'bold',
-                                            padding: { xs: '8px 6px', md: '16px' }
+                                            padding: { xs: '8px 6px', md: '16px' },
+                                            color: '#333'
                                         }}>Тип поиска</TableCell>
                                     </TableRow>
                                 </TableHead>
@@ -439,7 +490,8 @@ const UserDetailsPage = () => {
                                                 <TableRow key={history.id} hover>
                                                     <TableCell sx={{ 
                                                         padding: { xs: '8px 6px', md: '16px' },
-                                                        whiteSpace: { xs: 'nowrap', md: 'normal' }
+                                                        whiteSpace: { xs: 'nowrap', md: 'normal' },
+                                                        color: '#555'
                                                     }}>
                                                         {formatDate(history.searchDate)}
                                                     </TableCell>
@@ -454,12 +506,12 @@ const UserDetailsPage = () => {
                                                                 to={searchLink}
                                                                 style={{ 
                                                                     textDecoration: 'none', 
-                                                                    color: '#1976d2',
+                                                                    color: '#d32f2f',
                                                                     display: 'flex',
                                                                     alignItems: 'center'
                                                                 }}
                                                             >
-                                                                <SearchIcon sx={{ mr: 1, fontSize: 18, color: 'primary.main', flexShrink: 0 }} />
+                                                                <SearchIcon sx={{ mr: 1, fontSize: 18, color: '#d32f2f', flexShrink: 0 }} />
                                                                 <Box 
                                                                     component="span" 
                                                                     sx={{ 
@@ -468,7 +520,7 @@ const UserDetailsPage = () => {
                                                                             fontWeight: 'bold'
                                                                         },
                                                                         transition: 'all 0.2s',
-                                                                        borderBottom: '1px dotted #1976d2',
+                                                                        borderBottom: '1px dotted #d32f2f',
                                                                         overflow: 'hidden',
                                                                         textOverflow: 'ellipsis',
                                                                         whiteSpace: { xs: 'nowrap', md: 'normal' }
@@ -483,9 +535,10 @@ const UserDetailsPage = () => {
                                                                 alignItems: 'center',
                                                                 overflow: 'hidden',
                                                                 textOverflow: 'ellipsis',
-                                                                whiteSpace: { xs: 'nowrap', md: 'normal' }
+                                                                whiteSpace: { xs: 'nowrap', md: 'normal' },
+                                                                color: '#555'
                                                             }}>
-                                                                <SearchIcon sx={{ mr: 1, fontSize: 16, color: 'text.secondary', flexShrink: 0 }} />
+                                                                <SearchIcon sx={{ mr: 1, fontSize: 16, color: '#888', flexShrink: 0 }} />
                                                                 <span>{history.query}</span>
                                                             </Box>
                                                         )}
@@ -496,11 +549,11 @@ const UserDetailsPage = () => {
                                                         <Chip 
                                                             label={history.searchType} 
                                                             size="small" 
-                                                            variant="outlined" 
-                                                            color="primary"
                                                             sx={{
                                                                 height: { xs: '24px', md: '32px' },
-                                                                fontSize: { xs: '0.75rem', md: '0.875rem' }
+                                                                fontSize: { xs: '0.75rem', md: '0.875rem' },
+                                                                bgcolor: '#d32f2f',
+                                                                color: 'white'
                                                             }}
                                                         />
                                                     </TableCell>
@@ -527,16 +580,23 @@ const UserDetailsPage = () => {
                                     padding: { xs: '8px 0', md: '8px' }
                                 },
                                 '.MuiTablePagination-displayedRows': {
-                                    margin: { xs: '8px 0', md: 0 }
+                                    margin: { xs: '8px 0', md: 0 },
+                                    color: '#555'
                                 },
                                 '.MuiTablePagination-selectLabel': {
-                                    margin: { xs: '8px 0', md: 0 }
+                                    margin: { xs: '8px 0', md: 0 },
+                                    color: '#555'
                                 }
                             }}
                         />
                     </>
                 ) : (
-                    <Alert severity="info" sx={{ borderRadius: '8px' }}>
+                    <Alert severity="info" sx={{ 
+                        borderRadius: '8px',
+                        bgcolor: '#e8f4fd',
+                        border: '1px solid #c5e1fb',
+                        color: '#0d5289'
+                    }}>
                         У пользователя нет истории поиска
                     </Alert>
                 )}

@@ -382,6 +382,7 @@ const AppContent = () => {
                             <Route path="/searchByPriceRange/:minPrice/:maxPrice" element={<SearchBooksByPriceRange />} />
                             {/* Страница профиля пользователя - доступна всем авторизованным пользователям для своего профиля и админам для всех профилей */}
                             <Route path="/user/:userId" element={<UserDetailsPage />} />
+                            <Route path="/user" element={<UserDetailsPage />} />
                             <Route path="/initial-setup" element={<InitialSetupPage />} />
                         </Route>
 

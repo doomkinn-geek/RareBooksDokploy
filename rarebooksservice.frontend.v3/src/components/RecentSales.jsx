@@ -159,7 +159,12 @@ const RecentSales = () => {
         <Grid container spacing={isMobile ? 1 : 2}>
             {[1, 2, 3].map((item) => (
                 <Grid item xs={12} sm={6} md={4} key={item}>
-                    <Card sx={{ height: '100%', borderRadius: '8px' }}>
+                    <Card sx={{ 
+                        height: '100%', 
+                        borderRadius: '8px',
+                        bgcolor: 'white',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+                    }}>
                         <Skeleton variant="rectangular" height={isMobile ? 120 : 140} />
                         <CardContent>
                             <Skeleton variant="text" width="80%" height={24} />
@@ -175,12 +180,13 @@ const RecentSales = () => {
     
     return (
         <Paper 
-            elevation={2} 
+            elevation={3} 
             sx={{ 
-                p: { xs: 2, sm: 3 }, 
+                p: { xs: 2, sm: 3, md: 4 }, 
                 borderRadius: '12px', 
                 mb: 3,
-                transition: 'all 0.3s ease'
+                transition: 'all 0.3s ease',
+                bgcolor: 'white'
             }}
             className="recent-sales-paper"
         >
@@ -196,16 +202,17 @@ const RecentSales = () => {
                     <HistoryIcon 
                         sx={{ 
                             mr: 1, 
-                            fontSize: { xs: '1.3rem', md: '1.5rem' } 
+                            fontSize: { xs: '1.3rem', md: '1.5rem' },
+                            color: '#d32f2f'
                         }} 
-                        color="primary" 
                     />
                     <Typography 
                         variant="h6" 
                         fontWeight="bold" 
                         sx={{ 
                             fontSize: { xs: '1.1rem', md: '1.25rem' },
-                            flex: 1
+                            flex: 1,
+                            color: '#333'
                         }}
                     >
                         Недавние продажи
@@ -215,11 +222,13 @@ const RecentSales = () => {
                     {isMobile && (
                         <Tooltip title="Обновить данные">
                             <IconButton 
-                                color="primary" 
                                 onClick={fetchRecentSales}
                                 disabled={refreshing}
                                 size="small"
-                                sx={{ ml: 'auto' }}
+                                sx={{ 
+                                    ml: 'auto',
+                                    color: '#d32f2f'
+                                }}
                             >
                                 <RefreshIcon 
                                     sx={{ 
@@ -242,6 +251,14 @@ const RecentSales = () => {
                         size="small" 
                         onClick={fetchRecentSales}
                         disabled={refreshing}
+                        sx={{
+                            borderColor: '#d32f2f',
+                            color: '#d32f2f',
+                            '&:hover': {
+                                borderColor: '#b71c1c',
+                                backgroundColor: 'rgba(211, 47, 47, 0.04)'
+                            }
+                        }}
                         startIcon={
                             <RefreshIcon 
                                 sx={{ 
@@ -267,18 +284,24 @@ const RecentSales = () => {
                         fontSize: { xs: '0.8rem', sm: '0.875rem' },
                         '& .MuiAlert-icon': {
                             fontSize: { xs: '1.2rem', sm: '1.5rem' }
-                        }
+                        },
+                        bgcolor: '#fef7e7',
+                        border: '1px solid #f7dfad'
                     }}
                     action={
                         <Button 
                             component={Link} 
                             to="/subscription" 
-                            color="primary" 
+                            variant="contained"
                             size="small"
                             sx={{ 
                                 ml: { xs: 0, sm: 1 }, 
                                 mt: { xs: 1, sm: 0 },
-                                fontSize: { xs: '0.7rem', sm: '0.8rem' }
+                                fontSize: { xs: '0.7rem', sm: '0.8rem' },
+                                bgcolor: '#d32f2f',
+                                '&:hover': {
+                                    bgcolor: '#b71c1c'
+                                }
                             }}
                         >
                             Оформить подписку
@@ -296,7 +319,10 @@ const RecentSales = () => {
                     severity="error" 
                     sx={{ 
                         mt: 2,
-                        fontSize: { xs: '0.8rem', sm: '0.875rem' }
+                        fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                        bgcolor: '#fde9e9',
+                        border: '1px solid #f9c6c6',
+                        color: '#7f1f1f'
                     }}
                 >
                     {recentSalesError}
@@ -319,7 +345,7 @@ const RecentSales = () => {
                                     transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                                     '&:hover': {
                                         transform: 'translateY(-4px)',
-                                        boxShadow: '0 8px 24px rgba(0,0,0,0.12)'
+                                        boxShadow: '0 8px 20px rgba(0,0,0,0.09)'
                                     },
                                     cursor: 'pointer',
                                     overflow: 'hidden',
@@ -327,7 +353,9 @@ const RecentSales = () => {
                                     flexDirection: 'column',
                                     width: '100%',
                                     maxWidth: '100%',
-                                    position: 'relative'
+                                    position: 'relative',
+                                    bgcolor: 'white',
+                                    borderLeft: '4px solid #f5f5f5'
                                 }}
                                 onClick={() => book?.bookId && navigate(`/books/${book.bookId}`)}
                                 className="recent-sales-card"
@@ -336,12 +364,13 @@ const RecentSales = () => {
                                 <Box 
                                     sx={{ 
                                         height: isMobile ? 120 : 140, 
-                                        bgcolor: '#f5f5f5',
+                                        bgcolor: '#fafafa',
                                         display: 'flex',
                                         justifyContent: 'center',
                                         alignItems: 'center',
                                         overflow: 'hidden',
-                                        position: 'relative'
+                                        position: 'relative',
+                                        borderBottom: '1px solid #f0f0f0'
                                     }}
                                     className="book-image-container"
                                 >
@@ -399,7 +428,8 @@ const RecentSales = () => {
                                             textOverflow: 'ellipsis',
                                             display: '-webkit-box',
                                             WebkitLineClamp: 2,
-                                            WebkitBoxOrient: 'vertical'
+                                            WebkitBoxOrient: 'vertical',
+                                            color: '#333'
                                         }}
                                     >
                                         {book?.title || 'Название отсутствует'}
@@ -410,7 +440,12 @@ const RecentSales = () => {
                                             <Chip 
                                                 label={book.category} 
                                                 size="small" 
-                                                sx={{ fontSize: '0.7rem' }}
+                                                sx={{ 
+                                                    fontSize: '0.7rem',
+                                                    bgcolor: '#d32f2f',
+                                                    color: 'white',
+                                                    fontWeight: 500
+                                                }}
                                             />
                                         </Box>
                                     )}
@@ -420,9 +455,9 @@ const RecentSales = () => {
                                         alignItems: 'center', 
                                         mb: 0.5,
                                         fontSize: { xs: '0.75rem', sm: '0.8rem' },
-                                        color: 'text.secondary'
+                                        color: '#555'
                                     }}>
-                                        <TodayIcon sx={{ fontSize: '0.9rem', mr: 0.5 }} />
+                                        <TodayIcon sx={{ fontSize: '0.9rem', mr: 0.5, color: '#888' }} />
                                         Продана: {formatDate(book?.saleDate)}
                                     </Box>
                                     
@@ -434,12 +469,12 @@ const RecentSales = () => {
                                     }}>
                                         <Typography 
                                             variant="h6" 
-                                            color="primary"
                                             sx={{ 
                                                 fontWeight: 'bold',
                                                 display: 'flex',
                                                 alignItems: 'center',
-                                                fontSize: { xs: '1rem', sm: '1.1rem' }
+                                                fontSize: { xs: '1rem', sm: '1.1rem' },
+                                                color: '#d32f2f'
                                             }}
                                         >
                                             Цена: {formatPrice(book?.finalPrice || 0)}
@@ -455,7 +490,10 @@ const RecentSales = () => {
                     severity="info" 
                     sx={{ 
                         mt: 2,
-                        fontSize: { xs: '0.8rem', sm: '0.875rem' }
+                        fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                        bgcolor: '#e8f4fd',
+                        border: '1px solid #c5e1fb',
+                        color: '#0d5289'
                     }}
                 >
                     В настоящее время нет данных о недавних продажах. Попробуйте зайти позже.

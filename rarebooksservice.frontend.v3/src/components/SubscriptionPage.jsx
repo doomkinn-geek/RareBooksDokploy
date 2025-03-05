@@ -17,11 +17,13 @@ import {
     ListItemIcon,
     ListItemText,
     Alert,
-    Snackbar
+    Snackbar,
+    AlertTitle
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { UserContext } from '../context/UserContext';
 import { getSubscriptionPlans, subscribeUser, cancelSubscription, checkSubscriptionStatus } from '../api';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 
 // Временное решение: заменяем импорты иконок на простые строки
 const CheckIcon = () => "✓";
@@ -33,6 +35,19 @@ const PriceChangeIcon = () => "₽";
 const HistoryIcon = () => "⏱";
 const AnalyticsIcon = () => "📊";
 const ImageSearchIcon = () => "🔍";
+
+// Заменяем переменные CSS с цветами на константы
+const COLORS = {
+    primary: '#d32f2f',
+    primaryLight: 'rgba(211, 47, 47, 0.1)',
+    primaryDark: '#a82222',
+    textPrimary: '#333',
+    textSecondary: '#555',
+    textLight: '#888',
+    background: '#ffffff',
+    backgroundLight: '#fafafa',
+    backgroundMedium: '#f5f5f5',
+};
 
 const SubscriptionPage = () => {
     const { user, refreshUser, setUser } = useContext(UserContext);
@@ -341,24 +356,33 @@ const SubscriptionPage = () => {
         
         if (!user || !user.subscription) {
             return (
-                <Paper elevation={2} sx={{ p: 3, mb: 4, borderRadius: '12px', bgcolor: 'rgba(211, 47, 47, 0.05)' }}>
-                    <Typography variant="h6" fontWeight="bold" gutterBottom>
+                <Paper elevation={3} sx={{ p: 3, mb: 4, borderRadius: '12px', bgcolor: 'white', border: `1px solid ${COLORS.primary}` }}>
+                    <Typography variant="h6" fontWeight="bold" gutterBottom color={COLORS.textPrimary}>
                         У вас нет активной подписки
                     </Typography>
-                    <Typography variant="body1" paragraph>
+                    <Typography variant="body1" paragraph color={COLORS.textSecondary}>
                         Оформите подписку, чтобы получить доступ к полному функционалу сервиса оценки антикварных книг.
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" color={COLORS.textLight}>
                         Выберите подходящий план подписки ниже.
                     </Typography>
                     <Button 
                         variant="outlined" 
-                        color="primary" 
+                        sx={{ 
+                            mt: 2, 
+                            borderRadius: '8px', 
+                            textTransform: 'none', 
+                            borderColor: COLORS.primary, 
+                            color: COLORS.primary,
+                            '&:hover': {
+                                borderColor: COLORS.primaryDark,
+                                backgroundColor: COLORS.primaryLight,
+                            }
+                        }}
                         onClick={checkStatus}
                         disabled={isCheckingStatus}
-                        sx={{ mt: 2, borderRadius: '8px', textTransform: 'none' }}
                     >
-                        {isCheckingStatus ? <CircularProgress size={24} /> : 'Проверить статус подписки'}
+                        {isCheckingStatus ? <CircularProgress size={24} sx={{ color: COLORS.primary }} /> : 'Проверить статус подписки'}
                     </Button>
                 </Paper>
             );
@@ -368,20 +392,20 @@ const SubscriptionPage = () => {
 
         return (
             <Paper 
-                elevation={2} 
+                elevation={3} 
                 sx={{ 
                     p: 3, 
                     mb: 4, 
                     borderRadius: '12px',
-                    bgcolor: subscriptionActive ? 'rgba(46, 125, 50, 0.05)' : 'rgba(211, 47, 47, 0.05)'
+                    bgcolor: 'white',
+                    border: `1px solid ${subscriptionActive ? COLORS.primary : '#999'}`
                 }}
             >
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                     <VerifiedUserIcon 
-                        color={subscriptionActive ? 'success' : 'error'} 
-                        sx={{ mr: 1, fontSize: 28 }} 
+                        sx={{ mr: 1, fontSize: 28, color: subscriptionActive ? COLORS.primary : COLORS.textLight }} 
                     />
-                    <Typography variant="h5" fontWeight="bold">
+                    <Typography variant="h5" fontWeight="bold" color={COLORS.textPrimary}>
                         Ваша текущая подписка
                     </Typography>
                 </Box>
@@ -389,44 +413,54 @@ const SubscriptionPage = () => {
                 <Grid container spacing={3}>
                     <Grid item xs={12} md={8}>
                         <Box sx={{ mb: 2 }}>
-                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom color={COLORS.textPrimary}>
                                 План:
                             </Typography>
-                            <Typography variant="h6">
+                            <Typography variant="h6" color={COLORS.textSecondary}>
                                 {subscription.planName || 'Стандартный план'}
                             </Typography>
                         </Box>
                         
                         <Box sx={{ mb: 2 }}>
-                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom color={COLORS.textPrimary}>
                                 Статус:
                             </Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
                                 <Chip 
                                     label={subscriptionActive ? 'Активна' : 'Неактивна'} 
-                                    color={subscriptionActive ? 'success' : 'error'} 
-                                    variant="outlined"
+                                    sx={{ 
+                                        color: 'white', 
+                                        bgcolor: subscriptionActive ? COLORS.primary : COLORS.textLight,
+                                        borderColor: subscriptionActive ? COLORS.primary : COLORS.textLight,
+                                    }} 
                                 />
                                 {!subscriptionActive && (
-                                    <Typography variant="caption" color="error">
+                                    <Typography variant="caption" color={COLORS.primary}>
                                         {displayReason}
                                     </Typography>
                                 )}
                                 <Button
                                     size="small"
                                     variant="text"
-                                    color="primary"
+                                    sx={{ 
+                                        ml: 1, 
+                                        minWidth: 'auto', 
+                                        textTransform: 'none',
+                                        color: COLORS.primary,
+                                        '&:hover': {
+                                            backgroundColor: COLORS.primaryLight,
+                                        }
+                                    }}
                                     onClick={checkStatus}
                                     disabled={isCheckingStatus}
-                                    sx={{ ml: 1, minWidth: 'auto', textTransform: 'none' }}
                                 >
-                                    {isCheckingStatus ? <CircularProgress size={16} /> : 'Обновить статус'}
+                                    {isCheckingStatus ? <CircularProgress size={16} sx={{ color: COLORS.primary }} /> : 'Обновить статус'}
                                 </Button>
                             </Box>
                         </Box>
                         
                         <Box sx={{ mb: 2 }}>
-                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom color={COLORS.textPrimary}>
                                 Период:
                             </Typography>
                             <Typography variant="body1">
@@ -539,38 +573,58 @@ const SubscriptionPage = () => {
         return diffDays > 0 ? diffDays : 0;
     };
 
-    const renderFeatureList = (features) => (
-        <List dense>
-            {features.map((feature, index) => (
-                <ListItem key={index} disableGutters>
-                    <ListItemIcon sx={{ minWidth: 36 }}>
-                        <CheckIcon />
-                    </ListItemIcon>
-                    <ListItemText primary={feature} />
-                </ListItem>
-            ))}
-        </List>
-    );
+    const renderFeatureList = (features) => {
+        return (
+            <List disablePadding>
+                {features.map((feature, index) => (
+                    <ListItem 
+                        key={index} 
+                        disablePadding 
+                        sx={{ py: 0.5 }}
+                    >
+                        <ListItemIcon sx={{ minWidth: 32 }}>
+                            <CheckCircleOutlineIcon sx={{ color: COLORS.primary, fontSize: 20 }} />
+                        </ListItemIcon>
+                        <ListItemText 
+                            primary={feature} 
+                            primaryTypographyProps={{ 
+                                variant: 'body2', 
+                                color: COLORS.textSecondary 
+                            }} 
+                        />
+                    </ListItem>
+                ))}
+            </List>
+        );
+    };
 
     const renderPlans = () => {
         if (loading) {
             return (
-                <Box sx={{ 
-                    display: 'flex', 
-                    justifyContent: 'center', 
-                    alignItems: 'center', 
-                    minHeight: 300 
-                }}>
-                    <CircularProgress />
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                    <CircularProgress sx={{ color: COLORS.primary }} />
                 </Box>
             );
         }
-        
+
         if (!plans || !Array.isArray(plans) || plans.length === 0) {
-            console.warn('Планы подписки не являются массивом или пусты:', plans);
+            if (process.env.NODE_ENV !== 'production') {
+                console.warn('[SubscriptionPage] Планы подписки не найдены или имеют неверный формат');
+            }
+
             return (
-                <Alert severity="info" sx={{ marginTop: 2 }}>
-                    Информация о планах подписки временно недоступна. Пожалуйста, попробуйте позже.
+                <Alert 
+                    severity="info" 
+                    sx={{ 
+                        my: 2, 
+                        borderRadius: '8px', 
+                        bgcolor: COLORS.primaryLight, 
+                        color: COLORS.textPrimary,
+                        border: `1px solid ${COLORS.primary}` 
+                    }}
+                >
+                    <AlertTitle>Информация о планах подписки</AlertTitle>
+                    В настоящий момент информация о планах подписки недоступна. Пожалуйста, повторите попытку позже.
                 </Alert>
             );
         }
@@ -606,17 +660,24 @@ const SubscriptionPage = () => {
 
         return (
             <>
-                <Box sx={{ mb: 4, textAlign: 'center' }}>
-                    <Typography variant="h4" component="h2" fontWeight="bold" gutterBottom>
-                        Выберите подходящий план подписки
-                    </Typography>
-                    <Typography variant="body1" color="text.secondary">
-                        Получите доступ к полному функционалу сервиса оценки антикварных книг
-                    </Typography>
-                </Box>
+                {error && (
+                    <Alert 
+                        severity="error" 
+                        sx={{ 
+                            my: 2, 
+                            borderRadius: '8px', 
+                            bgcolor: 'rgba(211, 47, 47, 0.05)', 
+                            color: COLORS.primary,
+                            border: `1px solid ${COLORS.primary}`
+                        }}
+                    >
+                        <AlertTitle>Ошибка</AlertTitle>
+                        {error}
+                    </Alert>
+                )}
                 
-                <Grid container spacing={3} id="subscription-plans">
-                    {Array.isArray(plans) && plans.map((plan) => {
+                <Grid container spacing={3}>
+                    {plans.map((plan, index) => {
                         // Определяем, является ли этот план текущим для пользователя
                         const isCurrentPlan = user?.subscription?.subscriptionPlanId === plan?.id;
                         
@@ -634,55 +695,58 @@ const SubscriptionPage = () => {
                         const isPremium = plan?.name.toLowerCase().includes('премиум');
                         
                         return (
-                            <Grid item xs={12} md={4} key={plan?.id}>
+                            <Grid item xs={12} sm={6} md={4} key={plan?.id || index}>
                                 <Card 
-                                    elevation={3} 
+                                    raised={isPremium}
                                     sx={{ 
                                         height: '100%', 
                                         display: 'flex', 
                                         flexDirection: 'column',
-                                        borderRadius: '12px',
                                         position: 'relative',
-                                        overflow: 'visible',
-                                        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                                        borderRadius: '12px',
+                                        bgcolor: 'white',
+                                        transition: 'transform 0.2s, box-shadow 0.2s',
                                         '&:hover': {
-                                            transform: 'translateY(-8px)',
+                                            transform: 'translateY(-5px)',
                                             boxShadow: '0 12px 28px rgba(0,0,0,0.15)'
                                         },
                                         ...(isPremium && {
-                                            border: '2px solid var(--secondary-color)',
+                                            border: `2px solid ${COLORS.primary}`,
                                         })
                                     }}
                                 >
                                     {isPremium && (
                                         <Chip
                                             label="Рекомендуемый"
-                                            color="secondary"
                                             sx={{
                                                 position: 'absolute',
                                                 top: -12,
                                                 right: 16,
-                                                fontWeight: 'bold'
+                                                fontWeight: 'bold',
+                                                bgcolor: COLORS.primary,
+                                                color: 'white'
                                             }}
                                         />
                                     )}
                                     
                                     <CardContent sx={{ p: 3, flexGrow: 1 }}>
                                         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                                            {featureIcon}
-                                            <Typography variant="h5" component="h2" fontWeight="bold" sx={{ ml: 1 }}>
+                                            <Box sx={{ color: COLORS.primary }}>
+                                                {featureIcon}
+                                            </Box>
+                                            <Typography variant="h5" component="h2" fontWeight="bold" sx={{ ml: 1 }} color={COLORS.textPrimary}>
                                                 {plan?.name}
                                             </Typography>
                                         </Box>
                                         
-                                        <Typography variant="h4" color="primary" fontWeight="bold" sx={{ mb: 2 }}>
+                                        <Typography variant="h4" fontWeight="bold" sx={{ mb: 2 }} color={COLORS.primary}>
                                             {plan?.price} ₽
-                                            <Typography variant="body2" component="span" color="text.secondary" sx={{ ml: 1 }}>
+                                            <Typography variant="body2" component="span" color={COLORS.textLight} sx={{ ml: 1 }}>
                                                 / месяц
                                             </Typography>
                                         </Typography>
                                         
-                                        <Typography variant="body2" color="text.secondary" paragraph>
+                                        <Typography variant="body2" color={COLORS.textSecondary} paragraph>
                                             {plan?.description || `План "${plan?.name}" для оценки стоимости антикварных книг. Лимит запросов: ${plan?.monthlyRequestLimit || 'не указан'} в месяц.`}
                                         </Typography>
                                         
@@ -691,17 +755,17 @@ const SubscriptionPage = () => {
                                             alignItems: 'center', 
                                             mb: 2, 
                                             p: 1, 
-                                            bgcolor: 'rgba(0, 0, 0, 0.03)', 
+                                            bgcolor: COLORS.backgroundLight, 
                                             borderRadius: 1 
                                         }}>
-                                            <Typography variant="body2" fontWeight="bold">
-                                                Лимит запросов: <span style={{ color: 'var(--primary-color)' }}>{plan?.monthlyRequestLimit || 'не указан'}</span> в месяц
+                                            <Typography variant="body2" fontWeight="bold" color={COLORS.textSecondary}>
+                                                Лимит запросов: <span style={{ color: COLORS.primary }}>{plan?.monthlyRequestLimit || 'не указан'}</span> в месяц
                                             </Typography>
                                         </Box>
                                         
                                         <Divider sx={{ my: 2 }} />
                                         
-                                        <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                                        <Typography variant="subtitle1" fontWeight="bold" gutterBottom color={COLORS.textPrimary}>
                                             Включено:
                                         </Typography>
                                         
@@ -711,16 +775,25 @@ const SubscriptionPage = () => {
                                     <CardActions sx={{ p: 3, pt: 0 }}>
                                         <Button 
                                             variant={isCurrentPlan ? "outlined" : "contained"} 
-                                            color={isCurrentPlan ? "success" : "primary"}
                                             fullWidth
                                             disabled={subscribing || (isCurrentPlan && user?.subscription?.isActive)}
                                             onClick={() => handleSubscribe(plan?.id)}
                                             sx={{ 
                                                 py: 1.5,
                                                 fontWeight: 'bold',
+                                                color: isCurrentPlan ? COLORS.primary : 'white',
+                                                borderColor: COLORS.primary,
+                                                bgcolor: isCurrentPlan ? 'transparent' : COLORS.primary,
+                                                '&:hover': {
+                                                    bgcolor: isCurrentPlan ? COLORS.primaryLight : COLORS.primaryDark,
+                                                    borderColor: COLORS.primaryDark,
+                                                    color: isCurrentPlan ? COLORS.primary : 'white',
+                                                },
                                                 ...(isPremium && !isCurrentPlan && {
-                                                    background: 'linear-gradient(45deg, var(--primary-color) 30%, var(--secondary-color) 90%)',
-                                                    boxShadow: '0 3px 5px 2px rgba(255, 105, 135, .3)',
+                                                    bgcolor: COLORS.primary,
+                                                    '&:hover': {
+                                                        bgcolor: COLORS.primaryDark,
+                                                    }
                                                 })
                                             }}
                                         >
@@ -749,13 +822,12 @@ const SubscriptionPage = () => {
                     fontWeight="bold"
                     sx={{ 
                         mb: 2,
-                        color: 'var(--primary-dark)',
-                        textShadow: '0px 2px 4px rgba(0,0,0,0.1)'
+                        color: COLORS.textPrimary,
                     }}
                 >
                     Подписка на сервис оценки
                 </Typography>
-                <Typography variant="h6" color="text.secondary" sx={{ maxWidth: '800px', mx: 'auto' }}>
+                <Typography variant="h6" color={COLORS.textSecondary} sx={{ maxWidth: '800px', mx: 'auto' }}>
                     Выберите подходящий план для доступа к инструментам оценки стоимости антикварных книг
                 </Typography>
             </Box>
@@ -763,50 +835,50 @@ const SubscriptionPage = () => {
             {renderCurrentSubscription()}
             
             <Box sx={{ mb: 4 }}>
-                <Typography variant="h5" fontWeight="bold" gutterBottom>
+                <Typography variant="h5" fontWeight="bold" gutterBottom color={COLORS.textPrimary}>
                     Преимущества подписки
                 </Typography>
                 <Grid container spacing={3}>
                     <Grid item xs={12} sm={6} md={3}>
-                        <Paper elevation={1} sx={{ p: 3, height: '100%', borderRadius: '12px' }}>
-                            <PriceChangeIcon />
-                            <Typography variant="h6" fontWeight="bold" gutterBottom>
+                        <Paper elevation={2} sx={{ p: 3, height: '100%', borderRadius: '12px', bgcolor: 'white' }}>
+                            <PriceChangeIcon sx={{ color: COLORS.primary }} />
+                            <Typography variant="h6" fontWeight="bold" gutterBottom color={COLORS.textPrimary}>
                                 Актуальные цены
                             </Typography>
-                            <Typography variant="body2">
+                            <Typography variant="body2" color={COLORS.textSecondary}>
                                 Доступ к актуальным данным о ценах на редкие и антикварные издания из проверенных источников
                             </Typography>
                         </Paper>
                     </Grid>
                     <Grid item xs={12} sm={6} md={3}>
-                        <Paper elevation={1} sx={{ p: 3, height: '100%', borderRadius: '12px' }}>
-                            <HistoryIcon />
-                            <Typography variant="h6" fontWeight="bold" gutterBottom>
+                        <Paper elevation={2} sx={{ p: 3, height: '100%', borderRadius: '12px', bgcolor: 'white' }}>
+                            <HistoryIcon sx={{ color: COLORS.primary }} />
+                            <Typography variant="h6" fontWeight="bold" gutterBottom color={COLORS.textPrimary}>
                                 История продаж
                             </Typography>
-                            <Typography variant="body2">
+                            <Typography variant="body2" color={COLORS.textSecondary}>
                                 Полная история продаж с динамикой изменения стоимости редких изданий за длительный период
                             </Typography>
                         </Paper>
                     </Grid>
                     <Grid item xs={12} sm={6} md={3}>
-                        <Paper elevation={1} sx={{ p: 3, height: '100%', borderRadius: '12px' }}>
-                            <ImageSearchIcon />
-                            <Typography variant="h6" fontWeight="bold" gutterBottom>
+                        <Paper elevation={2} sx={{ p: 3, height: '100%', borderRadius: '12px', bgcolor: 'white' }}>
+                            <ImageSearchIcon sx={{ color: COLORS.primary }} />
+                            <Typography variant="h6" fontWeight="bold" gutterBottom color={COLORS.textPrimary}>
                                 Детальные изображения
                             </Typography>
-                            <Typography variant="body2">
+                            <Typography variant="body2" color={COLORS.textSecondary}>
                                 Высококачественные фотографии для точной оценки состояния и аутентичности издания
                             </Typography>
                         </Paper>
                     </Grid>
                     <Grid item xs={12} sm={6} md={3}>
-                        <Paper elevation={1} sx={{ p: 3, height: '100%', borderRadius: '12px' }}>
-                            <AnalyticsIcon />
-                            <Typography variant="h6" fontWeight="bold" gutterBottom>
+                        <Paper elevation={2} sx={{ p: 3, height: '100%', borderRadius: '12px', bgcolor: 'white' }}>
+                            <AnalyticsIcon sx={{ color: COLORS.primary }} />
+                            <Typography variant="h6" fontWeight="bold" gutterBottom color={COLORS.textPrimary}>
                                 Аналитика рынка
                             </Typography>
-                            <Typography variant="body2">
+                            <Typography variant="body2" color={COLORS.textSecondary}>
                                 Профессиональные инструменты анализа рынка антикварных книг и прогнозирования стоимости
                             </Typography>
                         </Paper>
@@ -814,44 +886,44 @@ const SubscriptionPage = () => {
                 </Grid>
             </Box>
             
-            <Typography variant="h5" fontWeight="bold" gutterBottom>
+            <Typography variant="h5" fontWeight="bold" gutterBottom color={COLORS.textPrimary}>
                 Планы подписки
             </Typography>
             {renderPlans()}
             
             <Box sx={{ mt: 6 }}>
-                <Paper elevation={1} sx={{ p: 3, borderRadius: '12px' }}>
-                    <Typography variant="h6" fontWeight="bold" gutterBottom>
+                <Paper elevation={2} sx={{ p: 3, borderRadius: '12px', bgcolor: 'white' }}>
+                    <Typography variant="h6" fontWeight="bold" gutterBottom color={COLORS.textPrimary}>
                         Часто задаваемые вопросы
                     </Typography>
                     <Grid container spacing={3}>
                         <Grid item xs={12} md={6}>
-                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom color={COLORS.textPrimary}>
                                 Как оформить подписку?
                             </Typography>
-                            <Typography variant="body2" paragraph>
+                            <Typography variant="body2" paragraph color={COLORS.textSecondary}>
                                 Выберите подходящий план, нажмите кнопку "Выбрать план" и следуйте инструкциям по оплате. После успешной оплаты подписка будет активирована автоматически.
                             </Typography>
                             
-                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom color={COLORS.textPrimary}>
                                 Можно ли отменить подписку?
                             </Typography>
-                            <Typography variant="body2" paragraph>
+                            <Typography variant="body2" paragraph color={COLORS.textSecondary}>
                                 Да, вы можете отменить подписку в любое время. При этом вы сохраните доступ к сервису до окончания оплаченного периода.
                             </Typography>
                         </Grid>
                         <Grid item xs={12} md={6}>
-                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom color={COLORS.textPrimary}>
                                 Как часто обновляются данные о ценах?
                             </Typography>
-                            <Typography variant="body2" paragraph>
+                            <Typography variant="body2" paragraph color={COLORS.textSecondary}>
                                 Данные о ценах обновляются ежедневно на основе информации с аукционов, специализированных площадок и частных продаж.
                             </Typography>
                             
-                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom color={COLORS.textPrimary}>
                                 Можно ли изменить план подписки?
                             </Typography>
-                            <Typography variant="body2" paragraph>
+                            <Typography variant="body2" paragraph color={COLORS.textSecondary}>
                                 Да, вы можете изменить план в любое время. При переходе на более дорогой план разница будет рассчитана пропорционально оставшемуся времени текущей подписки.
                             </Typography>
                         </Grid>

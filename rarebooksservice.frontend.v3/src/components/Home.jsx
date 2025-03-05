@@ -1,5 +1,5 @@
 ﻿// src/components/Home.jsx
-import React, { useState, useEffect, useContext, useRef } from 'react';
+import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
     Button,
@@ -34,7 +34,7 @@ import {
 } from '@mui/material';
 import axios from 'axios';
 import Cookies from 'js-cookie';
-import { getCategories, sendFeedback as sendFeedbackApi, API_URL, searchBooksByPriceRange, searchBooksByTitle } from '../api';
+import { getCategories, sendFeedback as sendFeedbackApi, API_URL, searchBooksByPriceRange, searchBooksByTitle, getPriceStatistics } from '../api';
 import { UserContext } from '../context/UserContext';
 import { LanguageContext } from '../context/LanguageContext';
 import translations from '../translations';
@@ -58,6 +58,14 @@ import MenuBookIcon from '@mui/icons-material/MenuBook';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 import PhotoLibraryIcon from '@mui/icons-material/PhotoLibrary';
+import CurrencyRubleIcon from '@mui/icons-material/CurrencyRuble';
+import AutoStoriesIcon from '@mui/icons-material/AutoStories';
+import DatasetIcon from '@mui/icons-material/Dataset';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import FindInPageIcon from '@mui/icons-material/FindInPage';
+import LoopIcon from '@mui/icons-material/Loop';
+import StorageIcon from '@mui/icons-material/Storage';
+import LockIcon from '@mui/icons-material/Lock';
 
 const Home = () => {
     const { user, setUser, loading } = useContext(UserContext);
@@ -240,7 +248,7 @@ const Home = () => {
         const hasSubscription = user.hasSubscription || false;
 
         return (
-            <Paper elevation={3} sx={{ padding: { xs: 2, md: 3 }, mb: 4, bgcolor: '#f5f8ff', borderRadius: '12px' }}>
+            <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, mb: 4, bgcolor: 'white', borderRadius: '12px' }}>
                 <Box sx={{ 
                     display: 'flex', 
                     flexDirection: { xs: 'column', sm: 'row' },
@@ -249,26 +257,43 @@ const Home = () => {
                     gap: { xs: 2, sm: 0 }
                 }}>
                     <Box>
-                        <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, fontSize: { xs: '1rem', md: '1.25rem' } }}>
+                        <Typography variant="h6" sx={{ 
+                            fontWeight: 'bold', 
+                            mb: 1, 
+                            fontSize: { xs: '1rem', md: '1.25rem' },
+                            color: '#333',
+                            display: 'flex',
+                            alignItems: 'center',
+                            flexWrap: 'wrap'
+                        }}>
+                            <VerifiedUserIcon sx={{ mr: 1, color: '#d32f2f', fontSize: '1.2rem' }} />
                             {t.subscriptionStatus}: {hasSubscription ? (
                                 <Chip 
                                     label={t.active} 
-                                    color="success" 
                                     size="small" 
-                                    sx={{ ml: 1 }} 
+                                    sx={{ 
+                                        ml: 1,
+                                        bgcolor: '#d32f2f',
+                                        color: 'white',
+                                        fontWeight: 'bold'
+                                    }} 
                                 />
                             ) : (
                                 <Chip 
                                     label={t.inactive} 
-                                    color="error" 
                                     size="small" 
-                                    sx={{ ml: 1 }} 
+                                    sx={{ 
+                                        ml: 1,
+                                        bgcolor: '#888',
+                                        color: 'white',
+                                        fontWeight: 'bold'
+                                    }} 
                                 />
                             )}
                         </Typography>
                         
                         {hasSubscription && (
-                            <Typography variant="body2" color="text.secondary">
+                            <Typography variant="body2" sx={{ color: '#555' }}>
                                 {t.subscriptionType}: <strong>{user.subscriptionType || t.standard}</strong><br />
                                 {t.validUntil}: <strong>{formatDate(user.subscriptionExpiryDate)}</strong>
                             </Typography>
@@ -284,14 +309,17 @@ const Home = () => {
                         {!hasSubscription && (
                             <Button 
                                 variant="contained" 
-                                color="primary" 
                                 component={Link} 
                                 to="/subscription"
                                 fullWidth={isMobile}
                                 sx={{ 
                                     borderRadius: '8px', 
                                     textTransform: 'none',
-                                    fontWeight: 'bold'
+                                    fontWeight: 'bold',
+                                    bgcolor: '#d32f2f',
+                                    '&:hover': {
+                                        bgcolor: '#b71c1c'
+                                    }
                                 }}
                             >
                                 {t.getSubscription}
@@ -302,14 +330,17 @@ const Home = () => {
                         {user && user.role && user.role.toLowerCase() === 'admin' && (
                             <Button 
                                 variant="contained" 
-                                color="secondary" 
                                 component={Link} 
                                 to="/admin"
                                 fullWidth={isMobile}
                                 sx={{ 
                                     borderRadius: '8px', 
                                     textTransform: 'none',
-                                    fontWeight: 'bold'
+                                    fontWeight: 'bold',
+                                    bgcolor: '#555',
+                                    '&:hover': {
+                                        bgcolor: '#333'
+                                    }
                                 }}
                             >
                                 {t.adminPanel}
@@ -318,13 +349,18 @@ const Home = () => {
                         
                         <Button 
                             variant="outlined" 
-                            color="error" 
                             onClick={handleLogout}
                             fullWidth={isMobile}
                             sx={{ 
                                 borderRadius: '8px', 
                                 textTransform: 'none',
-                                fontWeight: 'bold'
+                                fontWeight: 'bold',
+                                borderColor: '#d32f2f',
+                                color: '#d32f2f',
+                                '&:hover': {
+                                    borderColor: '#b71c1c',
+                                    bgcolor: 'rgba(211, 47, 47, 0.04)'
+                                }
                             }}
                         >
                             {t.logout}
@@ -598,194 +634,292 @@ const Home = () => {
 
     // Добавляем информационный блок о сервисе оценки
     const renderAntiqueBooksValuationInfo = () => (
-        <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, borderRadius: '12px', mb: 5, bgcolor: '#f8f9fa' }}>
+        <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, borderRadius: '12px', mb: 5, bgcolor: 'white' }}>
             <Typography 
                 variant="h2" 
                 fontWeight="bold" 
                 gutterBottom
-                sx={{ fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2rem' } }}
+                sx={{ fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2rem' }, color: '#333' }}
             >
-                <MenuBookIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                Профессиональная оценка антикварных книг
+                <MenuBookIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#d32f2f' }} />
+                {t.professionalAppraisal}
             </Typography>
             
-            <Typography variant="body1" paragraph sx={{ mb: 3, fontWeight: 'bold', fontSize: '1.1rem' }}>
-                Коллекционируете редкие книги или занимаетесь антиквариатом? Теперь у вас есть инструмент, который раскрывает реальную рыночную стоимость редких книг!
+            <Typography variant="body1" paragraph sx={{ mb: 3, fontWeight: 'bold', fontSize: '1.1rem', color: '#555' }}>
+                {t.collectorsIntro}
             </Typography>
             
-            <Typography variant="h3" gutterBottom sx={{ fontSize: { xs: '1.25rem', sm: '1.4rem', md: '1.5rem' }, mt: 4, mb: 2 }}>
-                <MonetizationOnIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                Как это работает
+            <Typography variant="h3" gutterBottom sx={{ 
+                fontSize: { xs: '1.25rem', sm: '1.4rem', md: '1.5rem' }, 
+                mt: 4, 
+                mb: 2,
+                color: '#d32f2f'
+            }}>
+                <MonetizationOnIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#d32f2f' }} />
+                {t.howItWorksTitle}
             </Typography>
             
             <Grid container spacing={3} sx={{ mb: 3 }}>
                 <Grid item xs={12} md={6}>
-                    <Paper elevation={2} sx={{ p: 2, height: '100%', position: 'relative', borderLeft: '4px solid #2196f3' }}>
-                        <Box sx={{ position: 'absolute', top: 10, right: 10, bgcolor: 'primary.main', color: 'white', width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Paper elevation={2} sx={{ 
+                        p: 2, 
+                        height: '100%', 
+                        position: 'relative', 
+                        borderLeft: '4px solid #d32f2f',
+                        borderRadius: '4px',
+                        bgcolor: '#fafafa'
+                    }}>
+                        <Box sx={{ 
+                            position: 'absolute', 
+                            top: 10, 
+                            right: 10, 
+                            bgcolor: '#d32f2f', 
+                            color: 'white', 
+                            width: 24, 
+                            height: 24, 
+                            borderRadius: '50%', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            fontWeight: 'bold'
+                        }}>
                             1
                         </Box>
-                        <Typography variant="h6" gutterBottom fontWeight="bold">
-                            <SearchIcon sx={{ mr: 1, verticalAlign: 'middle', color: 'primary.main' }} />
-                            База данных реальных продаж
+                        <Typography variant="h6" gutterBottom fontWeight="bold" sx={{ color: '#333' }}>
+                            <SearchIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#d32f2f' }} />
+                            {t.realSalesDatabase}
                         </Typography>
-                        <Typography variant="body2" paragraph>
-                            Наш сервис — это уникальная база данных продаж антикварных и редких книг, 
-                            собранная с одного из популярнейших порталов торговли редкими изданиями России.
+                        <Typography variant="body2" paragraph sx={{ color: '#555' }}>
+                            {t.realSalesDesc}
                         </Typography>
-                        <Typography variant="body2">
-                            В базе содержатся историческая информация о 
+                        <Typography variant="body2" sx={{ color: '#555' }}>
+                            {t.serviceDescription}
                             <Chip 
-                                label="230 000+ продаж" 
+                                label={t.salesRecords}
                                 size="small" 
-                                color="primary"
-                                sx={{ mx: 1, fontWeight: 'bold' }} 
+                                sx={{ 
+                                    mx: 1, 
+                                    fontWeight: 'bold',
+                                    bgcolor: '#d32f2f',
+                                    color: 'white'
+                                }} 
                             />
-                            с реальными ценами и подробным описанием каждого лота.
+                            {t.salesRecordsDesc}
                         </Typography>
                     </Paper>
                 </Grid>
                 
                 <Grid item xs={12} md={6}>
-                    <Paper elevation={2} sx={{ p: 2, height: '100%', position: 'relative', borderLeft: '4px solid #ff9800' }}>
-                        <Box sx={{ position: 'absolute', top: 10, right: 10, bgcolor: 'warning.main', color: 'white', width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Paper elevation={2} sx={{ 
+                        p: 2, 
+                        height: '100%', 
+                        position: 'relative', 
+                        borderLeft: '4px solid #888',
+                        borderRadius: '4px',
+                        bgcolor: '#fafafa'
+                    }}>
+                        <Box sx={{ 
+                            position: 'absolute', 
+                            top: 10, 
+                            right: 10, 
+                            bgcolor: '#888', 
+                            color: 'white', 
+                            width: 24, 
+                            height: 24, 
+                            borderRadius: '50%', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            fontWeight: 'bold'
+                        }}>
                             2
                         </Box>
-                        <Typography variant="h6" gutterBottom fontWeight="bold">
-                            <BookmarkAddedIcon sx={{ mr: 1, verticalAlign: 'middle', color: 'warning.main' }} />
-                            Оформление подписки
+                        <Typography variant="h6" gutterBottom fontWeight="bold" sx={{ color: '#333' }}>
+                            <BookmarkAddedIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#888' }} />
+                            {t.subscription}
                         </Typography>
-                        <Typography variant="body2" paragraph>
-                            Для доступа к полной базе данных и инструментам оценки необходимо 
-                            оформить подписку. Это обеспечивает точность результатов и постоянное обновление информации.
+                        <Typography variant="body2" paragraph sx={{ color: '#555' }}>
+                            {t.subscriptionDesc}
                         </Typography>
-                        <Typography variant="body2">
-                            Доступны различные тарифы подписки с 
+                        <Typography variant="body2" sx={{ color: '#555' }}>
+                            {t.subscriptionPromo}
                             <Chip 
-                                label="от 50₽/месяц" 
+                                label={t.fromPricePerMonth}
                                 size="small" 
-                                color="warning"
-                                sx={{ mx: 1, fontWeight: 'bold' }} 
+                                sx={{ 
+                                    mx: 1, 
+                                    fontWeight: 'bold',
+                                    bgcolor: '#888',
+                                    color: 'white'
+                                }} 
                             />
-                            в зависимости от ваших потребностей.
+                            {t.subscriptionNeedsDesc}
                         </Typography>
                     </Paper>
                 </Grid>
                 
                 <Grid item xs={12} md={6}>
-                    <Paper elevation={2} sx={{ p: 2, height: '100%', position: 'relative', borderLeft: '4px solid #4caf50' }}>
-                        <Box sx={{ position: 'absolute', top: 10, right: 10, bgcolor: 'success.main', color: 'white', width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Paper elevation={2} sx={{ 
+                        p: 2, 
+                        height: '100%', 
+                        position: 'relative', 
+                        borderLeft: '4px solid #888',
+                        borderRadius: '4px',
+                        bgcolor: '#fafafa'
+                    }}>
+                        <Box sx={{ 
+                            position: 'absolute', 
+                            top: 10, 
+                            right: 10, 
+                            bgcolor: '#888', 
+                            color: 'white', 
+                            width: 24, 
+                            height: 24, 
+                            borderRadius: '50%', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            fontWeight: 'bold'
+                        }}>
                             3
                         </Box>
-                        <Typography variant="h6" gutterBottom fontWeight="bold">
-                            <DescriptionIcon sx={{ mr: 1, verticalAlign: 'middle', color: 'success.main' }} />
-                            Поиск по вашим параметрам
+                        <Typography variant="h6" gutterBottom fontWeight="bold" sx={{ color: '#333' }}>
+                            <DescriptionIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#888' }} />
+                            {t.searchByParams}
                         </Typography>
-                        <Typography variant="body2" paragraph>
-                            Для точной оценки введите всю имеющуюся у вас информацию о книге: 
-                            название, год издания, автора, особенности издания.
+                        <Typography variant="body2" paragraph sx={{ color: '#555' }}>
+                            {t.searchByParamsDesc}
                         </Typography>
-                        <Typography variant="body2">
-                            Чем больше деталей вы укажете, тем точнее будет 
+                        <Typography variant="body2" sx={{ color: '#555' }}>
+                            {t.moreDetailsMoreAccurate}
                             <Chip 
-                                label="результат оценки" 
+                                label={t.accurateResult}
                                 size="small" 
-                                color="success"
-                                sx={{ mx: 1, fontWeight: 'bold' }} 
+                                sx={{ 
+                                    mx: 1, 
+                                    fontWeight: 'bold',
+                                    bgcolor: '#888',
+                                    color: 'white'
+                                }} 
                             />
-                            и подбор аналогичных изданий.
+                            {t.findAnalogsDesc}
                         </Typography>
                     </Paper>
                 </Grid>
                 
                 <Grid item xs={12} md={6}>
-                    <Paper elevation={2} sx={{ p: 2, height: '100%', position: 'relative', borderLeft: '4px solid #9c27b0' }}>
-                        <Box sx={{ position: 'absolute', top: 10, right: 10, bgcolor: 'secondary.main', color: 'white', width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Paper elevation={2} sx={{ 
+                        p: 2, 
+                        height: '100%', 
+                        position: 'relative', 
+                        borderLeft: '4px solid #d32f2f',
+                        borderRadius: '4px',
+                        bgcolor: '#fafafa'
+                    }}>
+                        <Box sx={{ 
+                            position: 'absolute', 
+                            top: 10, 
+                            right: 10, 
+                            bgcolor: '#d32f2f', 
+                            color: 'white', 
+                            width: 24, 
+                            height: 24, 
+                            borderRadius: '50%', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            fontWeight: 'bold'
+                        }}>
                             4
                         </Box>
-                        <Typography variant="h6" gutterBottom fontWeight="bold">
-                            <PriceChangeIcon sx={{ mr: 1, verticalAlign: 'middle', color: 'secondary.main' }} />
-                            Самостоятельная оценка
+                        <Typography variant="h6" gutterBottom fontWeight="bold" sx={{ color: '#333' }}>
+                            <PriceChangeIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#d32f2f' }} />
+                            {t.selfAppraisal}
                         </Typography>
-                        <Typography variant="body2" paragraph>
-                            Анализируйте результаты поиска — изучайте аналогичные издания, 
-                            которые были проданы ранее, их состояние, даты продаж и фактические цены.
+                        <Typography variant="body2" paragraph sx={{ color: '#555' }}>
+                            {t.selfAppraisalDesc}
                         </Typography>
-                        <Typography variant="body2">
-                            На основе представленных данных вы можете 
+                        <Typography variant="body2" sx={{ color: '#555' }}>
+                            {t.dataAnalysisDesc}
                             <Chip 
-                                label="самостоятельно определить" 
+                                label={t.determineSelf}
                                 size="small" 
-                                color="secondary"
-                                sx={{ mx: 1, fontWeight: 'bold' }} 
+                                sx={{ 
+                                    mx: 1, 
+                                    fontWeight: 'bold',
+                                    bgcolor: '#d32f2f',
+                                    color: 'white'
+                                }} 
                             />
-                            справедливую рыночную стоимость вашей книги.
+                            {t.fairMarketValue}
                         </Typography>
                     </Paper>
                 </Grid>
             </Grid>
 
-            <Typography variant="h3" gutterBottom sx={{ fontSize: { xs: '1.25rem', sm: '1.4rem', md: '1.5rem' }, mt: 4, mb: 2 }}>
-                <AssessmentIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                Преимущества нашего сервиса
+            <Typography variant="h3" gutterBottom sx={{ 
+                fontSize: { xs: '1.25rem', sm: '1.4rem', md: '1.5rem' }, 
+                mt: 4, 
+                mb: 2,
+                color: '#d32f2f'
+            }}>
+                <AssessmentIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#d32f2f' }} />
+                {t.serviceAdvantages}
             </Typography>
 
             <Grid container spacing={3} sx={{ mb: 4 }}>
                 <Grid item xs={12} md={6}>
                     <Box sx={{ mb: 2 }}>
-                        <Typography variant="h6" fontWeight="bold" gutterBottom>
-                            <HistoryIcon sx={{ mr: 1, verticalAlign: 'middle', color: 'primary.main' }} />
-                            Доступ к 10-летнему архиву аукционов
+                        <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ color: '#333' }}>
+                            <HistoryIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#d32f2f' }} />
+                            {t.tenYearArchive}
                         </Typography>
-                        <Typography variant="body2">
-                            Более 230 000 записей о реальных продажах антикварных книг за последнее десятилетие.
+                        <Typography variant="body2" sx={{ color: '#555' }}>
+                            {t.archiveRecords}
                         </Typography>
                     </Box>
                     <Box sx={{ mb: 2 }}>
-                        <Typography variant="h6" fontWeight="bold" gutterBottom>
-                            <VerifiedUserIcon sx={{ mr: 1, verticalAlign: 'middle', color: 'success.main' }} />
-                            Только реальные продажи
+                        <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ color: '#333' }}>
+                            <VerifiedUserIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#888' }} />
+                            {t.onlyRealSales}
                         </Typography>
-                        <Typography variant="body2">
-                            Все книги в нашей базе реально проданы на meshok.net — никаких теоретических оценок!
+                        <Typography variant="body2" sx={{ color: '#555' }}>
+                            {t.realSalesExplanation}
                         </Typography>
                     </Box>
                 </Grid>
                 <Grid item xs={12} md={6}>
                     <Box sx={{ mb: 2 }}>
-                        <Typography variant="h6" fontWeight="bold" gutterBottom>
-                            <SearchIcon sx={{ mr: 1, verticalAlign: 'middle', color: 'primary.main' }} />
-                            Гибкий поиск
+                        <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ color: '#333' }}>
+                            <SearchIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#888' }} />
+                            {t.flexibleSearch}
                         </Typography>
-                        <Typography variant="body2">
-                            Ищите по названию, описанию и ценовому диапазону. База данных постоянно пополняется новыми лотами.
+                        <Typography variant="body2" sx={{ color: '#555' }}>
+                            {t.flexibleSearchDesc}
                         </Typography>
                     </Box>
                     <Box sx={{ mb: 2 }}>
-                        <Typography variant="h6" fontWeight="bold" gutterBottom>
-                            <PhotoLibraryIcon sx={{ mr: 1, verticalAlign: 'middle', color: 'secondary.main' }} />
-                            Полная информация о лотах
+                        <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ color: '#333' }}>
+                            <PhotoLibraryIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#d32f2f' }} />
+                            {t.completeLotInfo}
                         </Typography>
-                        <Typography variant="body2">
-                            Фотографии лотов и все подробные данные аукционов помогут вам точно оценить ваши книги.
+                        <Typography variant="body2" sx={{ color: '#555' }}>
+                            {t.lotInfoDesc}
                         </Typography>
                     </Box>
                 </Grid>
             </Grid>
             
             <Paper elevation={3} sx={{ p: 3, mb: 3, bgcolor: '#f5f5f5', borderRadius: '8px' }}>
-                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
-                    <InfoIcon sx={{ mr: 1, color: 'info.main' }} />
-                    Важная информация
+                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', color: '#333' }}>
+                    <InfoIcon sx={{ mr: 1, color: '#d32f2f' }} />
+                    {t.importantInfo}
                 </Typography>
-                <Typography variant="body2" paragraph>
-                    Наш сервис предоставляет детальные <strong>исторические данные о реальных продажах</strong>, 
-                    но не делает автоматическую оценку вашей книги. Рыночная стоимость антикварных и редких изданий 
-                    зависит от множества факторов: состояния экземпляра, редкости издания, исторической ценности, 
-                    наличия автографов, иллюстраций и других особенностей.
+                <Typography variant="body2" paragraph sx={{ color: '#555' }}>
+                    {t.serviceProvides}
                 </Typography>
-                <Typography variant="body2">
-                    Сопоставляя вашу книгу с аналогичными проданными экземплярами, вы можете сформировать наиболее 
-                    объективное представление о ее реальной рыночной стоимости на текущий момент.
+                <Typography variant="body2" sx={{ color: '#555' }}>
+                    {t.compareBooks}
                 </Typography>
             </Paper>
 
@@ -793,25 +927,49 @@ const Home = () => {
                 textAlign: 'center', 
                 mt: 4, 
                 p: 3, 
-                bgcolor: 'primary.light', 
+                bgcolor: '#f5f5f5', 
                 borderRadius: '8px',
-                color: 'white'
+                color: '#333',
+                border: '1px solid #ddd'
             }}>
-                <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>
-                    💰 Узнайте, сколько действительно стоят редкие книги!
+                <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Box sx={{ 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        mr: 1,
+                        position: 'relative',
+                        bgcolor: '#d32f2f',
+                        p: 1,
+                        borderRadius: '50%',
+                        width: 40,
+                        height: 40,
+                        justifyContent: 'center'
+                    }}>
+                        <AutoStoriesIcon sx={{ color: 'white', fontSize: '1.2rem', position: 'absolute' }} />
+                        <CurrencyRubleIcon sx={{ color: 'white', fontSize: '1.2rem', ml: 1.5, mt: 1.5 }} />
+                    </Box>
+                    {t.discoverValue.replace('💰', '')}
                 </Typography>
-                <Typography variant="h6" gutterBottom>
-                    🎟 Подписка от 50 рублей
+                <Typography variant="h6" gutterBottom sx={{ color: '#555' }}>
+                    {t.subscriptionFrom}
                 </Typography>
                 <Button 
                     component={Link} 
                     to="/subscription" 
                     variant="contained" 
-                    color="secondary"
                     size="large"
-                    sx={{ mt: 2, fontWeight: 'bold', px: 4, py: 1.5 }}
+                    sx={{ 
+                        mt: 2, 
+                        fontWeight: 'bold', 
+                        px: 4, 
+                        py: 1.5,
+                        bgcolor: '#d32f2f',
+                        '&:hover': {
+                            bgcolor: '#b71c1c'
+                        }
+                    }}
                 >
-                    Начать оценку антикварных книг
+                    {t.startAppraisal}
                 </Button>
             </Box>
         </Paper>
