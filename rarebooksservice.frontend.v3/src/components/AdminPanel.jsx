@@ -491,14 +491,14 @@ const AdminPanel = () => {
                             <MenuIcon />
                         </IconButton>
                     )}
-                    <Typography variant="h4" component="h1" gutterBottom sx={{ 
-                        fontWeight: 'bold', 
-                        color: '#2c3e50',
+                <Typography variant="h4" component="h1" gutterBottom sx={{ 
+                    fontWeight: 'bold', 
+                    color: '#2c3e50',
                         fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2rem' },
                         my: 0
-                    }}>
-                        Панель администратора
-                    </Typography>
+                }}>
+                    Панель администратора
+                </Typography>
                 </Box>
                 
                 {error && (
@@ -546,35 +546,35 @@ const AdminPanel = () => {
 
                 {/* Вкладки для десктопа */}
                 {!isMobile && (
-                    <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-                        <Tabs 
-                            value={currentTab} 
-                            onChange={handleTabChange} 
-                            variant="scrollable"
-                            scrollButtons="auto"
-                            allowScrollButtonsMobile
-                            sx={{
-                                '& .MuiTab-root': {
-                                    fontWeight: 'bold',
-                                    fontSize: { xs: '0.8rem', sm: '0.9rem', md: '1rem' },
-                                    minWidth: { xs: 80, sm: 100, md: 120 },
-                                    py: { xs: 1, md: 1.5 },
-                                    px: { xs: 1, sm: 1.5, md: 2 }
-                                },
-                                '.MuiTabs-scrollButtons': {
-                                    '&.Mui-disabled': { opacity: 0.3 },
-                                }
-                            }}
-                        >
-                            <Tab label="Пользователи" value="users" />
-                            <Tab label="Экспорт данных" value="export" />
-                            <Tab label="Настройки" value="settings" />
-                            <Tab label="Импорт данных" value="import" />
-                            <Tab label="Обновление книг" value="bookupdate" />
-                            <Tab label="Планы подписки" value="subplans" />
-                            <Tab label="Категории" value="categories" />
-                        </Tabs>
-                    </Box>
+                <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+                    <Tabs 
+                        value={currentTab} 
+                        onChange={handleTabChange} 
+                        variant="scrollable"
+                        scrollButtons="auto"
+                        allowScrollButtonsMobile
+                        sx={{
+                            '& .MuiTab-root': {
+                                fontWeight: 'bold',
+                                fontSize: { xs: '0.8rem', sm: '0.9rem', md: '1rem' },
+                                minWidth: { xs: 80, sm: 100, md: 120 },
+                                py: { xs: 1, md: 1.5 },
+                                px: { xs: 1, sm: 1.5, md: 2 }
+                            },
+                            '.MuiTabs-scrollButtons': {
+                                '&.Mui-disabled': { opacity: 0.3 },
+                            }
+                        }}
+                    >
+                        <Tab label="Пользователи" value="users" />
+                        <Tab label="Экспорт данных" value="export" />
+                        <Tab label="Настройки" value="settings" />
+                        <Tab label="Импорт данных" value="import" />
+                        <Tab label="Обновление книг" value="bookupdate" />
+                        <Tab label="Планы подписки" value="subplans" />
+                        <Tab label="Категории" value="categories" />
+                    </Tabs>
+                </Box>
                 )}
 
                 {/* Отображение заголовка активной вкладки для мобильных устройств */}
@@ -614,9 +614,9 @@ const AdminPanel = () => {
                 {currentTab === 'import' && (
                     <Box>
                         {!isMobile && (
-                            <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50', mb: 3 }}>
-                                Импорт данных
-                            </Typography>
+                        <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50', mb: 3 }}>
+                            Импорт данных
+                        </Typography>
                         )}
                         <Import />
                     </Box>
@@ -626,9 +626,9 @@ const AdminPanel = () => {
                 {currentTab === 'export' && (
                     <Box>
                         {!isMobile && (
-                            <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50', mb: 3 }}>
-                                Экспорт данных
-                            </Typography>
+                        <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50', mb: 3 }}>
+                            Экспорт данных
+                        </Typography>
                         )}
                         <Export />
                     </Box>
@@ -653,9 +653,9 @@ const AdminPanel = () => {
                 {currentTab === 'categories' && (
                     <Box>
                         {!isMobile && (
-                            <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50', mb: 3 }}>
-                                Управление категориями
-                            </Typography>
+                        <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50', mb: 3 }}>
+                            Управление категориями
+                        </Typography>
                         )}
                         <CategoryCleanup />
                     </Box>

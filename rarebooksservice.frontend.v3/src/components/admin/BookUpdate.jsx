@@ -3,8 +3,10 @@ import {
     Box, Typography, Button, Paper, CircularProgress,
     Card, CardContent, Grid, Alert, Switch, FormControlLabel,
     useMediaQuery, useTheme, Table, TableBody, TableCell, 
-    TableContainer, TableHead, TableRow, Divider, Accordion,
-    AccordionSummary, AccordionDetails, Chip
+    TableContainer, TableHead, TableRow, Divider, IconButton,
+    Accordion, AccordionSummary, AccordionDetails, Chip,
+    Dialog, DialogTitle, DialogContent, DialogActions,
+    Skeleton, Fade
 } from '@mui/material';
 import axios from 'axios';
 import { API_URL } from '../../api';
@@ -13,15 +15,14 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import PauseIcon from '@mui/icons-material/Pause';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import UpdateIcon from '@mui/icons-material/Update';
+import SyncIcon from '@mui/icons-material/Sync';
+import InfoIcon from '@mui/icons-material/Info';
+import ErrorIcon from '@mui/icons-material/Error';
 
 const BookUpdate = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const isTablet = useMediaQuery(theme.breakpoints.down('md'));
-    
-    // Состояние для аккордеонов на мобильных устройствах
-    const [expandedAccordion, setExpandedAccordion] = useState('current');
     
     const [bookUpdateStatus, setBookUpdateStatus] = useState({
         isPaused: false,
@@ -37,16 +38,38 @@ const BookUpdate = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [autoRefresh, setAutoRefresh] = useState(true);
+    const [logDetailOpen, setLogDetailOpen] = useState(false);
+    const [selectedLog, setSelectedLog] = useState(null);
+    const [initialLoadComplete, setInitialLoadComplete] = useState(false);
     
     const fetchStatus = async () => {
         try {
-            setLoading(true);
+            // Не показываем индикатор загрузки при автоматическом обновлении,
+            // только меняем состояние loading
+            const showLoadingIndicator = !initialLoadComplete;
+            if (showLoadingIndicator) {
+                setLoading(true);
+            }
+            
             const token = Cookies.get('token');
             const response = await axios.get(`${API_URL}/bookupdateservice/status`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setBookUpdateStatus(response.data);
+            
+            // Плавно заменяем данные
+            setBookUpdateStatus(prevStatus => {
+                // Если логи не изменились, сохраняем старый объект для предотвращения перерисовки
+                if (JSON.stringify(prevStatus.logs) === JSON.stringify(response.data.logs)) {
+                    response.data.logs = prevStatus.logs;
+                }
+                return response.data;
+            });
+            
             setError('');
+            
+            if (!initialLoadComplete) {
+                setInitialLoadComplete(true);
+            }
         } catch (err) {
             console.error('Error fetching book update status:', err);
             setError('Не удалось получить статус обновления книг');
@@ -149,627 +172,65 @@ const BookUpdate = () => {
                           bookUpdateStatus.logs.length > 0 && 
                           typeof bookUpdateStatus.logs[0] === 'object';
     
-    // Для управления аккордеонами на мобильных устройствах
-    const handleAccordionChange = (panel) => (event, isExpanded) => {
-        setExpandedAccordion(isExpanded ? panel : false);
+    const handleViewLogDetail = (log) => {
+        setSelectedLog(log);
+        setLogDetailOpen(true);
     };
 
-    // Рендер содержимого для десктопной версии
-    const renderDesktopContent = () => (
-        <>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <FormControlLabel
-                    control={
-                        <Switch
-                            checked={autoRefresh}
-                            onChange={(e) => setAutoRefresh(e.target.checked)}
-                            color="primary"
-                        />
-                    }
-                    label="Автоматическое обновление статуса"
-                />
-                
-                <Button 
-                    variant="outlined"
-                    onClick={fetchStatus}
-                    disabled={loading}
-                    sx={{ ml: 2 }}
-                    startIcon={<RefreshIcon />}
-                >
-                    Обновить данные
-                </Button>
-            </Box>
-            
-            {loading && (
-                <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
-                    <CircularProgress size={24} />
-                </Box>
-            )}
-            
-            <Grid container spacing={3} sx={{ mb: 4 }}>
-                <Grid item xs={12} md={6}>
-                    <Card elevation={3} sx={{ height: '100%' }}>
-                        <CardContent>
-                            <Typography variant="h6" component="h3" gutterBottom>
-                                Текущий статус
-                            </Typography>
-                            
-                            <Box sx={{ 
-                                py: 2, 
-                                display: 'flex', 
-                                flexDirection: { xs: 'column', sm: 'row' },
-                                alignItems: { xs: 'flex-start', sm: 'center' },
-                                gap: 2
-                            }}>
-                                <Box sx={{ 
-                                    display: 'inline-flex', 
-                                    alignItems: 'center', 
-                                    gap: 1,
-                                    bgcolor: getStatusColor(bookUpdateStatus) + '1A',
-                                    p: 1,
-                                    px: 2,
-                                    borderRadius: '8px'
-                                }}>
-                                    <Box sx={{ 
-                                        width: 12, 
-                                        height: 12, 
-                                        borderRadius: '50%', 
-                                        bgcolor: getStatusColor(bookUpdateStatus) 
-                                    }} />
-                                    <Typography variant="subtitle1" fontWeight="bold" sx={{ color: getStatusColor(bookUpdateStatus) }}>
-                                        {getStatusText(bookUpdateStatus)}
-                                    </Typography>
-                                </Box>
-                                
-                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    Последнее обновление: {formatDateTime(bookUpdateStatus.lastRunTimeUtc)}
-                                </Typography>
-                            </Box>
-                            
-                            <Typography variant="body1" sx={{ mb: 2 }}>
-                                Следующее обновление: {formatDateTime(bookUpdateStatus.nextRunTimeUtc)}
-                            </Typography>
-
-                            {bookUpdateStatus.currentOperationName && (
-                                <Typography variant="body2" sx={{ mb: 2 }}>
-                                    Текущая операция: <strong>{bookUpdateStatus.currentOperationName}</strong>
-                                </Typography>
-                            )}
-                            
-                            <Typography variant="body2" sx={{ mb: 2 }}>
-                                Обработано лотов: <strong>{bookUpdateStatus.processedCount}</strong>
-                            </Typography>
-                            
-                            <Typography variant="body2" sx={{ mb: 2 }}>
-                                Последний обработанный лот (ID): <strong>{bookUpdateStatus.lastProcessedLotId || 'Н/Д'}</strong>
-                            </Typography>
-                            
-                            {bookUpdateStatus.lastProcessedLotTitle && (
-                                <Typography variant="body2" sx={{ mb: 2 }}>
-                                    Строка состояния обновления: <strong>{bookUpdateStatus.lastProcessedLotTitle}</strong>
-                                </Typography>
-                            )}
-                            
-                            <Box sx={{ 
-                                display: 'flex', 
-                                flexWrap: 'wrap', 
-                                gap: 2,
-                                flexDirection: { xs: 'column', sm: 'row' } 
-                            }}>
-                                {bookUpdateStatus.isRunningNow && !bookUpdateStatus.isPaused && (
-                                    <Button
-                                        variant="outlined"
-                                        color="warning"
-                                        onClick={handlePause}
-                                        sx={{ flex: { xs: '1', sm: '0 0 auto' } }}
-                                        startIcon={<PauseIcon />}
-                                    >
-                                        Приостановить
-                                    </Button>
-                                )}
-                                
-                                {bookUpdateStatus.isPaused && (
-                                    <Button
-                                        variant="outlined"
-                                        color="success"
-                                        onClick={handleResume}
-                                        sx={{ flex: { xs: '1', sm: '0 0 auto' } }}
-                                        startIcon={<PlayArrowIcon />}
-                                    >
-                                        Возобновить
-                                    </Button>
-                                )}
-                                
-                                {(!bookUpdateStatus.isRunningNow || bookUpdateStatus.isPaused) && (
-                                    <Button
-                                        variant="contained"
-                                        onClick={handleRunNow}
-                                        sx={{ 
-                                            backgroundColor: '#E72B3D', 
-                                            '&:hover': { backgroundColor: '#c4242f' },
-                                            flex: { xs: '1', sm: '0 0 auto' }
-                                        }}
-                                        startIcon={<UpdateIcon />}
-                                    >
-                                        Запустить сейчас
-                                    </Button>
-                                )}
-                            </Box>
-                        </CardContent>
-                    </Card>
-                </Grid>
-                
-                <Grid item xs={12} md={6}>
-                    <Card elevation={3} sx={{ height: '100%' }}>
-                        <CardContent>
-                            <Typography variant="h6" component="h3" gutterBottom>
-                                Информация об обновлении
-                            </Typography>
-                            
-                            <Typography variant="body1" paragraph>
-                                Процесс обновления книг отвечает за синхронизацию данных о книгах из внешних источников.
-                            </Typography>
-                            
-                            <Typography variant="body1" paragraph>
-                                По умолчанию обновление выполняется по расписанию, но вы можете управлять этим процессом вручную.
-                            </Typography>
-                            
-                            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                Внимание: частое запуск обновления может увеличить нагрузку на сервер и внешние API.
-                            </Typography>
-                        </CardContent>
-                    </Card>
-                </Grid>
-            </Grid>
-            
-            {/* Секция логов */}
-            <Card elevation={3} sx={{ mb: 4 }}>
-                <CardContent>
-                    <Typography variant="h6" component="h3" gutterBottom>
-                        Подробная информация / логи
-                    </Typography>
-                    
-                    {Array.isArray(bookUpdateStatus.logs) && bookUpdateStatus.logs.length > 0 ? (
-                        <Box sx={{ overflowX: 'auto' }}>
-                            {isStructuredLogs ? (
-                                <TableContainer component={Paper} elevation={0} sx={{ maxHeight: '400px', overflow: 'auto' }}>
-                                    <Table stickyHeader size={isTablet ? "small" : "medium"}>
-                                        <TableHead>
-                                            <TableRow>
-                                                <TableCell>Время</TableCell>
-                                                <TableCell>Сообщение</TableCell>
-                                                {!isMobile && <TableCell>Операция</TableCell>}
-                                                {!isMobile && <TableCell>LotId</TableCell>}
-                                                <TableCell>Ошибка?</TableCell>
-                                                {!isMobile && <TableCell>Exception</TableCell>}
-                                            </TableRow>
-                                        </TableHead>
-                                        <TableBody>
-                                            {[...bookUpdateStatus.logs]
-                                                .reverse()
-                                                .map((entry, idx) => {
-                                                    const timeLocal = new Date(entry.timestamp);
-                                                    return (
-                                                        <TableRow
-                                                            key={idx}
-                                                            sx={{ 
-                                                                color: entry.isError ? 'error.main' : 'inherit',
-                                                                backgroundColor: entry.isError ? 'rgba(244, 67, 54, 0.08)' : 'inherit'
-                                                            }}
-                                                        >
-                                                            <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                                                                {timeLocal.toLocaleString()}
-                                                            </TableCell>
-                                                            <TableCell>{entry.message}</TableCell>
-                                                            {!isMobile && <TableCell>{entry.operationName || '-'}</TableCell>}
-                                                            {!isMobile && <TableCell>{entry.lotId ?? '-'}</TableCell>}
-                                                            <TableCell>{entry.isError ? 'Да' : 'Нет'}</TableCell>
-                                                            {!isMobile && (
-                                                                <TableCell sx={{ whiteSpace: 'pre-wrap', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                                    {entry.exceptionMessage || ''}
-                                                                </TableCell>
-                                                            )}
-                                                        </TableRow>
-                                                    );
-                                                })}
-                                        </TableBody>
-                                    </Table>
-                                </TableContainer>
-                            ) : (
-                                <Box sx={{ p: 2, bgcolor: 'grey.100', borderRadius: 1, maxHeight: '300px', overflow: 'auto' }}>
-                                    {bookUpdateStatus.logs.map((log, index) => (
-                                        <Box key={index} sx={{ mb: 1 }}>
-                                            <Typography variant="body2" component="div">{log}</Typography>
-                                            {index < bookUpdateStatus.logs.length - 1 && <Divider sx={{ my: 1 }} />}
-                                        </Box>
-                                    ))}
-                                </Box>
-                            )}
-                        </Box>
-                    ) : (
-                        <Typography variant="body1" color="text.secondary">
-                            Логи пока отсутствуют.
-                        </Typography>
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* Мобильное отображение подробностей обработки (видно только на мобильных) */}
-            {isMobile && isStructuredLogs && bookUpdateStatus.logs.length > 0 && (
-                <Card elevation={3} sx={{ mb: 4 }}>
-                    <CardContent>
-                        <Typography variant="h6" component="h3" gutterBottom>
-                            Подробности последних событий
-                        </Typography>
-                        
-                        {[...bookUpdateStatus.logs]
-                            .reverse()
-                            .slice(0, 5)
-                            .map((entry, idx) => (
-                                <Box key={idx} sx={{ mb: 2, p: 1, borderRadius: 1, bgcolor: entry.isError ? 'rgba(244, 67, 54, 0.08)' : 'rgba(238, 238, 238, 0.5)' }}>
-                                    <Typography variant="caption" component="div" fontWeight="bold">
-                                        {new Date(entry.timestamp).toLocaleString()}
-                                    </Typography>
-                                    <Typography variant="body2" component="div" fontWeight={entry.isError ? 'bold' : 'normal'} color={entry.isError ? 'error.main' : 'inherit'}>
-                                        {entry.message}
-                                    </Typography>
-                                    
-                                    <Grid container spacing={1} sx={{ mt: 1 }}>
-                                        <Grid item xs={6}>
-                                            <Typography variant="caption" color="text.secondary">Операция:</Typography>
-                                            <Typography variant="body2">{entry.operationName || '-'}</Typography>
-                                        </Grid>
-                                        <Grid item xs={6}>
-                                            <Typography variant="caption" color="text.secondary">LotId:</Typography>
-                                            <Typography variant="body2">{entry.lotId ?? '-'}</Typography>
-                                        </Grid>
-                                        {entry.exceptionMessage && (
-                                            <Grid item xs={12}>
-                                                <Typography variant="caption" color="text.secondary">Ошибка:</Typography>
-                                                <Typography variant="body2" color="error.main" sx={{ 
-                                                    whiteSpace: 'pre-wrap', 
-                                                    maxHeight: '60px', 
-                                                    overflow: 'auto' 
-                                                }}>
-                                                    {entry.exceptionMessage}
-                                                </Typography>
-                                            </Grid>
-                                        )}
-                                    </Grid>
-                                </Box>
-                            ))}
-                            
-                        <Typography variant="caption" color="text.secondary">
-                            Показаны 5 последних записей. Прокрутите таблицу выше для просмотра всех логов.
-                        </Typography>
-                    </CardContent>
-                </Card>
-            )}
-        </>
-    );
-
-    // Рендер содержимого для мобильной версии
-    const renderMobileContent = () => (
-        <>
-            {/* Заголовок с статусом и обновлением */}
+    // Скелетон для данных статуса
+    const StatusSkeleton = () => (
+        <Box>
             <Box sx={{ 
                 display: 'flex', 
-                flexDirection: 'column',
+                justifyContent: 'space-between', 
+                alignItems: 'flex-start',
+                flexDirection: isMobile ? 'column' : 'row',
+                gap: isMobile ? 2 : 0,
                 mb: 2
             }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Chip
-                        label={getStatusText(bookUpdateStatus)}
-                        sx={{ 
-                            backgroundColor: getStatusColor(bookUpdateStatus) + '1A',
-                            color: getStatusColor(bookUpdateStatus),
-                            fontWeight: 'bold',
-                            px: 1
-                        }}
-                    />
-                    
-                    <Button 
-                        variant="outlined"
-                        size="small"
-                        onClick={fetchStatus}
-                        disabled={loading}
-                        startIcon={<RefreshIcon />}
-                    >
-                        Обновить
-                    </Button>
-                </Box>
-                
-                <FormControlLabel
-                    control={
-                        <Switch
-                            checked={autoRefresh}
-                            onChange={(e) => setAutoRefresh(e.target.checked)}
-                            color="primary"
-                            size="small"
-                        />
-                    }
-                    label={<Typography variant="body2">Автообновление</Typography>}
-                />
+                <Skeleton variant="text" width={200} height={32} />
+                <Skeleton variant="rounded" width={120} height={38} />
             </Box>
             
-            {loading && (
-                <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
-                    <CircularProgress size={24} />
-                </Box>
-            )}
+            <Grid container spacing={isMobile ? 1 : 2}>
+                {[1, 2, 3, 4, 5, 6].map((item) => (
+                    <Grid item xs={item % 2 === 0 ? 6 : 12} sm={6} key={item}>
+                        <Skeleton variant="text" width={120} height={20} />
+                        <Skeleton variant="text" width="90%" height={28} />
+                    </Grid>
+                ))}
+            </Grid>
             
-            {error && (
-                <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
-                    {error}
-                </Alert>
-            )}
+            <Divider sx={{ my: 2 }} />
             
-            {/* Аккордеон "Текущий статус" */}
-            <Accordion 
-                expanded={expandedAccordion === 'current'} 
-                onChange={handleAccordionChange('current')}
-                elevation={2}
-                sx={{ mb: 2 }}
-            >
-                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Typography variant="subtitle1" fontWeight="bold">
-                        Текущий статус
-                    </Typography>
-                </AccordionSummary>
-                <AccordionDetails>
-                    <Typography variant="body2" sx={{ mb: 1.5 }}>
-                        <strong>Последнее обновление:</strong> {formatDateTime(bookUpdateStatus.lastRunTimeUtc)}
-                    </Typography>
-                    
-                    <Typography variant="body2" sx={{ mb: 1.5 }}>
-                        <strong>Следующее обновление:</strong> {formatDateTime(bookUpdateStatus.nextRunTimeUtc)}
-                    </Typography>
-                    
-                    {bookUpdateStatus.currentOperationName && (
-                        <Typography variant="body2" sx={{ mb: 1.5 }}>
-                            <strong>Текущая операция:</strong> {bookUpdateStatus.currentOperationName}
-                        </Typography>
-                    )}
-                    
-                    <Typography variant="body2" sx={{ mb: 1.5 }}>
-                        <strong>Обработано лотов:</strong> {bookUpdateStatus.processedCount}
-                    </Typography>
-                    
-                    <Typography variant="body2" sx={{ mb: 1.5 }}>
-                        <strong>Последний лот (ID):</strong> {bookUpdateStatus.lastProcessedLotId || 'Н/Д'}
-                    </Typography>
-                    
-                    {bookUpdateStatus.lastProcessedLotTitle && (
-                        <Typography variant="body2" sx={{ mb: 1.5 }}>
-                            <strong>Состояние обновления:</strong> {bookUpdateStatus.lastProcessedLotTitle}
-                        </Typography>
-                    )}
-                    
-                    <Box sx={{ 
-                        display: 'flex', 
-                        gap: 1,
-                        flexDirection: 'column',
-                        mt: 2
-                    }}>
-                        {bookUpdateStatus.isRunningNow && !bookUpdateStatus.isPaused && (
-                            <Button
-                                variant="outlined"
-                                fullWidth
-                                color="warning"
-                                onClick={handlePause}
-                                startIcon={<PauseIcon />}
-                                size="small"
-                            >
-                                Приостановить
-                            </Button>
-                        )}
-                        
-                        {bookUpdateStatus.isPaused && (
-                            <Button
-                                variant="outlined"
-                                fullWidth
-                                color="success"
-                                onClick={handleResume}
-                                startIcon={<PlayArrowIcon />}
-                                size="small"
-                            >
-                                Возобновить
-                            </Button>
-                        )}
-                        
-                        {(!bookUpdateStatus.isRunningNow || bookUpdateStatus.isPaused) && (
-                            <Button
-                                variant="contained"
-                                fullWidth
-                                onClick={handleRunNow}
-                                sx={{ 
-                                    backgroundColor: '#E72B3D', 
-                                    '&:hover': { backgroundColor: '#c4242f' }
-                                }}
-                                startIcon={<UpdateIcon />}
-                                size="small"
-                            >
-                                Запустить сейчас
-                            </Button>
-                        )}
-                    </Box>
-                </AccordionDetails>
-            </Accordion>
-            
-            {/* Аккордеон "Информация об обновлении" */}
-            <Accordion 
-                expanded={expandedAccordion === 'info'} 
-                onChange={handleAccordionChange('info')}
-                elevation={2}
-                sx={{ mb: 2 }}
-            >
-                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Typography variant="subtitle1" fontWeight="bold">
-                        Информация об обновлении
-                    </Typography>
-                </AccordionSummary>
-                <AccordionDetails>
-                    <Typography variant="body2" paragraph>
-                        Процесс обновления книг отвечает за синхронизацию данных о книгах из внешних источников.
-                    </Typography>
-                    
-                    <Typography variant="body2" paragraph>
-                        По умолчанию обновление выполняется по расписанию, но вы можете управлять этим процессом вручную.
-                    </Typography>
-                    
-                    <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>
-                        Внимание: частое запуск обновления может увеличить нагрузку на сервер и внешние API.
-                    </Typography>
-                </AccordionDetails>
-            </Accordion>
-            
-            {/* Аккордеон "Последние события" */}
-            {isStructuredLogs && bookUpdateStatus.logs.length > 0 && (
-                <Accordion 
-                    expanded={expandedAccordion === 'events'} 
-                    onChange={handleAccordionChange('events')}
-                    elevation={2}
-                >
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                        <Typography variant="subtitle1" fontWeight="bold">
-                            Последние события ({Math.min(5, bookUpdateStatus.logs.length)})
-                        </Typography>
-                    </AccordionSummary>
-                    <AccordionDetails sx={{ p: 1 }}>
-                        {[...bookUpdateStatus.logs]
-                            .reverse()
-                            .slice(0, 5)
-                            .map((entry, idx) => (
-                                <Box key={idx} sx={{ 
-                                    mb: 1.5, 
-                                    p: 1.5, 
-                                    borderRadius: 1, 
-                                    bgcolor: entry.isError ? 'rgba(244, 67, 54, 0.08)' : 'rgba(238, 238, 238, 0.5)',
-                                    border: entry.isError ? '1px solid rgba(244, 67, 54, 0.3)' : 'none'
-                                }}>
-                                    <Typography variant="caption" component="div" fontWeight="bold">
-                                        {new Date(entry.timestamp).toLocaleString()}
-                                    </Typography>
-                                    <Typography variant="body2" component="div" fontWeight={entry.isError ? 'bold' : 'normal'} color={entry.isError ? 'error.main' : 'inherit'}>
-                                        {entry.message}
-                                    </Typography>
-                                    
-                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                                        {entry.operationName && (
-                                            <Chip
-                                                label={entry.operationName}
-                                                size="small"
-                                                variant="outlined"
-                                                sx={{ fontSize: '0.7rem' }}
-                                            />
-                                        )}
-                                        {entry.lotId && (
-                                            <Chip
-                                                label={`ID: ${entry.lotId}`}
-                                                size="small"
-                                                variant="outlined"
-                                                sx={{ fontSize: '0.7rem' }}
-                                            />
-                                        )}
-                                        {entry.isError && (
-                                            <Chip
-                                                label="Ошибка"
-                                                size="small"
-                                                color="error"
-                                                sx={{ fontSize: '0.7rem' }}
-                                            />
-                                        )}
-                                    </Box>
-                                    
-                                    {entry.exceptionMessage && (
-                                        <Box sx={{ mt: 1 }}>
-                                            <Typography variant="caption" color="text.secondary">Ошибка:</Typography>
-                                            <Typography variant="body2" color="error.main" sx={{ 
-                                                whiteSpace: 'pre-wrap', 
-                                                maxHeight: '60px', 
-                                                overflow: 'auto',
-                                                fontSize: '0.75rem',
-                                                backgroundColor: 'rgba(0,0,0,0.04)',
-                                                p: 0.5,
-                                                borderRadius: 0.5
-                                            }}>
-                                                {entry.exceptionMessage}
-                                            </Typography>
-                                        </Box>
-                                    )}
-                                </Box>
-                            ))}
-                            
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', mt: 1 }}>
-                            Показаны 5 последних записей.
-                        </Typography>
-                    </AccordionDetails>
-                </Accordion>
-            )}
-            
-            {/* Все логи для прокрутки */}
-            {Array.isArray(bookUpdateStatus.logs) && bookUpdateStatus.logs.length > 0 && (
-                <Accordion 
-                    expanded={expandedAccordion === 'logs'} 
-                    onChange={handleAccordionChange('logs')}
-                    elevation={2}
-                >
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                        <Typography variant="subtitle1" fontWeight="bold">
-                            Все логи ({bookUpdateStatus.logs.length})
-                        </Typography>
-                    </AccordionSummary>
-                    <AccordionDetails sx={{ p: 0 }}>
-                        {isStructuredLogs ? (
-                            <Box sx={{ maxHeight: '300px', overflow: 'auto' }}>
-                                {[...bookUpdateStatus.logs]
-                                    .reverse()
-                                    .map((entry, idx) => (
-                                        <Box key={idx} sx={{ 
-                                            p: 1.5, 
-                                            borderBottom: '1px solid rgba(0,0,0,0.1)',
-                                            bgcolor: entry.isError ? 'rgba(244, 67, 54, 0.08)' : 'transparent'
-                                        }}>
-                                            <Typography variant="caption" component="div" fontWeight="bold">
-                                                {new Date(entry.timestamp).toLocaleString()}
-                                            </Typography>
-                                            <Typography variant="body2" component="div">
-                                                {entry.message}
-                                            </Typography>
-                                            
-                                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 0.5 }}>
-                                                {entry.operationName && (
-                                                    <Chip
-                                                        label={entry.operationName}
-                                                        size="small"
-                                                        variant="outlined"
-                                                        sx={{ fontSize: '0.7rem' }}
-                                                    />
-                                                )}
-                                                {entry.lotId && (
-                                                    <Chip
-                                                        label={`ID: ${entry.lotId}`}
-                                                        size="small"
-                                                        variant="outlined"
-                                                        sx={{ fontSize: '0.7rem' }}
-                                                    />
-                                                )}
-                                            </Box>
-                                        </Box>
-                                    ))}
-                            </Box>
-                        ) : (
-                            <Box sx={{ p: 2, maxHeight: '300px', overflow: 'auto' }}>
-                                {bookUpdateStatus.logs.map((log, index) => (
-                                    <Box key={index} sx={{ mb: 1 }}>
-                                        <Typography variant="body2" component="div">{log}</Typography>
-                                        {index < bookUpdateStatus.logs.length - 1 && <Divider sx={{ my: 1 }} />}
-                                    </Box>
-                                ))}
-                            </Box>
-                        )}
-                    </AccordionDetails>
-                </Accordion>
+            <Box sx={{ 
+                display: 'flex', 
+                gap: 2,
+                flexDirection: isMobile ? 'column' : 'row',
+                mt: 2
+            }}>
+                <Skeleton variant="rounded" width="100%" height={40} />
+            </Box>
+        </Box>
+    );
+    
+    // Скелетон для логов
+    const LogSkeleton = () => (
+        <>
+            {isMobile ? (
+                <>
+                    {[1, 2, 3].map((item) => (
+                        <Skeleton 
+                            key={item} 
+                            variant="rounded" 
+                            width="100%" 
+                            height={90} 
+                            sx={{ mb: 2 }}
+                        />
+                    ))}
+                </>
+            ) : (
+                <Skeleton variant="rounded" width="100%" height={250} />
             )}
         </>
     );
@@ -785,14 +246,543 @@ const BookUpdate = () => {
                 Управление обновлением книг
             </Typography>
             
-            {error && !isMobile && (
-                <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
+            {error && (
+                <Alert severity="error" sx={{ mb: 3 }}>
                     {error}
                 </Alert>
             )}
             
-            {/* Разделение на мобильный и десктопный контент */}
-            {isMobile ? renderMobileContent() : renderDesktopContent()}
+            <Box sx={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: isMobile ? 'flex-start' : 'center', 
+                mb: 2,
+                flexDirection: isMobile ? 'column' : 'row',
+                gap: isMobile ? 2 : 0
+            }}>
+                <FormControlLabel
+                    control={
+                        <Switch
+                            checked={autoRefresh}
+                            onChange={(e) => setAutoRefresh(e.target.checked)}
+                            color="primary"
+                        />
+                    }
+                    label="Автоматическое обновление"
+                />
+                
+                <Button 
+                    variant="outlined"
+                    onClick={fetchStatus}
+                    disabled={loading}
+                    startIcon={<RefreshIcon />}
+                    size={isMobile ? "small" : "medium"}
+                    sx={{ width: isMobile ? '100%' : 'auto' }}
+                >
+                    Обновить данные
+                </Button>
+            </Box>
+            
+            {loading && !initialLoadComplete && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
+                    <CircularProgress size={24} />
+                </Box>
+            )}
+            
+            {/* Карточка статуса - всегда видима независимо от устройства */}
+            <Card elevation={3} sx={{ mb: 3 }}>
+                <CardContent sx={{ 
+                    p: isMobile ? 2 : 3,
+                    minHeight: isMobile ? '350px' : '250px', // Фиксированная минимальная высота
+                    transition: 'all 0.3s ease', // Плавный переход
+                    position: 'relative' // Для правильного позиционирования внутренних элементов
+                }}>
+                    {loading && !initialLoadComplete ? (
+                        <StatusSkeleton />
+                    ) : (
+                        <Fade in={true} timeout={300}>
+                            <Box>
+                                <Box sx={{ 
+                                    display: 'flex', 
+                                    justifyContent: 'space-between', 
+                                    alignItems: 'flex-start',
+                                    flexDirection: isMobile ? 'column' : 'row',
+                                    gap: isMobile ? 2 : 0,
+                                    mb: 2
+                                }}>
+                                    <Typography variant="h6" component="h3" gutterBottom sx={{ mb: isMobile ? 0 : 2 }}>
+                                        Текущий статус
+                                    </Typography>
+                                    
+                                    <Box sx={{ 
+                                        display: 'inline-flex', 
+                                        alignItems: 'center', 
+                                        gap: 1,
+                                        bgcolor: getStatusColor(bookUpdateStatus) + '1A',
+                                        p: 1,
+                                        px: 2,
+                                        borderRadius: '8px',
+                                        transition: 'background-color 0.3s ease, color 0.3s ease'
+                                    }}>
+                                        <Box sx={{ 
+                                            width: 12, 
+                                            height: 12, 
+                                            borderRadius: '50%', 
+                                            bgcolor: getStatusColor(bookUpdateStatus),
+                                            transition: 'background-color 0.3s ease'
+                                        }} />
+                                        <Typography variant="subtitle1" fontWeight="bold" sx={{ 
+                                            color: getStatusColor(bookUpdateStatus),
+                                            transition: 'color 0.3s ease'
+                                        }}>
+                                            {getStatusText(bookUpdateStatus)}
+                                        </Typography>
+                                    </Box>
+                                </Box>
+                                
+                                <Grid container spacing={isMobile ? 1 : 2}>
+                                    <Grid item xs={12} sm={6}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Последнее обновление:
+                                        </Typography>
+                                        <Typography variant="body1" sx={{ mb: 1, height: '1.5rem' }}>
+                                            {formatDateTime(bookUpdateStatus.lastRunTimeUtc)}
+                                        </Typography>
+                                    </Grid>
+                                    
+                                    <Grid item xs={12} sm={6}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Следующее обновление:
+                                        </Typography>
+                                        <Typography variant="body1" sx={{ mb: 1, height: '1.5rem' }}>
+                                            {formatDateTime(bookUpdateStatus.nextRunTimeUtc)}
+                                        </Typography>
+                                    </Grid>
+
+                                    <Grid item xs={12}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Текущая операция:
+                                        </Typography>
+                                        <Typography variant="body1" sx={{ mb: 1, height: '1.5rem', fontWeight: 'medium' }}>
+                                            {bookUpdateStatus.currentOperationName || 'Нет активной операции'}
+                                        </Typography>
+                                    </Grid>
+                                    
+                                    <Grid item xs={6}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Обработано лотов:
+                                        </Typography>
+                                        <Typography variant="body1" sx={{ mb: 1, height: '1.5rem' }}>
+                                            {bookUpdateStatus.processedCount}
+                                        </Typography>
+                                    </Grid>
+                                    
+                                    <Grid item xs={6}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Последний лот (ID):
+                                        </Typography>
+                                        <Typography variant="body1" sx={{ mb: 1, height: '1.5rem' }}>
+                                            {bookUpdateStatus.lastProcessedLotId || 'Н/Д'}
+                                        </Typography>
+                                    </Grid>
+                                    
+                                    <Grid item xs={12}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Строка состояния обновления:
+                                        </Typography>
+                                        <Typography variant="body1" sx={{ mb: 1, minHeight: '1.5rem' }}>
+                                            {bookUpdateStatus.lastProcessedLotTitle || 'Нет информации'}
+                                        </Typography>
+                                    </Grid>
+                                </Grid>
+                                
+                                <Divider sx={{ my: 2 }} />
+                                
+                                <Box sx={{ 
+                                    display: 'flex', 
+                                    gap: 2,
+                                    flexDirection: isMobile ? 'column' : 'row',
+                                    mt: 2
+                                }}>
+                                    {bookUpdateStatus.isRunningNow && !bookUpdateStatus.isPaused && (
+                                        <Button
+                                            variant="outlined"
+                                            color="warning"
+                                            onClick={handlePause}
+                                            startIcon={<PauseIcon />}
+                                            sx={{ 
+                                                flex: 1,
+                                                p: { xs: 1, sm: 1.5 }
+                                            }}
+                                        >
+                                            Приостановить
+                                        </Button>
+                                    )}
+                                    
+                                    {bookUpdateStatus.isPaused && (
+                                        <Button
+                                            variant="outlined"
+                                            color="success"
+                                            onClick={handleResume}
+                                            startIcon={<PlayArrowIcon />}
+                                            sx={{ 
+                                                flex: 1,
+                                                p: { xs: 1, sm: 1.5 }
+                                            }}
+                                        >
+                                            Возобновить
+                                        </Button>
+                                    )}
+                                    
+                                    {(!bookUpdateStatus.isRunningNow || bookUpdateStatus.isPaused) && (
+                                        <Button
+                                            variant="contained"
+                                            onClick={handleRunNow}
+                                            startIcon={<SyncIcon />}
+                                            sx={{ 
+                                                backgroundColor: '#E72B3D', 
+                                                '&:hover': { backgroundColor: '#c4242f' },
+                                                flex: 1,
+                                                p: { xs: 1, sm: 1.5 }
+                                            }}
+                                        >
+                                            Запустить сейчас
+                                        </Button>
+                                    )}
+
+                                    {/* Невидимая кнопка для стабилизации высоты, если не отображаются реальные кнопки */}
+                                    {!bookUpdateStatus.isPaused && !bookUpdateStatus.isRunningNow && (
+                                        <Box sx={{ visibility: 'hidden', height: 0, flex: 1 }} />
+                                    )}
+                                </Box>
+                            </Box>
+                        </Fade>
+                    )}
+                </CardContent>
+            </Card>
+            
+            {/* Информация об обновлении - преобразуем в аккордеон для мобильных */}
+            {isMobile ? (
+                <Accordion elevation={3} sx={{ mb: 3 }}>
+                    <AccordionSummary
+                        expandIcon={<ExpandMoreIcon />}
+                        aria-controls="info-accordion-content"
+                        id="info-accordion-header"
+                    >
+                        <Typography variant="h6" component="h3">Информация об обновлении</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                        <Typography variant="body1" paragraph>
+                            Процесс обновления книг отвечает за синхронизацию данных о книгах из внешних источников.
+                        </Typography>
+                        
+                        <Typography variant="body1" paragraph>
+                            По умолчанию обновление выполняется по расписанию, но вы можете управлять этим процессом вручную.
+                        </Typography>
+                        
+                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                            Внимание: частое запуск обновления может увеличить нагрузку на сервер и внешние API.
+                        </Typography>
+                    </AccordionDetails>
+                </Accordion>
+            ) : (
+                <Card elevation={3} sx={{ mb: 3 }}>
+                    <CardContent>
+                        <Typography variant="h6" component="h3" gutterBottom>
+                            Информация об обновлении
+                        </Typography>
+                        
+                        <Typography variant="body1" paragraph>
+                            Процесс обновления книг отвечает за синхронизацию данных о книгах из внешних источников.
+                        </Typography>
+                        
+                        <Typography variant="body1" paragraph>
+                            По умолчанию обновление выполняется по расписанию, но вы можете управлять этим процессом вручную.
+                        </Typography>
+                        
+                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                            Внимание: частое запуск обновления может увеличить нагрузку на сервер и внешние API.
+                        </Typography>
+                    </CardContent>
+                </Card>
+            )}
+            
+            {/* Секция логов - адаптируем для мобильных устройств */}
+            <Card elevation={3} sx={{ mb: 4 }}>
+                <CardContent sx={{ 
+                    p: isMobile ? 2 : 3,
+                    minHeight: isMobile ? '400px' : '450px', // Фиксированная минимальная высота
+                    transition: 'all 0.3s ease'
+                }}>
+                    <Typography variant="h6" component="h3" gutterBottom>
+                        Подробная информация / логи
+                    </Typography>
+                    
+                    {loading && !initialLoadComplete ? (
+                        <LogSkeleton />
+                    ) : (
+                        Array.isArray(bookUpdateStatus.logs) && bookUpdateStatus.logs.length > 0 ? (
+                            <Fade in={true} timeout={300}>
+                                <Box sx={{ overflowX: 'auto' }}>
+                                    {isStructuredLogs ? (
+                                        isMobile ? (
+                                            <Box sx={{ minHeight: '300px' }}>
+                                                {[...bookUpdateStatus.logs]
+                                                    .reverse()
+                                                    .slice(0, 10) // Ограничиваем количество логов для мобильной версии
+                                                    .map((entry, idx) => (
+                                                        <Box 
+                                                            key={idx} 
+                                                            sx={{ 
+                                                                mb: 2, 
+                                                                p: 2, 
+                                                                borderRadius: 1, 
+                                                                bgcolor: entry.isError ? 'rgba(244, 67, 54, 0.08)' : 'rgba(238, 238, 238, 0.5)',
+                                                                border: '1px solid',
+                                                                borderColor: entry.isError ? 'error.light' : 'divider',
+                                                                transition: 'background-color 0.2s ease, transform 0.2s ease',
+                                                                '&:hover': {
+                                                                    transform: 'translateY(-2px)',
+                                                                    boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
+                                                                }
+                                                            }}
+                                                            onClick={() => handleViewLogDetail(entry)}
+                                                        >
+                                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                                                <Typography variant="caption" component="div" fontWeight="bold">
+                                                                    {new Date(entry.timestamp).toLocaleString()}
+                                                                </Typography>
+                                                                {entry.isError && <ErrorIcon color="error" fontSize="small" />}
+                                                            </Box>
+                                                            
+                                                            <Typography 
+                                                                variant="body2" 
+                                                                component="div" 
+                                                                fontWeight={entry.isError ? 'bold' : 'normal'} 
+                                                                color={entry.isError ? 'error.main' : 'inherit'}
+                                                                sx={{
+                                                                    maxHeight: '60px',
+                                                                    overflow: 'hidden',
+                                                                    textOverflow: 'ellipsis',
+                                                                    whiteSpace: 'normal',
+                                                                    display: '-webkit-box',
+                                                                    WebkitLineClamp: 2,
+                                                                    WebkitBoxOrient: 'vertical'
+                                                                }}
+                                                            >
+                                                                {entry.message}
+                                                            </Typography>
+                                                            
+                                                            <Box sx={{ mt: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                <Chip 
+                                                                    label={entry.operationName || 'Нет операции'} 
+                                                                    size="small" 
+                                                                    sx={{ maxWidth: '60%', textOverflow: 'ellipsis' }}
+                                                                />
+                                                                <IconButton size="small" onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleViewLogDetail(entry);
+                                                                }}>
+                                                                    <InfoIcon fontSize="small" />
+                                                                </IconButton>
+                                                            </Box>
+                                                        </Box>
+                                                    ))}
+                                                <Typography variant="caption" color="text.secondary">
+                                                    Показаны последние записи. Нажмите на запись для подробностей.
+                                                </Typography>
+                                            </Box>
+                                        ) : (
+                                            <TableContainer component={Paper} elevation={0} sx={{ 
+                                                height: '350px', 
+                                                maxHeight: '350px', 
+                                                overflow: 'auto'
+                                            }}>
+                                                <Table stickyHeader size="small">
+                                                    <TableHead>
+                                                        <TableRow>
+                                                            <TableCell>Время</TableCell>
+                                                            <TableCell>Сообщение</TableCell>
+                                                            <TableCell>Операция</TableCell>
+                                                            <TableCell>LotId</TableCell>
+                                                            <TableCell>Ошибка?</TableCell>
+                                                            <TableCell>Exception</TableCell>
+                                                        </TableRow>
+                                                    </TableHead>
+                                                    <TableBody>
+                                                        {[...bookUpdateStatus.logs]
+                                                            .reverse()
+                                                            .map((entry, idx) => {
+                                                                const timeLocal = new Date(entry.timestamp);
+                                                                return (
+                                                                    <TableRow
+                                                                        key={idx}
+                                                                        sx={{ 
+                                                                            color: entry.isError ? 'error.main' : 'inherit',
+                                                                            backgroundColor: entry.isError ? 'rgba(244, 67, 54, 0.08)' : 'inherit',
+                                                                            cursor: 'pointer',
+                                                                            transition: 'background-color 0.2s ease',
+                                                                            '&:hover': {
+                                                                                backgroundColor: entry.isError ? 'rgba(244, 67, 54, 0.12)' : 'rgba(0, 0, 0, 0.04)'
+                                                                            }
+                                                                        }}
+                                                                        onClick={() => handleViewLogDetail(entry)}
+                                                                    >
+                                                                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                                                            {timeLocal.toLocaleString()}
+                                                                        </TableCell>
+                                                                        <TableCell>{entry.message}</TableCell>
+                                                                        <TableCell>{entry.operationName || '-'}</TableCell>
+                                                                        <TableCell>{entry.lotId ?? '-'}</TableCell>
+                                                                        <TableCell>{entry.isError ? 'Да' : 'Нет'}</TableCell>
+                                                                        <TableCell sx={{ 
+                                                                            whiteSpace: 'pre-wrap', 
+                                                                            maxWidth: '300px', 
+                                                                            overflow: 'hidden', 
+                                                                            textOverflow: 'ellipsis' 
+                                                                        }}>
+                                                                            {entry.exceptionMessage || ''}
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                );
+                                                            })}
+                                                    </TableBody>
+                                                </Table>
+                                            </TableContainer>
+                                        )
+                                    ) : (
+                                        <Box sx={{ p: 2, bgcolor: 'grey.100', borderRadius: 1, 
+                                            height: isMobile ? '300px' : '350px', 
+                                            overflow: 'auto' 
+                                        }}>
+                                            {bookUpdateStatus.logs.map((log, index) => (
+                                                <Box key={index} sx={{ mb: 1 }}>
+                                                    <Typography variant="body2" component="div">{log}</Typography>
+                                                    {index < bookUpdateStatus.logs.length - 1 && <Divider sx={{ my: 1 }} />}
+                                                </Box>
+                                            ))}
+                                        </Box>
+                                    )}
+                                </Box>
+                            </Fade>
+                        ) : (
+                            <Box sx={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                height: '300px' 
+                            }}>
+                                <Typography variant="body1" color="text.secondary">
+                                    Логи пока отсутствуют.
+                                </Typography>
+                            </Box>
+                        )
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Диалог с подробностями лога */}
+            <Dialog
+                open={logDetailOpen}
+                onClose={() => setLogDetailOpen(false)}
+                maxWidth="sm"
+                fullWidth
+                fullScreen={isMobile}
+                TransitionComponent={Fade}
+                transitionDuration={300}
+            >
+                <DialogTitle>
+                    Подробности записи
+                </DialogTitle>
+                <DialogContent dividers>
+                    {selectedLog && (
+                        <Box>
+                            <Grid container spacing={2}>
+                                <Grid item xs={12}>
+                                    <Typography variant="caption" color="text.secondary">
+                                        Время:
+                                    </Typography>
+                                    <Typography variant="body1" gutterBottom>
+                                        {new Date(selectedLog.timestamp).toLocaleString()}
+                                    </Typography>
+                                </Grid>
+                                
+                                <Grid item xs={12}>
+                                    <Typography variant="caption" color="text.secondary">
+                                        Сообщение:
+                                    </Typography>
+                                    <Typography 
+                                        variant="body1" 
+                                        gutterBottom 
+                                        fontWeight={selectedLog.isError ? 'bold' : 'normal'}
+                                        color={selectedLog.isError ? 'error.main' : 'inherit'}
+                                    >
+                                        {selectedLog.message}
+                                    </Typography>
+                                </Grid>
+                                
+                                <Grid item xs={6}>
+                                    <Typography variant="caption" color="text.secondary">
+                                        Операция:
+                                    </Typography>
+                                    <Typography variant="body1" gutterBottom>
+                                        {selectedLog.operationName || 'Не указана'}
+                                    </Typography>
+                                </Grid>
+                                
+                                <Grid item xs={6}>
+                                    <Typography variant="caption" color="text.secondary">
+                                        ID лота:
+                                    </Typography>
+                                    <Typography variant="body1" gutterBottom>
+                                        {selectedLog.lotId || 'Не указан'}
+                                    </Typography>
+                                </Grid>
+                                
+                                <Grid item xs={12}>
+                                    <Typography variant="caption" color="text.secondary">
+                                        Статус:
+                                    </Typography>
+                                    <Typography 
+                                        variant="body1" 
+                                        gutterBottom
+                                        color={selectedLog.isError ? 'error.main' : 'success.main'}
+                                    >
+                                        {selectedLog.isError ? 'Ошибка' : 'Успешно'}
+                                    </Typography>
+                                </Grid>
+                                
+                                {selectedLog.exceptionMessage && (
+                                    <Grid item xs={12}>
+                                        <Typography variant="caption" color="text.secondary">
+                                            Сообщение об ошибке:
+                                        </Typography>
+                                        <Paper 
+                                            elevation={0} 
+                                            sx={{ 
+                                                p: 2, 
+                                                bgcolor: 'error.light', 
+                                                color: 'error.contrastText',
+                                                maxHeight: '150px',
+                                                overflow: 'auto',
+                                                whiteSpace: 'pre-wrap',
+                                                mt: 1
+                                            }}
+                                        >
+                                            {selectedLog.exceptionMessage}
+                                        </Paper>
+                                    </Grid>
+                                )}
+                            </Grid>
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setLogDetailOpen(false)}>
+                        Закрыть
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 };
