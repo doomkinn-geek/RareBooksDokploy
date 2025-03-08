@@ -13,11 +13,15 @@ import {
     Divider,
     CircularProgress,
     Container,
-    useTheme
+    useTheme,
+    IconButton,
+    Tooltip,
+    Alert
 } from '@mui/material';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
-import { API_URL, getAuthHeaders } from '../api';
+import { API_URL, getAuthHeaders, checkIfBookIsFavorite, addBookToFavorites, removeBookFromFavorites } from '../api';
+import Cookies from 'js-cookie';
 
 // Импорт иконок
 import BookIcon from '@mui/icons-material/Book';
@@ -26,6 +30,8 @@ import StoreIcon from '@mui/icons-material/Store';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import DateRangeIcon from '@mui/icons-material/DateRange';
 import InfoIcon from '@mui/icons-material/Info';
+import FavoriteIcon from '@mui/icons-material/Favorite';
+import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 
 function getBookImageFile(id, imageName) {
     return axios.get(`${API_URL}/books/${id}/images/${imageName}`, {
@@ -42,6 +48,8 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
     const [error, setError] = useState('');
     const [showSubscriptionCTA, setShowSubscriptionCTA] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [favoriteBooks, setFavoriteBooks] = useState({});
+    const [favoritesLoading, setFavoritesLoading] = useState({});
 
     useEffect(() => {
         if (!books || books.length === 0) {
@@ -91,6 +99,34 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
         };
     }, [books]);
 
+    // Проверка статуса избранных книг
+    useEffect(() => {
+        const checkFavorites = async () => {
+            // Проверяем, авторизован ли пользователь
+            const token = Cookies.get('token');
+            if (!token || !books || books.length === 0) return;
+
+            try {
+                // Проверяем статус избранного для каждой книги
+                books.forEach(async (book) => {
+                    try {
+                        const response = await checkIfBookIsFavorite(book.id);
+                        setFavoriteBooks(prev => ({
+                            ...prev,
+                            [book.id]: response.data
+                        }));
+                    } catch (error) {
+                        console.error(`Ошибка при проверке статуса избранного для книги ${book.id}:`, error);
+                    }
+                });
+            } catch (error) {
+                console.error('Ошибка при проверке статуса избранных книг:', error);
+            }
+        };
+
+        checkFavorites();
+    }, [books]);
+
     // Форматирование даты в удобный для чтения вид
     const formatDate = (dateString) => {
         if (!dateString) return 'Нет данных';
@@ -132,6 +168,50 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
     // Обработка клика по книге
     const handleBookClick = (bookId) => {
         navigate(`/books/${bookId}`);
+    };
+
+    // Обработка добавления/удаления книги из избранного
+    const handleToggleFavorite = async (bookId, event) => {
+        event.stopPropagation();
+        
+        // Проверяем, авторизован ли пользователь
+        const token = Cookies.get('token');
+        if (!token) {
+            navigate('/login', { state: { from: window.location.pathname } });
+            return;
+        }
+
+        try {
+            setFavoritesLoading(prev => ({
+                ...prev,
+                [bookId]: true
+            }));
+
+            const isFavorite = favoriteBooks[bookId];
+
+            if (isFavorite) {
+                // Удаляем из избранного
+                await removeBookFromFavorites(bookId);
+                setFavoriteBooks(prev => ({
+                    ...prev,
+                    [bookId]: false
+                }));
+            } else {
+                // Добавляем в избранное
+                await addBookToFavorites(bookId);
+                setFavoriteBooks(prev => ({
+                    ...prev,
+                    [bookId]: true
+                }));
+            }
+        } catch (error) {
+            console.error('Ошибка при изменении статуса избранного:', error);
+        } finally {
+            setFavoritesLoading(prev => ({
+                ...prev,
+                [bookId]: false
+            }));
+        }
     };
 
     // Обработка изменения страницы
@@ -266,9 +346,35 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                                     '&:hover': {
                                         transform: 'translateY(-4px)',
                                         boxShadow: '0 8px 24px rgba(0,0,0,0.12)'
-                                    }
+                                    },
+                                    position: 'relative'
                                 }}
                             >
+                                {/* Кнопка добавления в избранное */}
+                                <Tooltip title={favoriteBooks[book.id] ? "Удалить из избранного" : "Добавить в избранное"}>
+                                    <IconButton
+                                        sx={{
+                                            position: 'absolute',
+                                            top: 8,
+                                            right: 8,
+                                            zIndex: 10,
+                                            backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                                            '&:hover': {
+                                                backgroundColor: 'rgba(255, 255, 255, 0.9)'
+                                            }
+                                        }}
+                                        onClick={(e) => handleToggleFavorite(book.id, e)}
+                                        disabled={favoritesLoading[book.id]}
+                                    >
+                                        {favoritesLoading[book.id] ? (
+                                            <CircularProgress size={24} />
+                                        ) : favoriteBooks[book.id] ? (
+                                            <FavoriteIcon sx={{ color: 'red' }} />
+                                        ) : (
+                                            <FavoriteBorderIcon />
+                                        )}
+                                    </IconButton>
+                                </Tooltip>
                                 <CardContent sx={{ p: 0 }}>
                                     <Grid container>
                                         {/* Изображение книги */}
@@ -460,19 +566,36 @@ const BookList = ({ books, totalPages, currentPage, setCurrentPage }) => {
                                                 </Grid>
 
                                                 <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-                                                    <Button
-                                                        variant="contained"
-                                                        color="primary"
-                                                        onClick={() => handleBookClick(book.id)}
-                                                        sx={{ 
-                                                            borderRadius: '8px', 
-                                                            textTransform: 'none',
-                                                            fontWeight: 'bold',
-                                                            px: 3
-                                                        }}
-                                                    >
-                                                        Подробнее
-                                                    </Button>
+                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                                                        <Box>
+                                                            {favoriteBooks[book.id] && (
+                                                                <Chip
+                                                                    icon={<FavoriteIcon sx={{ color: 'red !important' }} />}
+                                                                    label="В избранном"
+                                                                    variant="outlined"
+                                                                    size="small"
+                                                                    sx={{ 
+                                                                        borderColor: 'red',
+                                                                        color: 'red',
+                                                                        mr: 1
+                                                                    }}
+                                                                />
+                                                            )}
+                                                        </Box>
+                                                        <Button
+                                                            variant="contained"
+                                                            color="primary"
+                                                            onClick={() => handleBookClick(book.id)}
+                                                            sx={{ 
+                                                                borderRadius: '8px', 
+                                                                textTransform: 'none',
+                                                                fontWeight: 'bold',
+                                                                px: 3
+                                                            }}
+                                                        >
+                                                            Подробнее
+                                                        </Button>
+                                                    </Box>
                                                 </Box>
                                             </Box>
                                         </Grid>

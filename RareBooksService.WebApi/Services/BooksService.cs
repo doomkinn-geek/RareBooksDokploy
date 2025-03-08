@@ -61,6 +61,12 @@ namespace RareBooksService.WebApi.Services
 
         Task<BookValueEstimateDto> EstimateBookValueAsync(
             ApplicationUser user, BookValueEstimateRequest request);
+
+        Task<bool> AddBookToFavoritesAsync(string userId, int bookId);
+        Task<bool> RemoveBookFromFavoritesAsync(string userId, int bookId);
+        Task<bool> IsBookInFavoritesAsync(string userId, int bookId);
+        Task<PagedResultDto<BookDetailDto>> GetFavoriteBooksAsync(string userId, int page, int pageSize);
+        Task<BookDetailDto> GetBookByIdAsync(int id);
     }
 
     public class BooksService : IBooksService
@@ -74,17 +80,19 @@ namespace RareBooksService.WebApi.Services
         private readonly ISubscriptionService _subscriptionService;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly UsersDbContext _usersDbContext;
+        private readonly IUserService _userService;
 
         public BooksService(
             IRegularBaseBooksRepository booksRepository,
             ISearchHistoryService searchHistoryService,
             IBookImagesService bookImagesService,
-            UserManager<ApplicationUser> userManager,
             ILogger<BooksService> logger,
             IConfiguration configuration,
             IWebHostEnvironment env,
             ISubscriptionService subscriptionService,
-            UsersDbContext usersDbContext)
+            UserManager<ApplicationUser> userManager,
+            UsersDbContext usersDbContext,
+            IUserService userService)
         {
             _booksRepository = booksRepository;
             _searchHistoryService = searchHistoryService;
@@ -95,6 +103,7 @@ namespace RareBooksService.WebApi.Services
             _subscriptionService = subscriptionService;
             _userManager = userManager;
             _usersDbContext = usersDbContext;
+            _userService = userService;
         }
 
         public async Task<(bool hasSubscription, int? remainingRequests)>
@@ -962,6 +971,114 @@ namespace RareBooksService.WebApi.Services
             }
 
             return Math.Min(similarity, 0.99);
+        }
+
+        public async Task<bool> AddBookToFavoritesAsync(string userId, int bookId)
+        {
+            try
+            {
+                // Проверяем, существует ли книга
+                var book = await _booksRepository.GetBookByIdAsync(bookId);
+                if (book == null)
+                    return false;
+
+                // Добавляем книгу в избранное через UserService
+                return await _userService.AddBookToFavoritesAsync(userId, bookId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при добавлении книги {BookId} в избранное для пользователя {UserId}", bookId, userId);
+                return false;
+            }
+        }
+
+        public async Task<bool> RemoveBookFromFavoritesAsync(string userId, int bookId)
+        {
+            try
+            {
+                return await _userService.RemoveBookFromFavoritesAsync(userId, bookId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при удалении книги {BookId} из избранного для пользователя {UserId}", bookId, userId);
+                return false;
+            }
+        }
+
+        public async Task<bool> IsBookInFavoritesAsync(string userId, int bookId)
+        {
+            try
+            {
+                return await _userService.IsBookInFavoritesAsync(userId, bookId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при проверке наличия книги {BookId} в избранном пользователя {UserId}", bookId, userId);
+                return false;
+            }
+        }
+
+        public async Task<PagedResultDto<BookDetailDto>> GetFavoriteBooksAsync(string userId, int page, int pageSize)
+        {
+            try
+            {
+                // Получаем список избранных книг пользователя
+                var favoriteBooks = await _userService.GetUserFavoriteBooksAsync(userId);
+                
+                // Получаем только ID книг
+                var bookIds = favoriteBooks.Select(fb => fb.BookId).ToList();
+                
+                // Определяем, сколько всего книг и сколько страниц
+                int totalCount = bookIds.Count;
+                int totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+                
+                // Применяем пагинацию к списку ID
+                var pagedBookIds = bookIds
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+                
+                // Загружаем полную информацию о книгах
+                var detailedBooks = new List<BookDetailDto>();
+                foreach (var id in pagedBookIds)
+                {
+                    var book = await _booksRepository.GetBookByIdAsync(id);
+                    if (book != null)
+                    {
+                        detailedBooks.Add(book);
+                    }
+                }
+                
+                return new PagedResultDto<BookDetailDto>
+                {
+                    Items = detailedBooks,
+                    TotalCount = totalCount,
+                    TotalPages = totalPages
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при получении списка избранных книг для пользователя {UserId}", userId);
+                return new PagedResultDto<BookDetailDto>
+                {
+                    Items = new List<BookDetailDto>(),
+                    TotalCount = 0,
+                    TotalPages = 0
+                };
+            }
+        }
+
+        public async Task<BookDetailDto> GetBookByIdAsync(int id)
+        {
+            try
+            {
+                return await _booksRepository.GetBookByIdAsync(id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при получении книги по ID {BookId}", id);
+                return null;
+            }
         }
     }
 }

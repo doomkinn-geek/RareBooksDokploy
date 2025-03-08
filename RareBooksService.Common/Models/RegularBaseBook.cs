@@ -25,7 +25,7 @@ namespace RareBooksService.Common.Models
         public double? FinalPrice { get; set; }
         public int? YearPublished { get; set; }
         public List<string> Tags { get; set; } = new List<string>();
-        public int CategoryId { get; set; }
+        public int CategoryId { get; set; }//id из табицы categories (НЕ из meshok.net )
         public RegularBaseCategory Category { get; set; }        
         public float[] PicsRatio { get; set; }
         public int Status { get; set; }

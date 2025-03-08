@@ -365,6 +365,34 @@ namespace RareBooksService.Data.Migrations.UsersDb
                     b.ToTable("UserSearchStates");
                 });
 
+            modelBuilder.Entity("RareBooksService.Common.Models.UserFavoriteBook", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("AddedDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("BookId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "BookId")
+                        .IsUnique();
+
+                    b.ToTable("UserFavoriteBooks");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -457,11 +485,24 @@ namespace RareBooksService.Data.Migrations.UsersDb
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("RareBooksService.Common.Models.UserFavoriteBook", b =>
+                {
+                    b.HasOne("RareBooksService.Common.Models.ApplicationUser", "User")
+                        .WithMany("FavoriteBooks")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("RareBooksService.Common.Models.ApplicationUser", b =>
                 {
                     b.Navigation("SearchHistory");
 
                     b.Navigation("Subscriptions");
+
+                    b.Navigation("FavoriteBooks");
                 });
 #pragma warning restore 612, 618
         }

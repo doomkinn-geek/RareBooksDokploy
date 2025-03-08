@@ -10,6 +10,7 @@ namespace RareBooksService.Data
         public DbSet<Subscription> Subscriptions { get; set; }
         public DbSet<SubscriptionPlan> SubscriptionPlans { get; set; }
         public DbSet<UserSearchState> UserSearchStates { get; set; }
+        public DbSet<UserFavoriteBook> UserFavoriteBooks { get; set; }
 
         public UsersDbContext(DbContextOptions<UsersDbContext> options)
             : base(options)
@@ -49,6 +50,21 @@ namespace RareBooksService.Data
             modelBuilder.Entity<UserSearchState>()
                .HasIndex(s => new { s.UserId, s.SearchType })
                .IsUnique();
+
+            // Настройка UserFavoriteBook
+            modelBuilder.Entity<UserFavoriteBook>()
+                .HasKey(fb => fb.Id);
+
+            modelBuilder.Entity<UserFavoriteBook>()
+                .HasOne(fb => fb.User)
+                .WithMany(u => u.FavoriteBooks)
+                .HasForeignKey(fb => fb.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Создаем индекс для быстрого поиска по UserId и BookId
+            modelBuilder.Entity<UserFavoriteBook>()
+                .HasIndex(fb => new { fb.UserId, fb.BookId })
+                .IsUnique();
         }
     }
 }

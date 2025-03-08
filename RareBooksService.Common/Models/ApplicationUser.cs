@@ -26,5 +26,9 @@ namespace RareBooksService.Common.Models
                 return Subscriptions?.FirstOrDefault(s => s.IsActive);
             }
         }
+
+        // Избранные книги пользователя
+        public List<UserFavoriteBook> FavoriteBooks { get; set; } 
+            = new List<UserFavoriteBook>();
     }
 }

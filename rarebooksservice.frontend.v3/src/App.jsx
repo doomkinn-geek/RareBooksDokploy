@@ -42,6 +42,7 @@ import SearchByCategory from './components/SearchByCategory';
 import SearchBySeller from './components/SearchBySeller';
 import SearchBooksByPriceRange from './components/SearchBooksByPriceRange';
 import BookDetail from './components/BookDetail';
+import FavoriteBooks from './components/FavoriteBooks';
 import InitialSetupPage from './components/InitialSetupPage';
 import TermsOfService from './components/TermsOfService';
 import Contacts from './components/Contacts';
@@ -59,6 +60,7 @@ import MenuIcon from '@mui/icons-material/Menu';
 import HomeIcon from '@mui/icons-material/Home';
 import CategoryIcon from '@mui/icons-material/Category';
 import CloseIcon from '@mui/icons-material/Close';
+import FavoriteIcon from '@mui/icons-material/Favorite';
 
 const NavBar = () => {
     const { user, setUser } = useContext(UserContext);
@@ -142,6 +144,12 @@ const NavBar = () => {
                         <ListItemIcon><CategoryIcon /></ListItemIcon>
                         <ListItemText primary={language === 'RU' ? 'Каталог' : 'Catalog'} />
                     </ListItem>
+                    {user && (
+                        <ListItem button onClick={() => handleNavigate('/favorites')}>
+                            <ListItemIcon><FavoriteIcon /></ListItemIcon>
+                            <ListItemText primary={language === 'RU' ? 'Избранное' : 'Favorites'} />
+                        </ListItem>
+                    )}
                 </List>
                 <Divider sx={{ my: 2 }} />
                 <List>
@@ -220,6 +228,16 @@ const NavBar = () => {
                             <Button color="inherit" component={Link} to="/categories">
                                 {language === 'RU' ? 'Каталог' : 'Catalog'}
                             </Button>
+                            {user && (
+                                <Button 
+                                    color="inherit" 
+                                    component={Link} 
+                                    to="/favorites"
+                                    startIcon={<FavoriteIcon />}
+                                >
+                                    {language === 'RU' ? 'Избранное' : 'Favorites'}
+                                </Button>
+                            )}
                         </Box>
                     )}
 
@@ -375,6 +393,7 @@ const AppContent = () => {
                             <Route path="/subscription" element={<SubscriptionPage />} />
                             <Route path="/admin" element={<AdminPanel />} />
                             <Route path="/books/:id" element={<BookDetail />} />
+                            <Route path="/favorites" element={<FavoriteBooks />} />
                             <Route path="/searchByTitle/:title" element={<BookSearchByTitle />} />
                             <Route path="/searchByDescription/:description" element={<BookSearchByDescription />} />
                             <Route path="/searchByCategory/:categoryId" element={<SearchByCategory />} />

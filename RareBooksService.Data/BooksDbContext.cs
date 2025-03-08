@@ -40,9 +40,9 @@ namespace RareBooksService.Data
                 .HasIndex(b => b.NormalizedTitle)
                 .HasDatabaseName("IX_Books_NormalizedTitle");
 
-            modelBuilder.Entity<RegularBaseBook>()
+            /*modelBuilder.Entity<RegularBaseBook>()
                 .HasIndex(b => b.NormalizedDescription)
-                .HasDatabaseName("IX_Books_NormalizedDescription");
+                .HasDatabaseName("IX_Books_NormalizedDescription");*/
 
 
             // Пример связи "Book -> Category"

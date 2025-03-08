@@ -121,5 +121,77 @@ namespace RareBooksService.WebApi.Controllers
 
             return Ok(historyDto);
         }
+
+        /// <summary>
+        /// Получение списка избранных книг пользователя
+        /// </summary>
+        [HttpGet("{userId}/favorites")]
+        public async Task<ActionResult<IEnumerable<UserFavoriteBookDto>>> GetUserFavoriteBooks(string userId)
+        {
+            _logger.LogInformation("Запрос на получение списка избранных книг пользователя с ID: {UserId}", userId);
+
+            // Проверяем, что пользователь запрашивает свои данные или является администратором
+            var currentUser = await GetCurrentUserAsync();
+            if (currentUser == null)
+            {
+                _logger.LogWarning("Текущий пользователь не найден или не авторизован");
+                return Unauthorized("Пользователь не авторизован");
+            }
+
+            // Разрешаем доступ только к своим избранным или администратору
+            if (currentUser.Id != userId && !IsUserAdmin(currentUser))
+            {
+                _logger.LogWarning("Доступ запрещен: пользователь пытается получить избранные книги другого пользователя");
+                return Forbid("Вы можете просматривать только свои избранные книги");
+            }
+
+            var favoriteBooks = await _userService.GetUserFavoriteBooksAsync(userId);
+
+            var favoriteBooksDto = favoriteBooks.Select(fb => new UserFavoriteBookDto
+            {
+                Id = fb.Id,
+                BookId = fb.BookId,
+                AddedDate = fb.AddedDate
+            }).OrderByDescending(fb => fb.AddedDate);
+
+            _logger.LogInformation("Список избранных книг для пользователя с ID {UserId} успешно получен. Количество книг: {Count}", 
+                userId, favoriteBooksDto.Count());
+
+            return Ok(favoriteBooksDto);
+        }
+
+        /// <summary>
+        /// Удаление книги из избранного
+        /// </summary>
+        [HttpDelete("{userId}/favorites/{bookId}")]
+        public async Task<ActionResult> RemoveBookFromFavorites(string userId, int bookId)
+        {
+            _logger.LogInformation("Запрос на удаление книги {BookId} из избранного пользователя с ID: {UserId}", bookId, userId);
+
+            // Проверяем, что пользователь удаляет свои данные или является администратором
+            var currentUser = await GetCurrentUserAsync();
+            if (currentUser == null)
+            {
+                _logger.LogWarning("Текущий пользователь не найден или не авторизован");
+                return Unauthorized("Пользователь не авторизован");
+            }
+
+            // Разрешаем удаление только своих избранных или администратору
+            if (currentUser.Id != userId && !IsUserAdmin(currentUser))
+            {
+                _logger.LogWarning("Доступ запрещен: пользователь пытается удалить книгу из избранного другого пользователя");
+                return Forbid("Вы можете удалять книги только из своего списка избранных");
+            }
+
+            var success = await _userService.RemoveBookFromFavoritesAsync(userId, bookId);
+            if (!success)
+            {
+                _logger.LogWarning("Книга с ID {BookId} не найдена в избранном пользователя с ID {UserId}", bookId, userId);
+                return NotFound("Книга не найдена в избранном");
+            }
+
+            _logger.LogInformation("Книга с ID {BookId} успешно удалена из избранного пользователя с ID {UserId}", bookId, userId);
+            return NoContent();
+        }
     }
 } 

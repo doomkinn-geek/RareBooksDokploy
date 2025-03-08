@@ -181,6 +181,80 @@ namespace RareBooksService.WebApi.Controllers
             return Ok(sales);
         }
 
+        /// <summary>
+        /// Добавляет книгу в избранное текущего пользователя
+        /// </summary>
+        [HttpPost("{id}/favorite")]
+        public async Task<ActionResult> AddToFavorites(int id)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return Unauthorized();
+
+            // Проверяем, существует ли книга
+            var book = await _booksService.GetBookByIdAsync(id);
+            if (book == null)
+                return NotFound(new { message = "Книга не найдена" });
+
+            var result = await _booksService.AddBookToFavoritesAsync(user.Id, id);
+            
+            if (!result)
+                return BadRequest(new { message = "Книга уже в избранном или произошла ошибка" });
+
+            return Ok(new { message = "Книга добавлена в избранное" });
+        }
+
+        /// <summary>
+        /// Проверяет, находится ли книга в избранном у текущего пользователя
+        /// </summary>
+        [HttpGet("{id}/is-favorite")]
+        public async Task<ActionResult<bool>> CheckIfFavorite(int id)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return Unauthorized();
+
+            var isFavorite = await _booksService.IsBookInFavoritesAsync(user.Id, id);
+            
+            return Ok(isFavorite);
+        }
+
+        /// <summary>
+        /// Удаляет книгу из избранного текущего пользователя
+        /// </summary>
+        [HttpDelete("{id}/favorite")]
+        public async Task<ActionResult> RemoveFromFavorites(int id)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return Unauthorized();
+
+            var result = await _booksService.RemoveBookFromFavoritesAsync(user.Id, id);
+            
+            if (!result)
+                return NotFound(new { message = "Книга не найдена в избранном" });
+
+            return NoContent();
+        }
+
+        /// <summary>
+        /// Получает список всех избранных книг текущего пользователя
+        /// </summary>
+        [HttpGet("favorites")]
+        public async Task<ActionResult<List<BookDetailDto>>> GetFavoriteBooks(int page = 1, int pageSize = 10)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return Unauthorized();
+
+            var favorites = await _booksService.GetFavoriteBooksAsync(user.Id, page, pageSize);
+            
+            if (favorites == null || !favorites.Items.Any())
+                return Ok(new { items = new List<BookDetailDto>(), totalCount = 0 });
+
+            return Ok(favorites);
+        }
+
         [HttpGet("{id}/price-history")]
         public async Task<ActionResult<PriceHistoryDto>> GetPriceHistory(int id)
         {

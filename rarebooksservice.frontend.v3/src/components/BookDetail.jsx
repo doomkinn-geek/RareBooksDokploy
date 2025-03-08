@@ -6,16 +6,21 @@ import {
     getBookImages,
     getBookImageFile,
     getPriceHistory,
+    checkIfBookIsFavorite,
+    addBookToFavorites,
+    removeBookFromFavorites,
     API_URL,
     getAuthHeaders
 } from '../api';
-import { Card, CardContent, Typography, Box, Button, Container, Paper, Grid, Divider, Chip, CircularProgress, Alert } from '@mui/material';
+import { Card, CardContent, Typography, Box, Button, Container, Paper, Grid, Divider, Chip, CircularProgress, Alert, IconButton, Tooltip } from '@mui/material';
 import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
 import DOMPurify from 'dompurify';
 import Cookies from 'js-cookie';
 import { Helmet } from 'react-helmet';
+import FavoriteIcon from '@mui/icons-material/Favorite';
+import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 
 const BookDetail = () => {
     const { id } = useParams();
@@ -27,6 +32,8 @@ const BookDetail = () => {
     const [error, setError] = useState(null);
     const [open, setOpen] = useState(false);
     const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+    const [isFavorite, setIsFavorite] = useState(false);
+    const [favoritesLoading, setFavoritesLoading] = useState(false);
 
     // Отслеживание загрузки деталей книги
     const [loadingBook, setLoadingBook] = useState(true);
@@ -149,6 +156,29 @@ const BookDetail = () => {
         setLoading(loadingBook);
     }, [loadingBook]);
 
+    // Эффект для проверки, находится ли книга в избранном
+    useEffect(() => {
+        const checkFavoriteStatus = async () => {
+            try {
+                // Проверяем, авторизован ли пользователь
+                const token = Cookies.get('token');
+                if (!token) return;
+
+                setFavoritesLoading(true);
+                const response = await checkIfBookIsFavorite(id);
+                setIsFavorite(response.data);
+            } catch (error) {
+                console.error('Ошибка при проверке статуса избранного:', error);
+            } finally {
+                setFavoritesLoading(false);
+            }
+        };
+
+        if (id) {
+            checkFavoriteStatus();
+        }
+    }, [id]);
+
     const handleImageClick = (index) => {
         setSelectedImageIndex(index);
         setOpen(true);
@@ -269,6 +299,35 @@ const BookDetail = () => {
             const url = `${API_URL}/books/${bookId || id}/images/${imagePathOrUrl}`;
             console.log('Сформирован URL для изображения:', url);
             return url;
+        }
+    };
+
+    // Обработчик добавления/удаления книги из избранного
+    const handleToggleFavorite = async () => {
+        try {
+            setFavoritesLoading(true);
+            
+            // Проверяем, авторизован ли пользователь
+            const token = Cookies.get('token');
+            if (!token) {
+                // Если не авторизован, перенаправляем на страницу входа
+                navigate('/login', { state: { from: `/books/${id}` } });
+                return;
+            }
+
+            if (isFavorite) {
+                // Удаляем из избранного
+                await removeBookFromFavorites(id);
+                setIsFavorite(false);
+            } else {
+                // Добавляем в избранное
+                await addBookToFavorites(id);
+                setIsFavorite(true);
+            }
+        } catch (error) {
+            console.error('Ошибка при изменении статуса избранного:', error);
+        } finally {
+            setFavoritesLoading(false);
         }
     };
 
@@ -437,9 +496,33 @@ const BookDetail = () => {
                                     
                                     {/* Информация о книге */}
                                     <Grid item xs={12} md={6}>
-                                        <Typography variant="h4" gutterBottom fontWeight="bold">
-                                            {book.title || 'Без названия'}
-                                        </Typography>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                            <Typography variant="h4" gutterBottom fontWeight="bold">
+                                                {book.title || 'Без названия'}
+                                            </Typography>
+                                            
+                                            {/* Кнопка добавления в избранное */}
+                                            <Tooltip title={isFavorite ? "Удалить из избранного" : "Добавить в избранное"}>
+                                                <IconButton 
+                                                    color="primary" 
+                                                    onClick={handleToggleFavorite}
+                                                    disabled={favoritesLoading}
+                                                    sx={{ 
+                                                        '&:hover': { 
+                                                            backgroundColor: 'rgba(25, 118, 210, 0.04)'
+                                                        }
+                                                    }}
+                                                >
+                                                    {favoritesLoading ? (
+                                                        <CircularProgress size={24} />
+                                                    ) : isFavorite ? (
+                                                        <FavoriteIcon sx={{ color: 'red' }} />
+                                                    ) : (
+                                                        <FavoriteBorderIcon />
+                                                    )}
+                                                </IconButton>
+                                            </Tooltip>
+                                        </Box>
                                         
                                         {book.author && (
                                             <Typography variant="subtitle1" color="text.secondary" gutterBottom>

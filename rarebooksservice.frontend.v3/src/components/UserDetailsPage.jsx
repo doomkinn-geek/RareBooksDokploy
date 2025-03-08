@@ -23,6 +23,7 @@ import {
   CardContent,
   Alert
 } from '@mui/material';
+import UserFavoriteBooks from './UserFavoriteBooks';
 
 // Импорт иконок
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -32,6 +33,7 @@ import BadgeIcon from '@mui/icons-material/Badge';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import HistoryIcon from '@mui/icons-material/History';
 import SearchIcon from '@mui/icons-material/Search';
+import FavoriteIcon from '@mui/icons-material/Favorite';
 
 const UserDetailsPage = () => {
     const { userId } = useParams();
@@ -43,6 +45,19 @@ const UserDetailsPage = () => {
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const { user: currentUser } = useContext(UserContext);
+    const [contentHeight, setContentHeight] = useState(400); // Высота для компонента UserFavoriteBooks
+
+    // После загрузки контента определяем его высоту
+    useEffect(() => {
+        if (!loading && !error && searchHistory.length > 0) {
+            // Минимальная высота
+            const minContentHeight = Math.max(
+                400,  // Минимальная высота
+                Math.min(searchHistory.length * 60, 500)  // Ограничиваем максимальную высоту
+            );
+            setContentHeight(minContentHeight);
+        }
+    }, [loading, error, searchHistory]);
 
     useEffect(() => {
         const fetchUserData = async () => {
@@ -422,184 +437,263 @@ const UserDetailsPage = () => {
                 )}
             </Paper>
 
-            {/* История поиска */}
+            {/* Избранные книги */}
             <Paper 
                 elevation={3} 
                 sx={{ 
-                    p: { xs: 2, sm: 3, md: 4 }, 
                     borderRadius: '12px',
-                    bgcolor: 'white' 
+                    bgcolor: 'white',
+                    overflow: 'hidden',
+                    mb: { xs: 3, md: 4 }
                 }}
             >
                 <Box sx={{ 
                     display: 'flex', 
-                    alignItems: 'center', 
-                    mb: { xs: 2, md: 3 } 
+                    alignItems: 'center',
+                    p: { xs: 2, sm: 3, md: 4 },
+                    pb: { xs: 1, sm: 2 },
+                    borderBottom: '1px solid rgba(0, 0, 0, 0.12)'
                 }}>
-                    <HistoryIcon sx={{ fontSize: { xs: 28, md: 36 }, color: '#d32f2f', mr: 2 }} />
+                    <FavoriteIcon sx={{ 
+                        fontSize: { xs: 24, sm: 28, md: 36 }, 
+                        color: '#d32f2f', 
+                        mr: { xs: 1.5, sm: 2 } 
+                    }} />
                     <Typography 
                         variant="h5" 
                         fontWeight="bold"
-                        sx={{ fontSize: { xs: '1.25rem', md: '1.5rem' }, color: '#333' }}
+                        sx={{ 
+                            fontSize: { xs: '1.125rem', sm: '1.25rem', md: '1.5rem' }, 
+                            color: '#333' 
+                        }}
+                    >
+                        Избранные книги
+                    </Typography>
+                </Box>
+
+                <Box sx={{ p: { xs: 1.5, sm: 2, md: 3 } }}>
+                    <UserFavoriteBooks 
+                        userId={userId} 
+                        isCurrentUser={currentUser && userId === currentUser.id}
+                        height={`${contentHeight}px`}
+                    />
+                </Box>
+            </Paper>
+
+            {/* История поиска */}
+            <Paper 
+                elevation={3} 
+                sx={{ 
+                    borderRadius: '12px',
+                    bgcolor: 'white',
+                    overflow: 'hidden'
+                }}
+            >
+                <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center',
+                    p: { xs: 2, sm: 3, md: 4 },
+                    pb: { xs: 1, sm: 2 },
+                    borderBottom: '1px solid rgba(0, 0, 0, 0.12)'
+                }}>
+                    <HistoryIcon sx={{ 
+                        fontSize: { xs: 24, sm: 28, md: 36 }, 
+                        color: '#d32f2f', 
+                        mr: { xs: 1.5, sm: 2 }
+                    }} />
+                    <Typography 
+                        variant="h5" 
+                        fontWeight="bold"
+                        sx={{ 
+                            fontSize: { xs: '1.125rem', sm: '1.25rem', md: '1.5rem' }, 
+                            color: '#333' 
+                        }}
                     >
                         История поиска
                     </Typography>
                 </Box>
 
-                {searchHistory.length > 0 ? (
-                    <>
-                        <Box sx={{ 
-                            overflow: 'auto',
-                            '&::-webkit-scrollbar': {
-                                height: '8px',
-                            },
-                            '&::-webkit-scrollbar-thumb': {
-                                backgroundColor: 'rgba(0,0,0,0.2)',
-                                borderRadius: '4px',
-                            },
-                        }}>
-                            <Table sx={{ 
-                                minWidth: { xs: 300, sm: 500, md: 650 }
+                <Box sx={{ p: { xs: 1.5, sm: 2, md: 3 } }}>
+                    {searchHistory.length > 0 ? (
+                        <>
+                            <Box sx={{ 
+                                overflow: 'auto',
+                                '&::-webkit-scrollbar': {
+                                    height: '8px',
+                                },
+                                '&::-webkit-scrollbar-thumb': {
+                                    backgroundColor: 'rgba(0,0,0,0.2)',
+                                    borderRadius: '4px',
+                                },
                             }}>
-                                <TableHead>
-                                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                                        <TableCell sx={{ 
-                                            fontWeight: 'bold',
-                                            padding: { xs: '8px 6px', md: '16px' },
-                                            color: '#333'
-                                        }}>Дата</TableCell>
-                                        <TableCell sx={{ 
-                                            fontWeight: 'bold',
-                                            padding: { xs: '8px 6px', md: '16px' },
-                                            color: '#333'
-                                        }}>Запрос</TableCell>
-                                        <TableCell sx={{ 
-                                            fontWeight: 'bold',
-                                            padding: { xs: '8px 6px', md: '16px' },
-                                            color: '#333'
-                                        }}>Тип поиска</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {searchHistory
-                                        .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                        .map(history => {
-                                            const searchLink = generateSearchLink(history);
-                                            
-                                            return (
-                                                <TableRow key={history.id} hover>
-                                                    <TableCell sx={{ 
-                                                        padding: { xs: '8px 6px', md: '16px' },
-                                                        whiteSpace: { xs: 'nowrap', md: 'normal' },
-                                                        color: '#555'
-                                                    }}>
-                                                        {formatDate(history.searchDate)}
-                                                    </TableCell>
-                                                    <TableCell sx={{ 
-                                                        padding: { xs: '8px 6px', md: '16px' },
-                                                        maxWidth: { xs: '120px', sm: '200px', md: 'none' },
-                                                        overflow: 'hidden',
-                                                        textOverflow: 'ellipsis'
-                                                    }}>
-                                                        {searchLink ? (
-                                                            <Link 
-                                                                to={searchLink}
-                                                                style={{ 
-                                                                    textDecoration: 'none', 
-                                                                    color: '#d32f2f',
-                                                                    display: 'flex',
-                                                                    alignItems: 'center'
-                                                                }}
-                                                            >
-                                                                <SearchIcon sx={{ mr: 1, fontSize: 18, color: '#d32f2f', flexShrink: 0 }} />
-                                                                <Box 
-                                                                    component="span" 
-                                                                    sx={{ 
-                                                                        '&:hover': { 
-                                                                            textDecoration: 'underline',
-                                                                            fontWeight: 'bold'
-                                                                        },
-                                                                        transition: 'all 0.2s',
-                                                                        borderBottom: '1px dotted #d32f2f',
-                                                                        overflow: 'hidden',
-                                                                        textOverflow: 'ellipsis',
-                                                                        whiteSpace: { xs: 'nowrap', md: 'normal' }
+                                <Table sx={{ 
+                                    minWidth: { xs: 300, sm: 500, md: 650 }
+                                }}>
+                                    <TableHead>
+                                        <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                                            <TableCell sx={{ 
+                                                fontWeight: 'bold',
+                                                padding: { xs: '6px 4px', sm: '8px 6px', md: '16px' },
+                                                color: '#333',
+                                                fontSize: { xs: '0.75rem', sm: '0.875rem', md: '1rem' }
+                                            }}>Дата</TableCell>
+                                            <TableCell sx={{ 
+                                                fontWeight: 'bold',
+                                                padding: { xs: '6px 4px', sm: '8px 6px', md: '16px' },
+                                                color: '#333',
+                                                fontSize: { xs: '0.75rem', sm: '0.875rem', md: '1rem' }
+                                            }}>Запрос</TableCell>
+                                            <TableCell sx={{ 
+                                                fontWeight: 'bold',
+                                                padding: { xs: '6px 4px', sm: '8px 6px', md: '16px' },
+                                                color: '#333',
+                                                fontSize: { xs: '0.75rem', sm: '0.875rem', md: '1rem' }
+                                            }}>Тип поиска</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {searchHistory
+                                            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                            .map(history => {
+                                                const searchLink = generateSearchLink(history);
+                                                
+                                                return (
+                                                    <TableRow key={history.id} hover>
+                                                        <TableCell sx={{ 
+                                                            padding: { xs: '6px 4px', sm: '8px 6px', md: '16px' },
+                                                            whiteSpace: { xs: 'nowrap', md: 'normal' },
+                                                            color: '#555',
+                                                            fontSize: { xs: '0.75rem', sm: '0.875rem', md: '1rem' }
+                                                        }}>
+                                                            {formatDate(history.searchDate)}
+                                                        </TableCell>
+                                                        <TableCell sx={{ 
+                                                            padding: { xs: '6px 4px', sm: '8px 6px', md: '16px' },
+                                                            maxWidth: { xs: '80px', sm: '120px', md: '200px', lg: 'none' },
+                                                            overflow: 'hidden',
+                                                            textOverflow: 'ellipsis',
+                                                            fontSize: { xs: '0.75rem', sm: '0.875rem', md: '1rem' }
+                                                        }}>
+                                                            {searchLink ? (
+                                                                <Link 
+                                                                    to={searchLink}
+                                                                    style={{ 
+                                                                        textDecoration: 'none', 
+                                                                        color: '#d32f2f',
+                                                                        display: 'flex',
+                                                                        alignItems: 'center'
                                                                     }}
                                                                 >
-                                                                    {history.query}
+                                                                    <SearchIcon sx={{ 
+                                                                        mr: { xs: 0.5, sm: 1 }, 
+                                                                        fontSize: { xs: 14, sm: 16, md: 18 }, 
+                                                                        color: '#d32f2f', 
+                                                                        flexShrink: 0 
+                                                                    }} />
+                                                                    <Box 
+                                                                        component="span" 
+                                                                        sx={{ 
+                                                                            '&:hover': { 
+                                                                                textDecoration: 'underline',
+                                                                                fontWeight: 'bold'
+                                                                            },
+                                                                            transition: 'all 0.2s',
+                                                                            borderBottom: '1px dotted #d32f2f',
+                                                                            overflow: 'hidden',
+                                                                            textOverflow: 'ellipsis',
+                                                                            whiteSpace: { xs: 'nowrap', md: 'normal' },
+                                                                            fontSize: { xs: '0.75rem', sm: '0.875rem', md: '1rem' }
+                                                                        }}
+                                                                    >
+                                                                        {history.query}
+                                                                    </Box>
+                                                                </Link>
+                                                            ) : (
+                                                                <Box sx={{ 
+                                                                    display: 'flex', 
+                                                                    alignItems: 'center',
+                                                                    overflow: 'hidden',
+                                                                    textOverflow: 'ellipsis',
+                                                                    whiteSpace: { xs: 'nowrap', md: 'normal' },
+                                                                    color: '#555',
+                                                                    fontSize: { xs: '0.75rem', sm: '0.875rem', md: '1rem' }
+                                                                }}>
+                                                                    <SearchIcon sx={{ 
+                                                                        mr: { xs: 0.5, sm: 1 }, 
+                                                                        fontSize: { xs: 14, sm: 16 }, 
+                                                                        color: '#888', 
+                                                                        flexShrink: 0 
+                                                                    }} />
+                                                                    <span>{history.query}</span>
                                                                 </Box>
-                                                            </Link>
-                                                        ) : (
-                                                            <Box sx={{ 
-                                                                display: 'flex', 
-                                                                alignItems: 'center',
-                                                                overflow: 'hidden',
-                                                                textOverflow: 'ellipsis',
-                                                                whiteSpace: { xs: 'nowrap', md: 'normal' },
-                                                                color: '#555'
-                                                            }}>
-                                                                <SearchIcon sx={{ mr: 1, fontSize: 16, color: '#888', flexShrink: 0 }} />
-                                                                <span>{history.query}</span>
-                                                            </Box>
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell sx={{ 
-                                                        padding: { xs: '8px 6px', md: '16px' }
-                                                    }}>
-                                                        <Chip 
-                                                            label={history.searchType} 
-                                                            size="small" 
-                                                            sx={{
-                                                                height: { xs: '24px', md: '32px' },
-                                                                fontSize: { xs: '0.75rem', md: '0.875rem' },
-                                                                bgcolor: '#d32f2f',
-                                                                color: 'white'
-                                                            }}
-                                                        />
-                                                    </TableCell>
-                                                </TableRow>
-                                            );
-                                        })}
-                                </TableBody>
-                            </Table>
-                        </Box>
-                        <TablePagination
-                            component="div"
-                            count={searchHistory.length}
-                            page={page}
-                            onPageChange={handleChangePage}
-                            rowsPerPage={rowsPerPage}
-                            onRowsPerPageChange={handleChangeRowsPerPage}
-                            rowsPerPageOptions={[5, 10, 25]}
-                            labelRowsPerPage="Записей:"
-                            labelDisplayedRows={({ from, to, count }) => `${from}-${to} из ${count}`}
-                            sx={{
-                                '.MuiTablePagination-toolbar': {
-                                    flexWrap: 'wrap',
-                                    justifyContent: { xs: 'center', sm: 'flex-end' },
-                                    padding: { xs: '8px 0', md: '8px' }
-                                },
-                                '.MuiTablePagination-displayedRows': {
-                                    margin: { xs: '8px 0', md: 0 },
-                                    color: '#555'
-                                },
-                                '.MuiTablePagination-selectLabel': {
-                                    margin: { xs: '8px 0', md: 0 },
-                                    color: '#555'
-                                }
-                            }}
-                        />
-                    </>
-                ) : (
-                    <Alert severity="info" sx={{ 
-                        borderRadius: '8px',
-                        bgcolor: '#e8f4fd',
-                        border: '1px solid #c5e1fb',
-                        color: '#0d5289'
-                    }}>
-                        У пользователя нет истории поиска
-                    </Alert>
-                )}
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell sx={{ 
+                                                            padding: { xs: '6px 4px', sm: '8px 6px', md: '16px' }
+                                                        }}>
+                                                            <Chip 
+                                                                label={history.searchType} 
+                                                                size="small" 
+                                                                sx={{
+                                                                    height: { xs: '20px', sm: '24px', md: '32px' },
+                                                                    fontSize: { xs: '0.65rem', sm: '0.75rem', md: '0.875rem' },
+                                                                    bgcolor: '#d32f2f',
+                                                                    color: 'white'
+                                                                }}
+                                                            />
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
+                                    </TableBody>
+                                </Table>
+                            </Box>
+                            <TablePagination
+                                component="div"
+                                count={searchHistory.length}
+                                page={page}
+                                onPageChange={handleChangePage}
+                                rowsPerPage={rowsPerPage}
+                                onRowsPerPageChange={handleChangeRowsPerPage}
+                                rowsPerPageOptions={[5, 10, 25]}
+                                labelRowsPerPage="Записей:"
+                                labelDisplayedRows={({ from, to, count }) => `${from}-${to} из ${count}`}
+                                sx={{
+                                    '.MuiTablePagination-toolbar': {
+                                        flexWrap: 'wrap',
+                                        justifyContent: { xs: 'center', sm: 'flex-end' },
+                                        padding: { xs: '8px 0', md: '8px' }
+                                    },
+                                    '.MuiTablePagination-displayedRows': {
+                                        margin: { xs: '8px 0', md: 0 },
+                                        color: '#555',
+                                        fontSize: { xs: '0.75rem', sm: '0.875rem' }
+                                    },
+                                    '.MuiTablePagination-selectLabel': {
+                                        margin: { xs: '8px 0', md: 0 },
+                                        color: '#555',
+                                        fontSize: { xs: '0.75rem', sm: '0.875rem' }
+                                    },
+                                    '.MuiTablePagination-select': {
+                                        fontSize: { xs: '0.75rem', sm: '0.875rem' }
+                                    },
+                                    '.MuiTablePagination-actions': {
+                                        marginLeft: { xs: 0, sm: 2 }
+                                    }
+                                }}
+                            />
+                        </>
+                    ) : (
+                        <Alert severity="info" sx={{ 
+                            borderRadius: '8px',
+                            bgcolor: '#e8f4fd',
+                            border: '1px solid #c5e1fb',
+                            color: '#0d5289'
+                        }}>
+                            У пользователя нет истории поиска
+                        </Alert>
+                    )}
+                </Box>
             </Paper>
         </Container>
     );

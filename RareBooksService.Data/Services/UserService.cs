@@ -170,5 +170,89 @@ namespace RareBooksService.Data.Services
                 return new List<ApplicationUser>();
             }
         }
+
+        /// <summary>Возвращает список избранных книг пользователя.</summary>
+        public async Task<IEnumerable<UserFavoriteBook>> GetUserFavoriteBooksAsync(string userId)
+        {
+            try
+            {
+                return await _userContext.UserFavoriteBooks
+                    .Where(fb => fb.UserId == userId)
+                    .OrderByDescending(fb => fb.AddedDate)
+                    .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при получении избранных книг пользователя: {ex.Message}");
+                return new List<UserFavoriteBook>();
+            }
+        }
+
+        /// <summary>Добавляет книгу в избранное.</summary>
+        public async Task<bool> AddBookToFavoritesAsync(string userId, int bookId)
+        {
+            try
+            {
+                // Проверяем, есть ли уже такая книга в избранном
+                var existingFavorite = await _userContext.UserFavoriteBooks
+                    .FirstOrDefaultAsync(fb => fb.UserId == userId && fb.BookId == bookId);
+
+                if (existingFavorite != null)
+                    return false; // Книга уже в избранном
+
+                var favorite = new UserFavoriteBook
+                {
+                    UserId = userId,
+                    BookId = bookId,
+                    AddedDate = DateTime.UtcNow
+                };
+
+                _userContext.UserFavoriteBooks.Add(favorite);
+                await _userContext.SaveChangesAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при добавлении книги в избранное: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>Удаляет книгу из избранного.</summary>
+        public async Task<bool> RemoveBookFromFavoritesAsync(string userId, int bookId)
+        {
+            try
+            {
+                var favorite = await _userContext.UserFavoriteBooks
+                    .FirstOrDefaultAsync(fb => fb.UserId == userId && fb.BookId == bookId);
+
+                if (favorite == null)
+                    return false; // Книга не найдена в избранном
+
+                _userContext.UserFavoriteBooks.Remove(favorite);
+                await _userContext.SaveChangesAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при удалении книги из избранного: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>Проверяет, находится ли книга в избранном.</summary>
+        public async Task<bool> IsBookInFavoritesAsync(string userId, int bookId)
+        {
+            try
+            {
+                return await _userContext.UserFavoriteBooks
+                    .AnyAsync(fb => fb.UserId == userId && fb.BookId == bookId);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при проверке наличия книги в избранном: {ex.Message}");
+                return false;
+            }
+        }
     }
 }
