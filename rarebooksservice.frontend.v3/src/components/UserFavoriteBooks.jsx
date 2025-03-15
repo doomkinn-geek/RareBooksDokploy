@@ -152,7 +152,12 @@ const UserFavoriteBooks = ({ userId, isCurrentUser, height }) => {
     };
 
     return (
-        <Box sx={{ height: height || 'auto', display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ 
+            height: height || 'auto', 
+            display: 'flex', 
+            flexDirection: 'column',
+            px: { xs: 1, sm: 2 } // Добавляем небольшие отступы по горизонтали для мобильных
+        }}>
             {loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1 }}>
                     <CircularProgress sx={{ color: '#d32f2f' }} />
@@ -187,12 +192,28 @@ const UserFavoriteBooks = ({ userId, isCurrentUser, height }) => {
                                 overflowY: 'auto',
                                 // Улучшенные настройки для мобильных устройств
                                 maxHeight: {
-                                    xs: height ? `calc(${height} - 40px)` : '300px', 
-                                    sm: height ? `calc(${height} - 50px)` : '400px',
-                                    md: height ? `calc(${height} - 60px)` : 'calc(100vh - 300px)'
-                                }
+                                    xs: height ? `calc(${height} - 50px)` : '300px', 
+                                    sm: height ? `calc(${height} - 60px)` : '400px',
+                                    md: height ? `calc(${height} - 70px)` : 'calc(100vh - 300px)'
+                                },
+                                // Добавляем правильную прокрутку
+                                WebkitOverflowScrolling: 'touch', // для плавной прокрутки на iOS
+                                scrollbarWidth: 'thin',
+                                '&::-webkit-scrollbar': {
+                                    width: '6px',
+                                },
+                                '&::-webkit-scrollbar-thumb': {
+                                    backgroundColor: 'rgba(0,0,0,0.2)',
+                                    borderRadius: '3px',
+                                },
                             }}>
-                                <List sx={{ width: '100%', bgcolor: 'background.paper', p: 0 }}>
+                                <List sx={{ 
+                                    width: '100%', 
+                                    bgcolor: 'background.paper', 
+                                    p: 0,
+                                    borderRadius: '8px', // Скругляем углы списка
+                                    border: '1px solid rgba(0,0,0,0.08)' // Добавляем тонкую рамку
+                                }}>
                                     {books.map((book, index) => (
                                         <React.Fragment key={book.id}>
                                             {index > 0 && <Divider component="li" />}
@@ -206,8 +227,8 @@ const UserFavoriteBooks = ({ userId, isCurrentUser, height }) => {
                                                         bgcolor: 'rgba(211, 47, 47, 0.05)'
                                                     },
                                                     // Уменьшаем отступы для мобильных устройств
-                                                    paddingRight: { xs: '48px', sm: '56px' },
-                                                    py: { xs: 2, md: 2.5 }
+                                                    paddingRight: { xs: '42px', sm: '56px' },
+                                                    py: { xs: 1.5, sm: 2, md: 2.5 }
                                                 }}
                                             >
                                                 {bookImages[book.id] ? (
@@ -215,12 +236,17 @@ const UserFavoriteBooks = ({ userId, isCurrentUser, height }) => {
                                                     <Box
                                                         sx={{
                                                             position: 'relative',
-                                                            width: { xs: 72, sm: 90, md: 100 },
-                                                            height: { xs: 72, sm: 90, md: 100 }, 
-                                                            mr: { xs: 1.5, sm: 2, md: 3 },
+                                                            width: { xs: 80, sm: 90, md: 110 }, // Увеличиваем размер для лучшей видимости
+                                                            height: { xs: 100, sm: 115, md: 140 }, // Делаем высоту больше для лучшего отображения обложек
+                                                            mr: { xs: 1, sm: 2, md: 3 }, // Уменьшаем отступ справа на мобильных
                                                             overflow: 'visible',
+                                                            flexShrink: 0, // Предотвращаем сжатие изображения
                                                             '&:hover .book-image': {
-                                                                transform: 'scale(2)',
+                                                                transform: {
+                                                                    xs: 'scale(1.5)', // Меньший масштаб на мобильных для предотвращения выхода за границы экрана
+                                                                    sm: 'scale(1.8)',
+                                                                    md: 'scale(2)'
+                                                                },
                                                                 zIndex: 10,
                                                                 boxShadow: '0 6px 12px rgba(0,0,0,0.15)'
                                                             }
@@ -238,7 +264,8 @@ const UserFavoriteBooks = ({ userId, isCurrentUser, height }) => {
                                                                 borderRadius: '8px',
                                                                 boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                                                                 transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-                                                                transformOrigin: 'left center'
+                                                                transformOrigin: 'left center',
+                                                                objectFit: 'cover' // Улучшаем отображение изображения
                                                             }}
                                                         />
                                                     </Box>
@@ -247,12 +274,17 @@ const UserFavoriteBooks = ({ userId, isCurrentUser, height }) => {
                                                     <Box
                                                         sx={{
                                                             position: 'relative',
-                                                            width: { xs: 72, sm: 90, md: 100 },
-                                                            height: { xs: 72, sm: 90, md: 100 }, 
-                                                            mr: { xs: 1.5, sm: 2, md: 3 },
+                                                            width: { xs: 80, sm: 90, md: 110 }, // Увеличиваем размер для лучшей видимости
+                                                            height: { xs: 100, sm: 115, md: 140 }, // Делаем высоту больше для лучшего отображения обложек
+                                                            mr: { xs: 1, sm: 2, md: 3 }, // Уменьшаем отступ справа на мобильных
                                                             overflow: 'visible',
+                                                            flexShrink: 0, // Предотвращаем сжатие изображения
                                                             '&:hover .book-image': {
-                                                                transform: 'scale(2)',
+                                                                transform: {
+                                                                    xs: 'scale(1.5)', // Меньший масштаб на мобильных
+                                                                    sm: 'scale(1.8)',
+                                                                    md: 'scale(2)'
+                                                                },
                                                                 zIndex: 10,
                                                                 boxShadow: '0 6px 12px rgba(0,0,0,0.15)'
                                                             }
@@ -271,7 +303,7 @@ const UserFavoriteBooks = ({ userId, isCurrentUser, height }) => {
                                                                 transformOrigin: 'left center'
                                                             }}
                                                         >
-                                                            <BookIcon sx={{ color: '#d32f2f', fontSize: { xs: 32, sm: 40 } }} />
+                                                            <BookIcon sx={{ color: '#d32f2f', fontSize: { xs: 36, sm: 40, md: 48 } }} />
                                                         </Avatar>
                                                     </Box>
                                                 )}
@@ -280,11 +312,19 @@ const UserFavoriteBooks = ({ userId, isCurrentUser, height }) => {
                                                         <Typography 
                                                             variant="subtitle1" 
                                                             sx={{ 
-                                                                fontWeight: 'medium',
+                                                                fontWeight: 'bold',
                                                                 color: '#333',
                                                                 '&:hover': { color: '#d32f2f' },
-                                                                // Уменьшаем размер шрифта на мобильных
-                                                                fontSize: { xs: '0.875rem', sm: '1rem' }
+                                                                // Улучшаем размер шрифта на мобильных
+                                                                fontSize: { xs: '0.9rem', sm: '1rem', md: '1.1rem' },
+                                                                lineHeight: 1.3,
+                                                                mb: 0.5,
+                                                                // Ограничиваем количество строк (для длинных названий)
+                                                                display: '-webkit-box',
+                                                                WebkitLineClamp: 2,
+                                                                WebkitBoxOrient: 'vertical',
+                                                                overflow: 'hidden',
+                                                                textOverflow: 'ellipsis'
                                                             }}
                                                         >
                                                             {book.title || 'Без названия'}
@@ -294,15 +334,17 @@ const UserFavoriteBooks = ({ userId, isCurrentUser, height }) => {
                                                         <Box sx={{ 
                                                             // Улучшаем отображение вторичной информации
                                                             display: 'flex', 
-                                                            flexDirection: { xs: 'column', sm: 'row' },
-                                                            alignItems: { xs: 'flex-start', sm: 'center' },
-                                                            gap: { xs: 0.5, sm: 0 }
+                                                            flexDirection: 'column',
+                                                            gap: 0.5
                                                         }}>
                                                             <Typography 
                                                                 variant="body2" 
                                                                 color="text.secondary" 
                                                                 component="span"
-                                                                sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+                                                                sx={{ 
+                                                                    fontSize: { xs: '0.75rem', sm: '0.8rem' },
+                                                                    lineHeight: 1.2
+                                                                }}
                                                             >
                                                                 Добавлено: {formatDate(book.addedDate)}
                                                             </Typography>
@@ -311,10 +353,9 @@ const UserFavoriteBooks = ({ userId, isCurrentUser, height }) => {
                                                                     variant="body2" 
                                                                     component="span" 
                                                                     sx={{ 
-                                                                        ml: { xs: 0, sm: 2 }, 
                                                                         color: '#d32f2f', 
-                                                                        fontWeight: 'medium',
-                                                                        fontSize: { xs: '0.75rem', sm: '0.875rem' }
+                                                                        fontWeight: 'bold',
+                                                                        fontSize: { xs: '0.85rem', sm: '0.9rem' }
                                                                     }}
                                                                 >
                                                                     {formatPrice(book.finalPrice || book.price)}
