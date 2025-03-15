@@ -3,86 +3,230 @@
 <head>
     <meta charset="utf-8">
     <title>Initial Setup</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h2 {
+            color: #2c3e50;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        h3 {
+            color: #3498db;
+            margin-top: 20px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+        .section {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        input[type="text"], input[type="email"], input[type="password"] {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 20px;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .field-description {
+            font-size: 12px;
+            color: #7f8c8d;
+            margin-top: 3px;
+        }
+        #setupResult {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+    </style>
 </head>
 <body>
     <h2>Первичная настройка RareBooksService</h2>
     <form id="setupForm">
-        <div>
-            <label>Admin Email:</label>
-            <input type="email" name="adminEmail" required />
-        </div>
-        <div>
-            <label>Admin Password:</label>
-            <input type="password" name="adminPassword" required />
+        <div class="section">
+            <h3>Доступ администратора</h3>
+            <div>
+                <label>Admin Email:</label>
+                <input type="email" name="adminEmail" required />
+                <div class="field-description">Email администратора для доступа к системе</div>
+            </div>
+            <div>
+                <label>Admin Password:</label>
+                <input type="password" name="adminPassword" required />
+                <div class="field-description">Надежный пароль для доступа администратора</div>
+            </div>
         </div>
 
         <!-- Две строки подключения -->
-        <h3>Подключения к БД</h3>
-        <div>
-            <label>Books DB Connection String:</label>
-            <input type="text" name="booksConnectionString" required />
-        </div>
-        <div>
-            <label>Users DB Connection String:</label>
-            <input type="text" name="usersConnectionString" required />
+        <div class="section">
+            <h3>Подключения к БД</h3>
+            <div>
+                <label>Books DB Connection String:</label>
+                <input type="text" name="booksConnectionString" required />
+                <div class="field-description">Строка подключения к базе данных книг</div>
+            </div>
+            <div>
+                <label>Users DB Connection String:</label>
+                <input type="text" name="usersConnectionString" required />
+                <div class="field-description">Строка подключения к базе данных пользователей</div>
+            </div>
         </div>
 
         <!-- Поля для JWT -->
-        <h3>JWT Settings</h3>
-        <div>
-            <label>Jwt Key:</label>
-            <input type="text" name="jwtKey" required />
-        </div>
-        <div>
-            <label>Jwt Issuer:</label>
-            <input type="text" name="jwtIssuer" required />
-        </div>
-        <div>
-            <label>Jwt Audience:</label>
-            <input type="text" name="jwtAudience" required />
+        <div class="section">
+            <h3>JWT Settings</h3>
+            <div>
+                <label>Jwt Key:</label>
+                <input type="text" name="jwtKey" required />
+                <div class="field-description">Ключ для подписи JWT токенов</div>
+            </div>
+            <div>
+                <label>Jwt Issuer:</label>
+                <input type="text" name="jwtIssuer" required />
+                <div class="field-description">Издатель JWT токенов</div>
+            </div>
+            <div>
+                <label>Jwt Audience:</label>
+                <input type="text" name="jwtAudience" required />
+                <div class="field-description">Аудитория для JWT токенов</div>
+            </div>
         </div>
 
         <!-- YandexDisk (пример) -->
-        <h3>YandexDisk</h3>
-        <div>
-            <label>Token:</label>
-            <input type="text" name="yandexDiskToken" />
+        <div class="section">
+            <h3>YandexDisk</h3>
+            <div>
+                <label>Token:</label>
+                <input type="text" name="yandexDiskToken" />
+                <div class="field-description">Токен для доступа к Yandex Disk API</div>
+            </div>
         </div>
 
         <!-- TypeOfAccessImages -->
-        <h3>TypeOfAccessImages</h3>
-        <div>
-            <label>UseLocalFiles:</label>
-            <input type="text" name="typeOfAccessImagesUseLocalFiles" placeholder="true/false" />
-        </div>
-        <div>
-            <label>LocalPathOfImages:</label>
-            <input type="text" name="typeOfAccessImagesLocalPathOfImages" />
+        <div class="section">
+            <h3>TypeOfAccessImages</h3>
+            <div>
+                <label>UseLocalFiles:</label>
+                <input type="text" name="typeOfAccessImagesUseLocalFiles" placeholder="true/false" />
+                <div class="field-description">Использовать локальные файлы для изображений</div>
+            </div>
+            <div>
+                <label>LocalPathOfImages:</label>
+                <input type="text" name="typeOfAccessImagesLocalPathOfImages" />
+                <div class="field-description">Путь к локальным файлам изображений</div>
+            </div>
         </div>
 
         <!-- YandexCloud -->
-        <h3>YandexCloud</h3>
-        <div>
-            <label>AccessKey:</label>
-            <input type="text" name="yandexCloudAccessKey" />
-        </div>
-        <div>
-            <label>SecretKey:</label>
-            <input type="text" name="yandexCloudSecretKey" />
-        </div>
-        <div>
-            <label>ServiceUrl:</label>
-            <input type="text" name="yandexCloudServiceUrl" />
-        </div>
-        <div>
-            <label>BucketName:</label>
-            <input type="text" name="yandexCloudBucketName" />
+        <div class="section">
+            <h3>YandexCloud</h3>
+            <div>
+                <label>AccessKey:</label>
+                <input type="text" name="yandexCloudAccessKey" />
+                <div class="field-description">Ключ доступа к Yandex Cloud</div>
+            </div>
+            <div>
+                <label>SecretKey:</label>
+                <input type="text" name="yandexCloudSecretKey" />
+                <div class="field-description">Секретный ключ для Yandex Cloud</div>
+            </div>
+            <div>
+                <label>ServiceUrl:</label>
+                <input type="text" name="yandexCloudServiceUrl" />
+                <div class="field-description">URL сервиса Yandex Cloud</div>
+            </div>
+            <div>
+                <label>BucketName:</label>
+                <input type="text" name="yandexCloudBucketName" />
+                <div class="field-description">Имя бакета в Yandex Cloud Storage</div>
+            </div>
         </div>
 
-        <button type="submit">Инициализировать</button>
+        <!-- Добавляем раздел для YandexKassa -->
+        <div class="section">
+            <h3>YandexKassa</h3>
+            <div>
+                <label>ShopId:</label>
+                <input type="text" name="yandexKassaShopId" placeholder="1038939" />
+                <div class="field-description">Идентификатор магазина в Яндекс.Кассе</div>
+            </div>
+            <div>
+                <label>SecretKey:</label>
+                <input type="text" name="yandexKassaSecretKey" placeholder="test_aPscchHGDmW36S6BrCPjBLpT7UWTvX50eWzMY7kwE3g" />
+                <div class="field-description">Секретный ключ для API Яндекс.Кассы</div>
+            </div>
+            <div>
+                <label>ReturnUrl:</label>
+                <input type="text" name="yandexKassaReturnUrl" placeholder="http://localhost:5173/subscription-success" />
+                <div class="field-description">URL для возврата пользователя после оплаты</div>
+            </div>
+            <div>
+                <label>WebhookUrl:</label>
+                <input type="text" name="yandexKassaWebhookUrl" placeholder="https://rare-books.ru/api/subscription/webhook" />
+                <div class="field-description">URL для получения уведомлений от Яндекс.Кассы о статусе платежа</div>
+            </div>
+        </div>
+
+        <!-- Добавляем раздел для CacheSettings -->
+        <div class="section">
+            <h3>Настройки кэширования</h3>
+            <div>
+                <label>Локальный путь кэша:</label>
+                <input type="text" name="cacheSettingsLocalCachePath" placeholder="image_cache" />
+                <div class="field-description">Путь к локальной папке для хранения кэша изображений</div>
+            </div>
+            <div>
+                <label>Количество дней хранения:</label>
+                <input type="text" name="cacheSettingsDaysToKeep" placeholder="365" />
+                <div class="field-description">Срок хранения кэшированных файлов в днях</div>
+            </div>
+            <div>
+                <label>Максимальный размер кэша (МБ):</label>
+                <input type="text" name="cacheSettingsMaxCacheSizeMB" placeholder="6000" />
+                <div class="field-description">Максимальный размер кэша в мегабайтах</div>
+            </div>
+        </div>
+
+        <button type="submit">Инициализировать систему</button>
     </form>
 
-    <div id="setupResult" style="margin-top:10px; color:red"></div>
+    <div id="setupResult"></div>
 
     <script>
         const form = document.getElementById('setupForm');
@@ -109,10 +253,24 @@
                 yandexCloudAccessKey: formData.get('yandexCloudAccessKey'),
                 yandexCloudSecretKey: formData.get('yandexCloudSecretKey'),
                 yandexCloudServiceUrl: formData.get('yandexCloudServiceUrl'),
-                yandexCloudBucketName: formData.get('yandexCloudBucketName')
+                yandexCloudBucketName: formData.get('yandexCloudBucketName'),
+                
+                // Добавляем данные YandexKassa
+                yandexKassaShopId: formData.get('yandexKassaShopId'),
+                yandexKassaSecretKey: formData.get('yandexKassaSecretKey'),
+                yandexKassaReturnUrl: formData.get('yandexKassaReturnUrl'),
+                yandexKassaWebhookUrl: formData.get('yandexKassaWebhookUrl'),
+                
+                // Добавляем данные CacheSettings
+                cacheSettingsLocalCachePath: formData.get('cacheSettingsLocalCachePath'),
+                cacheSettingsDaysToKeep: formData.get('cacheSettingsDaysToKeep'),
+                cacheSettingsMaxCacheSizeMB: formData.get('cacheSettingsMaxCacheSizeMB')
             };
 
             try {
+                setupResultDiv.textContent = 'Выполняется настройка...';
+                setupResultDiv.className = '';
+                
                 const response = await fetch('/api/setup/initialize', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -131,20 +289,22 @@
                     } catch {
                         setupResultDiv.innerText = 'Ошибка 403: System probably configured.';
                     }
+                    setupResultDiv.className = 'error';
                     return;
                 }
 
                 const data = await response.json();
 
                 if (!response.ok || data.success === false) {
-                    setupResultDiv.style.color = 'red';
+                    setupResultDiv.className = 'error';
                     setupResultDiv.innerText = data.message || 'Ошибка при настройке';
                 } else {
                     // Успех
-                    setupResultDiv.style.color = 'green';
+                    setupResultDiv.className = 'success';
                     setupResultDiv.innerText = data.message;
                 }
             } catch (err) {
+                setupResultDiv.className = 'error';
                 setupResultDiv.innerText = 'Fetch error: ' + err.message;
             }
         });

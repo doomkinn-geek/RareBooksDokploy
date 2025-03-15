@@ -58,6 +58,17 @@ namespace RareBooksService.WebApi.Controllers
             public string YandexCloudSecretKey { get; set; }
             public string YandexCloudServiceUrl { get; set; }
             public string YandexCloudBucketName { get; set; }
+            
+            // YandexKassa
+            public string YandexKassaShopId { get; set; }
+            public string YandexKassaSecretKey { get; set; }
+            public string YandexKassaReturnUrl { get; set; }
+            public string YandexKassaWebhookUrl { get; set; }
+            
+            // CacheSettings
+            public string CacheSettingsLocalCachePath { get; set; }
+            public string CacheSettingsDaysToKeep { get; set; }
+            public string CacheSettingsMaxCacheSizeMB { get; set; }
         }
 
         /// <summary>Отдаёт страницу инициализации.</summary>
@@ -156,7 +167,9 @@ namespace RareBooksService.WebApi.Controllers
                       ""Jwt"": {}, 
                       ""YandexCloud"": {}, 
                       ""TypeOfAccessImages"": {}, 
-                      ""YandexDisk"": {}
+                      ""YandexDisk"": {},
+                      ""YandexKassa"": {},
+                      ""CacheSettings"": {}
                     }";
                 }
 
@@ -227,7 +240,36 @@ namespace RareBooksService.WebApi.Controllers
                 ycDict["BucketName"] = dto.YandexCloudBucketName ?? "";
                 dict["YandexCloud"] = ycDict;
 
-                // 7) Сериализуем обратно
+                // 7) YandexKassa
+                if (!dict.ContainsKey("YandexKassa"))
+                    dict["YandexKassa"] = new Dictionary<string, string>();
+
+                var ykObj = dict["YandexKassa"];
+                var ykDict = ykObj is JsonElement yke
+                    ? JsonSerializer.Deserialize<Dictionary<string, string>>(yke.GetRawText()) ?? new Dictionary<string, string>()
+                    : ykObj as Dictionary<string, string> ?? new Dictionary<string, string>();
+
+                ykDict["ShopId"] = dto.YandexKassaShopId ?? "";
+                ykDict["SecretKey"] = dto.YandexKassaSecretKey ?? "";
+                ykDict["ReturnUrl"] = dto.YandexKassaReturnUrl ?? "";
+                ykDict["WebhookUrl"] = dto.YandexKassaWebhookUrl ?? "";
+                dict["YandexKassa"] = ykDict;
+
+                // 8) CacheSettings
+                if (!dict.ContainsKey("CacheSettings"))
+                    dict["CacheSettings"] = new Dictionary<string, string>();
+
+                var csObj = dict["CacheSettings"];
+                var csDict = csObj is JsonElement cse
+                    ? JsonSerializer.Deserialize<Dictionary<string, string>>(cse.GetRawText()) ?? new Dictionary<string, string>()
+                    : csObj as Dictionary<string, string> ?? new Dictionary<string, string>();
+
+                csDict["LocalCachePath"] = dto.CacheSettingsLocalCachePath ?? "image_cache";
+                csDict["DaysToKeep"] = dto.CacheSettingsDaysToKeep ?? "365";
+                csDict["MaxCacheSizeMB"] = dto.CacheSettingsMaxCacheSizeMB ?? "6000";
+                dict["CacheSettings"] = csDict;
+
+                // 9) Сериализуем обратно
                 var newJson = JsonSerializer.Serialize(dict, new JsonSerializerOptions { WriteIndented = true });
                 await System.IO.File.WriteAllTextAsync(appSettingsPath, newJson);
 
