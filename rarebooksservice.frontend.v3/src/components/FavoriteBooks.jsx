@@ -14,9 +14,10 @@ import {
     ListItemText,
     ListItemSecondaryAction,
     Paper,
-    Divider
+    Divider,
+    Avatar
 } from '@mui/material';
-import { getFavoriteBooks, removeBookFromFavorites } from '../api';
+import { getFavoriteBooks, removeBookFromFavorites, getBookImages, getBookImageFile } from '../api';
 import DeleteIcon from '@mui/icons-material/Delete';
 import Cookies from 'js-cookie';
 import BookIcon from '@mui/icons-material/Book';
@@ -30,6 +31,7 @@ const FavoriteBooks = () => {
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [removingIds, setRemovingIds] = useState([]);
+    const [bookImages, setBookImages] = useState({});
 
     useEffect(() => {
         const fetchFavoriteBooks = async () => {
@@ -43,7 +45,9 @@ const FavoriteBooks = () => {
 
                 setLoading(true);
                 const response = await getFavoriteBooks(page, 15);
-                setBooks(response.data.items || []);
+                const fetchedBooks = response.data.items || [];
+                console.log('Полученные данные о книгах:', fetchedBooks);
+                setBooks(fetchedBooks);
                 setTotalPages(response.data.totalPages || 1);
                 setError(null);
             } catch (error) {
@@ -56,6 +60,51 @@ const FavoriteBooks = () => {
 
         fetchFavoriteBooks();
     }, [page, navigate]);
+
+    // Загрузка изображений книг
+    useEffect(() => {
+        const loadBookImages = async () => {
+            for (const book of books) {
+                if (!book || !book.id) continue;
+                
+                try {
+                    // Получаем список изображений для книги
+                    const imagesResponse = await getBookImages(book.id);
+                    const imageNames = imagesResponse?.data?.images || [];
+                    
+                    // Если есть хотя бы одно изображение
+                    if (imageNames.length > 0) {
+                        const firstImageName = imageNames[0];
+                        
+                        // Загружаем первое изображение
+                        const imageResponse = await getBookImageFile(book.id, firstImageName);
+                        const imageUrl = URL.createObjectURL(imageResponse.data);
+                        
+                        // Сохраняем URL изображения в состоянии
+                        setBookImages(prev => ({
+                            ...prev,
+                            [book.id]: imageUrl
+                        }));
+                    }
+                } catch (error) {
+                    console.error(`Ошибка при загрузке изображения для книги ${book.id}:`, error);
+                }
+            }
+        };
+
+        if (books.length > 0) {
+            loadBookImages();
+        }
+
+        // Очистка URL объектов при размонтировании компонента
+        return () => {
+            Object.values(bookImages).forEach(url => {
+                if (url && typeof url === 'string' && url.startsWith('blob:')) {
+                    URL.revokeObjectURL(url);
+                }
+            });
+        };
+    }, [books]);
 
     const handlePageChange = (event, value) => {
         setPage(value);
@@ -162,10 +211,75 @@ const FavoriteBooks = () => {
                                                     '&:hover': {
                                                         bgcolor: 'rgba(211, 47, 47, 0.05)'
                                                     },
-                                                    paddingRight: '56px' // Пространство для кнопки удаления
+                                                    paddingRight: '56px', // Пространство для кнопки удаления
+                                                    paddingY: { xs: 2, md: 2.5 } // Увеличиваем высоту элемента для большей картинки
                                                 }}
                                             >
-                                                <BookIcon sx={{ color: '#d32f2f', mr: 2, fontSize: 20 }} />
+                                                {bookImages[book.id] ? (
+                                                    // Если есть изображение - отображаем его
+                                                    <Box
+                                                        sx={{
+                                                            position: 'relative',
+                                                            width: { xs: 72, sm: 90, md: 100 },
+                                                            height: { xs: 72, sm: 90, md: 100 }, 
+                                                            mr: { xs: 2, sm: 3 },
+                                                            overflow: 'visible',
+                                                            '&:hover .book-image': {
+                                                                transform: 'scale(2)',
+                                                                zIndex: 10,
+                                                                boxShadow: '0 6px 12px rgba(0,0,0,0.15)'
+                                                            }
+                                                        }}
+                                                    >
+                                                        <Avatar 
+                                                            className="book-image"
+                                                            src={bookImages[book.id]} 
+                                                            alt={book.title || 'Обложка книги'}
+                                                            variant="rounded"
+                                                            sx={{ 
+                                                                width: '100%', 
+                                                                height: '100%', 
+                                                                border: '1px solid #eee',
+                                                                borderRadius: '8px',
+                                                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                                                transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+                                                                transformOrigin: 'left center'
+                                                            }}
+                                                        />
+                                                    </Box>
+                                                ) : (
+                                                    // Если нет изображения - отображаем иконку книги
+                                                    <Box
+                                                        sx={{
+                                                            position: 'relative',
+                                                            width: { xs: 72, sm: 90, md: 100 },
+                                                            height: { xs: 72, sm: 90, md: 100 }, 
+                                                            mr: { xs: 2, sm: 3 },
+                                                            overflow: 'visible',
+                                                            '&:hover .book-image': {
+                                                                transform: 'scale(2)',
+                                                                zIndex: 10,
+                                                                boxShadow: '0 6px 12px rgba(0,0,0,0.15)'
+                                                            }
+                                                        }}
+                                                    >
+                                                        <Avatar
+                                                            className="book-image"
+                                                            variant="rounded"
+                                                            sx={{ 
+                                                                width: '100%', 
+                                                                height: '100%', 
+                                                                bgcolor: '#f5f5f5',
+                                                                borderRadius: '8px',
+                                                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                                                transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+                                                                transformOrigin: 'left center'
+                                                            }}
+                                                        >
+                                                            <BookIcon sx={{ color: '#d32f2f', fontSize: { xs: 32, sm: 40 } }} />
+                                                        </Avatar>
+                                                    </Box>
+                                                )}
                                                 <ListItemText 
                                                     primary={
                                                         <Typography 
@@ -173,15 +287,26 @@ const FavoriteBooks = () => {
                                                             sx={{ 
                                                                 fontWeight: 'medium',
                                                                 color: '#333',
-                                                                '&:hover': { color: '#d32f2f' }
+                                                                '&:hover': { color: '#d32f2f' },
+                                                                fontSize: { xs: '0.9rem', sm: '1rem' }
                                                             }}
                                                         >
                                                             {book.title || 'Без названия'}
                                                         </Typography>
                                                     }
                                                     secondary={
-                                                        <Box>
-                                                            <Typography variant="body2" color="text.secondary" component="span">
+                                                        <Box sx={{ 
+                                                            display: 'flex', 
+                                                            flexDirection: { xs: 'column', sm: 'row' },
+                                                            alignItems: { xs: 'flex-start', sm: 'center' },
+                                                            gap: { xs: 0.5, sm: 0 }
+                                                        }}>
+                                                            <Typography 
+                                                                variant="body2" 
+                                                                color="text.secondary" 
+                                                                component="span"
+                                                                sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+                                                            >
                                                                 Добавлено: {formatDate(book.addedDate)}
                                                             </Typography>
                                                             {book.finalPrice && (
@@ -189,9 +314,10 @@ const FavoriteBooks = () => {
                                                                     variant="body2" 
                                                                     component="span" 
                                                                     sx={{ 
-                                                                        ml: 2, 
+                                                                        ml: { xs: 0, sm: 2 }, 
                                                                         color: '#d32f2f', 
-                                                                        fontWeight: 'medium' 
+                                                                        fontWeight: 'medium',
+                                                                        fontSize: { xs: '0.75rem', sm: '0.875rem' }
                                                                     }}
                                                                 >
                                                                     {formatPrice(book.finalPrice || book.price)}

@@ -12,9 +12,10 @@ import {
     ListItem,
     ListItemText,
     ListItemSecondaryAction,
-    Divider
+    Divider,
+    Avatar
 } from '@mui/material';
-import { getFavoriteBooks, removeBookFromFavorites } from '../api';
+import { getFavoriteBooks, removeBookFromFavorites, getBookImages, getBookImageFile } from '../api';
 import DeleteIcon from '@mui/icons-material/Delete';
 import BookIcon from '@mui/icons-material/Book';
 
@@ -26,6 +27,7 @@ const UserFavoriteBooks = ({ userId, isCurrentUser, height }) => {
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [removingIds, setRemovingIds] = useState([]);
+    const [bookImages, setBookImages] = useState({});
 
     useEffect(() => {
         const fetchFavoriteBooks = async () => {
@@ -47,6 +49,51 @@ const UserFavoriteBooks = ({ userId, isCurrentUser, height }) => {
             fetchFavoriteBooks();
         }
     }, [page, userId]);
+
+    // Загрузка изображений книг
+    useEffect(() => {
+        const loadBookImages = async () => {
+            for (const book of books) {
+                if (!book || !book.id) continue;
+                
+                try {
+                    // Получаем список изображений для книги
+                    const imagesResponse = await getBookImages(book.id);
+                    const imageNames = imagesResponse?.data?.images || [];
+                    
+                    // Если есть хотя бы одно изображение
+                    if (imageNames.length > 0) {
+                        const firstImageName = imageNames[0];
+                        
+                        // Загружаем первое изображение
+                        const imageResponse = await getBookImageFile(book.id, firstImageName);
+                        const imageUrl = URL.createObjectURL(imageResponse.data);
+                        
+                        // Сохраняем URL изображения в состоянии
+                        setBookImages(prev => ({
+                            ...prev,
+                            [book.id]: imageUrl
+                        }));
+                    }
+                } catch (error) {
+                    console.error(`Ошибка при загрузке изображения для книги ${book.id}:`, error);
+                }
+            }
+        };
+
+        if (books.length > 0) {
+            loadBookImages();
+        }
+
+        // Очистка URL объектов при размонтировании компонента
+        return () => {
+            Object.values(bookImages).forEach(url => {
+                if (url && typeof url === 'string' && url.startsWith('blob:')) {
+                    URL.revokeObjectURL(url);
+                }
+            });
+        };
+    }, [books]);
 
     const handlePageChange = (event, value) => {
         setPage(value);
@@ -160,14 +207,74 @@ const UserFavoriteBooks = ({ userId, isCurrentUser, height }) => {
                                                     },
                                                     // Уменьшаем отступы для мобильных устройств
                                                     paddingRight: { xs: '48px', sm: '56px' },
-                                                    py: { xs: 1.5, md: 2 }
+                                                    py: { xs: 2, md: 2.5 }
                                                 }}
                                             >
-                                                <BookIcon sx={{ 
-                                                    color: '#d32f2f', 
-                                                    mr: { xs: 1, sm: 2 }, 
-                                                    fontSize: { xs: 18, sm: 20 } 
-                                                }} />
+                                                {bookImages[book.id] ? (
+                                                    // Если есть изображение - отображаем его
+                                                    <Box
+                                                        sx={{
+                                                            position: 'relative',
+                                                            width: { xs: 72, sm: 90, md: 100 },
+                                                            height: { xs: 72, sm: 90, md: 100 }, 
+                                                            mr: { xs: 1.5, sm: 2, md: 3 },
+                                                            overflow: 'visible',
+                                                            '&:hover .book-image': {
+                                                                transform: 'scale(2)',
+                                                                zIndex: 10,
+                                                                boxShadow: '0 6px 12px rgba(0,0,0,0.15)'
+                                                            }
+                                                        }}
+                                                    >
+                                                        <Avatar 
+                                                            className="book-image"
+                                                            src={bookImages[book.id]} 
+                                                            alt={book.title || 'Обложка книги'}
+                                                            variant="rounded"
+                                                            sx={{ 
+                                                                width: '100%', 
+                                                                height: '100%', 
+                                                                border: '1px solid #eee',
+                                                                borderRadius: '8px',
+                                                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                                                transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+                                                                transformOrigin: 'left center'
+                                                            }}
+                                                        />
+                                                    </Box>
+                                                ) : (
+                                                    // Если нет изображения - отображаем иконку книги
+                                                    <Box
+                                                        sx={{
+                                                            position: 'relative',
+                                                            width: { xs: 72, sm: 90, md: 100 },
+                                                            height: { xs: 72, sm: 90, md: 100 }, 
+                                                            mr: { xs: 1.5, sm: 2, md: 3 },
+                                                            overflow: 'visible',
+                                                            '&:hover .book-image': {
+                                                                transform: 'scale(2)',
+                                                                zIndex: 10,
+                                                                boxShadow: '0 6px 12px rgba(0,0,0,0.15)'
+                                                            }
+                                                        }}
+                                                    >
+                                                        <Avatar
+                                                            className="book-image"
+                                                            variant="rounded"
+                                                            sx={{ 
+                                                                width: '100%', 
+                                                                height: '100%', 
+                                                                bgcolor: '#f5f5f5',
+                                                                borderRadius: '8px',
+                                                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                                                transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+                                                                transformOrigin: 'left center'
+                                                            }}
+                                                        >
+                                                            <BookIcon sx={{ color: '#d32f2f', fontSize: { xs: 32, sm: 40 } }} />
+                                                        </Avatar>
+                                                    </Box>
+                                                )}
                                                 <ListItemText 
                                                     primary={
                                                         <Typography 
