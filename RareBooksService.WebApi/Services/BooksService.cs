@@ -1025,8 +1025,9 @@ namespace RareBooksService.WebApi.Services
                 // Получаем список избранных книг пользователя
                 var favoriteBooks = await _userService.GetUserFavoriteBooksAsync(userId);
                 
-                // Получаем только ID книг
+                // Получаем только ID книг и создаем словарь для хранения дат добавления
                 var bookIds = favoriteBooks.Select(fb => fb.BookId).ToList();
+                var addedDateDict = favoriteBooks.ToDictionary(fb => fb.BookId, fb => fb.AddedDate);
                 
                 // Определяем, сколько всего книг и сколько страниц
                 int totalCount = bookIds.Count;
@@ -1045,6 +1046,8 @@ namespace RareBooksService.WebApi.Services
                     var book = await _booksRepository.GetBookByIdAsync(id);
                     if (book != null)
                     {
+                        // Добавляем информацию о дате добавления в избранное из нашего словаря
+                        book.AddedDate = addedDateDict.ContainsKey(id) ? addedDateDict[id] : DateTime.MinValue;
                         detailedBooks.Add(book);
                     }
                 }

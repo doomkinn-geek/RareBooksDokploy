@@ -139,10 +139,20 @@ const FavoriteBooks = () => {
         try {
             if (!dateString) return 'Нет данных';
             
-            const date = new Date(dateString);
+            // Проверяем, является ли дата корректной
+            let date;
+            if (typeof dateString === 'string') {
+                // Если дата в формате строки, конвертируем её
+                date = new Date(dateString);
+            } else if (dateString instanceof Date) {
+                // Если это уже объект Date
+                date = dateString;
+            } else {
+                return 'Некорректная дата';
+            }
             
             // Проверка валидности даты
-            if (isNaN(date.getTime())) {
+            if (isNaN(date.getTime()) || date.getFullYear() < 2000) {
                 return 'Некорректная дата';
             }
             
@@ -219,77 +229,69 @@ const FavoriteBooks = () => {
                                                 }}
                                             >
                                                 {bookImages[book.id] ? (
-                                                    // Если есть изображение - отображаем его
+                                                    // Если есть изображение - отображаем его в улучшенном контейнере
                                                     <Box
                                                         sx={{
                                                             position: 'relative',
-                                                            width: { xs: 80, sm: 90, md: 110 }, // Увеличиваем размер для лучшей видимости
-                                                            height: { xs: 100, sm: 115, md: 140 }, // Делаем высоту больше для лучшего отображения обложек
-                                                            mr: { xs: 1.5, sm: 2, md: 3 }, // Уменьшаем отступ справа на мобильных
-                                                            overflow: 'visible',
-                                                            flexShrink: 0, // Предотвращаем сжатие изображения
-                                                            '&:hover .book-image': {
-                                                                transform: {
-                                                                    xs: 'scale(1.7)', // Меньший масштаб на мобильных для предотвращения выхода за границы экрана
-                                                                    sm: 'scale(2)'
-                                                                },
-                                                                zIndex: 10,
-                                                                boxShadow: '0 6px 12px rgba(0,0,0,0.15)'
+                                                            width: { xs: 85, sm: 100, md: 120 },
+                                                            height: { xs: 120, sm: 140, md: 160 },
+                                                            mr: { xs: 1.5, sm: 2, md: 3 },
+                                                            flexShrink: 0,
+                                                            bgcolor: '#f5f5f5',
+                                                            borderRadius: '8px',
+                                                            overflow: 'hidden',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            border: '1px solid #eee',
+                                                            boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
+                                                            transition: 'all 0.3s ease',
+                                                            '&:hover': {
+                                                                boxShadow: '0 5px 10px rgba(0,0,0,0.15)',
+                                                                transform: 'scale(1.03)'
                                                             }
                                                         }}
                                                     >
-                                                        <Avatar 
-                                                            className="book-image"
+                                                        <img 
                                                             src={bookImages[book.id]} 
                                                             alt={book.title || 'Обложка книги'}
-                                                            variant="rounded"
-                                                            sx={{ 
-                                                                width: '100%', 
-                                                                height: '100%', 
-                                                                border: '1px solid #eee',
-                                                                borderRadius: '8px',
-                                                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                                                                transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-                                                                transformOrigin: 'left center',
-                                                                objectFit: 'cover' // Улучшаем отображение изображения
+                                                            style={{
+                                                                width: '100%',
+                                                                height: '100%',
+                                                                objectFit: 'contain',
+                                                                padding: '4px'
                                                             }}
                                                         />
                                                     </Box>
                                                 ) : (
-                                                    // Если нет изображения - отображаем иконку книги
+                                                    // Если нет изображения - отображаем иконку книги в стилизованном контейнере
                                                     <Box
                                                         sx={{
                                                             position: 'relative',
-                                                            width: { xs: 80, sm: 90, md: 110 }, // Увеличиваем размер для лучшей видимости
-                                                            height: { xs: 100, sm: 115, md: 140 }, // Делаем высоту больше для лучшего отображения обложек
-                                                            mr: { xs: 1.5, sm: 2, md: 3 }, // Уменьшаем отступ справа на мобильных
-                                                            overflow: 'visible',
-                                                            flexShrink: 0, // Предотвращаем сжатие изображения
-                                                            '&:hover .book-image': {
-                                                                transform: {
-                                                                    xs: 'scale(1.7)', // Меньший масштаб на мобильных для предотвращения выхода за границы экрана
-                                                                    sm: 'scale(2)'
-                                                                },
-                                                                zIndex: 10,
-                                                                boxShadow: '0 6px 12px rgba(0,0,0,0.15)'
+                                                            width: { xs: 85, sm: 100, md: 120 },
+                                                            height: { xs: 120, sm: 140, md: 160 },
+                                                            mr: { xs: 1.5, sm: 2, md: 3 },
+                                                            flexShrink: 0,
+                                                            bgcolor: '#f5f5f5',
+                                                            borderRadius: '8px',
+                                                            overflow: 'hidden',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            border: '1px solid #eee',
+                                                            boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
+                                                            transition: 'all 0.3s ease',
+                                                            '&:hover': {
+                                                                boxShadow: '0 5px 10px rgba(0,0,0,0.15)',
+                                                                transform: 'scale(1.03)'
                                                             }
                                                         }}
                                                     >
-                                                        <Avatar
-                                                            className="book-image"
-                                                            variant="rounded"
-                                                            sx={{ 
-                                                                width: '100%', 
-                                                                height: '100%', 
-                                                                bgcolor: '#f5f5f5',
-                                                                borderRadius: '8px',
-                                                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                                                                transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-                                                                transformOrigin: 'left center'
-                                                            }}
-                                                        >
-                                                            <BookIcon sx={{ color: '#d32f2f', fontSize: { xs: 36, sm: 40, md: 48 } }} />
-                                                        </Avatar>
+                                                        <BookIcon sx={{ 
+                                                            color: '#d32f2f', 
+                                                            opacity: 0.8,
+                                                            fontSize: { xs: 42, sm: 48, md: 56 }
+                                                        }} />
                                                     </Box>
                                                 )}
                                                 <ListItemText 

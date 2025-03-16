@@ -401,9 +401,16 @@ namespace RareBooksService.Data
                                              h.Query == query && 
                                              h.SearchType == searchType);
                 
-                // Добавляем запись только если такой еще нет
-                if (existingRecord == null)
+                if (existingRecord != null)
                 {
+                    // Если запись существует, обновляем дату поиска на текущую
+                    existingRecord.SearchDate = DateTime.UtcNow;
+                    _usersContext.UserSearchHistories.Update(existingRecord);
+                    await _usersContext.SaveChangesAsync();
+                }
+                else
+                {
+                    // Если записи нет, создаем новую
                     var searchHistory = new UserSearchHistory
                     {
                         UserId = userId,
