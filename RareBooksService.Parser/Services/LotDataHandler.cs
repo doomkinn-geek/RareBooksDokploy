@@ -413,10 +413,17 @@ namespace RareBooksService.Parser.Services
         {
             foreach (var url in urls)
             {
-                var filename = Path.GetFileName(new Uri(url).AbsolutePath);
+                // Проверяем, является ли URL относительным путем и дополняем его базовым URL если нужно
+                string fullUrl = url;
+                if (url.StartsWith("/"))
+                {
+                    fullUrl = $"https://meshok.net{url}";
+                }
+
+                var filename = Path.GetFileName(new Uri(fullUrl).AbsolutePath);
                 var filePath = Path.Combine(targetDir, filename);
 
-                using var imageStream = await DownloadFileStreamWithRetryAsync(url);
+                using var imageStream = await DownloadFileStreamWithRetryAsync(fullUrl);
                 using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
                 await imageStream.CopyToAsync(fileStream);
             }

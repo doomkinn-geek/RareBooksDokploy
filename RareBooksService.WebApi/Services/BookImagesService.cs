@@ -345,7 +345,15 @@ namespace RareBooksService.WebApi.Services
         {
             try
             {
-                var resp = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+                // Проверяем, является ли URL относительным путем и дополняем его базовым URL если нужно
+                string fullUrl = url;
+                if (url.StartsWith("/"))
+                {
+                    fullUrl = $"https://meshok.net{url}";
+                    _logger.LogDebug("Преобразован относительный URL {0} в абсолютный {1}", url, fullUrl);
+                }
+
+                var resp = await _httpClient.GetAsync(fullUrl, HttpCompletionOption.ResponseHeadersRead);
                 if (!resp.IsSuccessStatusCode)
                     return null;
 
@@ -369,7 +377,27 @@ namespace RareBooksService.WebApi.Services
             if (urls == null) return null;
             return urls.FirstOrDefault(u =>
             {
-                var name = Path.GetFileName(u);
+                // Корректно обрабатываем и относительные и абсолютные URL
+                string path = u;
+                if (path.StartsWith("/"))
+                {
+                    // Для относительных URL просто берем путь как есть
+                    path = u;
+                }
+                else
+                {
+                    // Для абсолютных URL создаем Uri объект
+                    try {
+                        var uri = new Uri(u);
+                        path = uri.AbsolutePath;
+                    }
+                    catch {
+                        // В случае некорректного URL используем исходную строку
+                        path = u;
+                    }
+                }
+                
+                var name = Path.GetFileName(path);
                 if (string.IsNullOrEmpty(name))
                     return false;
                 int idx = name.IndexOfAny(new char[] { '?', '#' });
