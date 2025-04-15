@@ -213,12 +213,28 @@ export async function updateAdminSettings(settingsDto) {
  */
 export async function initImport(fileSize = null) {
     const headers = getAuthHeaders();
-    const url = fileSize
-        ? `${API_URL}/import/init?fileSize=${fileSize}`
-        : `${API_URL}/import/init`;
+    let url;
+    
+    if (fileSize) {
+        // Преобразуем размер файла в строку для избежания проблем с типами
+        url = `${API_URL}/import/init?fileSize=${String(fileSize)}`;
+        console.log(`Инициализация импорта с размером файла: ${fileSize} байт, URL: ${url}`);
+    } else {
+        url = `${API_URL}/import/init`;
+        console.log(`Инициализация импорта без указания размера файла, URL: ${url}`);
+    }
 
-    const response = await axios.post(url, null, { headers });
-    return response.data; // { importTaskId }
+    try {
+        const response = await axios.post(url, null, { headers });
+        console.log('Успешная инициализация импорта, ответ:', response.data);
+        return response.data; // { importTaskId }
+    } catch (error) {
+        console.error('Ошибка инициализации импорта:', error);
+        if (error.response) {
+            console.error('Ответ сервера:', error.response.status, error.response.data);
+        }
+        throw error;
+    }
 }
 
 /**
@@ -231,15 +247,27 @@ export async function uploadImportChunk(importTaskId, fileChunk, onUploadProgres
         'Content-Type': 'application/octet-stream'
     };
 
-    // используем axios для POST
-    return await axios.post(
-        `${API_URL}/import/upload?importTaskId=${importTaskId}`,
-        fileChunk,
-        {
-            headers,
-            onUploadProgress, // отслеживаем прогресс отправки chunk'а
+    const url = `${API_URL}/import/upload?importTaskId=${importTaskId}`;
+    console.log(`Загрузка куска файла: importTaskId=${importTaskId}, размер=${fileChunk.size} байт`);
+
+    try {
+        // используем axios для POST
+        const response = await axios.post(
+            url,
+            fileChunk,
+            {
+                headers,
+                onUploadProgress, // отслеживаем прогресс отправки chunk'а
+            }
+        );
+        return response;
+    } catch (error) {
+        console.error('Ошибка загрузки куска файла:', error);
+        if (error.response) {
+            console.error('Ответ сервера:', error.response.status, error.response.data);
         }
-    );
+        throw error;
+    }
 }
 
 /**
@@ -247,9 +275,20 @@ export async function uploadImportChunk(importTaskId, fileChunk, onUploadProgres
  */
 export async function finishImport(importTaskId) {
     const headers = getAuthHeaders();
-    await axios.post(`${API_URL}/import/finish?importTaskId=${importTaskId}`, null, {
-        headers
-    });
+    const url = `${API_URL}/import/finish?importTaskId=${importTaskId}`;
+    console.log(`Завершение импорта: importTaskId=${importTaskId}`);
+
+    try {
+        const response = await axios.post(url, null, { headers });
+        console.log('Импорт успешно завершен');
+        return response;
+    } catch (error) {
+        console.error('Ошибка завершения импорта:', error);
+        if (error.response) {
+            console.error('Ответ сервера:', error.response.status, error.response.data);
+        }
+        throw error;
+    }
 }
 
 /**

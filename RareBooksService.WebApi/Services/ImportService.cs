@@ -1,5 +1,6 @@
 ﻿using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using RareBooksService.Common.Models;
 using RareBooksService.Common.Models.Interfaces;
@@ -202,6 +203,8 @@ namespace RareBooksService.WebApi.Services
         private async Task ImportInBackgroundAsync(ImportTaskInfo taskInfo, CancellationToken cancellationToken)
         {
             string importFolder = Path.Combine(Path.GetTempPath(), $"import_{taskInfo.ImportTaskId}");
+            long totalAddedBooks = 0;
+            long totalSkippedBooks = 0;
             
             try
             {
@@ -271,7 +274,8 @@ namespace RareBooksService.WebApi.Services
 
                 _logger.LogInformation("Всего будет импортировано {Count} книг", totalBooksCount);
 
-                long processed = 0;
+                //long processed = 0;
+                long processedBooks = 0;
 
                 // 2) Идём по всем chunk'ам
                 foreach (var chunkFile in chunkFiles.OrderBy(x => x))
@@ -295,7 +299,7 @@ namespace RareBooksService.WebApi.Services
                         .AsNoTracking()
                         .ToListAsync(cancellationToken);
 
-                    _logger.LogInformation("Найдено {Count} категорий в файле", chunkCategories.Count);
+                    _logger.LogInformation("Найдено {Count} категорий в файле", chunkCategories.Count);                    
 
                     using (var scope = _scopeFactory.CreateScope())
                     {
@@ -341,7 +345,8 @@ namespace RareBooksService.WebApi.Services
                                 }
 
                                 // Добавляем в словарь маппинга
-                                categoryMap[cat.CategoryId] = category;
+                                //categoryMap[cat.CategoryId] = category;
+                                categoryMap[cat.Id] = category;
                             }
 
                             await pgContext.SaveChangesAsync(cancellationToken);
@@ -356,86 +361,170 @@ namespace RareBooksService.WebApi.Services
 
                             _logger.LogInformation("Найдено {Count} книг в файле", books.Count);
 
-                            int processedBooks = 0;
+                            int booksProcessedInFile = 0;
+                            int addedBooks = 0;
+                            int skippedBooks = 0;
                             int batchSize = 100;
-                            var booksToAdd = new List<RegularBaseBook>();
 
-                            foreach (var book in books)
+                            // Начинаем НОВУЮ транзакцию для импорта книг
+                            using var booksTransaction = await pgContext.Database.BeginTransactionAsync(cancellationToken);
+                            try
                             {
-                                if (book == null)
+                                // Получим список ID уже существующих книг для оптимизации
+                                var existingBookIds = await pgContext.BooksInfo
+                                    .AsNoTracking()
+                                    .Where(b => books.Select(sb => sb.Id).Contains(b.Id))
+                                    .Select(b => b.Id)
+                                    .ToListAsync(cancellationToken);
+
+                                _logger.LogInformation("Найдено {Count} уже существующих книг в базе (будут пропущены)", existingBookIds.Count);
+                                
+                                // Создаем HashSet для быстрой проверки существования
+                                var existingIdsSet = new HashSet<int>(existingBookIds);
+                                
+                                // Освобождаем память
+                                existingBookIds = null;
+                                
+                                // Пакетная обработка для экономии памяти
+                                var booksToAdd = new List<RegularBaseBook>(batchSize);
+
+                                foreach (var book in books)
                                 {
-                                    _logger.LogWarning("Пропускаем null книгу");
-                                    continue;
+                                    // Увеличиваем счетчик обработанных записей для прогресса
+                                    booksProcessedInFile++;
+                                    
+                                    // Обновляем прогресс каждые 10 записей
+                                    if (booksProcessedInFile % 10 == 0)
+                                    {
+                                        taskInfo.ImportProgress = (double)booksProcessedInFile / books.Count * 100.0;
+                                    }
+                                    
+                                    if (book == null)
+                                    {
+                                        _logger.LogDebug("Пропускаем null книгу");
+                                        skippedBooks++;
+                                        continue;
+                                    }
+
+                                    // Если книга уже существует - пропускаем
+                                    if (existingIdsSet.Contains(book.Id))
+                                    {
+                                        skippedBooks++;
+                                        continue;
+                                    }
+
+                                    // Находим соответствующую категорию по CategoryId из исходной книги
+                                    if (!categoryMap.TryGetValue(book.CategoryId, out var category))
+                                    {
+                                        _logger.LogWarning("Не найдена категория для книги {BookId} с CategoryId {CategoryId}", 
+                                            book.Id, book.CategoryId);
+                                        skippedBooks++;
+                                        continue;
+                                    }
+
+                                    // Добавляем новую книгу
+                                    var newBook = new RegularBaseBook
+                                    {
+                                        Id = book.Id,
+                                        Title = book.Title ?? "",
+                                        NormalizedTitle = (book.Title ?? "").ToLowerInvariant(),
+                                        Description = book.Description ?? "",
+                                        NormalizedDescription = (book.Description ?? "").ToLowerInvariant(),
+                                        BeginDate = DateTime.SpecifyKind(book.BeginDate, DateTimeKind.Utc),
+                                        EndDate = DateTime.SpecifyKind(book.EndDate, DateTimeKind.Utc),
+                                        ImageUrls = book.ImageUrls,
+                                        ThumbnailUrls = book.ThumbnailUrls,
+                                        Price = book.Price,
+                                        City = book.City,
+                                        IsMonitored = book.IsMonitored,
+                                        FinalPrice = book.FinalPrice,
+                                        YearPublished = book.YearPublished,
+                                        CategoryId = category.Id,
+                                        Tags = book.Tags,
+                                        PicsRatio = book.PicsRatio,
+                                        Status = book.Status,
+                                        StartPrice = book.StartPrice,
+                                        Type = book.Type,
+                                        SoldQuantity = book.SoldQuantity,
+                                        BidsCount = book.BidsCount,
+                                        SellerName = book.SellerName,
+                                        PicsCount = book.PicsCount,
+                                        IsImagesCompressed = book.IsImagesCompressed,
+                                        ImageArchiveUrl = book.ImageArchiveUrl,
+                                        IsLessValuable = book.IsLessValuable
+                                    };
+
+                                    booksToAdd.Add(newBook);
+                                    addedBooks++;
+
+                                    // Сохраняем изменения по пакетам для экономии памяти
+                                    if (booksToAdd.Count >= batchSize)
+                                    {
+                                        await pgContext.BooksInfo.AddRangeAsync(booksToAdd, cancellationToken);
+                                        await pgContext.SaveChangesAsync(cancellationToken);
+                                        _logger.LogInformation("Добавлена пачка из {BatchSize} книг, всего обработано {ProcessedBooks} из {TotalBooks}", 
+                                            booksToAdd.Count, booksProcessedInFile, books.Count);
+                                        
+                                        // Очищаем список для следующей пачки
+                                        booksToAdd.Clear();
+                                        
+                                        // Запускаем сборку мусора для высвобождения памяти
+                                        if (booksProcessedInFile % (batchSize * 10) == 0)
+                                        {
+                                            GC.Collect();
+                                        }
+                                    }
                                 }
 
-                                // Находим соответствующую категорию по CategoryId из исходной книги
-                                if (!categoryMap.TryGetValue(book.CategoryId, out var category))
-                                {
-                                    _logger.LogWarning("Не найдена категория для книги {BookId} с CategoryId {CategoryId}", 
-                                        book.Id, book.CategoryId);
-                                    continue;
-                                }
-
-                                var newBook = new RegularBaseBook
-                                {
-                                    Id = book.Id,
-                                    Title = book.Title,
-                                    NormalizedTitle = book.Title.ToLowerInvariant(),
-                                    Description = book.Description,
-                                    NormalizedDescription = book.Description.ToLowerInvariant(),
-                                    BeginDate = DateTime.SpecifyKind(book.BeginDate, DateTimeKind.Utc),
-                                    EndDate = DateTime.SpecifyKind(book.EndDate, DateTimeKind.Utc),
-                                    ImageUrls = book.ImageUrls,
-                                    ThumbnailUrls = book.ThumbnailUrls,
-                                    Price = book.Price,
-                                    City = book.City,
-                                    IsMonitored = book.IsMonitored,
-                                    FinalPrice = book.FinalPrice,
-                                    YearPublished = book.YearPublished,
-
-                                    CategoryId = category.Id, // Используем Id категории из PG
-
-                                    Tags = book.Tags,
-                                    PicsRatio = book.PicsRatio,
-                                    Status = book.Status,
-                                    StartPrice = book.StartPrice,
-                                    Type = book.Type,
-                                    SoldQuantity = book.SoldQuantity,
-                                    BidsCount = book.BidsCount,
-                                    SellerName = book.SellerName,
-                                    PicsCount = book.PicsCount,
-                                    IsImagesCompressed = book.IsImagesCompressed,
-                                    ImageArchiveUrl = book.ImageArchiveUrl,
-                                    IsLessValuable = book.IsLessValuable
-                                };
-
-                                booksToAdd.Add(newBook);
-                                processedBooks++;
-
-                                if (booksToAdd.Count >= batchSize)
+                                // Сохраняем оставшиеся книги
+                                if (booksToAdd.Count > 0)
                                 {
                                     await pgContext.BooksInfo.AddRangeAsync(booksToAdd, cancellationToken);
                                     await pgContext.SaveChangesAsync(cancellationToken);
+                                    _logger.LogInformation("Добавлены оставшиеся {RemainingBooks} книг", booksToAdd.Count);
                                     booksToAdd.Clear();
-
-                                    taskInfo.ImportProgress = (double)processedBooks / books.Count * 100.0;
                                 }
-                            }
 
-                            // Сохраняем оставшиеся книги
-                            if (booksToAdd.Any())
+                                await booksTransaction.CommitAsync(cancellationToken);
+                                taskInfo.ImportProgress = 100.0;
+                                _logger.LogInformation("Импорт книг успешно завершен. Добавлено: {AddedBooks}, пропущено: {SkippedBooks}", 
+                                    addedBooks, skippedBooks);
+                                
+                                // Обновляем общую статистику
+                                totalAddedBooks += addedBooks;
+                                totalSkippedBooks += skippedBooks;
+                                processedBooks += booksProcessedInFile;
+                                
+                                // Очищаем память
+                                GC.Collect();
+                            }
+                            catch (Exception ex)
                             {
-                                await pgContext.BooksInfo.AddRangeAsync(booksToAdd, cancellationToken);
-                                await pgContext.SaveChangesAsync(cancellationToken);
+                                try
+                                {
+                                    await booksTransaction.RollbackAsync(cancellationToken);
+                                }
+                                catch (InvalidOperationException)
+                                {
+                                    // Игнорируем ошибку, если транзакция уже завершена или не может быть откачена
+                                    _logger.LogWarning("Не удалось выполнить откат транзакции книг: транзакция недоступна");
+                                }
+                                _logger.LogError(ex, "Ошибка при импорте книг");
+                                throw;
                             }
-
-                            taskInfo.ImportProgress = 100.0;
-                            _logger.LogInformation("Импорт успешно завершен");
                         }
                         catch (Exception ex)
                         {
-                            await transaction.RollbackAsync(cancellationToken);
-                            _logger.LogError(ex, "Ошибка при импорте данных");
+                            try 
+                            {
+                                await transaction.RollbackAsync(cancellationToken);
+                            }
+                            catch (InvalidOperationException)
+                            {
+                                // Игнорируем ошибку, если транзакция уже завершена или не может быть откачена
+                                _logger.LogWarning("Не удалось выполнить откат транзакции категорий: транзакция недоступна");
+                            }
+                            _logger.LogError(ex, "Ошибка при импорте категорий");
                             throw;
                         }
                     }
@@ -447,9 +536,9 @@ namespace RareBooksService.WebApi.Services
                 // Закончили все chunks
                 taskInfo.ImportProgress = 100.0;
                 taskInfo.IsCompleted = true;
-                taskInfo.Message = $"Импортировано / Обновлено {processed} книг всего.";
-                _logger.LogInformation("Импорт {ImportId} успешно завершен. Обработано {Count} книг", 
-                    taskInfo.ImportTaskId, processed);
+                taskInfo.Message = $"Импорт завершен. Добавлено {totalAddedBooks} книг, пропущено {totalSkippedBooks} книг.";
+                _logger.LogInformation("Импорт {ImportId} успешно завершен. Добавлено: {AddedBooks}, пропущено: {SkippedBooks} книг", 
+                    taskInfo.ImportTaskId, totalAddedBooks, totalSkippedBooks);
             }
             catch (OperationCanceledException)
             {

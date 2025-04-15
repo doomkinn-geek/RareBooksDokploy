@@ -19,9 +19,27 @@ const Import = () => {
 
   // Шаг 1: Инициализация импорта
   const initImportTask = async (fileSize) => {
-    const taskId = await initImport(fileSize);
-    setImportTaskId(taskId);
-    return taskId;
+    try {
+      // Убедимся, что размер файла передается как число
+      const fileSizeNumber = Number(fileSize);
+      console.log(`Инициализация задачи импорта, размер файла: ${fileSizeNumber} байт`);
+      
+      // Проверка на корректный размер файла
+      if (isNaN(fileSizeNumber) || fileSizeNumber <= 0) {
+        throw new Error(`Некорректный размер файла: ${fileSize}`);
+      }
+      
+      const response = await initImport(fileSizeNumber);
+      // Извлекаем именно значение importTaskId из ответа
+      const taskId = response.importTaskId;
+      
+      console.log(`Инициализация успешна, получен ID задачи: ${taskId}`);
+      setImportTaskId(taskId);
+      return taskId;
+    } catch (error) {
+      console.error("Ошибка инициализации импорта:", error);
+      throw error;
+    }
   };
 
   // Шаг 2: Загрузка файла по кускам (chunk'ам)
@@ -86,14 +104,19 @@ const Import = () => {
     setImportMessage('');
 
     try {
+      console.log(`Запуск импорта для файла: ${importFile.name}, размер: ${importFile.size} байт`);
+      
       // Шаг 1: init
       const newTaskId = await initImportTask(importFile.size);
+      console.log(`Получен importTaskId: ${newTaskId}`);
 
       // Шаг 2: upload
       await uploadFileChunks(importFile, newTaskId);
+      console.log(`Загрузка файла завершена`);
 
       // Шаг 3: finish
       await finishUpload(newTaskId);
+      console.log(`Процесс импорта запущен на сервере`);
 
       // Шаг 4: запустим периодический опрос статуса
       const pid = setInterval(() => {
@@ -101,7 +124,7 @@ const Import = () => {
       }, 500);
       setPollIntervalId(pid);
     } catch (err) {
-      console.error('Import error:', err);
+      console.error('Ошибка импорта:', err);
       setIsImporting(false);
       
       // Более детальная обработка ошибок
@@ -111,6 +134,10 @@ const Import = () => {
       } else if (err.response.status === 403) {
         // Ошибка аутентификации
         setImportMessage('Ошибка доступа. Возможно, истек срок действия сессии.');
+      } else if (err.response.status === 400) {
+        // Ошибка в запросе
+        const errorDetails = err.response.data ? (typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data)) : 'Неизвестная ошибка';
+        setImportMessage(`Ошибка в запросе (400): ${errorDetails}`);
       } else {
         // Другие ошибки
         setImportMessage(`Ошибка импорта: ${err.message || 'Неизвестная ошибка'}`);

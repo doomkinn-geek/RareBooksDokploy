@@ -38,7 +38,8 @@ namespace RareBooksService.Parser.Services
         private readonly TypeOfAccessImages _imageStorageOptions;
         private readonly ILogger<LotDataHandler> _logger;
         private readonly CookieContainer _cookieContainer;
-        private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(5);
+        private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(2);
+        private readonly Random _random = new Random();
         private bool _cookiesInitialized = false;
 
         private readonly IProgressReporter _progressReporter;
@@ -116,16 +117,47 @@ namespace RareBooksService.Parser.Services
                 {
                     CookieContainer = _cookieContainer,
                     AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
-                    SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13
+                    SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13,
+                    UseCookies = true,
+                    AllowAutoRedirect = true
                 };
 
                 using var httpClient = new HttpClient(handler);
                 httpClient.DefaultRequestHeaders.Accept.Clear();
                 httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/html"));
-                httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/xhtml+xml"));
+                httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("image/avif"));
+                httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("image/webp"));
+                
+                // Более реалистичный User-Agent
+                httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                
+                // Добавляем другие заголовки, имитирующие браузер
+                httpClient.DefaultRequestHeaders.Add("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
+                httpClient.DefaultRequestHeaders.Add("Cache-Control", "max-age=0");
+                httpClient.DefaultRequestHeaders.Add("sec-ch-ua", "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"121\", \"Chromium\";v=\"121\"");
+                httpClient.DefaultRequestHeaders.Add("sec-ch-ua-mobile", "?0");
+                httpClient.DefaultRequestHeaders.Add("sec-ch-ua-platform", "\"Windows\"");
+                httpClient.DefaultRequestHeaders.Add("Sec-Fetch-Dest", "document");
+                httpClient.DefaultRequestHeaders.Add("Sec-Fetch-Mode", "navigate");
+                httpClient.DefaultRequestHeaders.Add("Sec-Fetch-Site", "none");
+                httpClient.DefaultRequestHeaders.Add("Sec-Fetch-User", "?1");
+                
+                // Добавляем также заголовок Upgrade-Insecure-Requests
+                httpClient.DefaultRequestHeaders.Add("Upgrade-Insecure-Requests", "1");
 
+                _logger.LogInformation("Пытаемся инициализировать cookies для домена {Domain}", baseUri);
                 var response = await httpClient.GetAsync(baseUri);
                 response.EnsureSuccessStatusCode();
+
+                // Логгируем полученные cookies для диагностики
+                var cookies = _cookieContainer.GetCookies(new Uri(baseUri)).Cast<Cookie>().ToList();
+                _logger.LogInformation("Получено {count} cookies от {domain}", cookies.Count, baseUri);
+                foreach (var cookie in cookies)
+                {
+                    _logger.LogDebug("Cookie: {name}={value}, domain={domain}, path={path}, expires={expires}", 
+                        cookie.Name, cookie.Value, cookie.Domain, cookie.Path, cookie.Expires);
+                }
 
                 _logger.LogInformation("Успешно инициализированы cookies для домена {Domain}", baseUri);
             }
@@ -298,8 +330,6 @@ namespace RareBooksService.Parser.Services
             }
         }
 
-
-
         /// <summary>
         /// Качаем все изображения (images + thumbnails), помещаем в папки "images/" и "thumbnails/" внутри архива.
         /// После удачного архивирования -> IsImagesCompressed = true, ImageArchiveUrl = ... 
@@ -413,19 +443,63 @@ namespace RareBooksService.Parser.Services
         {
             foreach (var url in urls)
             {
-                // Проверяем, является ли URL относительным путем и дополняем его базовым URL если нужно
-                string fullUrl = url;
-                if (url.StartsWith("/"))
-                {
-                    fullUrl = $"https://meshok.net{url}";
+                try {
+                    // Проверяем, является ли URL относительным путем и дополняем его базовым URL если нужно
+                    string fullUrl = url;
+                    if (url.StartsWith("/"))
+                    {
+                        fullUrl = $"https://meshok.net{url}";
+                        _logger.LogDebug("Преобразован относительный URL {0} в абсолютный {1}", url, fullUrl);
+                    }
+                    
+                    // Получаем имя файла из URL, корректно обрабатывая как абсолютные, так и относительные URL
+                    string path;
+                    if (url.StartsWith("/"))
+                    {
+                        // Для относительных URL просто берем путь как есть
+                        path = url;
+                    }
+                    else
+                    {
+                        // Для абсолютных URL используем Uri
+                        try {
+                            var uri = new Uri(fullUrl);
+                            path = uri.AbsolutePath;
+                        } catch {
+                            // При ошибке парсинга используем исходную строку
+                            path = fullUrl;
+                        }
+                    }
+                    
+                    var filename = Path.GetFileName(path);
+                    if (string.IsNullOrEmpty(filename)) {
+                        _logger.LogWarning("Невозможно извлечь имя файла из URL: {0}", fullUrl);
+                        continue;
+                    }
+                    
+                    // Удаляем query-параметры из имени файла (всё после ? включительно)
+                    int queryIndex = filename.IndexOf('?');
+                    if (queryIndex > 0) {
+                        filename = filename.Substring(0, queryIndex);
+                        _logger.LogDebug("Удалены query-параметры из имени файла: {0}", filename);
+                    }
+                    
+                    // Удаляем другие недопустимые символы из имени файла
+                    char[] invalidChars = Path.GetInvalidFileNameChars();
+                    foreach (char c in invalidChars) {
+                        filename = filename.Replace(c, '_');
+                    }
+    
+                    var filePath = Path.Combine(targetDir, filename);
+    
+                    _logger.LogDebug("Скачивание {url} в {path}", fullUrl, filePath);
+                    using var imageStream = await DownloadFileStreamWithRetryAsync(fullUrl);
+                    using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
+                    await imageStream.CopyToAsync(fileStream);
+                } catch (Exception ex) {
+                    _logger.LogError(ex, "Ошибка при скачивании/сохранении изображения: {0}", url);
+                    // Продолжаем со следующим URL, не прерывая весь процесс
                 }
-
-                var filename = Path.GetFileName(new Uri(fullUrl).AbsolutePath);
-                var filePath = Path.Combine(targetDir, filename);
-
-                using var imageStream = await DownloadFileStreamWithRetryAsync(fullUrl);
-                using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
-                await imageStream.CopyToAsync(fileStream);
             }
         }
 
@@ -462,15 +536,37 @@ namespace RareBooksService.Parser.Services
             await _semaphore.WaitAsync();
             try
             {
+                // Добавляем случайную задержку перед каждым запросом
+                await RandomDelayAsync();
+                
                 using var handler = new HttpClientHandler
                 {
                     CookieContainer = _cookieContainer,
-                    AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+                    AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+                    UseCookies = true,
+                    AllowAutoRedirect = true
                 };
                 using var httpClient = new HttpClient(handler);
                 httpClient.DefaultRequestHeaders.Referrer = new Uri("https://meshok.net");
-
+                
+                // Добавляем User-Agent для имитации браузера
+                httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                
+                // Добавляем другие заголовки, которые обычно отправляет браузер
+                httpClient.DefaultRequestHeaders.Add("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
+                httpClient.DefaultRequestHeaders.Add("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
+                httpClient.DefaultRequestHeaders.Add("sec-ch-ua", "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"121\", \"Chromium\";v=\"121\"");
+                httpClient.DefaultRequestHeaders.Add("sec-ch-ua-mobile", "?0");
+                httpClient.DefaultRequestHeaders.Add("sec-ch-ua-platform", "\"Windows\"");
+                
+                _logger.LogDebug("Скачивание изображения: {Url}", url);
                 var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("Ошибка скачивания {0}: {1} {2}", url, (int)response.StatusCode, response.ReasonPhrase);
+                }
+                
                 response.EnsureSuccessStatusCode();
                 return await response.Content.ReadAsStreamAsync();
             }
@@ -490,6 +586,15 @@ namespace RareBooksService.Parser.Services
                 await _context.SaveChangesAsync();
             }
             return category;
+        }
+
+        // Добавляем задержку между запросами для имитации поведения человека
+        private async Task RandomDelayAsync()
+        {
+            // Задержка от 200 мс до 1500 мс для имитации человеческого поведения
+            int delay = _random.Next(200, 1500);
+            _logger.LogDebug("Ожидание {delay}мс между запросами", delay);
+            await Task.Delay(delay);
         }
 
         public void Dispose()
