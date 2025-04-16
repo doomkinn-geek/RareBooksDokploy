@@ -372,77 +372,135 @@ namespace RareBooksService.Parser.Services
         {
             _logger.LogInformation("Начинаем обработку книг с относительными URL изображений");
             
-            // Подсчет общего количества книг для обработки
-            var booksWithRelativeUrls = await _context.BooksInfo
-                .AsNoTracking()
-                .Where(b => !b.IsImagesCompressed || b.ImageArchiveUrl == null) // Только книги без скачанных изображений
-                .ToListAsync(token);
-
-            // Фильтруем книги с относительными URL в списке ImageUrls
-            var booksToProcess = booksWithRelativeUrls
-                .Where(b => b.ImageUrls != null && b.ImageUrls.Any(url => url.StartsWith("/")))
-                .ToList();
-
-            _logger.LogInformation("Найдено {Count} книг с относительными URL изображений, которые нужно обработать", 
-                booksToProcess.Count);
-
+            // Константы для пакетной обработки
+            const int batchSize = 500;
+            const int maxBooksToProcess = 5000; // Ограничение на количество книг для одного запуска
             int processedCount = 0;
             int successCount = 0;
             
-            foreach (var book in booksToProcess)
+            try
             {
-                processedCount++;
+                // Используем пагинацию для обработки книг партиями
+                int totalProcessed = 0;
+                int currentPage = 0;
+                bool hasMoreData = true;
                 
-                if (token.IsCancellationRequested || (_checkCancellationFunc?.Invoke() == true))
+                while (hasMoreData && totalProcessed < maxBooksToProcess)
                 {
-                    _logger.LogWarning("Операция была прервана пользователем");
-                    break;
-                }
-                
-                try
-                {
-                    _logger.LogInformation("Обработка книги {BookId} ({Current}/{Total})", 
-                        book.Id, processedCount, booksToProcess.Count);
-                    
-                    // Отправляем сообщение о прогрессе
-                    string progressMessage = $"Обработка книги с относительными URL изображений ({processedCount}/{booksToProcess.Count})";
-                    ProgressChanged?.Invoke(book.Id, progressMessage);
-                    _progressReporter.ReportInfo(progressMessage, "RefreshLotsWithRelativeImageUrlsAsync", book.Id);
-                    
-                    // Получаем актуальные данные о книге
-                    var lotResponse = await _lotDataService.GetLotDataAsync(book.Id);
-                    if (lotResponse?.result == null)
+                    // Проверка на отмену операции
+                    if (token.IsCancellationRequested || (_checkCancellationFunc?.Invoke() == true))
                     {
-                        _logger.LogWarning("Не удалось получить данные книги {BookId} (null result)", book.Id);
-                        continue;
+                        _logger.LogWarning("Операция была прервана пользователем");
+                        break;
                     }
                     
-                    // Сохраняем книгу с флагом downloadImages=true для скачивания изображений
-                    await _lotDataHandler.SaveLotDataAsync(
-                        lotResponse.result,
-                        lotResponse.result.categoryId,
-                        categoryName: "unknown",
-                        downloadImages: true,
-                        isLessValuableLot: book.IsLessValuable
-                    );
+                    // Разделяем запрос на две части:
+                    // 1. Сначала получаем партию книг с базовой фильтрацией, которую EF Core может транслировать в SQL
+                    var baseQuery = await _context.BooksInfo
+                        .AsNoTracking() // Важно для экономии памяти
+                        .Where(b => !b.IsImagesCompressed || b.ImageArchiveUrl == null) // Только книги без скачанных изображений
+                        .OrderBy(b => b.Id) // Обеспечивает стабильную пагинацию
+                        .Skip(currentPage * batchSize)
+                        .Take(batchSize * 3) // Получаем больше книг, так как после доп. фильтрации их число уменьшится
+                        .ToListAsync(token);
                     
-                    successCount++;
-                    _logger.LogInformation("Успешно обработана книга {BookId}, изображения скачаны", book.Id);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Ошибка при обработке книги {BookId}", book.Id);
-                    _progressReporter.ReportError(ex, $"Ошибка при обработке книги с относительными URL", 
-                        "RefreshLotsWithRelativeImageUrlsAsync", book.Id);
+                    // 2. Затем фильтруем полученные книги в памяти, проверяя ImageUrls
+                    var booksInBatch = baseQuery
+                        .Where(b => b.ImageUrls != null && b.ImageUrls.Any(url => url != null && url.StartsWith("/")))
+                        .Take(batchSize)
+                        .ToList();
+                    
+                    _logger.LogInformation("Загружена партия {CurrentPage}: {Count} книг с относительными URL (из {TotalFetched} полученных)", 
+                        currentPage + 1, booksInBatch.Count, baseQuery.Count);
+                    
+                    // Если книг в текущей партии меньше batchSize, это может означать, что либо:
+                    // 1. Мы достигли конца данных, либо
+                    // 2. После фильтрации in-memory осталось мало книг
+                    hasMoreData = booksInBatch.Count == batchSize || baseQuery.Count == batchSize * 3;
+                    currentPage++;
+                    
+                    // Обрабатываем книги текущей партии
+                    foreach (var book in booksInBatch)
+                    {
+                        processedCount++;
+                        totalProcessed++;
+                        
+                        if (token.IsCancellationRequested || (_checkCancellationFunc?.Invoke() == true))
+                        {
+                            _logger.LogWarning("Операция была прервана пользователем");
+                            break;
+                        }
+                        
+                        try
+                        {
+                            // Отправляем сообщение о прогрессе с указанием общего числа
+                            string progressMessage = $"Обработка книги с относительными URL изображений ({processedCount}/{booksInBatch.Count}, всего: {totalProcessed})";
+                            ProgressChanged?.Invoke(book.Id, progressMessage);
+                            _progressReporter.ReportInfo(progressMessage, "RefreshLotsWithRelativeImageUrlsAsync", book.Id);
+                            
+                            _logger.LogInformation("Обработка книги {BookId} (ID: {BookId})", book.Id, book.Id);
+                            
+                            // Получаем актуальные данные о книге
+                            var lotResponse = await _lotDataService.GetLotDataAsync(book.Id);
+                            if (lotResponse?.result == null)
+                            {
+                                _logger.LogWarning("Не удалось получить данные книги {BookId} (null result)", book.Id);
+                                continue;
+                            }
+                            
+                            // Сохраняем книгу с флагом downloadImages=true для скачивания изображений
+                            await _lotDataHandler.SaveLotDataAsync(
+                                lotResponse.result,
+                                lotResponse.result.categoryId,
+                                categoryName: "unknown",
+                                downloadImages: true,
+                                isLessValuableLot: book.IsLessValuable
+                            );
+                            
+                            successCount++;
+                            _logger.LogInformation("Успешно обработана книга {BookId}, изображения скачаны", book.Id);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Ошибка при обработке книги {BookId}", book.Id);
+                            _progressReporter.ReportError(ex, $"Ошибка при обработке книги с относительными URL", 
+                                "RefreshLotsWithRelativeImageUrlsAsync", book.Id);
+                        }
+                        
+                        // Пауза между запросами, чтобы не перегружать сервер
+                        await Task.Delay(300, token);
+                    }
+                    
+                    // Очищаем коллекции и запускаем сборку мусора после обработки партии
+                    baseQuery.Clear();
+                    booksInBatch.Clear();
+                    GC.Collect();
+                    
+                    // Пауза между партиями, позволяет системе "отдохнуть"
+                    await Task.Delay(1000, token);
+                    
+                    _logger.LogInformation("Обработана партия {CurrentPage}, всего обработано: {TotalProcessed}", 
+                        currentPage, totalProcessed);
                 }
                 
-                // Небольшая задержка между запросами, чтобы не перегружать сервер
-                await Task.Delay(500, token);
+                string completionMessage = hasMoreData 
+                    ? $"Достигнут лимит обработки ({maxBooksToProcess} книг). Запустите процесс повторно для продолжения." 
+                    : "Обработаны все книги с относительными URL изображений.";
+                
+                _logger.LogInformation("Завершена обработка книг с относительными URL изображений. " +
+                                     "Всего обработано: {ProcessedCount}, успешно: {SuccessCount}. {Message}", 
+                    totalProcessed, successCount, completionMessage);
             }
-            
-            _logger.LogInformation("Завершена обработка книг с относительными URL изображений. " +
-                                 "Всего обработано: {ProcessedCount}, успешно: {SuccessCount}", 
-                processedCount, successCount);
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Произошла ошибка при обработке книг с относительными URL");
+                _progressReporter.ReportError(ex, "Ошибка при обработке книг с относительными URL", "RefreshLotsWithRelativeImageUrlsAsync");
+            }
+            finally
+            {
+                // Финальная сборка мусора
+                GC.Collect();
+            }
         }
 
         public async Task FetchFreeListData(List<int> ids)

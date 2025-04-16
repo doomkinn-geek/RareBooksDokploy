@@ -150,7 +150,7 @@ namespace RareBooksService.WebApi.Services
             _operations = new (string, Func<CancellationToken, Task>)[]
             {
                 // Новая операция для скачивания изображений для книг с относительными URL
-                /*("RefreshLotsWithRelativeImageUrlsAsync", async ct =>
+                ("RefreshLotsWithRelativeImageUrlsAsync", async ct =>
                 {
                     using var scope = _serviceProvider.CreateScope();
                     var lotFetchingService = scope.ServiceProvider.GetRequiredService<ILotFetchingService>();
@@ -177,7 +177,7 @@ namespace RareBooksService.WebApi.Services
                             realLotFetchingService2.SetCancellationCheckFunc(null);
                         }
                     }
-                }),*/
+                }),
                 ("FetchAllNewData", async ct =>
                 {
                     // Для каждой операции создаём scope, чтобы получить нужные сервисы:
