@@ -27,8 +27,14 @@ namespace RareBooksService.WebApi.Services
         Task<PagedResultDto<BookSearchResultDto>> SearchByTitleAsync(
             ApplicationUser user, string title, bool exactPhrase, int page, int pageSize);
 
+        Task<PagedResultDto<BookSearchResultDto>> SearchByTitleAsync(
+            ApplicationUser user, string title, bool exactPhrase, List<int> categoryIds, int page, int pageSize);
+
         Task<PagedResultDto<BookSearchResultDto>> SearchByDescriptionAsync(
             ApplicationUser user, string description, bool exactPhrase, int page, int pageSize);
+
+        Task<PagedResultDto<BookSearchResultDto>> SearchByDescriptionAsync(
+            ApplicationUser user, string description, bool exactPhrase, List<int> categoryIds, int page, int pageSize);
 
         Task<PagedResultDto<BookSearchResultDto>> SearchByCategoryAsync(
             ApplicationUser user, int categoryId, int page, int pageSize);
@@ -235,11 +241,59 @@ namespace RareBooksService.WebApi.Services
             };
         }
 
+        public async Task<PagedResultDto<BookSearchResultDto>> SearchByTitleAsync(
+            ApplicationUser user, string title, bool exactPhrase, List<int> categoryIds, int page, int pageSize)
+        {
+            _logger.LogInformation("Поиск по названию: {Title}, с фильтрацией по категориям {CategoryIds}, page={Page}", 
+                title, string.Join(",", categoryIds), page);
+
+            var (hasSub, remain) = await CheckIfNewSearchAndConsumeLimit(user, "Title", title);
+            var books = await _booksRepository.GetBooksByTitleAsync(title, page, pageSize, exactPhrase, categoryIds);
+
+            if (!hasSub || remain == 0)
+            {
+                ApplyNoSubscriptionRulesToSearchResults(books.Items);
+            }
+
+            await _searchHistoryService.SaveSearchHistory(user.Id, title, "Title");
+
+            return new PagedResultDto<BookSearchResultDto>
+            {
+                Items = books.Items,
+                TotalPages = books.TotalPages,
+                RemainingRequests = remain
+            };
+        }
+
         public async Task<PagedResultDto<BookSearchResultDto>> SearchByDescriptionAsync(
             ApplicationUser user, string description, bool exactPhrase, int page, int pageSize)
         {
             var (hasSub, remain) = await CheckIfNewSearchAndConsumeLimit(user, "Description", description);
             var books = await _booksRepository.GetBooksByDescriptionAsync(description, page, pageSize, exactPhrase);
+
+            if (!hasSub || remain == 0)
+            {
+                ApplyNoSubscriptionRulesToSearchResults(books.Items);
+            }
+
+            await _searchHistoryService.SaveSearchHistory(user.Id, description, "Description");
+
+            return new PagedResultDto<BookSearchResultDto>
+            {
+                Items = books.Items,
+                TotalPages = books.TotalPages,
+                RemainingRequests = remain
+            };
+        }
+
+        public async Task<PagedResultDto<BookSearchResultDto>> SearchByDescriptionAsync(
+            ApplicationUser user, string description, bool exactPhrase, List<int> categoryIds, int page, int pageSize)
+        {
+            _logger.LogInformation("Поиск по описанию: {Description}, с фильтрацией по категориям {CategoryIds}, page={Page}", 
+                description, string.Join(",", categoryIds), page);
+                
+            var (hasSub, remain) = await CheckIfNewSearchAndConsumeLimit(user, "Description", description);
+            var books = await _booksRepository.GetBooksByDescriptionAsync(description, page, pageSize, exactPhrase, categoryIds);
 
             if (!hasSub || remain == 0)
             {
