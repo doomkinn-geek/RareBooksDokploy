@@ -172,42 +172,6 @@ namespace RareBooksService.Data
             return await BuildPagedBookResult(query, page, pageSize);
         }
 
-        public async Task<PagedResultDto<BookSearchResultDto>> GetBooksByTitleAsync(
-            string title, int page, int pageSize, bool exactPhrase, List<int> categoryIds)
-        {
-            string processedTitle;
-            if (exactPhrase)
-            {
-                processedTitle = title.ToLowerInvariant();
-            }
-            else
-            {
-                string detectedLanguage;
-                processedTitle = PreprocessText(title, out detectedLanguage);
-            }
-
-            var searchWords = processedTitle.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-
-            IQueryable<RegularBaseBook> query = _context.BooksInfo.AsQueryable();
-
-            // Формируем условие поиска: для каждого слова должно содержаться в NormalizedTitle
-            foreach (var word in searchWords)
-            {
-                query = query.Where(b => b.NormalizedTitle.Contains(word));
-            }
-
-            // Фильтруем по выбранным категориям, если они указаны
-            if (categoryIds != null && categoryIds.Count > 0)
-            {
-                query = query.Where(b => categoryIds.Contains(b.CategoryId));
-            }
-
-            // Сортируем по дате завершения
-            query = query.OrderByDescending(b => b.EndDate);
-
-            return await BuildPagedBookResult(query, page, pageSize);
-        }
-
         public async Task<PagedResultDto<BookSearchResultDto>> GetBooksByDescriptionAsync(
             string description, int page, int pageSize, bool exactPhrase = false)
         {
@@ -230,41 +194,6 @@ namespace RareBooksService.Data
             foreach (var word in searchWords)
             {
                 query = query.Where(b => b.NormalizedDescription.Contains(word));
-            }
-
-            query = query.OrderByDescending(b => b.EndDate);
-
-            return await BuildPagedBookResult(query, page, pageSize);
-        }
-
-        public async Task<PagedResultDto<BookSearchResultDto>> GetBooksByDescriptionAsync(
-            string description, int page, int pageSize, bool exactPhrase, List<int> categoryIds)
-        {
-            string processedDesc;
-            if (exactPhrase)
-            {
-                processedDesc = description.ToLowerInvariant();
-            }
-            else
-            {
-                string detectedLanguage;
-                processedDesc = PreprocessText(description, out detectedLanguage);
-            }
-
-            var searchWords = processedDesc.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-
-            IQueryable<RegularBaseBook> query = _context.BooksInfo.AsQueryable();
-
-            // Исправлено: теперь фильтруем по NormalizedDescription
-            foreach (var word in searchWords)
-            {
-                query = query.Where(b => b.NormalizedDescription.Contains(word));
-            }
-
-            // Фильтруем по выбранным категориям, если они указаны
-            if (categoryIds != null && categoryIds.Count > 0)
-            {
-                query = query.Where(b => categoryIds.Contains(b.CategoryId));
             }
 
             query = query.OrderByDescending(b => b.EndDate);

@@ -5,7 +5,6 @@ using RareBooksService.Common.Models;
 using RareBooksService.Common.Models.Dto;
 using RareBooksService.WebApi.Services;
 using System.Threading.Tasks;
-using System.Linq;
 
 namespace RareBooksService.WebApi.Controllers
 {
@@ -25,26 +24,14 @@ namespace RareBooksService.WebApi.Controllers
         }
 
         [HttpGet("searchByTitle")]
-        public async Task<ActionResult> SearchByTitle(string title, bool exactPhrase = false, string categoryIds = null, int page = 1, int pageSize = 10)
+        public async Task<ActionResult> SearchByTitle(string title, bool exactPhrase = false, int page = 1, int pageSize = 10)
         {
             var user = await GetCurrentUserAsync();
             if (user == null)
                 return Unauthorized();
 
-            // Преобразуем строку с разделителями в список целых чисел
-            List<int> categoryIdsList = null;
-            if (!string.IsNullOrEmpty(categoryIds))
-            {
-                categoryIdsList = categoryIds.Split(',')
-                    .Where(id => !string.IsNullOrEmpty(id))
-                    .Select(id => int.TryParse(id, out int parsedId) ? parsedId : -1)
-                    .Where(id => id != -1)
-                    .ToList();
-            }
-
-            var result = categoryIdsList != null && categoryIdsList.Any() 
-                ? await _booksService.SearchByTitleAsync(user, title, exactPhrase, categoryIdsList, page, pageSize)
-                : await _booksService.SearchByTitleAsync(user, title, exactPhrase, page, pageSize);
+            var result = await _booksService.SearchByTitleAsync(user, title, exactPhrase, page, pageSize);
+            // если надо, можно проверить result == null и вернуть NotFound()
 
             return Ok(new
             {
@@ -55,27 +42,13 @@ namespace RareBooksService.WebApi.Controllers
         }
 
         [HttpGet("searchByDescription")]
-        public async Task<ActionResult> SearchByDescription(string description, bool exactPhrase = false, string categoryIds = null, int page = 1, int pageSize = 10)
+        public async Task<ActionResult> SearchByDescription(string description, bool exactPhrase = false, int page = 1, int pageSize = 10)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) 
                 return Unauthorized();
 
-            // Преобразуем строку с разделителями в список целых чисел
-            List<int> categoryIdsList = null;
-            if (!string.IsNullOrEmpty(categoryIds))
-            {
-                categoryIdsList = categoryIds.Split(',')
-                    .Where(id => !string.IsNullOrEmpty(id))
-                    .Select(id => int.TryParse(id, out int parsedId) ? parsedId : -1)
-                    .Where(id => id != -1)
-                    .ToList();
-            }
-
-            var result = categoryIdsList != null && categoryIdsList.Any() 
-                ? await _booksService.SearchByDescriptionAsync(user, description, exactPhrase, categoryIdsList, page, pageSize)
-                : await _booksService.SearchByDescriptionAsync(user, description, exactPhrase, page, pageSize);
-
+            var result = await _booksService.SearchByDescriptionAsync(user, description, exactPhrase, page, pageSize);
             return Ok(new
             {
                 Items = result.Items,

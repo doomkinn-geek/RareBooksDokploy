@@ -2,10 +2,10 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
-//export const API_URL = '/api';
+export const API_URL = '/api';
 // Закомментируем localhost URL, так как он вызывает ошибку соединения
 //export const API_URL = 'https://localhost:7042/api';
-export const API_URL = 'http://localhost:5000/api';
+//export const API_URL = 'http://localhost:5000/api';
 
 // Глобальный обработчик ошибок для axios
 axios.interceptors.response.use(
@@ -39,40 +39,16 @@ export const getAuthHeaders = () => {
     return token ? { Authorization: `Bearer ${token}` } : {};
 };*/
 
-export const searchBooksByTitle = (title, exactPhrase = false, categoryIds = [], page = 1, pageSize = 10) =>
+export const searchBooksByTitle = (title, exactPhrase = false, page = 1, pageSize = 10) =>
     axios.get(`${API_URL}/books/searchByTitle`, {
-        params: { 
-            title, 
-            exactPhrase, 
-            categoryIds: categoryIds.join(','),
-            page, 
-            pageSize 
-        },
+        params: { title, exactPhrase, page, pageSize },
         headers: getAuthHeaders(),
-        paramsSerializer: params => {
-            return Object.entries(params)
-                .filter(([key, value]) => value !== undefined && value !== '')
-                .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
-                .join('&');
-        }
     });
 
-export const searchBooksByDescription = (description, exactPhrase = false, categoryIds = [], page = 1, pageSize = 10) =>
+export const searchBooksByDescription = (description, exactPhrase = false, page = 1, pageSize = 10) =>
     axios.get(`${API_URL}/books/searchByDescription`, {
-        params: { 
-            description, 
-            exactPhrase, 
-            categoryIds: categoryIds.join(','),
-            page, 
-            pageSize 
-        },
+        params: { description, exactPhrase, page, pageSize },
         headers: getAuthHeaders(),
-        paramsSerializer: params => {
-            return Object.entries(params)
-                .filter(([key, value]) => value !== undefined && value !== '')
-                .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
-                .join('&');
-        }
     });
 
 
@@ -382,63 +358,112 @@ export function checkSubscriptionStatus() {
 
 // Функции для оценки стоимости антикварных книг
 export function getPriceStatistics(categoryId = null) {
-    console.log(`Получение статистики цен для категории: ${categoryId || 'все категории'}`);
+    console.log(`[API] Начало запроса getPriceStatistics с categoryId=${categoryId}`);
     
-    let url = `${API_URL}/statistics/prices`;
-    if (categoryId) {
-        url += `?categoryId=${categoryId}`;
+    // URL с поддержкой обоих эндпоинтов (старого и нового)
+    let url;
+    try {
+        // Сначала пробуем новый endpoint (Statistics контроллер)
+        url = `${API_URL}/statistics/prices`;
+        if (categoryId) {
+            url += `?categoryId=${categoryId}`;
+        }
+        
+        console.log(`[API] Запрос к endpoint: ${url}`);
+        
+        return axios.get(url, {
+            headers: getAuthHeaders(),
+            timeout: 10000
+        })
+        .then(response => {
+            console.log(`[API] Успешно получены данные статистики цен:`, response.data);
+            return response;
+        })
+        .catch(error => {
+            console.warn(`[API] Ошибка при обращении к новому endpoint, пробуем старый:`, error.message);
+            
+            // Если новый эндпоинт недоступен - пробуем старый
+            url = `${API_URL}/books/price-statistics`;
+            if (categoryId) {
+                url += `?categoryId=${categoryId}`;
+            }
+            
+            console.log(`[API] Запрос к запасному endpoint: ${url}`);
+            
+            return axios.get(url, { 
+                headers: getAuthHeaders(),
+                timeout: 10000
+            })
+            .then(response => {
+                console.log(`[API] Успешно получены данные статистики цен через запасной endpoint:`, response.data);
+                return response;
+            })
+            .catch(secondError => {
+                // Детальное логирование ошибок при второй попытке
+                console.error(`[API] Ошибка при получении статистики цен через запасной endpoint:`, secondError);
+                
+                if (secondError.response) {
+                    console.error(`[API] Статус ответа: ${secondError.response.status}`);
+                    console.error(`[API] Данные ответа:`, secondError.response.data);
+                } else if (secondError.request) {
+                    console.error('[API] Нет ответа от сервера:', secondError.request);
+                } else {
+                    console.error('[API] Ошибка при настройке запроса:', secondError.message);
+                }
+                
+                throw secondError;
+            });
+        });
+    } catch (error) {
+        console.error(`[API] Критическая ошибка в getPriceStatistics:`, error);
+        return Promise.reject(error);
     }
-    
-    return axios.get(url, {
-        headers: getAuthHeaders(),
-        timeout: 10000
-    });
 }
 
 export function getRecentSales(limit = 5) {
-    return axios.get(`${API_URL}/books/recent-sales?limit=${limit}`, 
-        { headers: getAuthHeaders() }
-    );
+    const url = `${API_URL}/books/recent-sales?limit=${limit}`;
+    const headers = getAuthHeaders();
+    
+    console.log('API getRecentSales - URL:', url);
+    console.log('API getRecentSales - Headers:', headers);
+    
+    return axios.get(url, { headers });
 }
 
 export function getPriceHistory(bookId) {
-    return axios.get(`${API_URL}/books/${bookId}/price-history`, 
-        { headers: getAuthHeaders() }
-    );
+    return axios.get(`${API_URL}/books/${bookId}/price-history`, { headers: getAuthHeaders() });
 }
 
 export function getBookValueEstimate(params) {
-    return axios.post(`${API_URL}/books/estimate-value`, params, 
-        { headers: getAuthHeaders() }
-    );
+    return axios.post(`${API_URL}/books/estimate-value`, params, { headers: getAuthHeaders() });
 }
-
-// Методы для работы с избранными книгами
-export const addBookToFavorites = (bookId) =>
-    axios.post(`${API_URL}/books/${bookId}/favorite`, {}, {
-        headers: getAuthHeaders()
-    });
-
-export const removeBookFromFavorites = (bookId) =>
-    axios.delete(`${API_URL}/books/${bookId}/favorite`, {
-        headers: getAuthHeaders()
-    });
-
-export const checkIfBookIsFavorite = (bookId) =>
-    axios.get(`${API_URL}/books/${bookId}/is-favorite`, {
-        headers: getAuthHeaders()
-    });
-
-export const getFavoriteBooks = (page = 1, pageSize = 10) =>
-    axios.get(`${API_URL}/books/favorites`, {
-        params: { page, pageSize },
-        headers: getAuthHeaders()
-    });
 
 // ===== Функции для управления категориями (очистка нежелательных категорий) =====
 export function getAllCategoriesWithBooksCount() {
-    const headers = getAuthHeaders();
-    return axios.get(`${API_URL}/CategoryCleanup/categories`, { headers });
+    const token = Cookies.get('token');
+    console.log('Вызов getAllCategoriesWithBooksCount. Токен:', token ? 'Присутствует' : 'Отсутствует');
+    
+    if (!token) {
+        console.error('Токен авторизации отсутствует!');
+        return Promise.reject(new Error('Токен авторизации отсутствует'));
+    }
+    
+    // Не пытаемся анализировать токен, а просто используем его для авторизации
+    const headers = { Authorization: `Bearer ${token}` };
+    console.log('Заголовки запроса:', headers);
+    
+    return axios.get(`${API_URL}/CategoryCleanup/categories`, { headers })
+        .catch(error => {
+            console.error('Ошибка запроса к CategoryCleanup/categories:', error);
+            console.log('Статус ошибки:', error.response?.status);
+            console.log('Данные ошибки:', error.response?.data);
+            
+            if (error.response?.status === 403) {
+                console.error('Доступ запрещен. Проверьте права пользователя.');
+            }
+            
+            throw error;
+        });
 }
 
 export function analyzeCategoriesByNames(categoryNames) {
@@ -471,3 +496,25 @@ export function deleteUnwantedCategories() {
         headers: getAuthHeaders()
     });
 }
+
+// Методы для работы с избранными книгами
+export const addBookToFavorites = (bookId) =>
+    axios.post(`${API_URL}/books/${bookId}/favorite`, {}, {
+        headers: getAuthHeaders()
+    });
+
+export const removeBookFromFavorites = (bookId) =>
+    axios.delete(`${API_URL}/books/${bookId}/favorite`, {
+        headers: getAuthHeaders()
+    });
+
+export const checkIfBookIsFavorite = (bookId) =>
+    axios.get(`${API_URL}/books/${bookId}/is-favorite`, {
+        headers: getAuthHeaders()
+    });
+
+export const getFavoriteBooks = (page = 1, pageSize = 10) =>
+    axios.get(`${API_URL}/books/favorites`, {
+        params: { page, pageSize },
+        headers: getAuthHeaders()
+    });
