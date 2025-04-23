@@ -25,10 +25,10 @@ namespace RareBooksService.WebApi.Services
         void ApplyNoSubscriptionRulesToSearchResults(List<BookSearchResultDto> books);
 
         Task<PagedResultDto<BookSearchResultDto>> SearchByTitleAsync(
-            ApplicationUser user, string title, bool exactPhrase, int page, int pageSize);
+            ApplicationUser user, string title, bool exactPhrase, int page, int pageSize, List<int>? categoryIds = null);
 
         Task<PagedResultDto<BookSearchResultDto>> SearchByDescriptionAsync(
-            ApplicationUser user, string description, bool exactPhrase, int page, int pageSize);
+            ApplicationUser user, string description, bool exactPhrase, int page, int pageSize, List<int>? categoryIds = null);
 
         Task<PagedResultDto<BookSearchResultDto>> SearchByCategoryAsync(
             ApplicationUser user, int categoryId, int page, int pageSize);
@@ -213,12 +213,17 @@ namespace RareBooksService.WebApi.Services
         }
 
         public async Task<PagedResultDto<BookSearchResultDto>> SearchByTitleAsync(
-            ApplicationUser user, string title, bool exactPhrase, int page, int pageSize)
+            ApplicationUser user, string title, bool exactPhrase, int page, int pageSize, List<int>? categoryIds = null)
         {
-            _logger.LogInformation("Поиск по названию: {Title}, page={Page}", title, page);
-
             var (hasSub, remain) = await CheckIfNewSearchAndConsumeLimit(user, "Title", title);
-            var books = await _booksRepository.GetBooksByTitleAsync(title, page, pageSize, exactPhrase);
+            
+            // Дополнительная строка логирования для отладки
+            if (categoryIds != null && categoryIds.Count > 0)
+            {
+                _logger.LogInformation("Поиск по названию с фильтром по категориям: {Categories}", string.Join(", ", categoryIds));
+            }
+            
+            var books = await _booksRepository.GetBooksByTitleAsync(title, page, pageSize, exactPhrase, categoryIds);
 
             if (!hasSub || remain == 0)
             {
@@ -236,10 +241,17 @@ namespace RareBooksService.WebApi.Services
         }
 
         public async Task<PagedResultDto<BookSearchResultDto>> SearchByDescriptionAsync(
-            ApplicationUser user, string description, bool exactPhrase, int page, int pageSize)
+            ApplicationUser user, string description, bool exactPhrase, int page, int pageSize, List<int>? categoryIds = null)
         {
             var (hasSub, remain) = await CheckIfNewSearchAndConsumeLimit(user, "Description", description);
-            var books = await _booksRepository.GetBooksByDescriptionAsync(description, page, pageSize, exactPhrase);
+            
+            // Дополнительная строка логирования для отладки
+            if (categoryIds != null && categoryIds.Count > 0)
+            {
+                _logger.LogInformation("Поиск по описанию с фильтром по категориям: {Categories}", string.Join(", ", categoryIds));
+            }
+            
+            var books = await _booksRepository.GetBooksByDescriptionAsync(description, page, pageSize, exactPhrase, categoryIds);
 
             if (!hasSub || remain == 0)
             {

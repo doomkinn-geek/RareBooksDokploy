@@ -20,6 +20,7 @@ namespace RareBooksService.Parser.Services
         Task UpdateFinishedAuctionsStartPriceOneAsync(CancellationToken token);
         Task UpdateFinishedFixedPriceAsync(CancellationToken token);
         Task RefreshLotsWithRelativeImageUrlsAsync(CancellationToken token);
+        Task VerifyLotCategoriesAsync(CancellationToken token);
     }
 
     public class LotFetchingService : ILotFetchingService
@@ -702,7 +703,102 @@ namespace RareBooksService.Parser.Services
             _logger.LogInformation("Completed fetching and saving data for category '{CategoryName}'", categoryName);
         }
 
-
+        public async Task VerifyLotCategoriesAsync(CancellationToken token)
+        {
+            _logger.LogInformation("Начало проверки соответствия категорий в существующих лотах");
+            
+            // Имя файла для записи ID лотов с измененными категориями
+            string updatedLotsFilePath = "updated_categories_lots.txt";
+            List<int> updatedLotsIds = new List<int>();
+            
+            int batchSize = 500; // Размер партии для обработки
+            int processedCount = 0;
+            int updatedCount = 0;
+            int totalCount = await _context.BooksInfo.CountAsync();
+            
+            _progressReporter.ReportInfo($"Всего лотов для проверки: {totalCount}", "VerifyLotCategoriesAsync");
+            
+            // Загружаем лоты частями
+            for (int offset = 0; offset < totalCount; offset += batchSize)
+            {
+                // Проверка отмены
+                if (token.IsCancellationRequested || (_checkCancellationFunc?.Invoke() == true))
+                {
+                    _logger.LogInformation("Проверка категорий прервана.");
+                    break;
+                }
+                
+                var booksToCheck = await _context.BooksInfo
+                    .Include(b => b.Category)
+                    .Skip(offset)
+                    .Take(batchSize)
+                    .ToListAsync(token);
+                
+                foreach (var book in booksToCheck)
+                {
+                    processedCount++;
+                    
+                    // Обновляем прогресс через событие ProgressChanged
+                    ProgressChanged?.Invoke(book.Id, $"Проверка лота {processedCount} из {totalCount}");
+                    _progressReporter.ReportInfo($"Проверка лота {processedCount} из {totalCount}", "VerifyLotCategoriesAsync", book.Id);
+                    
+                    try
+                    {
+                        // Запрашиваем актуальные данные по лоту
+                        var updatedLotData = await _lotDataService.GetLotDataAsync(book.Id);
+                        if (updatedLotData?.result != null)
+                        {
+                            // Проверяем, совпадает ли категория в базе данных с категорией из MeshokBook
+                            bool categoryMismatch = book.Category?.CategoryId != updatedLotData.result.categoryId;
+                            
+                            if (categoryMismatch)
+                            {
+                                _logger.LogInformation(
+                                    "Несоответствие категории для лота {LotId}: в БД {DbCategory}, в MeshokBook {MeshokCategory}",
+                                    book.Id, book.Category?.CategoryId, updatedLotData.result.categoryId);
+                                
+                                // Полное обновление лота через SaveLotDataAsync с новой категорией
+                                await _lotDataHandler.SaveLotDataAsync(
+                                    lotData: updatedLotData.result,
+                                    categoryId: updatedLotData.result.categoryId,
+                                    categoryName: "unknown",
+                                    downloadImages: false,  // не загружаем изображения повторно
+                                    isLessValuableLot: book.IsLessValuable
+                                );
+                                
+                                // Добавляем ID лота в список обновленных
+                                updatedLotsIds.Add(book.Id);
+                                updatedCount++;
+                                
+                                // Записываем ID в файл сразу после обновления (чтобы не потерять данные при прерывании)
+                                File.AppendAllText(updatedLotsFilePath, $"{book.Id}\n");
+                                
+                                _progressReporter.ReportInfo(
+                                    $"Обновлена категория лота {book.Id}: с {book.Category?.CategoryId} на {updatedLotData.result.categoryId}",
+                                    "VerifyLotCategoriesAsync", book.Id);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Ошибка при проверке лота с ID {LotId}", book.Id);
+                        _progressReporter.ReportError(ex, $"Ошибка при проверке категории лота {book.Id}", "VerifyLotCategoriesAsync", book.Id);
+                    }
+                    
+                    // Делаем небольшую паузу, чтобы не нагружать сервер
+                    await Task.Delay(50, token);
+                }
+                
+                // Освобождаем память после обработки партии
+                _context.ChangeTracker.Clear();
+                GC.Collect();
+            }
+            
+            _logger.LogInformation("Завершена проверка категорий. Проверено лотов: {ProcessedCount}, обновлено: {UpdatedCount}", 
+                processedCount, updatedCount);
+            _progressReporter.ReportInfo($"Проверка категорий завершена. Проверено: {processedCount}, обновлено: {updatedCount}", 
+                "VerifyLotCategoriesAsync");
+        }
 
         private async Task ProcessLotAsync(int lotId,
                                    string nonStandardPricesFilePath = "",

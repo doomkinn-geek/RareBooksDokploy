@@ -142,6 +142,22 @@ const BookUpdate = () => {
         }
     };
     
+    const handleRunCategoryCheck = async () => {
+        try {
+            setLoading(true);
+            const token = Cookies.get('token');
+            await axios.post(`${API_URL}/bookupdateservice/runCategoryCheck`, null, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            await fetchStatus();
+        } catch (err) {
+            console.error('Error running category check:', err);
+            setError('Не удалось запустить проверку категорий');
+        } finally {
+            setLoading(false);
+        }
+    };
+    
     const formatDateTime = (dateTimeString) => {
         if (!dateTimeString) return 'Н/Д';
         const date = new Date(dateTimeString);
@@ -435,19 +451,34 @@ const BookUpdate = () => {
                                 )}
                                 
                                 {(!bookUpdateStatus.isRunningNow || bookUpdateStatus.isPaused) && (
-                                    <Button
-                                        variant="contained"
-                                        onClick={handleRunNow}
+                                    <>
+                                        <Button
+                                            variant="contained"
+                                            onClick={handleRunNow}
                                             startIcon={<SyncIcon />}
-                                        sx={{ 
-                                            backgroundColor: '#E72B3D', 
-                                            '&:hover': { backgroundColor: '#c4242f' },
+                                            sx={{ 
+                                                backgroundColor: '#E72B3D', 
+                                                '&:hover': { backgroundColor: '#c4242f' },
                                                 flex: 1,
                                                 p: { xs: 1, sm: 1.5 }
-                                        }}
-                                    >
-                                        Запустить сейчас
-                                    </Button>
+                                            }}
+                                        >
+                                            Запустить сейчас
+                                        </Button>
+                                        
+                                        <Button
+                                            variant="contained"
+                                            onClick={handleRunCategoryCheck}
+                                            sx={{ 
+                                                backgroundColor: '#5C6BC0', 
+                                                '&:hover': { backgroundColor: '#3F51B5' },
+                                                flex: 1,
+                                                p: { xs: 1, sm: 1.5 }
+                                            }}
+                                        >
+                                            Проверить категории
+                                        </Button>
+                                    </>
                                 )}
 
                                     {/* Невидимая кнопка для стабилизации высоты, если не отображаются реальные кнопки */}

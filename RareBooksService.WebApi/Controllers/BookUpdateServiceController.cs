@@ -72,5 +72,20 @@ namespace RareBooksService.WebApi.Controllers
             service.ForceRunNow();
             return Ok(new { message = "BookUpdateService runNow called" });
         }
+
+        [HttpPost("runCategoryCheck")]
+        public IActionResult RunCategoryCheck()
+        {
+            var service = _bookUpdateService as BookUpdateService;
+            if (service == null)
+            {
+                return BadRequest("Сервис не найден или не является BookUpdateService.");
+            }
+
+            // Запускаем только операцию VerifyLotCategoriesAsync
+            service._currentStepIndex = 0; // Установка индекса на первую операцию (VerifyLotCategoriesAsync)
+            service.ForceRunNow();
+            return Ok(new { message = "Category verification started" });
+        }
     }
 }

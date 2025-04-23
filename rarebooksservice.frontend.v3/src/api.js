@@ -39,17 +39,47 @@ export const getAuthHeaders = () => {
     return token ? { Authorization: `Bearer ${token}` } : {};
 };*/
 
-export const searchBooksByTitle = (title, exactPhrase = false, page = 1, pageSize = 10) =>
-    axios.get(`${API_URL}/books/searchByTitle`, {
-        params: { title, exactPhrase, page, pageSize },
+export const searchBooksByTitle = (title, exactPhrase = false, page = 1, pageSize = 10, categoryIds = []) => {
+    const params = { title, exactPhrase, page, pageSize };
+    
+    // Добавляем categoryIds только если они указаны
+    if (categoryIds && categoryIds.length > 0) {
+        // Передаем каждый элемент массива как отдельный параметр с одинаковым именем
+        // для правильной обработки ASP.NET Core
+        categoryIds.forEach((id, index) => {
+            params[`categoryIds[${index}]`] = id;
+        });
+    }
+    
+    return axios.get(`${API_URL}/books/searchByTitle`, {
+        params,
         headers: getAuthHeaders(),
+        paramsSerializer: {
+            indexes: null // Отключаем добавление индексов в квадратных скобках
+        }
     });
+};
 
-export const searchBooksByDescription = (description, exactPhrase = false, page = 1, pageSize = 10) =>
-    axios.get(`${API_URL}/books/searchByDescription`, {
-        params: { description, exactPhrase, page, pageSize },
+export const searchBooksByDescription = (description, exactPhrase = false, page = 1, pageSize = 10, categoryIds = []) => {
+    const params = { description, exactPhrase, page, pageSize };
+    
+    // Добавляем categoryIds только если они указаны
+    if (categoryIds && categoryIds.length > 0) {
+        // Передаем каждый элемент массива как отдельный параметр с одинаковым именем
+        // для правильной обработки ASP.NET Core
+        categoryIds.forEach((id, index) => {
+            params[`categoryIds[${index}]`] = id;
+        });
+    }
+    
+    return axios.get(`${API_URL}/books/searchByDescription`, {
+        params,
         headers: getAuthHeaders(),
+        paramsSerializer: {
+            indexes: null // Отключаем добавление индексов в квадратных скобках
+        }
     });
+};
 
 
 export const searchBooksByCategory = (categoryId, page = 1, pageSize = 10) =>

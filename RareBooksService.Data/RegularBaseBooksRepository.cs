@@ -143,7 +143,7 @@ namespace RareBooksService.Data
         // -------------------------- REAL METHODS -----------------------------
 
         public async Task<PagedResultDto<BookSearchResultDto>> GetBooksByTitleAsync(
-            string title, int page, int pageSize, bool exactPhrase = false)
+            string title, int page, int pageSize, bool exactPhrase = false, List<int>? categoryIds = null)
         {
             string processedTitle;
             if (exactPhrase)
@@ -166,6 +166,12 @@ namespace RareBooksService.Data
                 query = query.Where(b => b.NormalizedTitle.Contains(word));
             }
 
+            // Применяем фильтр по категориям, если он указан
+            if (categoryIds != null && categoryIds.Count > 0)
+            {
+                query = query.Where(b => categoryIds.Contains(b.CategoryId));
+            }
+
             // Сортируем по дате завершения
             query = query.OrderByDescending(b => b.EndDate);
 
@@ -173,7 +179,7 @@ namespace RareBooksService.Data
         }
 
         public async Task<PagedResultDto<BookSearchResultDto>> GetBooksByDescriptionAsync(
-            string description, int page, int pageSize, bool exactPhrase = false)
+            string description, int page, int pageSize, bool exactPhrase = false, List<int>? categoryIds = null)
         {
             string processedDesc;
             if (exactPhrase)
@@ -194,6 +200,12 @@ namespace RareBooksService.Data
             foreach (var word in searchWords)
             {
                 query = query.Where(b => b.NormalizedDescription.Contains(word));
+            }
+
+            // Применяем фильтр по категориям, если он указан
+            if (categoryIds != null && categoryIds.Count > 0)
+            {
+                query = query.Where(b => categoryIds.Contains(b.CategoryId));
             }
 
             query = query.OrderByDescending(b => b.EndDate);

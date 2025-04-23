@@ -10,8 +10,8 @@ namespace RareBooksService.Data.Interfaces
 {
     public interface IRegularBaseBooksRepository
     {
-        Task<PagedResultDto<BookSearchResultDto>> GetBooksByTitleAsync(string title, int page, int pageSize, bool exactPhrase = false);
-        Task<PagedResultDto<BookSearchResultDto>> GetBooksByDescriptionAsync(string description, int page, int pageSize, bool exactPhrase = false);
+        Task<PagedResultDto<BookSearchResultDto>> GetBooksByTitleAsync(string title, int page, int pageSize, bool exactPhrase = false, List<int>? categoryIds = null);
+        Task<PagedResultDto<BookSearchResultDto>> GetBooksByDescriptionAsync(string description, int page, int pageSize, bool exactPhrase = false, List<int>? categoryIds = null);
         Task<PagedResultDto<BookSearchResultDto>> GetBooksByCategoryAsync(int categoryId, int page, int pageSize);
         Task<PagedResultDto<BookSearchResultDto>> GetBooksByPriceRangeAsync(double minPrice, double maxPrice, int page, int pageSize);
         Task<(int totalFound, List<string> firstTwoTitles)> GetPartialInfoByPriceRangeAsync(double minPrice, double maxPrice);

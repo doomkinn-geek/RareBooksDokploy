@@ -5,6 +5,7 @@ using RareBooksService.Common.Models;
 using RareBooksService.Common.Models.Dto;
 using RareBooksService.WebApi.Services;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
 namespace RareBooksService.WebApi.Controllers
 {
@@ -14,23 +15,28 @@ namespace RareBooksService.WebApi.Controllers
     public class BooksController : BaseController
     {
         private readonly IBooksService _booksService;
+        private readonly ILogger<BooksController> _logger;
         
         public BooksController(
             IBooksService booksService,
-            UserManager<ApplicationUser> userManager
+            UserManager<ApplicationUser> userManager,
+            ILogger<BooksController> logger
         ) : base(userManager)
         {
             _booksService = booksService;
+            _logger = logger;
         }
 
         [HttpGet("searchByTitle")]
-        public async Task<ActionResult> SearchByTitle(string title, bool exactPhrase = false, int page = 1, int pageSize = 10)
+        public async Task<ActionResult> SearchByTitle(string title, bool exactPhrase = false, int page = 1, int pageSize = 10, [FromQuery(Name = "categoryIds")] List<int>? categoryIds = null)
         {
+            _logger.LogInformation($"Поиск по названию '{title}', с фильтрацией по категориям: {(categoryIds != null ? string.Join(", ", categoryIds) : "нет")}");
+            
             var user = await GetCurrentUserAsync();
             if (user == null)
                 return Unauthorized();
 
-            var result = await _booksService.SearchByTitleAsync(user, title, exactPhrase, page, pageSize);
+            var result = await _booksService.SearchByTitleAsync(user, title, exactPhrase, page, pageSize, categoryIds);
             // если надо, можно проверить result == null и вернуть NotFound()
 
             return Ok(new
@@ -42,13 +48,15 @@ namespace RareBooksService.WebApi.Controllers
         }
 
         [HttpGet("searchByDescription")]
-        public async Task<ActionResult> SearchByDescription(string description, bool exactPhrase = false, int page = 1, int pageSize = 10)
+        public async Task<ActionResult> SearchByDescription(string description, bool exactPhrase = false, int page = 1, int pageSize = 10, [FromQuery(Name = "categoryIds")] List<int>? categoryIds = null)
         {
+            _logger.LogInformation($"Поиск по описанию '{description}', с фильтрацией по категориям: {(categoryIds != null ? string.Join(", ", categoryIds) : "нет")}");
+            
             var user = await GetCurrentUserAsync();
             if (user == null) 
                 return Unauthorized();
 
-            var result = await _booksService.SearchByDescriptionAsync(user, description, exactPhrase, page, pageSize);
+            var result = await _booksService.SearchByDescriptionAsync(user, description, exactPhrase, page, pageSize, categoryIds);
             return Ok(new
             {
                 Items = result.Items,

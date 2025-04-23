@@ -112,7 +112,7 @@ namespace RareBooksService.WebApi.Services
         // ========== 3) СПИСОК ОПЕРАЦИЙ ====================================
         // ==================================================================
         // Мы опишем четыре операции в массиве. При запуске пройдём по ним по порядку.
-        private int _currentStepIndex = 0;
+        public int _currentStepIndex = 0;
 
         private (string Name, Func<CancellationToken, Task> Operation)[] _operations;
 
@@ -149,7 +149,37 @@ namespace RareBooksService.WebApi.Services
             // Каждый шаг - кортеж (НазваниеОперации, async метод).
             _operations = new (string, Func<CancellationToken, Task>)[]
             {
-                // Новая операция для скачивания изображений для книг с относительными URL
+                // Новая операция для проверки категорий книг
+                ("VerifyLotCategoriesAsync", async ct =>
+                {
+                    using var scope = _serviceProvider.CreateScope();
+                    var lotFetchingService = scope.ServiceProvider.GetRequiredService<ILotFetchingService>();
+
+                    _currentOperationName = "VerifyLotCategoriesAsync";
+                    ResetProgress();
+                    _logger.LogInformation("Проверка соответствия категорий в лотах...");
+
+                    if (lotFetchingService is LotFetchingService realLotFetchingService)
+                    {
+                        realLotFetchingService.ProgressChanged += OnLotProgressChanged;
+                        realLotFetchingService.SetCancellationCheckFunc(() => _cancellationRequested || ct.IsCancellationRequested);
+                    }
+
+                    try
+                    {
+                        await lotFetchingService.VerifyLotCategoriesAsync(ct);
+                    }
+                    finally
+                    {
+                        if (lotFetchingService is LotFetchingService realLotFetchingService2)
+                        {
+                            realLotFetchingService2.ProgressChanged -= OnLotProgressChanged;
+                            realLotFetchingService2.SetCancellationCheckFunc(null);
+                        }
+                    }
+                }),
+                
+                // Операция для скачивания изображений для книг с относительными URL
                 /*("RefreshLotsWithRelativeImageUrlsAsync", async ct =>
                 {
                     using var scope = _serviceProvider.CreateScope();

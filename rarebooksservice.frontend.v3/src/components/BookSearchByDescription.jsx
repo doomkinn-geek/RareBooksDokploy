@@ -1,47 +1,88 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useContext } from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
-import { searchBooksByDescription } from '../api';
+import { searchBooksByDescription, getCategories } from '../api';
 import BookList from './BookList.jsx';
-import { Typography, Box } from '@mui/material';
+import { 
+    Typography, 
+    Box, 
+    FormControl, 
+    InputLabel, 
+    Select, 
+    MenuItem, 
+    Checkbox, 
+    ListItemText, 
+    OutlinedInput, 
+    Chip,
+    FormControlLabel,
+    Switch,
+    Grid,
+    Button,
+    Paper
+} from '@mui/material';
 import ErrorMessage from './ErrorMessage';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import { LanguageContext } from '../context/LanguageContext';
+import translations from '../translations';
 
 const BookSearchByDescription = () => {
     const { description } = useParams();
     const location = useLocation();
     const navigate = useNavigate();
+    const { language } = useContext(LanguageContext);
+    const t = translations[language];
 
     const query = new URLSearchParams(location.search);
     const exactPhrase = query.get('exactPhrase') === 'true';
     const initialPage = parseInt(query.get('page'), 10) || 1;
+    const initialCategoryIds = query.get('categoryIds') ? query.get('categoryIds').split(',').map(id => parseInt(id)) : [];
 
     const [books, setBooks] = useState([]);
     const [currentPage, setCurrentPage] = useState(initialPage);
     const [totalPages, setTotalPages] = useState(1);
+    const [categories, setCategories] = useState([]);
+    const [selectedCategories, setSelectedCategories] = useState(initialCategoryIds);
+    const [showFilters, setShowFilters] = useState(false);
 
     const [errorMessage, setErrorMessage] = useState('');
     const [loading, setLoading] = useState(false);
-
-    // Новое:
     const [remainingRequests, setRemainingRequests] = useState(null);
+
+    // Загрузка списка категорий при монтировании компонента
+    useEffect(() => {
+        const fetchCategories = async () => {
+            try {
+                const response = await getCategories();
+                setCategories(response.data);
+            } catch (error) {
+                console.error('Ошибка при загрузке категорий:', error);
+            }
+        };
+
+        fetchCategories();
+    }, []);
 
     useEffect(() => {
         const fetchBooks = async (page = 1) => {
             setLoading(true);
             setErrorMessage('');
             try {
-                const response = await searchBooksByDescription(description, exactPhrase, page);
-                // response.data => { items, totalPages, remainingRequests }
+                const response = await searchBooksByDescription(description, exactPhrase, page, 10, selectedCategories);
+                const { data } = response;
+                
+                if (!data || !Array.isArray(data.items)) {
+                    setBooks([]);
+                    setErrorMessage('Сервер вернул неожиданные данные.');
+                    return;
+                }
+                
+                setBooks(data.items);
+                setTotalPages(data.totalPages);
 
-                setBooks(response.data.items);
-                setTotalPages(response.data.totalPages);
-
-                setRemainingRequests(data.remainingRequests);
-
-                if (typeof response.data.remainingRequests !== 'undefined') {
-                    setRemainingRequests(response.data.remainingRequests);
+                if (typeof data.remainingRequests !== 'undefined') {
+                    setRemainingRequests(data.remainingRequests);
                 }
 
-                if (response.data.items.length === 0) {
+                if (data.items.length === 0) {
                     setErrorMessage('Ничего не найдено.');
                 }
             } catch (error) {
@@ -53,29 +94,122 @@ const BookSearchByDescription = () => {
         };
 
         fetchBooks(currentPage);
-    }, [description, exactPhrase, currentPage]);
+    }, [description, exactPhrase, currentPage, selectedCategories]);
 
     useEffect(() => {
         const newQuery = new URLSearchParams();
         newQuery.set('exactPhrase', exactPhrase);
         newQuery.set('page', currentPage);
+        if (selectedCategories.length > 0) {
+            newQuery.set('categoryIds', selectedCategories.join(','));
+        }
         navigate(`?${newQuery.toString()}`, { replace: true });
-    }, [exactPhrase, currentPage, navigate]);
+    }, [exactPhrase, currentPage, navigate, selectedCategories]);
+
+    const handleCategoryChange = (event) => {
+        const {
+            target: { value },
+        } = event;
+        setSelectedCategories(typeof value === 'string' ? value.split(',').map(id => parseInt(id)) : value);
+        setCurrentPage(1); // Сбрасываем страницу при изменении фильтров
+    };
+
+    const handleResetFilters = () => {
+        setSelectedCategories([]);
+        setCurrentPage(1);
+    };
 
     return (
         <div className="container">
-            <Typography variant="h4">
-                Книги с описанием: {description}
-            </Typography>
+            <Box sx={{ mb: 2 }}>
+                <Typography variant="h5" sx={{ fontWeight: 'bold', marginTop: '10px' }}>
+                    {language === 'RU' ? 'Книги с описанием:' : 'Books with description:'} {description}
+                </Typography>
+            </Box>
+
+            <Box sx={{ mb: 3 }}>
+                <Button 
+                    variant="outlined" 
+                    startIcon={<FilterListIcon />}
+                    onClick={() => setShowFilters(!showFilters)}
+                    sx={{ mb: 1 }}
+                >
+                    {language === 'RU' ? 'Фильтры' : 'Filters'}
+                </Button>
+                
+                {showFilters && (
+                    <Paper sx={{ p: 2, mt: 1 }}>
+                        <Grid container spacing={2} alignItems="center">
+                            <Grid item xs={12} md={6}>
+                                <FormControl fullWidth>
+                                    <InputLabel id="category-select-label">
+                                        {language === 'RU' ? 'Категории' : 'Categories'}
+                                    </InputLabel>
+                                    <Select
+                                        labelId="category-select-label"
+                                        multiple
+                                        value={selectedCategories}
+                                        onChange={handleCategoryChange}
+                                        input={<OutlinedInput label={language === 'RU' ? 'Категории' : 'Categories'} />}
+                                        renderValue={(selected) => (
+                                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                                {selected.map((value) => {
+                                                    const category = categories.find(cat => cat.id === value);
+                                                    return (
+                                                        <Chip 
+                                                            key={value} 
+                                                            label={category ? category.name : value} 
+                                                        />
+                                                    );
+                                                })}
+                                            </Box>
+                                        )}
+                                    >
+                                        {categories.map((category) => (
+                                            <MenuItem key={category.id} value={category.id}>
+                                                <Checkbox checked={selectedCategories.indexOf(category.id) > -1} />
+                                                <ListItemText 
+                                                    primary={category.name} 
+                                                    secondary={`${language === 'RU' ? 'Книг' : 'Books'}: ${category.bookCount}`} 
+                                                />
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+                            <Grid item xs={12} md={3}>
+                                <FormControlLabel
+                                    control={
+                                        <Switch 
+                                            checked={exactPhrase} 
+                                            onChange={(e) => navigate(`?exactPhrase=${e.target.checked}&page=1${selectedCategories.length > 0 ? `&categoryIds=${selectedCategories.join(',')}` : ''}`)}
+                                        />
+                                    }
+                                    label={language === 'RU' ? 'Точная фраза' : 'Exact phrase'}
+                                />
+                            </Grid>
+                            <Grid item xs={12} md={3}>
+                                <Button 
+                                    variant="outlined" 
+                                    onClick={handleResetFilters}
+                                    fullWidth
+                                >
+                                    {language === 'RU' ? 'Сбросить фильтры' : 'Reset filters'}
+                                </Button>
+                            </Grid>
+                        </Grid>
+                    </Paper>
+                )}
+            </Box>
 
             <ErrorMessage message={errorMessage} />
 
-            {loading && <Typography variant="h6">Загрузка...</Typography>}
+            {loading && <Typography variant="h6">{language === 'RU' ? 'Загрузка...' : 'Loading...'}</Typography>}
 
             {/* Выводим остаток запросов */}
             {!loading && (remainingRequests !== null) && (
                 <Typography variant="body1" sx={{ color: '#666', marginBottom: '8px' }}>
-                    Осталось запросов: {remainingRequests === null ? 'безлимит' : remainingRequests}
+                    {language === 'RU' ? 'Осталось запросов:' : 'Remaining requests:'} {remainingRequests === null ? (language === 'RU' ? 'безлимит' : 'unlimited') : remainingRequests}
                 </Typography>
             )}
 
