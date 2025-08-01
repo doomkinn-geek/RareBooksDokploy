@@ -117,9 +117,10 @@ namespace RareBooksService.WebApi.Controllers
         [HttpGet("download-exported-file/{taskId}")]
         public IActionResult DownloadExportedFile(Guid taskId)
         {
+            var startTime = DateTime.UtcNow;
             try
             {
-                _logger.LogInformation($"Запрос на скачивание файла экспорта, TaskId: {taskId}");
+                _logger.LogInformation($"Запрос на скачивание файла экспорта, TaskId: {taskId}, IP: {HttpContext.Connection.RemoteIpAddress}");
                 var file = _exportService.GetExportedFile(taskId);
                 if (file == null || !file.Exists)
                 {
@@ -130,17 +131,40 @@ namespace RareBooksService.WebApi.Controllers
                 var fileSizeMB = file.Length / (1024.0 * 1024.0);
                 _logger.LogInformation($"Начинается скачивание файла экспорта: {file.FullName}, размер: {fileSizeMB:F2} MB, TaskId: {taskId}");
 
+                // Логируем заголовки запроса для диагностики
+                var userAgent = HttpContext.Request.Headers["User-Agent"].ToString();
+                var rangeHeader = HttpContext.Request.Headers["Range"].ToString();
+                _logger.LogInformation($"User-Agent: {userAgent}, Range: {rangeHeader}, TaskId: {taskId}");
+
+                // Проверяем, что файл доступен для чтения
+                try
+                {
+                    using (var testStream = System.IO.File.OpenRead(file.FullName))
+                    {
+                        _logger.LogInformation($"Файл успешно открыт для чтения, TaskId: {taskId}");
+                    }
+                }
+                catch (Exception readEx)
+                {
+                    _logger.LogError(readEx, $"Ошибка при попытке открыть файл для чтения, TaskId: {taskId}");
+                    throw;
+                }
+
                 // Исправляем расширение файла на .zip, так как ExportService создает zip-архив
                 var result = PhysicalFile(file.FullName, "application/zip", $"export_{taskId}.zip");
                 
                 // Включаем поддержку Range requests для больших файлов (позволяет докачку)
                 result.EnableRangeProcessing = true;
                 
+                var processingTime = (DateTime.UtcNow - startTime).TotalMilliseconds;
+                _logger.LogInformation($"PhysicalFileResult создан за {processingTime:F2}ms, начинается передача файла клиенту, TaskId: {taskId}");
+                
                 return result;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Ошибка при попытке скачивания файла экспорта, TaskId: {taskId}");
+                var processingTime = (DateTime.UtcNow - startTime).TotalMilliseconds;
+                _logger.LogError(ex, $"Ошибка при попытке скачивания файла экспорта за {processingTime:F2}ms, TaskId: {taskId}");
                 return StatusCode(500, "Внутренняя ошибка сервера при скачивании файла");
             }
         }

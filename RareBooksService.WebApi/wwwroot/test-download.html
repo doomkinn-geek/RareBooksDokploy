@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Тестирование загрузки файлов экспорта</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        button { padding: 10px 20px; margin: 10px; }
+        .progress { width: 100%; height: 20px; margin: 10px 0; }
+        .log { background: #f5f5f5; padding: 10px; margin: 10px 0; height: 300px; overflow-y: scroll; font-family: monospace; font-size: 12px; }
+        .error { color: red; }
+        .success { color: green; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Тестирование загрузки файлов экспорта</h1>
+        
+        <div>
+            <label>Task ID:</label>
+            <input type="text" id="taskId" placeholder="Введите Task ID" style="width: 300px;">
+            <button onclick="downloadFile()">Скачать файл</button>
+            <button onclick="clearLog()">Очистить лог</button>
+        </div>
+        
+        <div>
+            <label>Прогресс:</label>
+            <progress id="progress" class="progress" value="0" max="100"></progress>
+            <span id="progressText">0%</span>
+        </div>
+        
+        <div>
+            <h3>Лог операций:</h3>
+            <div id="log" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+            logDiv.innerHTML += `<div class="${className}">[${time}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function updateProgress(percent, loaded, total) {
+            const progressBar = document.getElementById('progress');
+            const progressText = document.getElementById('progressText');
+            
+            progressBar.value = percent;
+            const loadedMB = loaded ? (loaded / (1024 * 1024)).toFixed(2) : '?';
+            const totalMB = total ? (total / (1024 * 1024)).toFixed(2) : '?';
+            progressText.textContent = `${percent}% (${loadedMB}/${totalMB} MB)`;
+        }
+
+        async function downloadFile() {
+            const taskId = document.getElementById('taskId').value.trim();
+            
+            if (!taskId) {
+                log('Введите Task ID', 'error');
+                return;
+            }
+
+            log(`Начинается загрузка файла для Task ID: ${taskId}`);
+            updateProgress(0);
+
+            try {
+                const url = `/api/admin/download-exported-file/${taskId}`;
+                log(`URL запроса: ${url}`);
+
+                // Получаем токен из cookies (если есть)
+                const token = getCookie('token');
+                const headers = {};
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                    log('Токен авторизации найден и добавлен в заголовки');
+                } else {
+                    log('Токен авторизации не найден', 'error');
+                }
+
+                log('Отправляем запрос на сервер...');
+                
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: headers
+                });
+
+                log(`Ответ сервера: ${response.status} ${response.statusText}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const contentLength = response.headers.get('Content-Length');
+                const contentType = response.headers.get('Content-Type');
+                log(`Content-Type: ${contentType}`);
+                log(`Content-Length: ${contentLength ? (parseInt(contentLength) / (1024*1024)).toFixed(2) + ' MB' : 'Неизвестно'}`);
+
+                if (!response.body) {
+                    throw new Error('ReadableStream не поддерживается');
+                }
+
+                const reader = response.body.getReader();
+                const chunks = [];
+                let receivedLength = 0;
+                const totalLength = contentLength ? parseInt(contentLength) : 0;
+
+                log('Начинаем чтение потока данных...');
+
+                while (true) {
+                    const { done, value } = await reader.read();
+
+                    if (done) {
+                        log('Чтение потока завершено');
+                        break;
+                    }
+
+                    chunks.push(value);
+                    receivedLength += value.length;
+
+                    const percent = totalLength > 0 ? Math.round((receivedLength / totalLength) * 100) : 0;
+                    updateProgress(percent, receivedLength, totalLength);
+
+                    if (receivedLength % (1024 * 1024) < value.length) { // Каждый MB
+                        log(`Получено: ${(receivedLength / (1024 * 1024)).toFixed(2)} MB`);
+                    }
+                }
+
+                log(`Всего получено: ${(receivedLength / (1024 * 1024)).toFixed(2)} MB`);
+                log('Создаем Blob из полученных данных...');
+
+                const blob = new Blob(chunks);
+                log(`Blob создан, размер: ${(blob.size / (1024 * 1024)).toFixed(2)} MB`);
+
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.download = `export_${taskId}.zip`;
+                
+                log('Инициируем скачивание файла...');
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(downloadUrl);
+
+                updateProgress(100, blob.size, blob.size);
+                log('Скачивание завершено успешно!', 'success');
+
+            } catch (error) {
+                log(`Ошибка: ${error.message}`, 'error');
+                console.error('Детали ошибки:', error);
+            }
+        }
+
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+            return null;
+        }
+
+        // Автоматически заполняем Task ID из URL параметров
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const taskId = urlParams.get('taskId');
+            if (taskId) {
+                document.getElementById('taskId').value = taskId;
+                log(`Task ID загружен из URL: ${taskId}`);
+            }
+        };
+    </script>
+</body>
+</html> 

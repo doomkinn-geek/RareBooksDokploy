@@ -329,6 +329,10 @@ namespace RareBooksService.WebApi
                 app.UseHttpsRedirection();
                 app.UseRouting();
                 app.UseCors("AllowAll");
+                
+                // Middleware для логирования загрузки файлов
+                app.UseMiddleware<RareBooksService.WebApi.Middleware.FileDownloadLoggingMiddleware>();
+                
                 app.UseAuthentication();
                 app.UseAuthorization();
 

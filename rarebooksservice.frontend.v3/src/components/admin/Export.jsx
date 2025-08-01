@@ -158,9 +158,13 @@ const Export = () => {
                 return;
             }
             
+            console.log(`Начинается скачивание файла экспорта для TaskId: ${downloadTaskId}`);
+            
             // Устанавливаем состояние загрузки
             setIsDownloading(true);
             setDownloadProgress(0);
+            
+            console.log(`Отправляем запрос на скачивание: ${API_URL}/admin/download-exported-file/${downloadTaskId}`);
             
             const response = await axios.get(
                 `${API_URL}/admin/download-exported-file/${downloadTaskId}`,
@@ -172,49 +176,89 @@ const Export = () => {
                         if (progressEvent.total) {
                             const progress = Math.round((progressEvent.loaded / progressEvent.total) * 100);
                             setDownloadProgress(progress);
+                            console.log(`Прогресс скачивания: ${progress}% (${progressEvent.loaded}/${progressEvent.total} байт)`);
+                        } else {
+                            console.log(`Загружено: ${progressEvent.loaded} байт (размер неизвестен)`);
                         }
                     }
                 }
             );
+            
+            console.log('Ответ получен от сервера:', {
+                status: response.status,
+                statusText: response.statusText,
+                contentType: response.headers['content-type'],
+                contentLength: response.headers['content-length'],
+                dataSize: response.data?.size
+            });
 
             // Проверяем, что ответ содержит данные
             if (!response.data || response.data.size === 0) {
+                console.error('Получен пустой файл от сервера');
                 throw new Error('Получен пустой файл');
             }
 
-            const url = window.URL.createObjectURL(new Blob([response.data]));
+            console.log(`Создаем blob для скачивания, размер: ${response.data.size} байт`);
+            const blob = new Blob([response.data]);
+            console.log(`Blob создан, размер: ${blob.size} байт`);
+            
+            const url = window.URL.createObjectURL(blob);
+            console.log(`URL создан: ${url}`);
+            
             const link = document.createElement('a');
             link.href = url;
             link.setAttribute('download', `export_${downloadTaskId}.zip`);
+            console.log(`Добавляем ссылку в DOM и инициируем скачивание`);
+            
             document.body.appendChild(link);
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
+            
+            console.log('Скачивание файла инициировано успешно');
             
             // Сбрасываем состояние загрузки после небольшой задержки,
             // чтобы пользователь успел увидеть 100%
             setTimeout(() => {
                 setIsDownloading(false);
                 setDownloadProgress(0);
+                console.log('Состояние загрузки сброшено');
             }, 1000);
         } catch (err) {
             console.error('Error downloading export file:', err);
+            console.error('Error details:', {
+                message: err.message,
+                code: err.code,
+                response: err.response ? {
+                    status: err.response.status,
+                    statusText: err.response.statusText,
+                    data: err.response.data,
+                    headers: err.response.headers
+                } : 'No response',
+                stack: err.stack
+            });
             
             // Более детальная обработка ошибок
             let errorMessage = 'Ошибка при скачивании файла экспорта';
             
             if (err.code === 'ECONNABORTED') {
                 errorMessage = 'Превышено время ожидания загрузки. Попробуйте еще раз.';
+                console.log('Timeout error detected');
             } else if (err.message === 'Network Error') {
                 errorMessage = 'Ошибка сети. Проверьте подключение к интернету.';
+                console.log('Network error detected');
             } else if (err.response?.status === 404) {
                 errorMessage = 'Файл экспорта не найден или был удален.';
+                console.log('404 error detected');
             } else if (err.response?.status >= 500) {
                 errorMessage = 'Ошибка сервера. Попробуйте еще раз позже.';
+                console.log(`Server error detected: ${err.response.status}`);
             } else if (err.message) {
                 errorMessage += ': ' + err.message;
+                console.log(`Other error detected: ${err.message}`);
             }
             
+            console.log(`Setting error message: ${errorMessage}`);
             setExportInternalError(errorMessage);
             setIsDownloading(false);
         }
