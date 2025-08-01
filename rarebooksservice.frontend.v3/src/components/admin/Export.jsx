@@ -250,6 +250,12 @@ const Export = () => {
             } else if (err.response?.status === 404) {
                 errorMessage = 'Файл экспорта не найден или был удален.';
                 console.log('404 error detected');
+            } else if (err.response?.status === 502) {
+                errorMessage = 'Ошибка сервера (502). Пробуем альтернативный способ загрузки...';
+                console.log(`502 error detected, trying stream download`);
+                // Пробуем альтернативный endpoint для потоковой загрузки
+                setTimeout(() => downloadExportFileStream(downloadTaskId), 1000);
+                return;
             } else if (err.response?.status >= 500) {
                 errorMessage = 'Ошибка сервера. Попробуйте еще раз позже.';
                 console.log(`Server error detected: ${err.response.status}`);
@@ -259,6 +265,110 @@ const Export = () => {
             }
             
             console.log(`Setting error message: ${errorMessage}`);
+            setExportInternalError(errorMessage);
+            setIsDownloading(false);
+        }
+    };
+
+    const downloadExportFileStream = async (taskId) => {
+        try {
+            const token = Cookies.get('token');
+            const downloadTaskId = taskId || exportTaskId;
+            
+            if (!downloadTaskId) {
+                setExportInternalError('ID задачи экспорта не найден');
+                return;
+            }
+            
+            console.log(`[STREAM] Начинается потоковое скачивание файла экспорта для TaskId: ${downloadTaskId}`);
+            
+            setIsDownloading(true);
+            setDownloadProgress(0);
+            
+            console.log(`[STREAM] Отправляем запрос на потоковое скачивание: ${API_URL}/admin/download-exported-file-stream/${downloadTaskId}`);
+            
+            const response = await axios.get(
+                `${API_URL}/admin/download-exported-file-stream/${downloadTaskId}`,
+                {
+                    headers: { Authorization: `Bearer ${token}` },
+                    responseType: 'blob',
+                    timeout: 600000, // 10 минут timeout для больших файлов
+                    onDownloadProgress: (progressEvent) => {
+                        if (progressEvent.total) {
+                            const progress = Math.round((progressEvent.loaded / progressEvent.total) * 100);
+                            setDownloadProgress(progress);
+                            console.log(`[STREAM] Прогресс скачивания: ${progress}% (${progressEvent.loaded}/${progressEvent.total} байт)`);
+                        } else {
+                            console.log(`[STREAM] Загружено: ${progressEvent.loaded} байт (размер неизвестен)`);
+                        }
+                    }
+                }
+            );
+            
+            console.log('[STREAM] Ответ получен от сервера:', {
+                status: response.status,
+                statusText: response.statusText,
+                contentType: response.headers['content-type'],
+                contentLength: response.headers['content-length'],
+                dataSize: response.data?.size
+            });
+
+            if (!response.data || response.data.size === 0) {
+                console.error('[STREAM] Получен пустой файл от сервера');
+                throw new Error('Получен пустой файл');
+            }
+
+            console.log(`[STREAM] Создаем blob для скачивания, размер: ${response.data.size} байт`);
+            const blob = new Blob([response.data]);
+            console.log(`[STREAM] Blob создан, размер: ${blob.size} байт`);
+            
+            const url = window.URL.createObjectURL(blob);
+            console.log(`[STREAM] URL создан: ${url}`);
+            
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `export_${downloadTaskId}.zip`);
+            console.log(`[STREAM] Добавляем ссылку в DOM и инициируем скачивание`);
+            
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            
+            console.log('[STREAM] Потоковое скачивание файла инициировано успешно');
+            
+            setTimeout(() => {
+                setIsDownloading(false);
+                setDownloadProgress(0);
+                console.log('[STREAM] Состояние загрузки сброшено');
+            }, 1000);
+        } catch (err) {
+            console.error('[STREAM] Error downloading export file:', err);
+            console.error('[STREAM] Error details:', {
+                message: err.message,
+                code: err.code,
+                response: err.response ? {
+                    status: err.response.status,
+                    statusText: err.response.statusText,
+                    data: err.response.data,
+                    headers: err.response.headers
+                } : 'No response',
+                stack: err.stack
+            });
+            
+            let errorMessage = 'Ошибка при потоковом скачивании файла экспорта';
+            
+            if (err.code === 'ECONNABORTED') {
+                errorMessage = 'Превышено время ожидания потоковой загрузки. Файл слишком большой.';
+            } else if (err.message === 'Network Error') {
+                errorMessage = 'Ошибка сети при потоковой загрузке.';
+            } else if (err.response?.status >= 500) {
+                errorMessage = 'Ошибка сервера при потоковой загрузке. Возможно, файл поврежден.';
+            } else if (err.message) {
+                errorMessage += ': ' + err.message;
+            }
+            
+            console.log(`[STREAM] Setting error message: ${errorMessage}`);
             setExportInternalError(errorMessage);
             setIsDownloading(false);
         }
@@ -315,9 +425,31 @@ const Export = () => {
                         onClick={cancelExport}
                         disabled={!isExporting || isDownloading}
                         color="error"
+                        sx={{ mr: 1 }}
                     >
                         Отменить
                     </Button>
+                    {exportTaskId && !isExporting && (
+                        <>
+                            <Button
+                                variant="outlined"
+                                onClick={() => downloadExportFile(exportTaskId)}
+                                disabled={isDownloading}
+                                color="primary"
+                                sx={{ mr: 1 }}
+                            >
+                                Скачать (обычный)
+                            </Button>
+                            <Button
+                                variant="outlined"
+                                onClick={() => downloadExportFileStream(exportTaskId)}
+                                disabled={isDownloading}
+                                color="secondary"
+                            >
+                                Скачать (потоковый)
+                            </Button>
+                        </>
+                    )}
                 </Box>
 
                 {isExporting && (

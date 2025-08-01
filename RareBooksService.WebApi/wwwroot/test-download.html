@@ -20,7 +20,8 @@
         <div>
             <label>Task ID:</label>
             <input type="text" id="taskId" placeholder="Введите Task ID" style="width: 300px;">
-            <button onclick="downloadFile()">Скачать файл</button>
+            <button onclick="downloadFile()">Скачать файл (обычный)</button>
+            <button onclick="downloadFileStream()">Скачать файл (потоковый)</button>
             <button onclick="clearLog()">Очистить лог</button>
         </div>
         
@@ -155,6 +156,91 @@
             } catch (error) {
                 log(`Ошибка: ${error.message}`, 'error');
                 console.error('Детали ошибки:', error);
+            }
+        }
+
+        async function downloadFileStream() {
+            const taskId = document.getElementById('taskId').value;
+            if (!taskId) {
+                log('Введите Task ID!', 'error');
+                return;
+            }
+
+            try {
+                log(`[STREAM] Начинаем потоковое скачивание для Task ID: ${taskId}`);
+                updateProgress(0, 0, 0);
+
+                const token = getCookie('token');
+                if (!token) {
+                    log('Токен авторизации не найден. Войдите в систему.', 'error');
+                    return;
+                }
+
+                const response = await fetch(`/api/admin/download-exported-file-stream/${taskId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                log(`[STREAM] Ответ сервера: ${response.status} ${response.statusText}`);
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+
+                const contentLength = response.headers.get('content-length');
+                const totalSize = contentLength ? parseInt(contentLength) : 0;
+                log(`[STREAM] Размер файла: ${(totalSize / (1024 * 1024)).toFixed(2)} MB`);
+
+                const reader = response.body.getReader();
+                const chunks = [];
+                let receivedLength = 0;
+
+                while(true) {
+                    const { done, value } = await reader.read();
+                    
+                    if (done) break;
+                    
+                    chunks.push(value);
+                    receivedLength += value.length;
+                    
+                    if (totalSize > 0) {
+                        const progress = Math.round((receivedLength / totalSize) * 100);
+                        updateProgress(progress, receivedLength, totalSize);
+                    }
+                    
+                    // Логируем прогресс каждые 10%
+                    const currentProgress = totalSize > 0 ? Math.round((receivedLength / totalSize) * 100) : 0;
+                    if (currentProgress % 10 === 0 && currentProgress > 0) {
+                        log(`[STREAM] Загружено: ${currentProgress}% (${(receivedLength / (1024 * 1024)).toFixed(2)} MB)`);
+                    }
+                }
+
+                log(`[STREAM] Все данные получены: ${(receivedLength / (1024 * 1024)).toFixed(2)} MB`);
+
+                const blob = new Blob(chunks);
+                log(`[STREAM] Blob создан, размер: ${(blob.size / (1024 * 1024)).toFixed(2)} MB`);
+
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.download = `export_stream_${taskId}.zip`;
+                
+                log('[STREAM] Инициируем скачивание файла...');
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(downloadUrl);
+
+                updateProgress(100, blob.size, blob.size);
+                log('[STREAM] Потоковое скачивание завершено успешно!', 'success');
+
+            } catch (error) {
+                log(`[STREAM] Ошибка: ${error.message}`, 'error');
+                console.error('[STREAM] Детали ошибки:', error);
             }
         }
 

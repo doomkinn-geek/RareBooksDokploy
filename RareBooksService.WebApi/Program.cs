@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -50,6 +50,29 @@ namespace RareBooksService.WebApi
 
                 // 1) ��������� �����������
                 builder.Services.AddControllers();
+                
+                // 1.1) ��������� ��� ������ � �������� �������
+                builder.Services.Configure<IISServerOptions>(options =>
+                {
+                    options.MaxRequestBodySize = null; // ������� ����������� �� ������ �������
+                });
+                
+                builder.WebHost.ConfigureKestrel(serverOptions =>
+                {
+                    // ����������� ������������ ������ ���� ������� �� 500MB
+                    serverOptions.Limits.MaxRequestBodySize = 500 * 1024 * 1024;
+                    
+                    // ����������� �������� ��� ������� ������
+                    serverOptions.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(10);
+                    serverOptions.Limits.RequestHeadersTimeout = TimeSpan.FromMinutes(5);
+                    
+                    // ��������� ��� ������� �������
+                    serverOptions.Limits.MinResponseDataRate = new Microsoft.AspNetCore.Server.Kestrel.Core.MinDataRate(
+                        bytesPerSecond: 100, gracePeriod: TimeSpan.FromMinutes(10));
+                        
+                    serverOptions.Limits.MinRequestBodyDataRate = new Microsoft.AspNetCore.Server.Kestrel.Core.MinDataRate(
+                        bytesPerSecond: 100, gracePeriod: TimeSpan.FromMinutes(10));
+                });
 
                 // 2) ��������� DbContext
                 builder.Services.AddSingleton<NullToZeroMaterializationInterceptor>();

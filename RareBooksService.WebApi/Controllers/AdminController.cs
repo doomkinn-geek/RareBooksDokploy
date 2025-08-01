@@ -394,6 +394,74 @@ namespace RareBooksService.WebApi.Controllers
 
             return Ok();
         }
+        
+        /// <summary>
+        /// Альтернативный endpoint для потоковой загрузки больших файлов экспорта
+        /// </summary>
+        [HttpGet("download-exported-file-stream/{taskId}")]
+        public async Task<IActionResult> DownloadExportedFileStream(Guid taskId)
+        {
+            var startTime = DateTime.UtcNow;
+            try
+            {
+                _logger.LogInformation($"[STREAM] Запрос на потоковое скачивание файла экспорта, TaskId: {taskId}, IP: {HttpContext.Connection.RemoteIpAddress}");
+                
+                // Проверяем статус экспорта
+                var status = _exportService.GetStatus(taskId);
+                _logger.LogInformation($"[STREAM] Статус экспорта - Progress: {status.Progress}%, IsError: {status.IsError}, TaskId: {taskId}");
+
+                if (status.Progress != 100 || status.IsError)
+                {
+                    _logger.LogWarning($"[STREAM] Экспорт не завершен или содержит ошибку, TaskId: {taskId}");
+                    return BadRequest("Экспорт не завершен или содержит ошибку.");
+                }
+
+                var file = _exportService.GetExportedFile(taskId);
+                if (file == null || !file.Exists)
+                {
+                    _logger.LogWarning($"[STREAM] Файл экспорта не найден, TaskId: {taskId}");
+                    return NotFound("Файл не найден.");
+                }
+
+                var fileSizeMB = file.Length / (1024.0 * 1024.0);
+                _logger.LogInformation($"[STREAM] Файл найден: {file.FullName}, размер: {fileSizeMB:F2} MB, TaskId: {taskId}");
+
+                // Логируем заголовки запроса
+                var userAgent = HttpContext.Request.Headers["User-Agent"].ToString();
+                var rangeHeader = HttpContext.Request.Headers["Range"].ToString();
+                _logger.LogInformation($"[STREAM] User-Agent: {userAgent}, Range: {rangeHeader}, TaskId: {taskId}");
+
+                // Проверяем, что файл доступен для чтения
+                FileStream fileStream = null;
+                try
+                {
+                    fileStream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 64 * 1024, useAsync: true);
+                    _logger.LogInformation($"[STREAM] Файл успешно открыт для потокового чтения, TaskId: {taskId}");
+                }
+                catch (Exception readEx)
+                {
+                    _logger.LogError(readEx, $"[STREAM] Не удалось открыть файл для потокового чтения: {file.FullName}, TaskId: {taskId}");
+                    fileStream?.Dispose();
+                    return StatusCode(500, "Не удалось получить доступ к файлу экспорта");
+                }
+
+                _logger.LogInformation($"[STREAM] Создаем FileStreamResult для потоковой отправки, TaskId: {taskId}");
+
+                var elapsedMs = (DateTime.UtcNow - startTime).TotalMilliseconds;
+                _logger.LogInformation($"[STREAM] FileStreamResult создан за {elapsedMs:F2}ms, начинаем потоковую отправку, TaskId: {taskId}");
+
+                return new FileStreamResult(fileStream, "application/zip")
+                {
+                    FileDownloadName = $"export_{taskId}.zip",
+                    EnableRangeProcessing = true
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"[STREAM] Ошибка при потоковом скачивании файла экспорта, TaskId: {taskId}");
+                return StatusCode(500, "Внутренняя ошибка сервера при скачивании файла");
+            }
+        }
     }
 
     public class AssignSubscriptionPlanRequest
