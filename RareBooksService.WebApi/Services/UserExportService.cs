@@ -26,7 +26,9 @@ namespace RareBooksService.WebApi.Services
     {
         public string Id { get; set; }
         public string UserName { get; set; }
+        public string NormalizedUserName { get; set; }
         public string Email { get; set; }
+        public string NormalizedEmail { get; set; }
         public bool EmailConfirmed { get; set; }
         public string PhoneNumber { get; set; }
         public bool PhoneNumberConfirmed { get; set; }
@@ -36,6 +38,11 @@ namespace RareBooksService.WebApi.Services
         public int AccessFailedCount { get; set; }
         public bool HasSubscription { get; set; }
         public string Role { get; set; }
+        
+        // Критически важные поля для авторизации
+        public string PasswordHash { get; set; }
+        public string SecurityStamp { get; set; }
+        public string ConcurrencyStamp { get; set; }
         
         // Связанные данные
         public List<ExportedUserSearchHistory> SearchHistory { get; set; } = new();
@@ -222,15 +229,20 @@ namespace RareBooksService.WebApi.Services
         {
             try
             {
+                _logger.LogInformation($"Начинаем экспорт пользователей, TaskId: {taskId}");
                 _progress[taskId] = 0;
 
                 using var scope = _scopeFactory.CreateScope();
                 var usersContext = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
 
                 // 1) Получаем общее количество пользователей
+                _logger.LogInformation($"Подсчитываем общее количество пользователей, TaskId: {taskId}");
                 int totalUsers = await usersContext.Users.CountAsync(token);
+                _logger.LogInformation($"Найдено {totalUsers} пользователей для экспорта, TaskId: {taskId}");
+                
                 if (totalUsers == 0)
                 {
+                    _logger.LogWarning($"Нет пользователей для экспорта, TaskId: {taskId}");
                     _progress[taskId] = 100;
                     return;
                 }
@@ -238,6 +250,7 @@ namespace RareBooksService.WebApi.Services
 
                 // 2) Создаём временную папку
                 string tempFolder = Path.Combine(Path.GetTempPath(), $"user_export_{taskId}");
+                _logger.LogInformation($"Создаем временную папку: {tempFolder}, TaskId: {taskId}");
                 if (!Directory.Exists(tempFolder))
                     Directory.CreateDirectory(tempFolder);
 
@@ -245,6 +258,7 @@ namespace RareBooksService.WebApi.Services
                 var allExportedUsers = new List<ExportedUserData>();
 
                 // 3) Обрабатываем пользователей порциями
+                _logger.LogInformation($"Начинаем обработку {totalUsers} пользователей порциями по {ChunkSize}, TaskId: {taskId}");
                 while (processed < totalUsers)
                 {
                     token.ThrowIfCancellationRequested();
@@ -261,7 +275,12 @@ namespace RareBooksService.WebApi.Services
                         .ToListAsync(token);
 
                     if (usersChunk.Count == 0)
+                    {
+                        _logger.LogWarning($"Получен пустой chunk на позиции {processed}, завершаем, TaskId: {taskId}");
                         break;
+                    }
+
+                    _logger.LogDebug($"Обрабатываем chunk пользователей: {usersChunk.Count} пользователей, TaskId: {taskId}");
 
                     // Конвертируем в DTO
                     foreach (var user in usersChunk)
@@ -272,7 +291,9 @@ namespace RareBooksService.WebApi.Services
                         {
                             Id = user.Id,
                             UserName = user.UserName,
+                            NormalizedUserName = user.NormalizedUserName,
                             Email = user.Email,
+                            NormalizedEmail = user.NormalizedEmail,
                             EmailConfirmed = user.EmailConfirmed,
                             PhoneNumber = user.PhoneNumber,
                             PhoneNumberConfirmed = user.PhoneNumberConfirmed,
@@ -282,6 +303,11 @@ namespace RareBooksService.WebApi.Services
                             AccessFailedCount = user.AccessFailedCount,
                             HasSubscription = user.HasSubscription,
                             Role = user.Role,
+                            
+                            // Критически важные поля для авторизации
+                            PasswordHash = user.PasswordHash,
+                            SecurityStamp = user.SecurityStamp,
+                            ConcurrencyStamp = user.ConcurrencyStamp,
                             SearchHistory = user.SearchHistory?.Select(sh => new ExportedUserSearchHistory
                             {
                                 Query = sh.Query,
@@ -321,6 +347,7 @@ namespace RareBooksService.WebApi.Services
                 // 4) Сохраняем в JSON файл
                 _progress[taskId] = 85;
                 string jsonFilePath = Path.Combine(tempFolder, "users_data.json");
+                _logger.LogInformation($"Сохраняем {allExportedUsers.Count} пользователей в JSON файл: {jsonFilePath}, TaskId: {taskId}");
                 
                 var options = new JsonSerializerOptions
                 {
@@ -330,43 +357,83 @@ namespace RareBooksService.WebApi.Services
 
                 string jsonContent = JsonSerializer.Serialize(allExportedUsers, options);
                 await File.WriteAllTextAsync(jsonFilePath, jsonContent, token);
+                _logger.LogInformation($"JSON файл создан успешно, размер: {jsonContent.Length} символов, TaskId: {taskId}");
 
                 token.ThrowIfCancellationRequested();
                 _progress[taskId] = 90;
 
                 // 5) Создаём zip архив
                 string zipFilePath = Path.Combine(Path.GetTempPath(), $"user_export_{taskId}.zip");
+                _logger.LogInformation($"Начинаем создание ZIP архива: {zipFilePath}, TaskId: {taskId}");
                 if (File.Exists(zipFilePath))
+                {
                     File.Delete(zipFilePath);
+                    _logger.LogInformation($"Удален существующий ZIP файл, TaskId: {taskId}");
+                }
 
                 ZipFile.CreateFromDirectory(tempFolder, zipFilePath, CompressionLevel.Fastest, false);
+                _logger.LogInformation($"ZIP архив создан успешно, TaskId: {taskId}");
 
                 token.ThrowIfCancellationRequested();
                 _progress[taskId] = 95;
+
+                // Проверяем размер созданного архива
+                var zipFileInfo = new FileInfo(zipFilePath);
+                var zipSizeMB = zipFileInfo.Length / (1024.0 * 1024.0);
+                _logger.LogInformation($"ZIP архив: размер {zipSizeMB:F2} MB, TaskId: {taskId}");
 
                 // Запоминаем путь к zip
                 _files[taskId] = zipFilePath;
 
                 // Удаляем временную папку
-                Directory.Delete(tempFolder, true);
+                try
+                {
+                    Directory.Delete(tempFolder, true);
+                    _logger.LogInformation($"Временная папка удалена, TaskId: {taskId}");
+                }
+                catch (Exception deleteEx)
+                {
+                    _logger.LogWarning(deleteEx, $"Не удалось удалить временную папку {tempFolder}, TaskId: {taskId}");
+                }
 
                 // 100% - готово
                 _progress[taskId] = 100;
+                _logger.LogInformation($"Экспорт пользователей завершен успешно, TaskId: {taskId}");
             }
             catch (OperationCanceledException)
             {
+                _logger.LogWarning($"Экспорт пользователей отменён пользователем, TaskId: {taskId}");
                 _progress[taskId] = -1;
                 _errors[taskId] = "Экспорт пользователей отменён.";
             }
+            catch (OutOfMemoryException memEx)
+            {
+                _logger.LogError(memEx, $"Недостаточно памяти для экспорта пользователей, TaskId: {taskId}");
+                _progress[taskId] = -1;
+                _errors[taskId] = "Недостаточно памяти для выполнения экспорта. Попробуйте экспортировать меньшими порциями.";
+            }
+            catch (UnauthorizedAccessException accessEx)
+            {
+                _logger.LogError(accessEx, $"Ошибка доступа к файлам при экспорте пользователей, TaskId: {taskId}");
+                _progress[taskId] = -1;
+                _errors[taskId] = "Ошибка доступа к временным файлам. Проверьте права доступа.";
+            }
+            catch (System.Data.Common.DbException dbEx)
+            {
+                _logger.LogError(dbEx, $"Ошибка базы данных при экспорте пользователей, TaskId: {taskId}");
+                _progress[taskId] = -1;
+                _errors[taskId] = $"Ошибка базы данных: {dbEx.Message}";
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка экспорта пользователей");
+                _logger.LogError(ex, $"Неожиданная ошибка экспорта пользователей, TaskId: {taskId}");
                 _progress[taskId] = -1;
-                _errors[taskId] = ex.ToString();
+                _errors[taskId] = $"Неожиданная ошибка: {ex.Message}";
             }
             finally
             {
                 _cancellationTokens.TryRemove(taskId, out _);
+                _logger.LogInformation($"Задача экспорта пользователей завершена, TaskId: {taskId}");
             }
         }
     }

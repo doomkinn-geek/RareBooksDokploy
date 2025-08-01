@@ -258,12 +258,24 @@ namespace RareBooksService.WebApi.Services
                             continue;
                         }
 
-                        // Создаем нового пользователя
+                        // Проверяем, что ID еще не занят
+                        var existingById = await usersContext.Users.FirstOrDefaultAsync(u => u.Id == exportedUser.Id);
+                        var finalUserId = exportedUser.Id;
+                        if (existingById != null)
+                        {
+                            // Генерируем новый ID если старый занят
+                            finalUserId = Guid.NewGuid().ToString();
+                            _logger.LogWarning($"ID {exportedUser.Id} уже занят, используем новый: {finalUserId}");
+                        }
+
+                        // Создаем нового пользователя со всеми данными авторизации
                         var newUser = new ApplicationUser
                         {
-                            Id = exportedUser.Id, // Сохраняем оригинальный ID если возможно
+                            Id = finalUserId,
                             UserName = exportedUser.UserName,
+                            NormalizedUserName = exportedUser.NormalizedUserName,
                             Email = exportedUser.Email,
+                            NormalizedEmail = exportedUser.NormalizedEmail,
                             EmailConfirmed = exportedUser.EmailConfirmed,
                             PhoneNumber = exportedUser.PhoneNumber,
                             PhoneNumberConfirmed = exportedUser.PhoneNumberConfirmed,
@@ -272,15 +284,26 @@ namespace RareBooksService.WebApi.Services
                             LockoutEnd = exportedUser.LockoutEnd,
                             AccessFailedCount = exportedUser.AccessFailedCount,
                             HasSubscription = exportedUser.HasSubscription,
-                            Role = exportedUser.Role
+                            Role = exportedUser.Role,
+                            
+                            // Восстанавливаем критически важные поля для авторизации
+                            PasswordHash = exportedUser.PasswordHash,
+                            SecurityStamp = exportedUser.SecurityStamp ?? Guid.NewGuid().ToString(),
+                            ConcurrencyStamp = exportedUser.ConcurrencyStamp ?? Guid.NewGuid().ToString()
                         };
 
-                        // Создаем пользователя без пароля (администратор потом установит)
-                        var result = await userManager.CreateAsync(newUser);
-                        if (!result.Succeeded)
+                        // Добавляем пользователя напрямую в контекст, чтобы сохранить PasswordHash
+                        usersContext.Users.Add(newUser);
+                        
+                        try
                         {
-                            var errors = string.Join(", ", result.Errors.Select(e => e.Description));
-                            stats.Errors.Add($"Ошибка создания пользователя {exportedUser.Email}: {errors}");
+                            await usersContext.SaveChangesAsync();
+                            _logger.LogInformation($"Пользователь {exportedUser.Email} успешно импортирован с ID: {finalUserId}");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, $"Ошибка сохранения пользователя {exportedUser.Email}");
+                            stats.Errors.Add($"Ошибка сохранения пользователя {exportedUser.Email}: {ex.Message}");
                             continue;
                         }
 
@@ -291,7 +314,7 @@ namespace RareBooksService.WebApi.Services
                         {
                             var newSearchHistory = new UserSearchHistory
                             {
-                                UserId = newUser.Id,
+                                UserId = finalUserId,
                                 Query = searchHistory.Query,
                                 SearchDate = searchHistory.SearchDate,
                                 SearchType = searchHistory.SearchType
@@ -305,7 +328,7 @@ namespace RareBooksService.WebApi.Services
                         {
                             var newFavoriteBook = new UserFavoriteBook
                             {
-                                UserId = newUser.Id,
+                                UserId = finalUserId,
                                 BookId = favoriteBook.BookId,
                                 AddedDate = favoriteBook.AddedDate
                             };
@@ -323,7 +346,7 @@ namespace RareBooksService.WebApi.Services
                             {
                                 var newSubscription = new Subscription
                                 {
-                                    UserId = newUser.Id,
+                                    UserId = finalUserId,
                                     SubscriptionPlanId = subscription.SubscriptionPlanId,
                                     StartDate = subscription.StartDate,
                                     EndDate = subscription.EndDate,
@@ -343,6 +366,7 @@ namespace RareBooksService.WebApi.Services
                             }
                         }
 
+                        // Сохраняем связанные данные
                         await usersContext.SaveChangesAsync();
 
                         processed++;

@@ -130,19 +130,23 @@ namespace RareBooksService.WebApi.Controllers
                     // TODO: Добавить валидацию JWT токена
                 }
                 
+                // Логируем подробности запроса для диагностики
+                var requestHeaders = string.Join("; ", HttpContext.Request.Headers.Select(h => $"{h.Key}={h.Value}"));
+                _logger.LogInformation($"[DOWNLOAD] Headers: {requestHeaders}, TaskId: {taskId}");
+                
                 // Проверяем статус экспорта
                 var status = _exportService.GetStatus(taskId);
                 _logger.LogInformation($"[DOWNLOAD] Статус экспорта - Progress: {status.Progress}%, IsError: {status.IsError}, TaskId: {taskId}");
                 
                 if (status.IsError)
                 {
-                    _logger.LogWarning($"[DOWNLOAD] Экспорт завершился с ошибкой: {status.ErrorDetails}, TaskId: {taskId}");
+                    _logger.LogWarning($"[DOWNLOAD] 400 BadRequest - Экспорт завершился с ошибкой: {status.ErrorDetails}, TaskId: {taskId}");
                     return BadRequest($"Экспорт завершился с ошибкой: {status.ErrorDetails}");
                 }
                 
                 if (status.Progress < 100)
                 {
-                    _logger.LogWarning($"[DOWNLOAD] Экспорт еще не завершен ({status.Progress}%), TaskId: {taskId}");
+                    _logger.LogWarning($"[DOWNLOAD] 400 BadRequest - Экспорт еще не завершен ({status.Progress}%), TaskId: {taskId}");
                     return BadRequest($"Экспорт еще не завершен. Прогресс: {status.Progress}%");
                 }
                 

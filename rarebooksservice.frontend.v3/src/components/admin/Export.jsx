@@ -116,7 +116,13 @@ const Export = () => {
                 if (currentProgress === 100) {
                     clearInterval(newIntervalId);
                     setIsExporting(false);
-                    downloadExportFile(taskId);
+                    // Используем рабочий метод скачивания через форму вместо axios
+                    console.log('Экспорт завершен, автоматически скачиваем через форму');
+                    
+                    // Небольшая задержка перед автоматическим скачиванием
+                    setTimeout(() => {
+                        downloadExportFileDirect(taskId);
+                    }, 1000);
                 }
             } catch (err) {
                 console.error('Error polling export progress:', err);
@@ -247,6 +253,21 @@ const Export = () => {
             } else if (err.message === 'Network Error') {
                 errorMessage = 'Ошибка сети. Проверьте подключение к интернету.';
                 console.log('Network error detected');
+                            } else if (err.response?.status === 400) {
+                errorMessage = 'Ошибка запроса (400). Автоматически переключаемся на безопасный способ загрузки...';
+                console.log('400 error detected, trying direct form download');
+                console.log('Response data:', err.response?.data);
+                console.log('Request config:', err.config);
+                
+                // Показываем пользователю, что происходит переключение
+                setExportInternalError('Обычное скачивание недоступно. Переключаемся на альтернативный способ...');
+                
+                // Пробуем рабочий способ через форму через небольшую задержку
+                setTimeout(() => {
+                    setExportInternalError(null); // Убираем сообщение об ошибке
+                    downloadExportFileDirect(downloadTaskId);
+                }, 2000);
+                return;
             } else if (err.response?.status === 404) {
                 errorMessage = 'Файл экспорта не найден или был удален.';
                 console.log('404 error detected');
