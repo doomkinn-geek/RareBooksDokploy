@@ -17,7 +17,7 @@ import {
     useMediaQuery, useTheme, Drawer, List, ListItem, ListItemText,
     IconButton, AppBar, Toolbar
 } from '@mui/material';
-import { CategoryCleanup, SubPlans, BookUpdate, Import, Export, UsersPanel, SettingsPanel } from './admin';
+import { CategoryCleanup, SubPlans, BookUpdate, Import, Export, UserImport, UserExport, UsersPanel, SettingsPanel } from './admin';
 import MenuIcon from '@mui/icons-material/Menu';
 
 const AdminPanel = () => {
@@ -28,7 +28,7 @@ const AdminPanel = () => {
     // Состояние для drawer (бокового меню)
     const [drawerOpen, setDrawerOpen] = useState(false);
     
-    // Вкладки: 'users' | 'export' | 'settings' | 'import' | 'bookupdate' | 'subplans' | 'categories'
+    // Вкладки: 'users' | 'export' | 'settings' | 'import' | 'bookupdate' | 'subplans' | 'categories' | 'userexport' | 'userimport'
     const [currentTab, setCurrentTab] = useState('users');
 
     // ----- Состояния пользователей
@@ -495,7 +495,9 @@ const AdminPanel = () => {
         import: 'Импорт данных',
         bookupdate: 'Обновление книг',
         subplans: 'Планы подписки',
-        categories: 'Управление категориями'
+        categories: 'Управление категориями',
+        userexport: 'Экспорт пользователей',
+        userimport: 'Импорт пользователей'
     };
 
     // ====================== Рендер контента по вкладкам ======================
@@ -596,6 +598,8 @@ const AdminPanel = () => {
                         <Tab label="Обновление книг" value="bookupdate" />
                         <Tab label="Планы подписки" value="subplans" />
                         <Tab label="Категории" value="categories" />
+                        <Tab label="Экспорт пользователей" value="userexport" />
+                        <Tab label="Импорт пользователей" value="userimport" />
                     </Tabs>
                 </Box>
                 )}
@@ -681,6 +685,30 @@ const AdminPanel = () => {
                         </Typography>
                         )}
                         <CategoryCleanup />
+                    </Box>
+                )}
+
+                {/* ============ Вкладка "userexport" ============ */}
+                {currentTab === 'userexport' && (
+                    <Box>
+                        {!isMobile && (
+                        <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50', mb: 3 }}>
+                            Экспорт пользователей
+                        </Typography>
+                        )}
+                        <UserExport />
+                    </Box>
+                )}
+
+                {/* ============ Вкладка "userimport" ============ */}
+                {currentTab === 'userimport' && (
+                    <Box>
+                        {!isMobile && (
+                        <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50', mb: 3 }}>
+                            Импорт пользователей
+                        </Typography>
+                        )}
+                        <UserImport />
                     </Box>
                 )}
             </Box>

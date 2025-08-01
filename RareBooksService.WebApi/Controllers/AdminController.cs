@@ -36,9 +36,23 @@ namespace RareBooksService.WebApi.Controllers
         [HttpPost("export-data")]
         public async Task<IActionResult> StartExport()
         {
-            _logger.LogInformation("Запущен экспорт данных из PostgreSQL в SQLite");
-            var taskId = await _exportService.StartExportAsync();
-            return Ok(new { TaskId = taskId });
+            try
+            {
+                _logger.LogInformation("Запрос на запуск экспорта данных из PostgreSQL в SQLite");
+                var taskId = await _exportService.StartExportAsync();
+                _logger.LogInformation($"Экспорт запущен с TaskId: {taskId}");
+                return Ok(new { TaskId = taskId });
+            }
+            catch (InvalidOperationException invalidOpEx)
+            {
+                _logger.LogWarning($"Попытка запуска экспорта при активном процессе: {invalidOpEx.Message}");
+                return BadRequest(invalidOpEx.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Критическая ошибка при запуске экспорта");
+                return StatusCode(500, "Внутренняя ошибка сервера при запуске экспорта");
+            }
         }
 
         [HttpGet("export-progress/{taskId}")]
@@ -46,14 +60,16 @@ namespace RareBooksService.WebApi.Controllers
         {
             try
             {
+                _logger.LogDebug($"Запрос прогресса экспорта для TaskId: {taskId}");
                 var status = _exportService.GetStatus(taskId);
 
                 if (status.Progress == -1 && !status.IsError)
                 {
-                    // Значит задача не найдена
+                    _logger.LogWarning($"Задача экспорта не найдена, TaskId: {taskId}");
                     return NotFound("Задача не найдена.");
                 }
 
+                _logger.LogDebug($"Прогресс экспорта TaskId: {taskId}, Progress: {status.Progress}%, IsError: {status.IsError}");
                 return Ok(new ExportStatusDto
                 {
                     Progress = status.Progress,
@@ -63,8 +79,8 @@ namespace RareBooksService.WebApi.Controllers
             }
             catch (Exception e)
             {
-                _logger.LogError(e, "Ошибка получения прогресса экспорта");
-                return Ok(new { Progress = -1, IsError = true, ErrorDetails = e.ToString() });
+                _logger.LogError(e, $"Критическая ошибка получения прогресса экспорта, TaskId: {taskId}");
+                return StatusCode(500, new { Progress = -1, IsError = true, ErrorDetails = "Внутренняя ошибка сервера при получении прогресса экспорта" });
             }
         }
 
@@ -101,17 +117,32 @@ namespace RareBooksService.WebApi.Controllers
         [HttpGet("download-exported-file/{taskId}")]
         public IActionResult DownloadExportedFile(Guid taskId)
         {
-            var file = _exportService.GetExportedFile(taskId);
-            if (file == null || !file.Exists)
-                return NotFound("Файл не найден.");
+            try
+            {
+                _logger.LogInformation($"Запрос на скачивание файла экспорта, TaskId: {taskId}");
+                var file = _exportService.GetExportedFile(taskId);
+                if (file == null || !file.Exists)
+                {
+                    _logger.LogWarning($"Файл экспорта не найден, TaskId: {taskId}");
+                    return NotFound("Файл не найден.");
+                }
 
-            // Исправляем расширение файла на .zip, так как ExportService создает zip-архив
-            var result = PhysicalFile(file.FullName, "application/zip", $"export_{taskId}.zip");
-            
-            // Включаем поддержку Range requests для больших файлов (позволяет докачку)
-            result.EnableRangeProcessing = true;
-            
-            return result;
+                var fileSizeMB = file.Length / (1024.0 * 1024.0);
+                _logger.LogInformation($"Начинается скачивание файла экспорта: {file.FullName}, размер: {fileSizeMB:F2} MB, TaskId: {taskId}");
+
+                // Исправляем расширение файла на .zip, так как ExportService создает zip-архив
+                var result = PhysicalFile(file.FullName, "application/zip", $"export_{taskId}.zip");
+                
+                // Включаем поддержку Range requests для больших файлов (позволяет докачку)
+                result.EnableRangeProcessing = true;
+                
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Ошибка при попытке скачивания файла экспорта, TaskId: {taskId}");
+                return StatusCode(500, "Внутренняя ошибка сервера при скачивании файла");
+            }
         }
 
         [HttpPost("cancel-export/{taskId}")]

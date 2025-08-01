@@ -5,7 +5,13 @@ import Cookies from 'js-cookie';
 export const API_URL = '/api';
 // Закомментируем localhost URL, так как он вызывает ошибку соединения
 //export const API_URL = 'https://localhost:7042/api';
-//export const API_URL = 'http://localhost:5000/api';
+
+
+
+
+
+
+//export const API_URL = 'http://localhost:5000/api'; - не рабочая строка
 
 // Глобальный обработчик ошибок для axios
 axios.interceptors.response.use(

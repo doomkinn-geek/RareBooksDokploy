@@ -7,7 +7,7 @@ import axios from 'axios';
 import { API_URL } from '../../api';
 import Cookies from 'js-cookie';
 
-const Export = () => {
+const UserExport = () => {
     const [exportTaskId, setExportTaskId] = useState(null);
     const [progress, setProgress] = useState(null);
     const [exportError, setExportError] = useState(null);
@@ -15,7 +15,7 @@ const Export = () => {
     const [isExporting, setIsExporting] = useState(false);
     const [intervalId, setIntervalId] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    // Новые состояния для отслеживания прогресса загрузки файла
+    // Состояния для отслеживания прогресса загрузки файла
     const [isDownloading, setIsDownloading] = useState(false);
     const [downloadProgress, setDownloadProgress] = useState(0);
 
@@ -33,13 +33,13 @@ const Export = () => {
         };
     }, [intervalId]);
 
-    // Проверка, есть ли активный экспорт
+    // Проверка, есть ли активный экспорт пользователей
     const checkExportStatus = async () => {
         setIsLoading(true);
         try {
             const token = Cookies.get('token');
             const response = await axios.get(
-                `${API_URL}/admin/export-status`,
+                `${API_URL}/useradmin/user-export-status`,
                 { headers: { Authorization: `Bearer ${token}` } }
             );
             
@@ -50,7 +50,7 @@ const Export = () => {
                 startPollingProgress(response.data.taskId);
             }
         } catch (err) {
-            console.error('Error checking export status:', err);
+            console.error('Error checking user export status:', err);
             // Если не удалось получить статус, предполагаем, что экспорт не выполняется
         } finally {
             setIsLoading(false);
@@ -66,7 +66,7 @@ const Export = () => {
         try {
             const token = Cookies.get('token');
             const response = await axios.post(
-                `${API_URL}/admin/export-data`,
+                `${API_URL}/useradmin/export-users`,
                 null,
                 { headers: { Authorization: `Bearer ${token}` } }
             );
@@ -75,8 +75,18 @@ const Export = () => {
             setExportTaskId(taskId);
             startPollingProgress(taskId);
         } catch (err) {
-            console.error('Error starting export:', err);
-            setExportInternalError('Ошибка при запуске экспорта: ' + (err.response?.data || err.message));
+            console.error('Error starting user export:', err);
+            let errorMessage = 'Ошибка при запуске экспорта пользователей';
+            
+            if (err.response?.status === 403) {
+                errorMessage = 'Доступ запрещён. Экспорт пользователей доступен только администраторам.';
+            } else if (err.response?.data) {
+                errorMessage += ': ' + err.response.data;
+            } else if (err.message) {
+                errorMessage += ': ' + err.message;
+            }
+            
+            setExportInternalError(errorMessage);
             setIsExporting(false);
         }
     };
@@ -90,7 +100,7 @@ const Export = () => {
         const newIntervalId = setInterval(async () => {
             try {
                 if (!taskId) {
-                    console.error('No export task ID available');
+                    console.error('No user export task ID available');
                     clearInterval(newIntervalId);
                     setIsExporting(false);
                     return;
@@ -98,7 +108,7 @@ const Export = () => {
 
                 const token = Cookies.get('token');
                 const response = await axios.get(
-                    `${API_URL}/admin/export-progress/${taskId}`,
+                    `${API_URL}/useradmin/user-export-progress/${taskId}`,
                     { headers: { Authorization: `Bearer ${token}` } }
                 );
 
@@ -106,7 +116,7 @@ const Export = () => {
                 
                 setProgress(currentProgress);
                 if (isError) {
-                    setExportError(errorDetails || 'Произошла ошибка при экспорте');
+                    setExportError(errorDetails || 'Произошла ошибка при экспорте пользователей');
                     clearInterval(newIntervalId);
                     setIsExporting(false);
                     return;
@@ -119,31 +129,12 @@ const Export = () => {
                     downloadExportFile(taskId);
                 }
             } catch (err) {
-                console.error('Error polling export progress:', err);
-                
-                let errorMessage = 'Ошибка при получении прогресса экспорта';
-                
-                if (err.response?.status === 502) {
-                    errorMessage = 'Сервер временно недоступен (502). Экспорт может продолжаться в фоне. Обновите страницу через несколько минут.';
-                    // Не останавливаем polling для 502 ошибок - сервер может восстановиться
-                    return;
-                } else if (err.response?.status >= 500) {
-                    errorMessage = 'Ошибка сервера. Экспорт может быть прерван.';
-                } else if (err.code === 'ECONNABORTED') {
-                    errorMessage = 'Превышено время ожидания ответа сервера.';
-                } else if (err.message === 'Network Error') {
-                    errorMessage = 'Ошибка сети. Проверьте подключение.';
-                } else if (err.response?.data) {
-                    errorMessage += ': ' + err.response.data;
-                } else if (err.message) {
-                    errorMessage += ': ' + err.message;
-                }
-                
-                setExportInternalError(errorMessage);
+                console.error('Error polling user export progress:', err);
+                setExportInternalError('Ошибка при получении прогресса экспорта пользователей: ' + (err.response?.data || err.message));
                 clearInterval(newIntervalId);
                 setIsExporting(false);
             }
-        }, 2000); // Увеличиваем интервал до 2 секунд, чтобы снизить нагрузку
+        }, 2000);
         
         setIntervalId(newIntervalId);
     };
@@ -151,10 +142,10 @@ const Export = () => {
     const downloadExportFile = async (taskId) => {
         try {
             const token = Cookies.get('token');
-            const downloadTaskId = taskId || exportTaskId; // Используем переданный taskId или сохраненный
+            const downloadTaskId = taskId || exportTaskId;
             
             if (!downloadTaskId) {
-                setExportInternalError('ID задачи экспорта не найден');
+                setExportInternalError('ID задачи экспорта пользователей не найден');
                 return;
             }
             
@@ -163,7 +154,7 @@ const Export = () => {
             setDownloadProgress(0);
             
             const response = await axios.get(
-                `${API_URL}/admin/download-exported-file/${downloadTaskId}`,
+                `${API_URL}/useradmin/download-exported-users/${downloadTaskId}`,
                 {
                     headers: { Authorization: `Bearer ${token}` },
                     responseType: 'blob',
@@ -185,23 +176,22 @@ const Export = () => {
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `export_${downloadTaskId}.zip`);
+            link.setAttribute('download', `users_export_${downloadTaskId}.zip`);
             document.body.appendChild(link);
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
             
-            // Сбрасываем состояние загрузки после небольшой задержки,
-            // чтобы пользователь успел увидеть 100%
+            // Сбрасываем состояние загрузки после небольшой задержки
             setTimeout(() => {
                 setIsDownloading(false);
                 setDownloadProgress(0);
             }, 1000);
         } catch (err) {
-            console.error('Error downloading export file:', err);
+            console.error('Error downloading user export file:', err);
             
             // Более детальная обработка ошибок
-            let errorMessage = 'Ошибка при скачивании файла экспорта';
+            let errorMessage = 'Ошибка при скачивании файла экспорта пользователей';
             
             if (err.code === 'ECONNABORTED') {
                 errorMessage = 'Превышено время ожидания загрузки. Попробуйте еще раз.';
@@ -225,7 +215,7 @@ const Export = () => {
             try {
                 const token = Cookies.get('token');
                 await axios.post(
-                    `${API_URL}/admin/cancel-export/${exportTaskId}`,
+                    `${API_URL}/useradmin/cancel-user-export/${exportTaskId}`,
                     null,
                     { headers: { Authorization: `Bearer ${token}` } }
                 );
@@ -238,8 +228,8 @@ const Export = () => {
                 setProgress(null);
                 setExportTaskId(null);
             } catch (err) {
-                console.error('Error cancelling export:', err);
-                setExportInternalError('Ошибка при отмене экспорта');
+                console.error('Error cancelling user export:', err);
+                setExportInternalError('Ошибка при отмене экспорта пользователей');
             }
         }
     };
@@ -247,7 +237,7 @@ const Export = () => {
     return (
         <Box>
             <Typography variant="h6" gutterBottom>
-                Экспорт данных
+                Экспорт пользователей
             </Typography>
 
             {(exportError || exportInternalError) && (
@@ -257,6 +247,10 @@ const Export = () => {
             )}
 
             <Paper sx={{ p: 2, mb: 2 }}>
+                <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+                    Экспорт включает данные пользователей, историю поиска, подписки и избранные книги.
+                </Typography>
+                
                 <Box sx={{ mb: 2 }}>
                     <Button
                         variant="contained"
@@ -264,7 +258,7 @@ const Export = () => {
                         disabled={isExporting || isLoading || isDownloading}
                         sx={{ mr: 1 }}
                     >
-                        {isLoading ? 'Загрузка...' : 'Начать экспорт'}
+                        {isLoading ? 'Загрузка...' : 'Начать экспорт пользователей'}
                     </Button>
                     <Button
                         variant="outlined"
@@ -291,7 +285,7 @@ const Export = () => {
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                             <CircularProgress size={20} />
                             <Typography variant="body2">
-                                Экспорт в процессе...
+                                Экспорт пользователей в процессе...
                             </Typography>
                         </Box>
                     </Box>
@@ -320,7 +314,7 @@ const Export = () => {
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                             <CircularProgress size={20} color="success" />
                             <Typography variant="body2">
-                                Скачивание файла экспорта...
+                                Скачивание файла экспорта пользователей...
                             </Typography>
                         </Box>
                     </Box>
@@ -330,4 +324,4 @@ const Export = () => {
     );
 };
 
-export default Export; 
+export default UserExport;

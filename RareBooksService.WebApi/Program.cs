@@ -165,6 +165,9 @@ namespace RareBooksService.WebApi
                 builder.Services.AddScoped<ISearchHistoryService, SearchHistoryService>();
                 builder.Services.AddScoped<IImportService, ImportService>();
                 builder.Services.AddScoped<IExportService, ExportService>();
+                // Новые сервисы для экспорта/импорта пользователей
+                builder.Services.AddScoped<IUserExportService, UserExportService>();
+                builder.Services.AddScoped<IUserImportService, UserImportService>();
                 builder.Services.AddScoped<IBookImagesService, BookImagesService>();
                 //builder.Services.AddScoped<ISearchSignatureStore, RedisSearchSignatureStore>();
                 builder.Services.AddScoped<MigrationService>();

@@ -52,7 +52,7 @@ namespace RareBooksService.WebApi.Services
         private static ConcurrentDictionary<Guid, CancellationTokenSource> _cancellationTokens = new ConcurrentDictionary<Guid, CancellationTokenSource>();
 
         // Уменьшаем chunkSize для снижения пикового потребления памяти
-        private const int ChunkSize = 20000;
+        private const int ChunkSize = 5000; // Еще больше уменьшаем для стабильности
 
         public ExportService(IServiceScopeFactory scopeFactory, ILogger<ExportService> logger)
         {
@@ -63,13 +63,20 @@ namespace RareBooksService.WebApi.Services
 
         public async Task<Guid> StartExportAsync()
         {
+            // Проверяем доступную память
+            var memoryBefore = GC.GetTotalMemory(false) / (1024.0 * 1024.0);
+            _logger.LogInformation($"Доступная память перед экспортом: {memoryBefore:F2} MB");
+
             // 1) Перед запуском нового экспорта удалим старые файлы экспорта
             CleanupOldExportFilesOnDisk();
 
             // 2) Проверяем, нет ли уже активного экспорта
             bool anyActive = _progress.Values.Any(p => p >= 0 && p < 100);
             if (anyActive)
+            {
+                _logger.LogWarning("Попытка запуска экспорта при уже активном процессе");
                 throw new InvalidOperationException("Экспорт уже выполняется. Дождитесь завершения или отмените предыдущий экспорт.");
+            }
 
             var taskId = Guid.NewGuid();
             _progress[taskId] = 0;
@@ -77,6 +84,8 @@ namespace RareBooksService.WebApi.Services
 
             var cts = new CancellationTokenSource();
             _cancellationTokens[taskId] = cts;
+
+            _logger.LogInformation($"Создана новая задача экспорта, TaskId: {taskId}");
 
             // Запускаем DoExport в фоновом потоке
             _ = Task.Run(() => DoExport(taskId, cts.Token));
@@ -213,16 +222,20 @@ namespace RareBooksService.WebApi.Services
         {
             try
             {
+                _logger.LogInformation($"Начинаем экспорт данных, TaskId: {taskId}");
                 _progress[taskId] = 0;
 
                 using var scope = _scopeFactory.CreateScope();
                 var regularContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
 
                 // 1) Узнаём общее число книг
+                _logger.LogInformation($"Подсчитываем общее количество книг, TaskId: {taskId}");
                 int totalBooks = await regularContext.BooksInfo.CountAsync(token);
+                _logger.LogInformation($"Найдено {totalBooks} книг для экспорта, TaskId: {taskId}");
+                
                 if (totalBooks == 0)
                 {
-                    // Если книг нет, сразу выходим
+                    _logger.LogWarning($"Нет книг для экспорта, TaskId: {taskId}");
                     _progress[taskId] = 100;
                     return;
                 }
@@ -230,15 +243,18 @@ namespace RareBooksService.WebApi.Services
 
                 // 2) Загружаем все категории из старой базы (PostgreSQL / PostgreSQL)
                 //    Здесь Category.Id — это старый PK, Category.CategoryId — meshok ID
+                _logger.LogInformation($"Загружаем категории, TaskId: {taskId}");
                 var allCategories = await regularContext.Categories
                     .AsNoTracking()
                     .OrderBy(c => c.Id)
                     .ToListAsync(token);
+                _logger.LogInformation($"Загружено {allCategories.Count} категорий, TaskId: {taskId}");
 
                 token.ThrowIfCancellationRequested();
 
                 // 3) Создаём временную папку, куда будем складывать part_*.db
                 string tempFolder = Path.Combine(Path.GetTempPath(), $"export_{taskId}");
+                _logger.LogInformation($"Создаем временную папку: {tempFolder}, TaskId: {taskId}");
                 if (!Directory.Exists(tempFolder))
                     Directory.CreateDirectory(tempFolder);
 
@@ -246,11 +262,13 @@ namespace RareBooksService.WebApi.Services
                 int chunkIndex = 0;
 
                 // Цикл по порциям книг (ChunkSize задан у вас в классе ExportService)
+                _logger.LogInformation($"Начинаем обработку {totalBooks} книг порциями по {ChunkSize}, TaskId: {taskId}");
                 while (processed < totalBooks)
                 {
                     token.ThrowIfCancellationRequested();
 
                     // 4) Загружаем очередной блок (chunk) книг из старой базы
+                    _logger.LogDebug($"Загружаем chunk {chunkIndex + 1}, позиция {processed}-{processed + ChunkSize}, TaskId: {taskId}");
                     var booksChunk = await regularContext.BooksInfo
                         .OrderBy(b => b.Id)
                         .Skip(processed)
@@ -259,10 +277,14 @@ namespace RareBooksService.WebApi.Services
                         .ToListAsync(token);
 
                     if (booksChunk.Count == 0)
+                    {
+                        _logger.LogWarning($"Получен пустой chunk на позиции {processed}, завершаем, TaskId: {taskId}");
                         break;
+                    }
 
                     chunkIndex++;
                     string chunkDbPath = Path.Combine(tempFolder, $"part_{chunkIndex}.db");
+                    _logger.LogDebug($"Создаем SQLite файл: {chunkDbPath}, TaskId: {taskId}");
                     if (File.Exists(chunkDbPath))
                         File.Delete(chunkDbPath);
 
@@ -272,10 +294,12 @@ namespace RareBooksService.WebApi.Services
 
                     using (var extendedContext = new ExtendedBooksContext(optionsBuilder.Options))
                     {
-                        // Создаём таблицы, если вдруг не созданы
-                        extendedContext.Database.EnsureCreated();
-                        // Отключаем автоматическое DetectChanges для быстроты
-                        extendedContext.ChangeTracker.AutoDetectChangesEnabled = false;
+                        try
+                        {
+                            // Создаём таблицы, если вдруг не созданы
+                            extendedContext.Database.EnsureCreated();
+                            // Отключаем автоматическое DetectChanges для быстроты
+                            extendedContext.ChangeTracker.AutoDetectChangesEnabled = false;
 
                         // 6) Заполняем таблицу категорий (полностью),
                         //    чтобы у каждой категории был свой auto-increment PK (Id)
@@ -358,15 +382,38 @@ namespace RareBooksService.WebApi.Services
                             extendedBooks.Add(newBook);
                         }
 
-                        // Сохраняем книги этого чанка
-                        extendedContext.BooksInfo.AddRange(extendedBooks);
-                        await extendedContext.SaveChangesAsync(token);
+                            // Сохраняем книги этого чанка
+                            extendedContext.BooksInfo.AddRange(extendedBooks);
+                            await extendedContext.SaveChangesAsync(token);
+                            _logger.LogInformation($"Сохранено {extendedBooks.Count} книг в chunk {chunkIndex}, TaskId: {taskId}");
+                        }
+                        catch (Exception chunkEx)
+                        {
+                            _logger.LogError(chunkEx, $"Ошибка при обработке chunk {chunkIndex}, TaskId: {taskId}");
+                            throw;
+                        }
                     }
 
                     // Закрываем соединения, освобождаем SQLite connection pool
                     SqliteConnection.ClearAllPools();
 
                     processed += booksChunk.Count;
+
+                    // Мониторинг памяти каждые 10 chunks
+                    if (chunkIndex % 10 == 0)
+                    {
+                        var currentMemory = GC.GetTotalMemory(false) / (1024.0 * 1024.0);
+                        _logger.LogInformation($"Chunk {chunkIndex}: обработано {processed}/{totalBooks}, память: {currentMemory:F2} MB, TaskId: {taskId}");
+                        
+                        // Принудительная сборка мусора каждые 50 chunks для освобождения памяти
+                        if (chunkIndex % 50 == 0)
+                        {
+                            GC.Collect();
+                            GC.WaitForPendingFinalizers();
+                            var memoryAfterGC = GC.GetTotalMemory(true) / (1024.0 * 1024.0);
+                            _logger.LogInformation($"Сборка мусора выполнена, память после: {memoryAfterGC:F2} MB, TaskId: {taskId}");
+                        }
+                    }
 
                     // 0..90%: остальное 10% зарезервируем на упаковку
                     int percent = (int)((double)processed / totalBooks * 90);
@@ -378,10 +425,17 @@ namespace RareBooksService.WebApi.Services
 
                 // 9) Создаём zip из tempFolder с оптимизацией для больших файлов
                 string zipFilePath = Path.Combine(Path.GetTempPath(), $"export_{taskId}.zip");
+                _logger.LogInformation($"Начинаем создание ZIP архива: {zipFilePath}, TaskId: {taskId}");
                 if (File.Exists(zipFilePath))
                     File.Delete(zipFilePath);
 
                 _progress[taskId] = 91; // Начинаем упаковку
+
+                // Получаем информацию о размере папки для логирования
+                var dirInfo = new DirectoryInfo(tempFolder);
+                var folderSizeMB = dirInfo.GetFiles("*.db", SearchOption.AllDirectories)
+                    .Sum(file => file.Length) / (1024.0 * 1024.0);
+                _logger.LogInformation($"Размер данных для архивирования: {folderSizeMB:F2} MB, TaskId: {taskId}");
 
                 // Используем более эффективный подход для больших архивов
                 ZipFile.CreateFromDirectory(
@@ -394,29 +448,56 @@ namespace RareBooksService.WebApi.Services
                 token.ThrowIfCancellationRequested();
                 _progress[taskId] = 95; // Архив создан
 
+                // Логируем размер созданного архива
+                var zipFileInfo = new FileInfo(zipFilePath);
+                var zipSizeMB = zipFileInfo.Length / (1024.0 * 1024.0);
+                _logger.LogInformation($"ZIP архив создан, размер: {zipSizeMB:F2} MB, TaskId: {taskId}");
+
                 // Запоминаем путь к zip, чтобы потом отдавать файл
                 _files[taskId] = zipFilePath;
 
                 // Удаляем временную папку part_*.db
                 Directory.Delete(tempFolder, true);
+                _logger.LogInformation($"Временная папка удалена, TaskId: {taskId}");
 
                 // 100% – готово
                 _progress[taskId] = 100;
+                _logger.LogInformation($"Экспорт завершен успешно, TaskId: {taskId}");
             }
             catch (OperationCanceledException)
             {
+                _logger.LogWarning($"Экспорт отменён пользователем, TaskId: {taskId}");
                 _progress[taskId] = -1;
                 _errors[taskId] = "Экспорт отменён пользователем.";
             }
+            catch (OutOfMemoryException memEx)
+            {
+                _logger.LogError(memEx, $"Недостаточно памяти для экспорта, TaskId: {taskId}");
+                _progress[taskId] = -1;
+                _errors[taskId] = "Недостаточно памяти для выполнения экспорта. Попробуйте экспортировать меньшими порциями.";
+            }
+            catch (UnauthorizedAccessException accessEx)
+            {
+                _logger.LogError(accessEx, $"Ошибка доступа к файлам при экспорте, TaskId: {taskId}");
+                _progress[taskId] = -1;
+                _errors[taskId] = "Ошибка доступа к временным файлам. Проверьте права доступа.";
+            }
+            catch (System.Data.Common.DbException dbEx)
+            {
+                _logger.LogError(dbEx, $"Ошибка базы данных при экспорте, TaskId: {taskId}");
+                _progress[taskId] = -1;
+                _errors[taskId] = $"Ошибка базы данных: {dbEx.Message}";
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка экспорта");
+                _logger.LogError(ex, $"Неожиданная ошибка экспорта, TaskId: {taskId}");
                 _progress[taskId] = -1;
-                _errors[taskId] = ex.ToString();
+                _errors[taskId] = $"Неожиданная ошибка: {ex.Message}";
             }
             finally
             {
                 _cancellationTokens.TryRemove(taskId, out _);
+                _logger.LogInformation($"Задача экспорта завершена, TaskId: {taskId}");
             }
         }
 
