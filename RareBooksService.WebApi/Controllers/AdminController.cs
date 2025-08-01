@@ -120,52 +120,78 @@ namespace RareBooksService.WebApi.Controllers
             var startTime = DateTime.UtcNow;
             try
             {
-                _logger.LogInformation($"Запрос на скачивание файла экспорта, TaskId: {taskId}, IP: {HttpContext.Connection.RemoteIpAddress}");
-                var file = _exportService.GetExportedFile(taskId);
-                if (file == null || !file.Exists)
+                _logger.LogInformation($"[DOWNLOAD] Запрос на скачивание файла экспорта, TaskId: {taskId}, IP: {HttpContext.Connection.RemoteIpAddress}");
+                
+                // Проверяем статус экспорта
+                var status = _exportService.GetStatus(taskId);
+                _logger.LogInformation($"[DOWNLOAD] Статус экспорта - Progress: {status.Progress}%, IsError: {status.IsError}, TaskId: {taskId}");
+                
+                if (status.IsError)
                 {
-                    _logger.LogWarning($"Файл экспорта не найден, TaskId: {taskId}");
-                    return NotFound("Файл не найден.");
+                    _logger.LogWarning($"[DOWNLOAD] Экспорт завершился с ошибкой: {status.ErrorDetails}, TaskId: {taskId}");
+                    return BadRequest($"Экспорт завершился с ошибкой: {status.ErrorDetails}");
+                }
+                
+                if (status.Progress < 100)
+                {
+                    _logger.LogWarning($"[DOWNLOAD] Экспорт еще не завершен ({status.Progress}%), TaskId: {taskId}");
+                    return BadRequest($"Экспорт еще не завершен. Прогресс: {status.Progress}%");
+                }
+                
+                var file = _exportService.GetExportedFile(taskId);
+                if (file == null)
+                {
+                    _logger.LogError($"[DOWNLOAD] GetExportedFile вернул null, TaskId: {taskId}");
+                    return NotFound("Файл экспорта не найден в системе.");
+                }
+                
+                if (!file.Exists)
+                {
+                    _logger.LogError($"[DOWNLOAD] Файл экспорта не существует на диске: {file.FullName}, TaskId: {taskId}");
+                    return NotFound("Файл экспорта не найден на диске.");
                 }
 
                 var fileSizeMB = file.Length / (1024.0 * 1024.0);
-                _logger.LogInformation($"Начинается скачивание файла экспорта: {file.FullName}, размер: {fileSizeMB:F2} MB, TaskId: {taskId}");
+                _logger.LogInformation($"[DOWNLOAD] Файл найден: {file.FullName}, размер: {fileSizeMB:F2} MB, TaskId: {taskId}");
 
                 // Логируем заголовки запроса для диагностики
                 var userAgent = HttpContext.Request.Headers["User-Agent"].ToString();
                 var rangeHeader = HttpContext.Request.Headers["Range"].ToString();
-                _logger.LogInformation($"User-Agent: {userAgent}, Range: {rangeHeader}, TaskId: {taskId}");
+                _logger.LogInformation($"[DOWNLOAD] User-Agent: {userAgent}, Range: {rangeHeader}, TaskId: {taskId}");
 
                 // Проверяем, что файл доступен для чтения
                 try
                 {
                     using (var testStream = System.IO.File.OpenRead(file.FullName))
                     {
-                        _logger.LogInformation($"Файл успешно открыт для чтения, TaskId: {taskId}");
+                        var testBuffer = new byte[1024];
+                        var bytesRead = testStream.Read(testBuffer, 0, 1024);
+                        _logger.LogInformation($"[DOWNLOAD] Файл успешно прочитан, первые {bytesRead} байт получены, TaskId: {taskId}");
                     }
                 }
                 catch (Exception readEx)
                 {
-                    _logger.LogError(readEx, $"Ошибка при попытке открыть файл для чтения, TaskId: {taskId}");
-                    throw;
+                    _logger.LogError(readEx, $"[DOWNLOAD] Ошибка при тестовом чтении файла, TaskId: {taskId}");
+                    return StatusCode(500, "Файл поврежден или недоступен для чтения");
                 }
 
-                // Исправляем расширение файла на .zip, так как ExportService создает zip-архив
+                // Создаем результат
+                _logger.LogInformation($"[DOWNLOAD] Создаем PhysicalFileResult, TaskId: {taskId}");
                 var result = PhysicalFile(file.FullName, "application/zip", $"export_{taskId}.zip");
                 
                 // Включаем поддержку Range requests для больших файлов (позволяет докачку)
                 result.EnableRangeProcessing = true;
                 
                 var processingTime = (DateTime.UtcNow - startTime).TotalMilliseconds;
-                _logger.LogInformation($"PhysicalFileResult создан за {processingTime:F2}ms, начинается передача файла клиенту, TaskId: {taskId}");
+                _logger.LogInformation($"[DOWNLOAD] PhysicalFileResult создан за {processingTime:F2}ms, возвращаем результат, TaskId: {taskId}");
                 
                 return result;
             }
             catch (Exception ex)
             {
                 var processingTime = (DateTime.UtcNow - startTime).TotalMilliseconds;
-                _logger.LogError(ex, $"Ошибка при попытке скачивания файла экспорта за {processingTime:F2}ms, TaskId: {taskId}");
-                return StatusCode(500, "Внутренняя ошибка сервера при скачивании файла");
+                _logger.LogError(ex, $"[DOWNLOAD] КРИТИЧЕСКАЯ ОШИБКА при обработке запроса загрузки за {processingTime:F2}ms, TaskId: {taskId}");
+                return StatusCode(500, $"Внутренняя ошибка сервера: {ex.Message}");
             }
         }
 

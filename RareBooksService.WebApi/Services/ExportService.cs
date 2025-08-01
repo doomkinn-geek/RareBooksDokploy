@@ -426,43 +426,91 @@ namespace RareBooksService.WebApi.Services
                 // 9) Создаём zip из tempFolder с оптимизацией для больших файлов
                 string zipFilePath = Path.Combine(Path.GetTempPath(), $"export_{taskId}.zip");
                 _logger.LogInformation($"Начинаем создание ZIP архива: {zipFilePath}, TaskId: {taskId}");
-                if (File.Exists(zipFilePath))
-                    File.Delete(zipFilePath);
+                
+                try
+                {
+                    if (File.Exists(zipFilePath))
+                    {
+                        File.Delete(zipFilePath);
+                        _logger.LogInformation($"Удален существующий ZIP файл, TaskId: {taskId}");
+                    }
 
-                _progress[taskId] = 91; // Начинаем упаковку
+                    _progress[taskId] = 91; // Начинаем упаковку
 
-                // Получаем информацию о размере папки для логирования
-                var dirInfo = new DirectoryInfo(tempFolder);
-                var folderSizeMB = dirInfo.GetFiles("*.db", SearchOption.AllDirectories)
-                    .Sum(file => file.Length) / (1024.0 * 1024.0);
-                _logger.LogInformation($"Размер данных для архивирования: {folderSizeMB:F2} MB, TaskId: {taskId}");
+                    // Получаем информацию о размере папки для логирования
+                    var dirInfo = new DirectoryInfo(tempFolder);
+                    if (!dirInfo.Exists)
+                    {
+                        throw new DirectoryNotFoundException($"Временная папка не найдена: {tempFolder}");
+                    }
+                    
+                    var dbFiles = dirInfo.GetFiles("*.db", SearchOption.AllDirectories);
+                    var folderSizeMB = dbFiles.Sum(file => file.Length) / (1024.0 * 1024.0);
+                    _logger.LogInformation($"Найдено {dbFiles.Length} файлов .db, общий размер: {folderSizeMB:F2} MB, TaskId: {taskId}");
 
-                // Используем более эффективный подход для больших архивов
-                ZipFile.CreateFromDirectory(
-                    tempFolder, 
-                    zipFilePath, 
-                    CompressionLevel.Fastest, // Быстрое сжатие для ускорения процесса
-                    false
-                );
+                    if (dbFiles.Length == 0)
+                    {
+                        throw new InvalidOperationException("Не найдено файлов .db для архивирования");
+                    }
 
-                token.ThrowIfCancellationRequested();
-                _progress[taskId] = 95; // Архив создан
+                    // Проверяем свободное место на диске
+                    var driveInfo = new DriveInfo(Path.GetPathRoot(zipFilePath));
+                    var freeSpaceGB = driveInfo.AvailableFreeSpace / (1024.0 * 1024.0 * 1024.0);
+                    _logger.LogInformation($"Свободное место на диске: {freeSpaceGB:F2} GB, TaskId: {taskId}");
 
-                // Логируем размер созданного архива
-                var zipFileInfo = new FileInfo(zipFilePath);
-                var zipSizeMB = zipFileInfo.Length / (1024.0 * 1024.0);
-                _logger.LogInformation($"ZIP архив создан, размер: {zipSizeMB:F2} MB, TaskId: {taskId}");
+                    // Используем более эффективный подход для больших архивов
+                    _logger.LogInformation($"Запускаем архивирование папки {tempFolder}, TaskId: {taskId}");
+                    ZipFile.CreateFromDirectory(
+                        tempFolder, 
+                        zipFilePath, 
+                        CompressionLevel.Fastest, // Быстрое сжатие для ускорения процесса
+                        false
+                    );
+                    _logger.LogInformation($"Архивирование завершено, TaskId: {taskId}");
 
-                // Запоминаем путь к zip, чтобы потом отдавать файл
-                _files[taskId] = zipFilePath;
+                    token.ThrowIfCancellationRequested();
+                    _progress[taskId] = 95; // Архив создан
 
-                // Удаляем временную папку part_*.db
-                Directory.Delete(tempFolder, true);
-                _logger.LogInformation($"Временная папка удалена, TaskId: {taskId}");
+                    // Проверяем, что архив создался корректно
+                    if (!File.Exists(zipFilePath))
+                    {
+                        throw new FileNotFoundException($"ZIP архив не был создан: {zipFilePath}");
+                    }
 
-                // 100% – готово
-                _progress[taskId] = 100;
-                _logger.LogInformation($"Экспорт завершен успешно, TaskId: {taskId}");
+                    // Логируем размер созданного архива
+                    var zipFileInfo = new FileInfo(zipFilePath);
+                    var zipSizeMB = zipFileInfo.Length / (1024.0 * 1024.0);
+                    _logger.LogInformation($"ZIP архив создан успешно, размер: {zipSizeMB:F2} MB, TaskId: {taskId}");
+
+                    if (zipFileInfo.Length < 1024) // Файл меньше 1KB - подозрительно
+                    {
+                        _logger.LogWarning($"ZIP файл очень маленький ({zipFileInfo.Length} байт), возможна ошибка, TaskId: {taskId}");
+                    }
+
+                    // Запоминаем путь к zip, чтобы потом отдавать файл
+                    _files[taskId] = zipFilePath;
+
+                    // Удаляем временную папку part_*.db
+                    try
+                    {
+                        Directory.Delete(tempFolder, true);
+                        _logger.LogInformation($"Временная папка удалена, TaskId: {taskId}");
+                    }
+                    catch (Exception deleteEx)
+                    {
+                        _logger.LogWarning(deleteEx, $"Не удалось удалить временную папку {tempFolder}, TaskId: {taskId}");
+                        // Не прерываем выполнение из-за этой ошибки
+                    }
+
+                    // 100% – готово
+                    _progress[taskId] = 100;
+                    _logger.LogInformation($"Экспорт завершен успешно, TaskId: {taskId}");
+                }
+                catch (Exception zipEx)
+                {
+                    _logger.LogError(zipEx, $"Критическая ошибка при создании ZIP архива, TaskId: {taskId}");
+                    throw;
+                }
             }
             catch (OperationCanceledException)
             {

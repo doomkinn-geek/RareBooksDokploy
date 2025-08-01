@@ -330,8 +330,11 @@ namespace RareBooksService.WebApi
                 app.UseRouting();
                 app.UseCors("AllowAll");
                 
-                // Middleware для логирования загрузки файлов
-                app.UseMiddleware<RareBooksService.WebApi.Middleware.FileDownloadLoggingMiddleware>();
+                // Настройка статических файлов
+                app.UseStaticFiles();
+                
+                // Временно отключаем middleware для диагностики 502 ошибки
+                // app.UseMiddleware<RareBooksService.WebApi.Middleware.FileDownloadLoggingMiddleware>();
                 
                 app.UseAuthentication();
                 app.UseAuthorization();
