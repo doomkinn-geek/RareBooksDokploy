@@ -219,24 +219,47 @@ const AdminPanel = () => {
         if (!exportTaskId) return;
         const token = Cookies.get('token');
         try {
+            // Используем AbortController для контроля timeout'а
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 минут
+
             const response = await fetch(
-                `${API_URL}/Admin/download-exported-file/${exportTaskId}`,
-                { headers: { Authorization: `Bearer ${token}` } }
+                `${API_URL}/admin/download-exported-file/${exportTaskId}`, // исправляем регистр
+                { 
+                    headers: { Authorization: `Bearer ${token}` },
+                    signal: controller.signal
+                }
             );
+            
+            clearTimeout(timeoutId);
+            
             if (!response.ok) throw new Error('Не удалось скачать файл');
 
             const blob = await response.blob();
+            
+            // Проверяем, что получили данные
+            if (!blob || blob.size === 0) {
+                throw new Error('Получен пустой файл');
+            }
+            
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `export_${exportTaskId}.zip`; // меняем расширение на .zip
+            a.download = `export_${exportTaskId}.zip`;
             document.body.appendChild(a);
             a.click();
             a.remove();
             URL.revokeObjectURL(url);
         } catch (err) {
             console.error('Error downloading file:', err);
-            setError('Ошибка при скачивании файла.');
+            
+            if (err.name === 'AbortError') {
+                setError('Превышено время ожидания загрузки. Попробуйте еще раз.');
+            } else if (err.message === 'Network Error' || err.message.includes('fetch')) {
+                setError('Ошибка сети. Проверьте подключение к интернету.');
+            } else {
+                setError('Ошибка при скачивании файла: ' + err.message);
+            }
         }
     };
 

@@ -68,6 +68,35 @@ namespace RareBooksService.WebApi.Controllers
             }
         }
 
+        [HttpGet("export-status")]
+        public IActionResult GetExportStatus()
+        {
+            try
+            {
+                // Проверяем, есть ли активные экспорты
+                // Поскольку в ExportService используются статические словари, проверим их
+                var activeExports = _exportService.GetActiveExports();
+                
+                if (activeExports != null && activeExports.Any())
+                {
+                    var activeExport = activeExports.First();
+                    return Ok(new
+                    {
+                        isExporting = true,
+                        taskId = activeExport.TaskId,
+                        progress = activeExport.Progress
+                    });
+                }
+
+                return Ok(new { isExporting = false });
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, "Ошибка получения статуса экспорта");
+                return Ok(new { isExporting = false });
+            }
+        }
+
 
         [HttpGet("download-exported-file/{taskId}")]
         public IActionResult DownloadExportedFile(Guid taskId)
@@ -76,7 +105,13 @@ namespace RareBooksService.WebApi.Controllers
             if (file == null || !file.Exists)
                 return NotFound("Файл не найден.");
 
-            return PhysicalFile(file.FullName, "application/octet-stream", $"export_{taskId}.db");
+            // Исправляем расширение файла на .zip, так как ExportService создает zip-архив
+            var result = PhysicalFile(file.FullName, "application/zip", $"export_{taskId}.zip");
+            
+            // Включаем поддержку Range requests для больших файлов (позволяет докачку)
+            result.EnableRangeProcessing = true;
+            
+            return result;
         }
 
         [HttpPost("cancel-export/{taskId}")]

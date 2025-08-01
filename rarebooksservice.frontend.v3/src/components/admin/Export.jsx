@@ -148,6 +148,7 @@ const Export = () => {
                 {
                     headers: { Authorization: `Bearer ${token}` },
                     responseType: 'blob',
+                    timeout: 300000, // 5 минут timeout для больших файлов
                     onDownloadProgress: (progressEvent) => {
                         if (progressEvent.total) {
                             const progress = Math.round((progressEvent.loaded / progressEvent.total) * 100);
@@ -156,6 +157,11 @@ const Export = () => {
                     }
                 }
             );
+
+            // Проверяем, что ответ содержит данные
+            if (!response.data || response.data.size === 0) {
+                throw new Error('Получен пустой файл');
+            }
 
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
@@ -174,7 +180,23 @@ const Export = () => {
             }, 1000);
         } catch (err) {
             console.error('Error downloading export file:', err);
-            setExportInternalError('Ошибка при скачивании файла экспорта: ' + (err.response?.data || err.message));
+            
+            // Более детальная обработка ошибок
+            let errorMessage = 'Ошибка при скачивании файла экспорта';
+            
+            if (err.code === 'ECONNABORTED') {
+                errorMessage = 'Превышено время ожидания загрузки. Попробуйте еще раз.';
+            } else if (err.message === 'Network Error') {
+                errorMessage = 'Ошибка сети. Проверьте подключение к интернету.';
+            } else if (err.response?.status === 404) {
+                errorMessage = 'Файл экспорта не найден или был удален.';
+            } else if (err.response?.status >= 500) {
+                errorMessage = 'Ошибка сервера. Попробуйте еще раз позже.';
+            } else if (err.message) {
+                errorMessage += ': ' + err.message;
+            }
+            
+            setExportInternalError(errorMessage);
             setIsDownloading(false);
         }
     };

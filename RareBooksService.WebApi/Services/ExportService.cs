@@ -18,6 +18,16 @@ namespace RareBooksService.WebApi.Services
         FileInfo GetExportedFile(Guid taskId);
         void CancelExport(Guid taskId);
         void CleanupAllFiles();
+        IEnumerable<ActiveExportDto> GetActiveExports();
+    }
+
+    /// <summary>
+    /// DTO для информации об активном экспорте
+    /// </summary>
+    public class ActiveExportDto
+    {
+        public Guid TaskId { get; set; }
+        public int Progress { get; set; }
     }
 
     /// <summary>
@@ -171,6 +181,29 @@ namespace RareBooksService.WebApi.Services
                 }
             }
             _files.Clear();
+        }
+
+        public IEnumerable<ActiveExportDto> GetActiveExports()
+        {
+            var activeExports = new List<ActiveExportDto>();
+            
+            foreach (var kvp in _progress)
+            {
+                var taskId = kvp.Key;
+                var progress = kvp.Value;
+                
+                // Считаем активными экспорты с прогрессом от 0 до 99 (не завершенные и не ошибочные)
+                if (progress >= 0 && progress < 100)
+                {
+                    activeExports.Add(new ActiveExportDto
+                    {
+                        TaskId = taskId,
+                        Progress = progress
+                    });
+                }
+            }
+            
+            return activeExports;
         }
 
         /// <summary>
@@ -343,11 +376,23 @@ namespace RareBooksService.WebApi.Services
                 // Небольшая пауза, чтобы гарантировать, что все файлы освобождены
                 await Task.Delay(300, token);
 
-                // 9) Создаём zip из tempFolder
+                // 9) Создаём zip из tempFolder с оптимизацией для больших файлов
                 string zipFilePath = Path.Combine(Path.GetTempPath(), $"export_{taskId}.zip");
                 if (File.Exists(zipFilePath))
                     File.Delete(zipFilePath);
-                ZipFile.CreateFromDirectory(tempFolder, zipFilePath);
+
+                _progress[taskId] = 91; // Начинаем упаковку
+
+                // Используем более эффективный подход для больших архивов
+                ZipFile.CreateFromDirectory(
+                    tempFolder, 
+                    zipFilePath, 
+                    CompressionLevel.Fastest, // Быстрое сжатие для ускорения процесса
+                    false
+                );
+
+                token.ThrowIfCancellationRequested();
+                _progress[taskId] = 95; // Архив создан
 
                 // Запоминаем путь к zip, чтобы потом отдавать файл
                 _files[taskId] = zipFilePath;
