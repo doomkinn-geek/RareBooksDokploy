@@ -374,6 +374,89 @@ const Export = () => {
         }
     };
 
+    const downloadExportFileDirect = (taskId) => {
+        try {
+            const token = Cookies.get('token');
+            const downloadTaskId = taskId || exportTaskId;
+            
+            if (!downloadTaskId) {
+                setExportInternalError('ID задачи экспорта не найден');
+                return;
+            }
+            
+            console.log(`[DIRECT] Начинается прямое скачивание файла экспорта для TaskId: ${downloadTaskId}`);
+            
+            // Создаем временную форму для авторизованного скачивания
+            const form = document.createElement('form');
+            form.method = 'GET';
+            form.action = `${API_URL}/admin/download-exported-file/${downloadTaskId}`;
+            form.style.display = 'none';
+            
+            // Добавляем скрытое поле с токеном авторизации
+            const tokenInput = document.createElement('input');
+            tokenInput.type = 'hidden';
+            tokenInput.name = 'token';
+            tokenInput.value = token;
+            form.appendChild(tokenInput);
+            
+            document.body.appendChild(form);
+            
+            console.log(`[DIRECT] Отправляем форму для скачивания: ${form.action}`);
+            form.submit();
+            
+            // Удаляем форму через небольшую задержку
+            setTimeout(() => {
+                document.body.removeChild(form);
+                console.log('[DIRECT] Форма удалена');
+            }, 1000);
+            
+            console.log('[DIRECT] Прямое скачивание инициировано через форму');
+        } catch (err) {
+            console.error('[DIRECT] Error in direct download:', err);
+            setExportInternalError('Ошибка при прямом скачивании: ' + err.message);
+        }
+    };
+
+    const downloadExportFileWindow = (taskId) => {
+        try {
+            const token = Cookies.get('token');
+            const downloadTaskId = taskId || exportTaskId;
+            
+            if (!downloadTaskId) {
+                setExportInternalError('ID задачи экспорта не найден');
+                return;
+            }
+            
+            console.log(`[WINDOW] Начинается скачивание через новое окно для TaskId: ${downloadTaskId}`);
+            
+            // Формируем URL с токеном в параметрах (не рекомендуется для продакшена, но может помочь для тестирования)
+            const downloadUrl = `${API_URL}/admin/download-exported-file/${downloadTaskId}?token=${encodeURIComponent(token)}`;
+            
+            console.log(`[WINDOW] Открываем новое окно: ${downloadUrl}`);
+            
+            // Открываем в новом окне
+            const newWindow = window.open(downloadUrl, '_blank');
+            
+            if (!newWindow) {
+                throw new Error('Браузер заблокировал открытие нового окна. Разрешите всплывающие окна.');
+            }
+            
+            console.log('[WINDOW] Новое окно открыто для скачивания');
+            
+            // Закрываем окно через 5 секунд
+            setTimeout(() => {
+                if (newWindow && !newWindow.closed) {
+                    newWindow.close();
+                    console.log('[WINDOW] Окно закрыто');
+                }
+            }, 5000);
+            
+        } catch (err) {
+            console.error('[WINDOW] Error in window download:', err);
+            setExportInternalError('Ошибка при скачивании через окно: ' + err.message);
+        }
+    };
+
     const cancelExport = async () => {
         if (exportTaskId) {
             try {
@@ -437,16 +520,38 @@ const Export = () => {
                                 disabled={isDownloading}
                                 color="primary"
                                 sx={{ mr: 1 }}
+                                size="small"
                             >
-                                Скачать (обычный)
+                                Скачать (axios)
                             </Button>
                             <Button
                                 variant="outlined"
                                 onClick={() => downloadExportFileStream(exportTaskId)}
                                 disabled={isDownloading}
                                 color="secondary"
+                                sx={{ mr: 1 }}
+                                size="small"
                             >
-                                Скачать (потоковый)
+                                Скачать (поток)
+                            </Button>
+                            <Button
+                                variant="outlined"
+                                onClick={() => downloadExportFileDirect(exportTaskId)}
+                                disabled={isDownloading}
+                                color="success"
+                                sx={{ mr: 1 }}
+                                size="small"
+                            >
+                                Скачать (форма)
+                            </Button>
+                            <Button
+                                variant="outlined"
+                                onClick={() => downloadExportFileWindow(exportTaskId)}
+                                disabled={isDownloading}
+                                color="info"
+                                size="small"
+                            >
+                                Скачать (окно)
                             </Button>
                         </>
                     )}

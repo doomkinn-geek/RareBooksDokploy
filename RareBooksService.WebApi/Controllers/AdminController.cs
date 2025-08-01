@@ -115,12 +115,20 @@ namespace RareBooksService.WebApi.Controllers
 
 
         [HttpGet("download-exported-file/{taskId}")]
-        public IActionResult DownloadExportedFile(Guid taskId)
+        public IActionResult DownloadExportedFile(Guid taskId, [FromQuery] string token = null)
         {
             var startTime = DateTime.UtcNow;
             try
             {
                 _logger.LogInformation($"[DOWNLOAD] Запрос на скачивание файла экспорта, TaskId: {taskId}, IP: {HttpContext.Connection.RemoteIpAddress}");
+                
+                // Проверяем авторизацию (если токен передан через query параметр)
+                if (!string.IsNullOrEmpty(token))
+                {
+                    _logger.LogInformation($"[DOWNLOAD] Проверяем токен из query параметра, TaskId: {taskId}");
+                    // Здесь можно добавить проверку JWT токена, пока просто логируем
+                    // TODO: Добавить валидацию JWT токена
+                }
                 
                 // Проверяем статус экспорта
                 var status = _exportService.GetStatus(taskId);
@@ -399,12 +407,19 @@ namespace RareBooksService.WebApi.Controllers
         /// Альтернативный endpoint для потоковой загрузки больших файлов экспорта
         /// </summary>
         [HttpGet("download-exported-file-stream/{taskId}")]
-        public async Task<IActionResult> DownloadExportedFileStream(Guid taskId)
+        public async Task<IActionResult> DownloadExportedFileStream(Guid taskId, [FromQuery] string token = null)
         {
             var startTime = DateTime.UtcNow;
             try
             {
                 _logger.LogInformation($"[STREAM] Запрос на потоковое скачивание файла экспорта, TaskId: {taskId}, IP: {HttpContext.Connection.RemoteIpAddress}");
+                
+                // Проверяем авторизацию (если токен передан через query параметр)
+                if (!string.IsNullOrEmpty(token))
+                {
+                    _logger.LogInformation($"[STREAM] Проверяем токен из query параметра, TaskId: {taskId}");
+                    // TODO: Добавить валидацию JWT токена
+                }
                 
                 // Проверяем статус экспорта
                 var status = _exportService.GetStatus(taskId);

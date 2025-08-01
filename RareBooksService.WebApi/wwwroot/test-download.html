@@ -20,8 +20,10 @@
         <div>
             <label>Task ID:</label>
             <input type="text" id="taskId" placeholder="Введите Task ID" style="width: 300px;">
-            <button onclick="downloadFile()">Скачать файл (обычный)</button>
-            <button onclick="downloadFileStream()">Скачать файл (потоковый)</button>
+            <button onclick="downloadFile()">Скачать (axios)</button>
+            <button onclick="downloadFileStream()">Скачать (поток)</button>
+            <button onclick="downloadFileDirect()">Скачать (форма)</button>
+            <button onclick="downloadFileWindow()">Скачать (окно)</button>
             <button onclick="clearLog()">Очистить лог</button>
         </div>
         
@@ -241,6 +243,93 @@
             } catch (error) {
                 log(`[STREAM] Ошибка: ${error.message}`, 'error');
                 console.error('[STREAM] Детали ошибки:', error);
+            }
+        }
+
+        function downloadFileDirect() {
+            const taskId = document.getElementById('taskId').value;
+            if (!taskId) {
+                log('Введите Task ID!', 'error');
+                return;
+            }
+
+            try {
+                log(`[DIRECT] Начинается прямое скачивание для Task ID: ${taskId}`);
+                updateProgress(0, 0, 0);
+
+                const token = getCookie('token');
+                if (!token) {
+                    log('Токен авторизации не найден. Войдите в систему.', 'error');
+                    return;
+                }
+
+                // Создаем временную форму для авторизованного скачивания
+                const form = document.createElement('form');
+                form.method = 'GET';
+                form.action = `/api/admin/download-exported-file/${taskId}?token=${encodeURIComponent(token)}`;
+                form.style.display = 'none';
+                
+                document.body.appendChild(form);
+                
+                log(`[DIRECT] Отправляем форму для скачивания: ${form.action}`);
+                form.submit();
+                
+                // Удаляем форму через небольшую задержку
+                setTimeout(() => {
+                    document.body.removeChild(form);
+                    log('[DIRECT] Форма удалена');
+                }, 1000);
+                
+                log('[DIRECT] Прямое скачивание инициировано через форму', 'success');
+
+            } catch (error) {
+                log(`[DIRECT] Ошибка: ${error.message}`, 'error');
+                console.error('[DIRECT] Детали ошибки:', error);
+            }
+        }
+
+        function downloadFileWindow() {
+            const taskId = document.getElementById('taskId').value;
+            if (!taskId) {
+                log('Введите Task ID!', 'error');
+                return;
+            }
+
+            try {
+                log(`[WINDOW] Начинается скачивание через новое окно для Task ID: ${taskId}`);
+                updateProgress(0, 0, 0);
+
+                const token = getCookie('token');
+                if (!token) {
+                    log('Токен авторизации не найден. Войдите в систему.', 'error');
+                    return;
+                }
+
+                // Формируем URL с токеном в параметрах
+                const downloadUrl = `/api/admin/download-exported-file/${taskId}?token=${encodeURIComponent(token)}`;
+                
+                log(`[WINDOW] Открываем новое окно: ${downloadUrl}`);
+                
+                // Открываем в новом окне
+                const newWindow = window.open(downloadUrl, '_blank');
+                
+                if (!newWindow) {
+                    throw new Error('Браузер заблокировал открытие нового окна. Разрешите всплывающие окна.');
+                }
+                
+                log('[WINDOW] Новое окно открыто для скачивания', 'success');
+                
+                // Закрываем окно через 5 секунд
+                setTimeout(() => {
+                    if (newWindow && !newWindow.closed) {
+                        newWindow.close();
+                        log('[WINDOW] Окно закрыто');
+                    }
+                }, 5000);
+
+            } catch (error) {
+                log(`[WINDOW] Ошибка: ${error.message}`, 'error');
+                console.error('[WINDOW] Детали ошибки:', error);
             }
         }
 
