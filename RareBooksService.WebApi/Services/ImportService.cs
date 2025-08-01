@@ -32,6 +32,12 @@ namespace RareBooksService.WebApi.Services
         public bool IsFinished { get; set; }
         public bool IsCancelledOrError { get; set; }
         public string Message { get; set; }
+        
+        // Новые поля для отображения информации о файлах
+        public int CurrentFileIndex { get; set; }    // Номер текущего обрабатываемого файла (начиная с 1)
+        public int TotalFilesCount { get; set; }     // Общее количество файлов в архиве
+        public string CurrentFileName { get; set; }  // Имя текущего обрабатываемого файла
+        public double CurrentFileProgress { get; set; } // Прогресс обработки текущего файла (0..100)
     }
 
     public class ImportService : IImportService
@@ -251,6 +257,9 @@ namespace RareBooksService.WebApi.Services
                 
                 cancellationToken.ThrowIfCancellationRequested();
 
+                // Устанавливаем общее количество файлов для отслеживания прогресса
+                taskInfo.TotalFilesCount = chunkFiles.Length;
+
                 // Подсчитываем общее количество книг (для прогресса)
                 long totalBooksCount = 0;
                 foreach (var chunkFile in chunkFiles)
@@ -272,17 +281,26 @@ namespace RareBooksService.WebApi.Services
                     }
                 }
 
-                _logger.LogInformation("Всего будет импортировано {Count} книг", totalBooksCount);
+                _logger.LogInformation("Всего будет импортировано {Count} книг из {FileCount} файлов", totalBooksCount, chunkFiles.Length);
 
                 //long processed = 0;
                 long processedBooks = 0;
 
                 // 2) Идём по всем chunk'ам
-                foreach (var chunkFile in chunkFiles.OrderBy(x => x))
+                var sortedChunkFiles = chunkFiles.OrderBy(x => x).ToArray();
+                for (int fileIndex = 0; fileIndex < sortedChunkFiles.Length; fileIndex++)
                 {
+                    var chunkFile = sortedChunkFiles[fileIndex];
+                    
                     cancellationToken.ThrowIfCancellationRequested();
                     
-                    _logger.LogInformation("Обработка файла: {ChunkFile}", Path.GetFileName(chunkFile));
+                    // Обновляем информацию о текущем обрабатываемом файле
+                    taskInfo.CurrentFileIndex = fileIndex + 1;
+                    taskInfo.CurrentFileName = Path.GetFileName(chunkFile);
+                    taskInfo.CurrentFileProgress = 0.0;
+                    
+                    _logger.LogInformation("Обработка файла {CurrentFile}/{TotalFiles}: {ChunkFile}", 
+                        taskInfo.CurrentFileIndex, taskInfo.TotalFilesCount, taskInfo.CurrentFileName);
                     
                     var sqliteOptions = new DbContextOptionsBuilder<ExtendedBooksContext>()
                         .UseSqlite($"Filename={chunkFile}")
@@ -397,7 +415,14 @@ namespace RareBooksService.WebApi.Services
                                     // Обновляем прогресс каждые 10 записей
                                     if (booksProcessedInFile % 10 == 0)
                                     {
-                                        taskInfo.ImportProgress = (double)booksProcessedInFile / books.Count * 100.0;
+                                        // Прогресс текущего файла
+                                        taskInfo.CurrentFileProgress = (double)booksProcessedInFile / books.Count * 100.0;
+                                        
+                                        // Общий прогресс импорта (с учетом всех файлов)
+                                        double fileProgressWeight = 100.0 / taskInfo.TotalFilesCount;
+                                        double completedFilesProgress = (taskInfo.CurrentFileIndex - 1) * fileProgressWeight;
+                                        double currentFileProgress = (taskInfo.CurrentFileProgress / 100.0) * fileProgressWeight;
+                                        taskInfo.ImportProgress = completedFilesProgress + currentFileProgress;
                                     }
                                     
                                     if (book == null)
@@ -552,9 +577,17 @@ namespace RareBooksService.WebApi.Services
                                 }
 
                                 await booksTransaction.CommitAsync(cancellationToken);
-                                taskInfo.ImportProgress = 100.0;
-                                _logger.LogInformation("Импорт книг успешно завершен. Добавлено/обновлено: {AddedBooks}, пропущено: {SkippedBooks}", 
-                                    addedBooks, skippedBooks);
+                                
+                                // Устанавливаем прогресс текущего файла на 100%
+                                taskInfo.CurrentFileProgress = 100.0;
+                                
+                                // Обновляем общий прогресс
+                                double finalFileWeight = 100.0 / taskInfo.TotalFilesCount;
+                                double finalCompletedProgress = taskInfo.CurrentFileIndex * finalFileWeight;
+                                taskInfo.ImportProgress = finalCompletedProgress;
+                                
+                                _logger.LogInformation("Файл {CurrentFile}/{TotalFiles} обработан. Добавлено/обновлено: {AddedBooks}, пропущено: {SkippedBooks}", 
+                                    taskInfo.CurrentFileIndex, taskInfo.TotalFilesCount, addedBooks, skippedBooks);
                                 
                                 // Обновляем общую статистику
                                 totalAddedBooks += addedBooks;
@@ -598,10 +631,13 @@ namespace RareBooksService.WebApi.Services
 
                 // Закончили все chunks
                 taskInfo.ImportProgress = 100.0;
+                taskInfo.CurrentFileIndex = taskInfo.TotalFilesCount;
+                taskInfo.CurrentFileName = "Завершено";
+                taskInfo.CurrentFileProgress = 100.0;
                 taskInfo.IsCompleted = true;
-                taskInfo.Message = $"Импорт завершен. Добавлено {totalAddedBooks} книг, пропущено {totalSkippedBooks} книг.";
-                _logger.LogInformation("Импорт {ImportId} успешно завершен. Добавлено: {AddedBooks}, пропущено: {SkippedBooks} книг", 
-                    taskInfo.ImportTaskId, totalAddedBooks, totalSkippedBooks);
+                taskInfo.Message = $"Импорт завершен. Обработано {taskInfo.TotalFilesCount} файлов. Добавлено {totalAddedBooks} книг, пропущено {totalSkippedBooks} книг.";
+                _logger.LogInformation("Импорт {ImportId} успешно завершен. Обработано {FilesCount} файлов. Добавлено: {AddedBooks}, пропущено: {SkippedBooks} книг", 
+                    taskInfo.ImportTaskId, taskInfo.TotalFilesCount, totalAddedBooks, totalSkippedBooks);
             }
             catch (OperationCanceledException)
             {
@@ -713,7 +749,11 @@ namespace RareBooksService.WebApi.Services
                 ImportProgress = info.ImportProgress,
                 IsFinished = info.IsCompleted,
                 IsCancelledOrError = info.IsCancelledOrError,
-                Message = info.Message
+                Message = info.Message,
+                CurrentFileIndex = info.CurrentFileIndex,
+                TotalFilesCount = info.TotalFilesCount,
+                CurrentFileName = info.CurrentFileName,
+                CurrentFileProgress = info.CurrentFileProgress
             };
         }
 
@@ -818,6 +858,12 @@ namespace RareBooksService.WebApi.Services
             public bool IsCompleted { get; set; } = false;
             public bool IsCancelledOrError { get; set; } = false;
             public string Message { get; set; } = "";
+            
+            // Новые поля для отслеживания информации о файлах
+            public int CurrentFileIndex { get; set; } = 0;
+            public int TotalFilesCount { get; set; } = 0;
+            public string CurrentFileName { get; set; } = "";
+            public double CurrentFileProgress { get; set; } = 0.0;
             
             public void Dispose()
             {
