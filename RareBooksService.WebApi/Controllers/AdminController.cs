@@ -537,40 +537,88 @@ namespace RareBooksService.WebApi.Controllers
         [HttpGet("download-exported-subscription-plans/{taskId}")]
         public IActionResult DownloadExportedSubscriptionPlans(Guid taskId, [FromQuery] string token = null)
         {
+            var startTime = DateTime.UtcNow;
             try
             {
-                _logger.LogInformation($"Запрос на скачивание файла экспорта планов подписок, TaskId: {taskId}");
+                _logger.LogInformation($"[PLAN-DOWNLOAD] Запрос на скачивание файла экспорта планов подписок, TaskId: {taskId}, IP: {HttpContext.Connection.RemoteIpAddress}");
                 
-                // Проверяем статус экспорта
+                // Логируем заголовки запроса для диагностики
+                var userAgent = HttpContext.Request.Headers["User-Agent"].ToString();
+                var rangeHeader = HttpContext.Request.Headers["Range"].ToString();
+                _logger.LogInformation($"[PLAN-DOWNLOAD] User-Agent: {userAgent}, Range: {rangeHeader}, TaskId: {taskId}");
+                
+                // Проверяем авторизацию (если токен передан через query параметр)
+                if (!string.IsNullOrEmpty(token))
+                {
+                    _logger.LogInformation($"[PLAN-DOWNLOAD] Проверяем токен из query параметра, TaskId: {taskId}");
+                }
+                
+                // Проверяем статус экспорта с детальным логированием
+                _logger.LogInformation($"[PLAN-DOWNLOAD] Получаем статус экспорта планов, TaskId: {taskId}");
                 var status = _subscriptionPlanExportService.GetStatus(taskId);
+                _logger.LogInformation($"[PLAN-DOWNLOAD] Статус экспорта планов - Progress: {status.Progress}%, IsError: {status.IsError}, ErrorDetails: '{status.ErrorDetails}', TaskId: {taskId}");
+                
                 if (status.IsError)
                 {
+                    _logger.LogWarning($"[PLAN-DOWNLOAD] 400 BadRequest - Экспорт планов завершился с ошибкой: {status.ErrorDetails}, TaskId: {taskId}");
                     return BadRequest($"Экспорт планов завершился с ошибкой: {status.ErrorDetails}");
                 }
                 
                 if (status.Progress < 100)
                 {
+                    _logger.LogWarning($"[PLAN-DOWNLOAD] 400 BadRequest - Экспорт планов еще не завершен ({status.Progress}%), TaskId: {taskId}");
                     return BadRequest($"Экспорт планов еще не завершен. Прогресс: {status.Progress}%");
                 }
                 
+                _logger.LogInformation($"[PLAN-DOWNLOAD] Статус экспорта планов корректный, получаем файл, TaskId: {taskId}");
                 var file = _subscriptionPlanExportService.GetExportedFile(taskId);
-                if (file == null || !file.Exists)
+                if (file == null)
                 {
-                    _logger.LogError($"Файл экспорта планов не найден, TaskId: {taskId}");
-                    return NotFound("Файл экспорта планов не найден.");
+                    _logger.LogError($"[PLAN-DOWNLOAD] GetExportedFile вернул null, TaskId: {taskId}");
+                    return NotFound("Файл экспорта планов не найден в системе.");
+                }
+                
+                if (!file.Exists)
+                {
+                    _logger.LogError($"[PLAN-DOWNLOAD] Файл экспорта планов не существует на диске: {file.FullName}, TaskId: {taskId}");
+                    return NotFound("Файл экспорта планов не найден на диске.");
                 }
 
                 var fileSizeMB = file.Length / (1024.0 * 1024.0);
-                _logger.LogInformation($"Файл экспорта планов найден: {file.FullName}, размер: {fileSizeMB:F2} MB, TaskId: {taskId}");
+                _logger.LogInformation($"[PLAN-DOWNLOAD] Файл экспорта планов найден: {file.FullName}, размер: {fileSizeMB:F2} MB, TaskId: {taskId}");
                 
+                // Проверяем, что файл доступен для чтения
+                try
+                {
+                    using (var testStream = System.IO.File.OpenRead(file.FullName))
+                    {
+                        var testBuffer = new byte[1024];
+                        var bytesRead = testStream.Read(testBuffer, 0, 1024);
+                        _logger.LogInformation($"[PLAN-DOWNLOAD] Файл планов успешно прочитан, первые {bytesRead} байт получены, TaskId: {taskId}");
+                    }
+                }
+                catch (Exception readEx)
+                {
+                    _logger.LogError(readEx, $"[PLAN-DOWNLOAD] Ошибка при тестовом чтении файла планов, TaskId: {taskId}");
+                    return StatusCode(500, "Файл планов поврежден или недоступен для чтения");
+                }
+                
+                // Создаем результат
+                _logger.LogInformation($"[PLAN-DOWNLOAD] Создаем PhysicalFileResult для планов, TaskId: {taskId}");
                 var result = PhysicalFile(file.FullName, "application/zip", $"subscription_plans_export_{taskId}.zip");
+                
+                // Включаем поддержку Range requests для больших файлов (позволяет докачку)
                 result.EnableRangeProcessing = true;
+                
+                var processingTime = (DateTime.UtcNow - startTime).TotalMilliseconds;
+                _logger.LogInformation($"[PLAN-DOWNLOAD] PhysicalFileResult для планов создан за {processingTime:F2}ms, возвращаем результат, TaskId: {taskId}");
                 
                 return result;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Ошибка при скачивании файла экспорта планов, TaskId: {taskId}");
+                var processingTime = (DateTime.UtcNow - startTime).TotalMilliseconds;
+                _logger.LogError(ex, $"[PLAN-DOWNLOAD] КРИТИЧЕСКАЯ ОШИБКА при обработке запроса загрузки планов за {processingTime:F2}ms, TaskId: {taskId}");
                 return StatusCode(500, $"Внутренняя ошибка сервера: {ex.Message}");
             }
         }

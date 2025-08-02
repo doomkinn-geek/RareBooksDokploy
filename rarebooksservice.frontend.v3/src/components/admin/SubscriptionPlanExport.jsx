@@ -233,6 +233,15 @@ const SubscriptionPlanExport = () => {
             }, 1000);
         } catch (err) {
             console.error('Error downloading subscription plan export file:', err);
+            console.error('Error details:', {
+                status: err.response?.status,
+                statusText: err.response?.statusText,
+                data: err.response?.data,
+                headers: err.response?.headers,
+                config: err.config,
+                message: err.message,
+                code: err.code
+            });
             
             // Более детальная обработка ошибок
             let errorMessage = 'Ошибка при скачивании файла экспорта планов подписок';
@@ -242,7 +251,13 @@ const SubscriptionPlanExport = () => {
             } else if (err.message === 'Network Error') {
                 errorMessage = 'Ошибка сети. Проверьте подключение к интернету.';
             } else if (err.response?.status === 400) {
-                errorMessage = 'Экспорт планов еще не завершен или завершился с ошибкой.';
+                console.log('400 Error response data:', err.response.data);
+                // Если есть текст ошибки от сервера, используем его
+                if (typeof err.response.data === 'string') {
+                    errorMessage = `Ошибка сервера: ${err.response.data}`;
+                } else {
+                    errorMessage = 'Экспорт планов еще не завершен или завершился с ошибкой.';
+                }
             } else if (err.response?.status === 404) {
                 errorMessage = 'Файл экспорта планов не найден или был удален.';
             } else if (err.response?.status >= 500) {
