@@ -246,31 +246,54 @@ const SubscriptionPlanExport = () => {
             // Более детальная обработка ошибок
             let errorMessage = 'Ошибка при скачивании файла экспорта планов подписок';
             
-            if (err.code === 'ECONNABORTED') {
-                errorMessage = 'Превышено время ожидания загрузки. Попробуйте еще раз.';
-            } else if (err.message === 'Network Error') {
-                errorMessage = 'Ошибка сети. Проверьте подключение к интернету.';
-            } else if (err.response?.status === 400) {
-                console.log('400 Error response data:', err.response.data);
-                // Если есть текст ошибки от сервера, используем его
-                if (typeof err.response.data === 'string') {
-                    errorMessage = `Ошибка сервера: ${err.response.data}`;
-                } else {
-                    errorMessage = 'Экспорт планов еще не завершен или завершился с ошибкой.';
+            // Обработка ошибок с учетом асинхронности
+            const handleError = async () => {
+                if (err.code === 'ECONNABORTED') {
+                    errorMessage = 'Превышено время ожидания загрузки. Попробуйте еще раз.';
+                } else if (err.message === 'Network Error') {
+                    errorMessage = 'Ошибка сети. Проверьте подключение к интернету.';
+                } else if (err.response?.status === 400) {
+                    console.log('400 Error response data:', err.response.data);
+                    // Если ответ пришел как Blob, читаем его как текст
+                    if (err.response.data instanceof Blob) {
+                        try {
+                            const errorText = await err.response.data.text();
+                            console.log('400 Error blob content:', errorText);
+                            
+                            // Пытаемся распарсить JSON
+                            try {
+                                const errorJson = JSON.parse(errorText);
+                                errorMessage = `Ошибка сервера: ${errorJson.title || errorJson.detail || errorJson.message || errorText}`;
+                            } catch {
+                                // Если не JSON, используем как текст
+                                errorMessage = `Ошибка сервера: ${errorText}`;
+                            }
+                        } catch (blobError) {
+                            console.error('Error reading blob:', blobError);
+                            errorMessage = 'Ошибка чтения ответа сервера.';
+                        }
+                    } else if (typeof err.response.data === 'string') {
+                        errorMessage = `Ошибка сервера: ${err.response.data}`;
+                    } else {
+                        errorMessage = 'Экспорт планов еще не завершен или завершился с ошибкой.';
+                    }
+                } else if (err.response?.status === 404) {
+                    errorMessage = 'Файл экспорта планов не найден или был удален.';
+                } else if (err.response?.status >= 500) {
+                    errorMessage = 'Ошибка сервера. Попробуйте еще раз позже.';
+                } else if (err.response?.data) {
+                    errorMessage += ': ' + err.response.data;
+                } else if (err.message) {
+                    errorMessage += ': ' + err.message;
                 }
-            } else if (err.response?.status === 404) {
-                errorMessage = 'Файл экспорта планов не найден или был удален.';
-            } else if (err.response?.status >= 500) {
-                errorMessage = 'Ошибка сервера. Попробуйте еще раз позже.';
-            } else if (err.response?.data) {
-                errorMessage += ': ' + err.response.data;
-            } else if (err.message) {
-                errorMessage += ': ' + err.message;
-            }
+                
+                console.log(`Setting error message: ${errorMessage}`);
+                setExportInternalError(errorMessage);
+                setIsDownloading(false);
+            };
             
-            console.log(`Setting error message: ${errorMessage}`);
-            setExportInternalError(errorMessage);
-            setIsDownloading(false);
+            // Выполняем асинхронную обработку
+            handleError();
         }
     };
 

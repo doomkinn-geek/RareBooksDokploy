@@ -538,6 +538,10 @@ namespace RareBooksService.WebApi.Controllers
         public IActionResult DownloadExportedSubscriptionPlans(Guid taskId, [FromQuery] string token = null)
         {
             var startTime = DateTime.UtcNow;
+            
+            // САМЫЙ ПЕРВЫЙ ЛОГ - чтобы убедиться, что запрос доходит до endpoint'а
+            _logger.LogCritical($"[PLAN-DOWNLOAD] *** ВХОД В ENDPOINT *** TaskId: {taskId}");
+            
             try
             {
                 _logger.LogInformation($"[PLAN-DOWNLOAD] Запрос на скачивание файла экспорта планов подписок, TaskId: {taskId}, IP: {HttpContext.Connection.RemoteIpAddress}");
@@ -551,6 +555,13 @@ namespace RareBooksService.WebApi.Controllers
                 if (!string.IsNullOrEmpty(token))
                 {
                     _logger.LogInformation($"[PLAN-DOWNLOAD] Проверяем токен из query параметра, TaskId: {taskId}");
+                }
+                
+                // Проверяем, что сервис доступен
+                if (_subscriptionPlanExportService == null)
+                {
+                    _logger.LogCritical($"[PLAN-DOWNLOAD] *** СЕРВИС NULL *** TaskId: {taskId}");
+                    return StatusCode(500, "Сервис экспорта планов недоступен");
                 }
                 
                 // Проверяем статус экспорта с детальным логированием
@@ -620,6 +631,10 @@ namespace RareBooksService.WebApi.Controllers
                 var processingTime = (DateTime.UtcNow - startTime).TotalMilliseconds;
                 _logger.LogError(ex, $"[PLAN-DOWNLOAD] КРИТИЧЕСКАЯ ОШИБКА при обработке запроса загрузки планов за {processingTime:F2}ms, TaskId: {taskId}");
                 return StatusCode(500, $"Внутренняя ошибка сервера: {ex.Message}");
+            }
+            finally
+            {
+                _logger.LogCritical($"[PLAN-DOWNLOAD] *** ВЫХОД ИЗ ENDPOINT *** TaskId: {taskId}");
             }
         }
 

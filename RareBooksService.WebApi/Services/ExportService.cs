@@ -295,11 +295,11 @@ namespace RareBooksService.WebApi.Services
                     using (var extendedContext = new ExtendedBooksContext(optionsBuilder.Options))
                     {
                         try
-                        {
-                            // Создаём таблицы, если вдруг не созданы
-                            extendedContext.Database.EnsureCreated();
-                            // Отключаем автоматическое DetectChanges для быстроты
-                            extendedContext.ChangeTracker.AutoDetectChangesEnabled = false;
+                    {
+                        // Создаём таблицы, если вдруг не созданы
+                        extendedContext.Database.EnsureCreated();
+                        // Отключаем автоматическое DetectChanges для быстроты
+                        extendedContext.ChangeTracker.AutoDetectChangesEnabled = false;
 
                         // 6) Заполняем таблицу категорий (полностью),
                         //    чтобы у каждой категории был свой auto-increment PK (Id)
@@ -382,9 +382,9 @@ namespace RareBooksService.WebApi.Services
                             extendedBooks.Add(newBook);
                         }
 
-                            // Сохраняем книги этого чанка
-                            extendedContext.BooksInfo.AddRange(extendedBooks);
-                            await extendedContext.SaveChangesAsync(token);
+                        // Сохраняем книги этого чанка
+                        extendedContext.BooksInfo.AddRange(extendedBooks);
+                        await extendedContext.SaveChangesAsync(token);
                             _logger.LogInformation($"Сохранено {extendedBooks.Count} книг в chunk {chunkIndex}, TaskId: {taskId}");
                         }
                         catch (Exception chunkEx)
@@ -429,9 +429,9 @@ namespace RareBooksService.WebApi.Services
                 
                 try
                 {
-                    if (File.Exists(zipFilePath))
+                if (File.Exists(zipFilePath))
                     {
-                        File.Delete(zipFilePath);
+                    File.Delete(zipFilePath);
                         _logger.LogInformation($"Удален существующий ZIP файл, TaskId: {taskId}");
                     }
 
@@ -487,13 +487,13 @@ namespace RareBooksService.WebApi.Services
                         _logger.LogWarning($"ZIP файл очень маленький ({zipFileInfo.Length} байт), возможна ошибка, TaskId: {taskId}");
                     }
 
-                    // Запоминаем путь к zip, чтобы потом отдавать файл
-                    _files[taskId] = zipFilePath;
+                // Запоминаем путь к zip, чтобы потом отдавать файл
+                _files[taskId] = zipFilePath;
 
-                    // Удаляем временную папку part_*.db
+                // Удаляем временную папку part_*.db
                     try
                     {
-                        Directory.Delete(tempFolder, true);
+                Directory.Delete(tempFolder, true);
                         _logger.LogInformation($"Временная папка удалена, TaskId: {taskId}");
                     }
                     catch (Exception deleteEx)
@@ -502,8 +502,8 @@ namespace RareBooksService.WebApi.Services
                         // Не прерываем выполнение из-за этой ошибки
                     }
 
-                    // 100% – готово
-                    _progress[taskId] = 100;
+                // 100% – готово
+                _progress[taskId] = 100;
                     _logger.LogInformation($"Экспорт завершен успешно, TaskId: {taskId}");
                 }
                 catch (Exception zipEx)

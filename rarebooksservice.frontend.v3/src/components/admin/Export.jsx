@@ -189,7 +189,7 @@ const Export = () => {
                     }
                 }
             );
-            
+
             console.log('Ответ получен от сервера:', {
                 status: response.status,
                 statusText: response.statusText,
