@@ -17,7 +17,7 @@ import {
     useMediaQuery, useTheme, Drawer, List, ListItem, ListItemText,
     IconButton, AppBar, Toolbar
 } from '@mui/material';
-import { CategoryCleanup, SubPlans, BookUpdate, Import, Export, UserImport, UserExport, UsersPanel, SettingsPanel } from './admin';
+import { CategoryCleanup, SubPlans, BookUpdate, Import, Export, UserImport, UserExport, SubscriptionPlanExport, SubscriptionPlanImport, UsersPanel, SettingsPanel } from './admin';
 import MenuIcon from '@mui/icons-material/Menu';
 
 const AdminPanel = () => {
@@ -28,7 +28,7 @@ const AdminPanel = () => {
     // Состояние для drawer (бокового меню)
     const [drawerOpen, setDrawerOpen] = useState(false);
     
-    // Вкладки: 'users' | 'export' | 'settings' | 'import' | 'bookupdate' | 'subplans' | 'categories' | 'userexport' | 'userimport'
+    // Вкладки: 'users' | 'export' | 'settings' | 'import' | 'bookupdate' | 'subplans' | 'categories' | 'userexport' | 'userimport' | 'subscriptionplanexport' | 'subscriptionplanimport'
     const [currentTab, setCurrentTab] = useState('users');
 
     // ----- Состояния пользователей
@@ -497,7 +497,9 @@ const AdminPanel = () => {
         subplans: 'Планы подписки',
         categories: 'Управление категориями',
         userexport: 'Экспорт пользователей',
-        userimport: 'Импорт пользователей'
+        userimport: 'Импорт пользователей',
+        subscriptionplanexport: 'Экспорт планов подписок',
+        subscriptionplanimport: 'Импорт планов подписок'
     };
 
     // ====================== Рендер контента по вкладкам ======================
@@ -600,6 +602,8 @@ const AdminPanel = () => {
                         <Tab label="Категории" value="categories" />
                         <Tab label="Экспорт пользователей" value="userexport" />
                         <Tab label="Импорт пользователей" value="userimport" />
+                        <Tab label="Экспорт планов подписок" value="subscriptionplanexport" />
+                        <Tab label="Импорт планов подписок" value="subscriptionplanimport" />
                     </Tabs>
                 </Box>
                 )}
@@ -709,6 +713,30 @@ const AdminPanel = () => {
                         </Typography>
                         )}
                         <UserImport />
+                    </Box>
+                )}
+
+                {/* ============ Вкладка "subscriptionplanexport" ============ */}
+                {currentTab === 'subscriptionplanexport' && (
+                    <Box>
+                        {!isMobile && (
+                        <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50', mb: 3 }}>
+                            Экспорт планов подписок
+                        </Typography>
+                        )}
+                        <SubscriptionPlanExport />
+                    </Box>
+                )}
+
+                {/* ============ Вкладка "subscriptionplanimport" ============ */}
+                {currentTab === 'subscriptionplanimport' && (
+                    <Box>
+                        {!isMobile && (
+                        <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50', mb: 3 }}>
+                            Импорт планов подписок
+                        </Typography>
+                        )}
+                        <SubscriptionPlanImport />
                     </Box>
                 )}
             </Box>
