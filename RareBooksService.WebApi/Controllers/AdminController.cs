@@ -535,7 +535,7 @@ namespace RareBooksService.WebApi.Controllers
         }
 
         [HttpGet("download-exported-subscription-plans/{taskId}")]
-        public IActionResult DownloadExportedSubscriptionPlans(Guid taskId, [FromQuery] string token = null)
+        public IActionResult DownloadExportedSubscriptionPlans(Guid taskId)
         {
             var startTime = DateTime.UtcNow;
             
@@ -551,11 +551,7 @@ namespace RareBooksService.WebApi.Controllers
                 var rangeHeader = HttpContext.Request.Headers["Range"].ToString();
                 _logger.LogInformation($"[PLAN-DOWNLOAD] User-Agent: {userAgent}, Range: {rangeHeader}, TaskId: {taskId}");
                 
-                // Проверяем авторизацию (если токен передан через query параметр)
-                if (!string.IsNullOrEmpty(token))
-                {
-                    _logger.LogInformation($"[PLAN-DOWNLOAD] Проверяем токен из query параметра, TaskId: {taskId}");
-                }
+                // Авторизация проверяется через [Authorize] атрибут контроллера
                 
                 // Проверяем, что сервис доступен
                 if (_subscriptionPlanExportService == null)
