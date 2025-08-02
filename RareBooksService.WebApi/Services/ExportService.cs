@@ -52,7 +52,7 @@ namespace RareBooksService.WebApi.Services
         private static ConcurrentDictionary<Guid, CancellationTokenSource> _cancellationTokens = new ConcurrentDictionary<Guid, CancellationTokenSource>();
 
         // Уменьшаем chunkSize для снижения пикового потребления памяти
-        private const int ChunkSize = 20000; // Еще больше уменьшаем для стабильности
+        private const int ChunkSize = 5000; // Еще больше уменьшаем для стабильности
 
         public ExportService(IServiceScopeFactory scopeFactory, ILogger<ExportService> logger)
         {
