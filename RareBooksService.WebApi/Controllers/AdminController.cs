@@ -18,19 +18,25 @@ namespace RareBooksService.WebApi.Controllers
         private readonly IUserService _userService;
         private readonly ILogger<AdminController> _logger;
         private readonly ISubscriptionService _subscriptionService;
+        private readonly ISubscriptionPlanExportService _subscriptionPlanExportService;
+        private readonly ISubscriptionPlanImportService _subscriptionPlanImportService;
 
         public AdminController(
             IUserService userService,
             UserManager<ApplicationUser> userManager,
             ILogger<AdminController> logger,
             IExportService exportService,
-            ISubscriptionService subscriptionService)
+            ISubscriptionService subscriptionService,
+            ISubscriptionPlanExportService subscriptionPlanExportService,
+            ISubscriptionPlanImportService subscriptionPlanImportService)
             : base(userManager)
         {
             _userService = userService;
             _logger = logger;
             _exportService = exportService;
             _subscriptionService = subscriptionService;
+            _subscriptionPlanExportService = subscriptionPlanExportService;
+            _subscriptionPlanImportService = subscriptionPlanImportService;
         }
 
         [HttpPost("export-data")]
@@ -481,11 +487,232 @@ namespace RareBooksService.WebApi.Controllers
                 return StatusCode(500, "Внутренняя ошибка сервера при скачивании файла");
             }
         }
+
+        // ===== ЭКСПОРТ/ИМПОРТ ПЛАНОВ ПОДПИСОК =====
+
+        [HttpPost("export-subscription-plans")]
+        public async Task<IActionResult> StartSubscriptionPlanExport()
+        {
+            try
+            {
+                _logger.LogInformation("Запрос на запуск экспорта планов подписок");
+                var taskId = await _subscriptionPlanExportService.StartExportAsync();
+                _logger.LogInformation($"Экспорт планов подписок запущен с TaskId: {taskId}");
+                return Ok(new { TaskId = taskId });
+            }
+            catch (InvalidOperationException invalidOpEx)
+            {
+                _logger.LogWarning($"Попытка запуска экспорта планов при активном процессе: {invalidOpEx.Message}");
+                return BadRequest(invalidOpEx.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при запуске экспорта планов подписок");
+                return StatusCode(500, $"Внутренняя ошибка сервера: {ex.Message}");
+            }
+        }
+
+        [HttpGet("subscription-plan-export-progress/{taskId}")]
+        public IActionResult GetSubscriptionPlanExportProgress(Guid taskId)
+        {
+            try
+            {
+                _logger.LogDebug($"Запрос прогресса экспорта планов, TaskId: {taskId}");
+                var status = _subscriptionPlanExportService.GetStatus(taskId);
+                
+                if (status.IsError)
+                {
+                    _logger.LogError($"Экспорт планов завершился с ошибкой, TaskId: {taskId}, Error: {status.ErrorDetails}");
+                }
+                
+                return Ok(status);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Критическая ошибка при получении прогресса экспорта планов, TaskId: {taskId}");
+                return StatusCode(500, $"Внутренняя ошибка сервера: {ex.Message}");
+            }
+        }
+
+        [HttpGet("download-exported-subscription-plans/{taskId}")]
+        public IActionResult DownloadExportedSubscriptionPlans(Guid taskId, [FromQuery] string token = null)
+        {
+            try
+            {
+                _logger.LogInformation($"Запрос на скачивание файла экспорта планов подписок, TaskId: {taskId}");
+                
+                // Проверяем статус экспорта
+                var status = _subscriptionPlanExportService.GetStatus(taskId);
+                if (status.IsError)
+                {
+                    return BadRequest($"Экспорт планов завершился с ошибкой: {status.ErrorDetails}");
+                }
+                
+                if (status.Progress < 100)
+                {
+                    return BadRequest($"Экспорт планов еще не завершен. Прогресс: {status.Progress}%");
+                }
+                
+                var file = _subscriptionPlanExportService.GetExportedFile(taskId);
+                if (file == null || !file.Exists)
+                {
+                    _logger.LogError($"Файл экспорта планов не найден, TaskId: {taskId}");
+                    return NotFound("Файл экспорта планов не найден.");
+                }
+
+                var fileSizeMB = file.Length / (1024.0 * 1024.0);
+                _logger.LogInformation($"Файл экспорта планов найден: {file.FullName}, размер: {fileSizeMB:F2} MB, TaskId: {taskId}");
+                
+                var result = PhysicalFile(file.FullName, "application/zip", $"subscription_plans_export_{taskId}.zip");
+                result.EnableRangeProcessing = true;
+                
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Ошибка при скачивании файла экспорта планов, TaskId: {taskId}");
+                return StatusCode(500, $"Внутренняя ошибка сервера: {ex.Message}");
+            }
+        }
+
+        [HttpPost("cancel-subscription-plan-export/{taskId}")]
+        public IActionResult CancelSubscriptionPlanExport(Guid taskId)
+        {
+            try
+            {
+                _subscriptionPlanExportService.CancelExport(taskId);
+                _logger.LogInformation($"Экспорт планов отменён, TaskId: {taskId}");
+                return Ok(new { Message = "Экспорт планов отменён" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Ошибка при отмене экспорта планов, TaskId: {taskId}");
+                return StatusCode(500, $"Внутренняя ошибка сервера: {ex.Message}");
+            }
+        }
+
+        // ИМПОРТ ПЛАНОВ ПОДПИСОК
+
+        [HttpPost("start-subscription-plan-import")]
+        public IActionResult StartSubscriptionPlanImport([FromQuery] long? expectedFileSize = null)
+        {
+            try
+            {
+                var importId = _subscriptionPlanImportService.StartImport(expectedFileSize ?? 0);
+                _logger.LogInformation($"Импорт планов подписок начат, ImportId: {importId}");
+                return Ok(new { ImportId = importId });
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning($"Невозможно начать импорт планов: {ex.Message}");
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при запуске импорта планов подписок");
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpPut("subscription-plan-import/{importId}/file-size")]
+        public IActionResult UpdateSubscriptionPlanImportFileSize(Guid importId, [FromBody] UpdateFileSizeRequest request)
+        {
+            try
+            {
+                _subscriptionPlanImportService.UpdateExpectedFileSize(importId, request.ExpectedFileSize);
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Ошибка при обновлении размера файла планов, ImportId: {importId}");
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpPost("subscription-plan-import/{importId}/chunk")]
+        public IActionResult UploadSubscriptionPlanImportChunk(Guid importId, IFormFile chunk)
+        {
+            try
+            {
+                if (chunk == null || chunk.Length == 0)
+                {
+                    return BadRequest("Файл не предоставлен или пустой");
+                }
+
+                using var stream = chunk.OpenReadStream();
+                var buffer = new byte[chunk.Length];
+                var totalRead = 0;
+                int bytesRead;
+
+                while (totalRead < chunk.Length && (bytesRead = stream.Read(buffer, totalRead, (int)chunk.Length - totalRead)) > 0)
+                {
+                    totalRead += bytesRead;
+                }
+
+                _subscriptionPlanImportService.WriteFileChunk(importId, buffer, totalRead);
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Ошибка при загрузке чанка планов, ImportId: {importId}");
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpPost("subscription-plan-import/{importId}/finish")]
+        public async Task<IActionResult> FinishSubscriptionPlanImport(Guid importId)
+        {
+            try
+            {
+                await _subscriptionPlanImportService.FinishFileUploadAsync(importId);
+                return Ok(new { Message = "Загрузка файла планов завершена, начинается импорт" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Ошибка при завершении загрузки файла планов, ImportId: {importId}");
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet("subscription-plan-import-progress/{importId}")]
+        public IActionResult GetSubscriptionPlanImportProgress(Guid importId)
+        {
+            try
+            {
+                var progress = _subscriptionPlanImportService.GetImportProgress(importId);
+                return Ok(progress);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Ошибка при получении прогресса импорта планов, ImportId: {importId}");
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        [HttpPost("cancel-subscription-plan-import/{importId}")]
+        public async Task<IActionResult> CancelSubscriptionPlanImport(Guid importId)
+        {
+            try
+            {
+                await _subscriptionPlanImportService.CancelImportAsync(importId);
+                return Ok(new { Message = "Импорт планов отменён" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Ошибка при отмене импорта планов, ImportId: {importId}");
+                return StatusCode(500, ex.Message);
+            }
+        }
     }
 
     public class AssignSubscriptionPlanRequest
     {
         public int PlanId { get; set; } // 0 = отключить
         public bool AutoRenew { get; set; }
+    }
+
+    public class UpdateFileSizeRequest
+    {
+        public long ExpectedFileSize { get; set; }
     }
 }
