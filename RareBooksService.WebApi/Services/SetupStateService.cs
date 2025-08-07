@@ -61,7 +61,7 @@ namespace RareBooksService.WebApi.Services
                 //исключение из БД, возможно не была выполнена миграция
                 if (e.InnerException is PostgresException)
                 {
-                    _isSetupNeeded = false;
+                    _isSetupNeeded = true;  // Исправлена логика: если БД недоступна, нужна настройка
                     return;
                 }
                 _isSetupNeeded = true;

@@ -4,7 +4,7 @@ services:
   db_books:
     image: postgres:15
     container_name: rarebooks_books_db
-    restart: always
+    restart: unless-stopped
     environment:
       - POSTGRES_DB=RareBooks_Books
       - POSTGRES_USER=postgres
@@ -13,11 +13,16 @@ services:
       - "5433:5432"        # на хосте 5433, внутри контейнера 5432
     volumes:
       - db_books_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   db_users:
     image: postgres:15
     container_name: rarebooks_users_db
-    restart: always
+    restart: unless-stopped
     environment:
       - POSTGRES_DB=RareBooks_Users
       - POSTGRES_USER=postgres
@@ -26,6 +31,11 @@ services:
       - "5434:5432"
     volumes:
       - db_users_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   backend:
     build:
@@ -33,13 +43,22 @@ services:
       dockerfile: RareBooksService.WebApi/Dockerfile
     container_name: rarebooks_backend
     depends_on:
-      - db_books
-      - db_users
+      db_books:
+        condition: service_healthy
+      db_users:
+        condition: service_healthy
     environment:
       - ConnectionStrings__BooksDb=Host=db_books;Port=5432;Database=RareBooks_Books;Username=postgres;Password=123456
       - ConnectionStrings__UsersDb=Host=db_users;Port=5432;Database=RareBooks_Users;Username=postgres;Password=123456
       - ASPNETCORE_URLS=http://+:80
-    restart: always
+      - ASPNETCORE_ENVIRONMENT=Production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   frontend:
     build:
@@ -47,13 +66,20 @@ services:
       dockerfile: Dockerfile
     container_name: rarebooks_frontend
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     environment:
       - VITE_API_URL=http://backend:80/api
-    restart: always
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   proxy:
-    image: nginx:latest
+    image: nginx:stable-alpine
     container_name: nginx_container
     ports:
       - 80:80
@@ -63,9 +89,16 @@ services:
       - ./nginx/nginx_prod.conf:/etc/nginx/nginx.conf
       - /home/docker/ssl/rare-books.ru:/etc/ssl/rare-books.ru:ro
     depends_on:
-      - frontend
-      - backend
-    restart: always
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   db_books_data:

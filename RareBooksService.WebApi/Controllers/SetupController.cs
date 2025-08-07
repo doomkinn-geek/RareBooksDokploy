@@ -95,55 +95,68 @@ namespace RareBooksService.WebApi.Controllers
         [HttpPost("initialize")]
         public async Task<IActionResult> Initialize([FromBody] SetupDto dto)
         {
-            // Если уже настроена — возвращаем JSON, 
-            // чтобы фронт не пытался парсить HTML и не падал.
-            if (!_setupStateService.IsInitialSetupNeeded)
+            try
             {
-                // Можем вернуть 200 (OK) или 403. 
-                // Но главное — ответить JSON.
-                return StatusCode(StatusCodes.Status403Forbidden, new
+                // Если уже настроена — возвращаем JSON, 
+                // чтобы фронт не пытался парсить HTML и не падал.
+                if (!_setupStateService.IsInitialSetupNeeded)
                 {
-                    success = false,
-                    message = "System is already configured. Re-initialization is not allowed."
+                    // Можем вернуть 200 (OK) или 403. 
+                    // Но главное — ответить JSON.
+                    return StatusCode(StatusCodes.Status403Forbidden, new
+                    {
+                        success = false,
+                        message = "System is already configured. Re-initialization is not allowed."
+                    });
+                }
+
+                // 1) Сохраняем настройки (обе строки подключения, JWT и т.д.)
+                var err = await SaveSettingsToAppSettings(dto);
+                if (!string.IsNullOrEmpty(err))
+                {
+                    return BadRequest(new { success = false, message = $"SaveSettings error: {err}" });
+                }
+
+                // 2) Мигрируем обе базы:
+                //    - BooksDbContext
+                //    - UsersDbContext
+                err = await RunMigrationsForBooksDb(dto.BooksConnectionString);
+                if (!string.IsNullOrEmpty(err))
+                {
+                    return BadRequest(new { success = false, message = $"RunMigrations(BooksDb) error: {err}" });
+                }
+
+                err = await RunMigrationsForUsersDb(dto.UsersConnectionString);
+                if (!string.IsNullOrEmpty(err))
+                {
+                    return BadRequest(new { success = false, message = $"RunMigrations(UsersDb) error: {err}" });
+                }
+
+                // 3) Создаём администратора (в UsersDb)
+                err = await CreateAdmin(dto.AdminEmail, dto.AdminPassword, dto.UsersConnectionString);
+                if (!string.IsNullOrEmpty(err))
+                {
+                    return BadRequest(new { success = false, message = $"CreateAdmin error: {err}" });
+                }
+
+                // Обновляем признак «система настроена»
+                _setupStateService.DetermineIfSetupNeeded();
+
+                // 4) Перезапуск (по желанию)
+                //ForceRestart();
+
+                return Ok(new { success = true, message = "Initialization complete. The server will restart now." });
+            }
+            catch (Exception ex)
+            {
+                // Гарантируем возврат JSON даже при необработанных исключениях
+                return StatusCode(500, new 
+                { 
+                    success = false, 
+                    message = $"Unexpected error during initialization: {ex.Message}",
+                    details = ex.StackTrace
                 });
             }
-
-            // 1) Сохраняем настройки (обе строки подключения, JWT и т.д.)
-            var err = await SaveSettingsToAppSettings(dto);
-            if (!string.IsNullOrEmpty(err))
-            {
-                return BadRequest(new { success = false, message = $"SaveSettings error: {err}" });
-            }
-
-            // 2) Мигрируем обе базы:
-            //    - BooksDbContext
-            //    - UsersDbContext
-            err = await RunMigrationsForBooksDb(dto.BooksConnectionString);
-            if (!string.IsNullOrEmpty(err))
-            {
-                return BadRequest(new { success = false, message = $"RunMigrations(BooksDb) error: {err}" });
-            }
-
-            err = await RunMigrationsForUsersDb(dto.UsersConnectionString);
-            if (!string.IsNullOrEmpty(err))
-            {
-                return BadRequest(new { success = false, message = $"RunMigrations(UsersDb) error: {err}" });
-            }
-
-            // 3) Создаём администратора (в UsersDb)
-            err = await CreateAdmin(dto.AdminEmail, dto.AdminPassword, dto.UsersConnectionString);
-            if (!string.IsNullOrEmpty(err))
-            {
-                return BadRequest(new { success = false, message = $"CreateAdmin error: {err}" });
-            }
-
-            // Обновляем признак «система настроена»
-            _setupStateService.DetermineIfSetupNeeded();
-
-            // 4) Перезапуск (по желанию)
-            //ForceRestart();
-
-            return Ok(new { success = true, message = "Initialization complete. The server will restart now." });
         }
 
         /// <summary>Запись в appsettings.json</summary>
@@ -257,16 +270,16 @@ namespace RareBooksService.WebApi.Controllers
 
                 // 8) CacheSettings
                 if (!dict.ContainsKey("CacheSettings"))
-                    dict["CacheSettings"] = new Dictionary<string, string>();
+                    dict["CacheSettings"] = new Dictionary<string, object>();
 
                 var csObj = dict["CacheSettings"];
                 var csDict = csObj is JsonElement cse
-                    ? JsonSerializer.Deserialize<Dictionary<string, string>>(cse.GetRawText()) ?? new Dictionary<string, string>()
-                    : csObj as Dictionary<string, string> ?? new Dictionary<string, string>();
+                    ? JsonSerializer.Deserialize<Dictionary<string, object>>(cse.GetRawText()) ?? new Dictionary<string, object>()
+                    : csObj as Dictionary<string, object> ?? new Dictionary<string, object>();
 
                 csDict["LocalCachePath"] = dto.CacheSettingsLocalCachePath ?? "image_cache";
-                csDict["DaysToKeep"] = dto.CacheSettingsDaysToKeep ?? "365";
-                csDict["MaxCacheSizeMB"] = dto.CacheSettingsMaxCacheSizeMB ?? "6000";
+                csDict["DaysToKeep"] = int.TryParse(dto.CacheSettingsDaysToKeep, out var daysToKeep) ? daysToKeep : 365;
+                csDict["MaxCacheSizeMB"] = int.TryParse(dto.CacheSettingsMaxCacheSizeMB, out var maxCacheSizeMB) ? maxCacheSizeMB : 6000;
                 dict["CacheSettings"] = csDict;
 
                 // 9) Сериализуем обратно

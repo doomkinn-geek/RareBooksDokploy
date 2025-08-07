@@ -1,49 +1,49 @@
+п»ї# --------------------------------------------------
+# 1) Р­С‚Р°Рї build: РєРѕРјРїРёР»СЏС†РёСЏ .NET 8 SDK, СЃР±РѕСЂРєР° РїСЂРѕРµРєС‚Р°
 # --------------------------------------------------
-# 1) Этап build: используем .NET 6 SDK, собираем проекты
-# --------------------------------------------------
-FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-# Копируем .csproj-файлы для ВСЕХ .NET-проектов, которые должны участвовать в сборке.
-# А именно: RareBooksService.WebApi, RareBooksService.Common, RareBooksService.Data, RareBooksService.Parser
-# (Не копируем sln, не копируем .esproj-файлы фронтенда и т.д.)
+# РљРѕРїРёСЂСѓРµРј .csproj-С„Р°Р№Р»С‹ РґР»СЏ РІСЃРµС… .NET-РїСЂРѕРµРєС‚РѕРІ, РєРѕС‚РѕСЂС‹Рµ РґРѕР»Р¶РЅС‹ Р±С‹С‚СЊ РІРєР»СЋС‡РµРЅС‹ РІ СЃР±РѕСЂРєСѓ.
+# РЈ РЅР°СЃ С‚СѓС‚: RareBooksService.WebApi, RareBooksService.Common, RareBooksService.Data, RareBooksService.Parser
+# (РќР• РІРєР»СЋС‡Р°РµРј sln, РќР• РІРєР»СЋС‡Р°РµРј .esproj-С„Р°Р№Р»С‹ С„СЂРѕРЅС‚РµРЅРґР° Рё С‚.Рґ.)
 COPY ["RareBooksService.WebApi/RareBooksService.WebApi.csproj", "RareBooksService.WebApi/"]
 COPY ["RareBooksService.Common/RareBooksService.Common.csproj", "RareBooksService.Common/"]
 COPY ["RareBooksService.Data/RareBooksService.Data.csproj",     "RareBooksService.Data/"]
 COPY ["RareBooksService.Parser/RareBooksService.Parser.csproj", "RareBooksService.Parser/"]
 
-# 1a) Выполняем restore для КАЖДОГО нужного .csproj по отдельности, 
-# либо, как минимум, для WebApi (который подтянет зависимости на Common/Data/Parser).
+# 1a) Р’С‹РїРѕР»РЅСЏРµРј restore РґР»СЏ РѕСЃРЅРѕРІРЅРѕРіРѕ РїСЂРѕРµРєС‚Р° .csproj СЃРѕ Р·Р°РІРёСЃРёРјРѕСЃС‚СЏРјРё, 
+# СЌС‚РѕРіРѕ, РєР°Рє РїСЂР°РІРёР»Рѕ, С…РІР°С‚Р°РµС‚ РґР»СЏ WebApi (РєРѕС‚РѕСЂС‹Р№ СЃРѕРґРµСЂР¶РёС‚ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё РЅР° Common/Data/Parser).
 # 
-# Вариант A: (Лучше, т. к. гарантирует, что все .csproj-зависимости зарезолвятся.)
+# Р’Р°СЂРёР°РЅС‚ A: (РјРѕР¶РЅРѕ, С‚. Рє. Р·Р°РІРёСЃРёРјРѕСЃС‚Рё, С‡С‚Рѕ РІСЃРµ .csproj-Р·Р°РІРёСЃРёРјРѕСЃС‚Рё СЂР°Р·СЂРµС€Р°СЋС‚СЃСЏ.)
 # RUN dotnet restore "RareBooksService.Common/RareBooksService.Common.csproj"
 # RUN dotnet restore "RareBooksService.Data/RareBooksService.Data.csproj"
 # RUN dotnet restore "RareBooksService.Parser/RareBooksService.Parser.csproj"
 # RUN dotnet restore "RareBooksService.WebApi/RareBooksService.WebApi.csproj"
 
-# Вариант B: (Часто хватает одного restore на проект, в котором ProjectReference на Common/Data/Parser.)
+# Р’Р°СЂРёР°РЅС‚ B: (Р±РѕР»РµРµ РїСЂРѕСЃС‚РѕР№ РІР°СЂРёР°РЅС‚ restore РЅР° РїСЂРѕРµРєС‚, Сѓ РєРѕС‚РѕСЂРѕРіРѕ ProjectReference РЅР° Common/Data/Parser.)
 RUN dotnet restore "RareBooksService.WebApi/RareBooksService.WebApi.csproj"
 
-# 2) Копируем весь оставшийся исходный код (все папки RareBooksService.WebApi, .Common, .Data, .Parser)
+# 2) РљРѕРїРёСЂСѓРµРј РІРµСЃСЊ РѕСЃС‚Р°Р»СЊРЅРѕР№ РёСЃС…РѕРґРЅС‹Р№ РєРѕРґ (РІСЃРµ РїР°РїРєРё RareBooksService.WebApi, .Common, .Data, .Parser)
 COPY . .
 
-# Переходим в папку WebApi
+# РџРµСЂРµС…РѕРґРёРј РІ РїР°РїРєСѓ WebApi
 WORKDIR /src/RareBooksService.WebApi
 
-# 3) Публикуем в папку /app/out (Release)
+# 3) РџСѓР±Р»РёРєСѓРµРј РІ РїР°РїРєСѓ /app/out (Release)
 RUN dotnet publish -c Release -o /app/out
 
 # --------------------------------------------------
-# 2) Этап runtime: .NET 6 ASP.NET
+# 2) Р­С‚Р°Рї runtime: .NET 8 ASP.NET
 # --------------------------------------------------
-FROM mcr.microsoft.com/dotnet/aspnet:6.0
+FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
 
-# 4) Копируем результат из предыдущего этапа
+# 4) РљРѕРїРёСЂСѓРµРј СЂРµР·СѓР»СЊС‚Р°С‚ СЃ РїСЂРµРґС‹РґСѓС‰РµРіРѕ СЌС‚Р°РїР°
 COPY --from=build /app/out ./
 
-# Открываем порт 80 внутри контейнера
+# Р­РєСЃРїРѕРЅРёСЂСѓРµРј РїРѕСЂС‚ 80 РІРЅСѓС‚СЂРё РєРѕРЅС‚РµР№РЅРµСЂР°
 EXPOSE 80
 
-# 5) Запуск
+# 5) Р—Р°РїСѓСЃРє
 ENTRYPOINT ["dotnet", "RareBooksService.WebApi.dll"]

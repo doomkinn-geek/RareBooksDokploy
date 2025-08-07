@@ -312,9 +312,10 @@ namespace RareBooksService.WebApi
                 app.Use(async (context, next) =>
                 
                 {
-                    // ��������� /api/setup/ � /api/setupcheck/
+                    // Пропускаем /api/setup/, /api/setupcheck/ и /api/test/
                     if (context.Request.Path.StartsWithSegments("/api/setup") ||
-                        context.Request.Path.StartsWithSegments("/api/setupcheck"))
+                        context.Request.Path.StartsWithSegments("/api/setupcheck") ||
+                        context.Request.Path.StartsWithSegments("/api/test"))
                     {
                         await next.Invoke();
                         return;

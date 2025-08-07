@@ -1,0 +1,184 @@
+Проект "RareBooksService.WebApi" содержит следующие ссылки на пакеты
+   [net8.0]: 
+   Пакет верхнего уровня                                        Запрошено   Разрешено
+   > AWSSDK.S3                                                  3.7.400.3   3.7.400.3
+   > MailKit                                                    4.10.0      4.10.0   
+   > Microsoft.AspNetCore.Authentication.Google                 8.0.19      8.0.19   
+   > Microsoft.AspNetCore.Authentication.JwtBearer              8.0.19      8.0.19   
+   > Microsoft.AspNetCore.Identity.EntityFrameworkCore          8.0.19      8.0.19   
+   > Microsoft.EntityFrameworkCore                              8.0.19      8.0.19   
+   > Microsoft.EntityFrameworkCore.Design                       8.0.19      8.0.19   
+   > Microsoft.Extensions.Logging                               8.0.1       8.0.1    
+   > Microsoft.IdentityModel.Protocols                          8.1.1       8.1.1    
+   > Microsoft.IdentityModel.Protocols.OpenIdConnect            8.1.1       8.1.1    
+   > Microsoft.VisualStudio.Azure.Containers.Tools.Targets      1.21.0      1.21.0   
+   > MimeKit                                                    4.10.0      4.10.0   
+   > NLog                                                       5.3.4       5.3.4    
+   > NLog.Web.AspNetCore                                        5.3.14      5.3.14   
+   > Npgsql.EntityFrameworkCore.PostgreSQL                      8.0.10      8.0.10   
+   > SixLabors.ImageSharp                                       3.1.6       3.1.6    
+   > SixLabors.ImageSharp.Drawing                               2.1.4       2.1.4    
+   > StackExchange.Redis                                        2.8.24      2.8.24   
+   > Stripe.net                                                 45.4.0      45.4.0   
+   > Swashbuckle.AspNetCore                                     6.5.0       6.5.0    
+   > System.IdentityModel.Tokens.Jwt                            8.1.1       8.1.1    
+   > Yandex.Checkout.V3                                         4.2.0       4.2.0    
+   > Yandex.Cloud.Protos                                        1.3.0       1.3.0    
+   > Yandex.Cloud.SDK                                           1.3.0       1.3.0    
+
+   Транзитивный пакет                                                                   Разрешено
+   > AutoMapper                                                                         13.0.1   
+   > AWSSDK.Core                                                                        3.7.400.3
+   > BouncyCastle.Cryptography                                                          2.5.0    
+   > Contrib.Grpc.Core.M1                                                               2.41.0   
+   > Google.Protobuf                                                                    3.19.1   
+   > Grpc                                                                               2.41.1   
+   > Grpc.Core                                                                          2.41.1   
+   > Grpc.Core.Api                                                                      2.41.1   
+   > Humanizer.Core                                                                     2.14.1   
+   > LanguageDetection.NETStandard                                                      1.3.1    
+   > Microsoft.AspNetCore.Cryptography.Internal                                         8.0.19   
+   > Microsoft.AspNetCore.Cryptography.KeyDerivation                                    8.0.19   
+   > Microsoft.Bcl.AsyncInterfaces                                                      6.0.0    
+   > Microsoft.Bcl.TimeProvider                                                         8.0.1    
+   > Microsoft.CodeAnalysis.Analyzers                                                   3.3.3    
+   > Microsoft.CodeAnalysis.Common                                                      4.5.0    
+   > Microsoft.CodeAnalysis.CSharp                                                      4.5.0    
+   > Microsoft.CodeAnalysis.CSharp.Workspaces                                           4.5.0    
+   > Microsoft.CodeAnalysis.Workspaces.Common                                           4.5.0    
+   > Microsoft.CSharp                                                                   4.7.0    
+   > Microsoft.Data.Sqlite.Core                                                         8.0.19   
+   > Microsoft.EntityFrameworkCore.Abstractions                                         8.0.19   
+   > Microsoft.EntityFrameworkCore.Analyzers                                            8.0.19   
+   > Microsoft.EntityFrameworkCore.Relational                                           8.0.19   
+   > Microsoft.EntityFrameworkCore.Sqlite                                               8.0.19   
+   > Microsoft.EntityFrameworkCore.Sqlite.Core                                          8.0.19   
+   > Microsoft.Extensions.ApiDescription.Server                                         6.0.5    
+   > Microsoft.Extensions.Caching.Abstractions                                          8.0.0    
+   > Microsoft.Extensions.Caching.Memory                                                8.0.1    
+   > Microsoft.Extensions.Configuration.Abstractions                                    8.0.0    
+   > Microsoft.Extensions.DependencyInjection                                           8.0.1    
+   > Microsoft.Extensions.DependencyInjection.Abstractions                              8.0.2    
+   > Microsoft.Extensions.DependencyModel                                               8.0.2    
+   > Microsoft.Extensions.Identity.Core                                                 8.0.19   
+   > Microsoft.Extensions.Identity.Stores                                               8.0.19   
+   > Microsoft.Extensions.Logging.Abstractions                                          8.0.2    
+   > Microsoft.Extensions.Options                                                       8.0.2    
+   > Microsoft.Extensions.Primitives                                                    8.0.0    
+   > Microsoft.IdentityModel.Abstractions                                               8.1.1    
+   > Microsoft.IdentityModel.JsonWebTokens                                              8.1.1    
+   > Microsoft.IdentityModel.Logging                                                    8.1.1    
+   > Microsoft.IdentityModel.Tokens                                                     8.1.1    
+   > Microsoft.NETCore.Platforms                                                        1.1.1    
+   > Microsoft.NETCore.Targets                                                          1.1.0    
+   > Microsoft.OpenApi                                                                  1.2.3    
+   > Microsoft.Win32.Primitives                                                         4.3.0    
+   > Microsoft.Win32.SystemEvents                                                       6.0.0    
+   > Mono.TextTemplating                                                                2.2.1    
+   > NETStandard.Library                                                                1.6.1    
+   > Newtonsoft.Json                                                                    13.0.2   
+   > NLog.Extensions.Logging                                                            5.3.13   
+   > Npgsql                                                                             8.0.5    
+   > Pipelines.Sockets.Unofficial                                                       2.2.8    
+   > runtime.debian.8-x64.runtime.native.System.Security.Cryptography.OpenSsl           4.3.2    
+   > runtime.fedora.23-x64.runtime.native.System.Security.Cryptography.OpenSsl          4.3.2    
+   > runtime.fedora.24-x64.runtime.native.System.Security.Cryptography.OpenSsl          4.3.2    
+   > runtime.native.System                                                              4.3.0    
+   > runtime.native.System.IO.Compression                                               4.3.0    
+   > runtime.native.System.Net.Http                                                     4.3.0    
+   > runtime.native.System.Security.Cryptography.Apple                                  4.3.0    
+   > runtime.native.System.Security.Cryptography.OpenSsl                                4.3.2    
+   > runtime.opensuse.13.2-x64.runtime.native.System.Security.Cryptography.OpenSsl      4.3.2    
+   > runtime.opensuse.42.1-x64.runtime.native.System.Security.Cryptography.OpenSsl      4.3.2    
+   > runtime.osx.10.10-x64.runtime.native.System.Security.Cryptography.Apple            4.3.0    
+   > runtime.osx.10.10-x64.runtime.native.System.Security.Cryptography.OpenSsl          4.3.2    
+   > runtime.rhel.7-x64.runtime.native.System.Security.Cryptography.OpenSsl             4.3.2    
+   > runtime.ubuntu.14.04-x64.runtime.native.System.Security.Cryptography.OpenSsl       4.3.2    
+   > runtime.ubuntu.16.04-x64.runtime.native.System.Security.Cryptography.OpenSsl       4.3.2    
+   > runtime.ubuntu.16.10-x64.runtime.native.System.Security.Cryptography.OpenSsl       4.3.2    
+   > SixLabors.Fonts                                                                    2.0.4    
+   > SQLitePCLRaw.bundle_e_sqlite3                                                      2.1.6    
+   > SQLitePCLRaw.core                                                                  2.1.6    
+   > SQLitePCLRaw.lib.e_sqlite3                                                         2.1.6    
+   > SQLitePCLRaw.provider.e_sqlite3                                                    2.1.6    
+   > StemmersNet.Standard                                                               1.1.1    
+   > Swashbuckle.AspNetCore.Swagger                                                     6.5.0    
+   > Swashbuckle.AspNetCore.SwaggerGen                                                  6.5.0    
+   > Swashbuckle.AspNetCore.SwaggerUI                                                   6.5.0    
+   > System.AppContext                                                                  4.3.0    
+   > System.Buffers                                                                     4.3.0    
+   > System.CodeDom                                                                     4.4.0    
+   > System.Collections                                                                 4.3.0    
+   > System.Collections.Concurrent                                                      4.3.0    
+   > System.Collections.Immutable                                                       6.0.0    
+   > System.Composition                                                                 6.0.0    
+   > System.Composition.AttributedModel                                                 6.0.0    
+   > System.Composition.Convention                                                      6.0.0    
+   > System.Composition.Hosting                                                         6.0.0    
+   > System.Composition.Runtime                                                         6.0.0    
+   > System.Composition.TypedParts                                                      6.0.0    
+   > System.Configuration.ConfigurationManager                                          6.0.0    
+   > System.Console                                                                     4.3.0    
+   > System.Diagnostics.Debug                                                           4.3.0    
+   > System.Diagnostics.DiagnosticSource                                                4.3.0    
+   > System.Diagnostics.Tools                                                           4.3.0    
+   > System.Diagnostics.Tracing                                                         4.3.0    
+   > System.Drawing.Common                                                              6.0.0    
+   > System.Formats.Asn1                                                                8.0.1    
+   > System.Globalization                                                               4.3.0    
+   > System.Globalization.Calendars                                                     4.3.0    
+   > System.Globalization.Extensions                                                    4.3.0    
+   > System.IO                                                                          4.3.0    
+   > System.IO.Compression                                                              4.3.0    
+   > System.IO.Compression.ZipFile                                                      4.3.0    
+   > System.IO.FileSystem                                                               4.3.0    
+   > System.IO.FileSystem.Primitives                                                    4.3.0    
+   > System.IO.Pipelines                                                                6.0.3    
+   > System.Linq                                                                        4.3.0    
+   > System.Linq.Expressions                                                            4.3.0    
+   > System.Memory                                                                      4.5.3    
+   > System.Net.Http                                                                    4.3.4    
+   > System.Net.Primitives                                                              4.3.0    
+   > System.Net.Sockets                                                                 4.3.0    
+   > System.ObjectModel                                                                 4.3.0    
+   > System.Reflection                                                                  4.3.0    
+   > System.Reflection.Emit                                                             4.3.0    
+   > System.Reflection.Emit.ILGeneration                                                4.3.0    
+   > System.Reflection.Emit.Lightweight                                                 4.3.0    
+   > System.Reflection.Extensions                                                       4.3.0    
+   > System.Reflection.Metadata                                                         6.0.1    
+   > System.Reflection.Primitives                                                       4.3.0    
+   > System.Reflection.TypeExtensions                                                   4.3.0    
+   > System.Resources.ResourceManager                                                   4.3.0    
+   > System.Runtime                                                                     4.3.0    
+   > System.Runtime.CompilerServices.Unsafe                                             6.0.0    
+   > System.Runtime.Extensions                                                          4.3.0    
+   > System.Runtime.Handles                                                             4.3.0    
+   > System.Runtime.InteropServices                                                     4.3.0    
+   > System.Runtime.InteropServices.RuntimeInformation                                  4.3.0    
+   > System.Runtime.Numerics                                                            4.3.0    
+   > System.Security.AccessControl                                                      6.0.0    
+   > System.Security.Cryptography.Algorithms                                            4.3.0    
+   > System.Security.Cryptography.Cng                                                   4.3.0    
+   > System.Security.Cryptography.Csp                                                   4.3.0    
+   > System.Security.Cryptography.Encoding                                              4.3.0    
+   > System.Security.Cryptography.OpenSsl                                               4.3.0    
+   > System.Security.Cryptography.Pkcs                                                  8.0.1    
+   > System.Security.Cryptography.Primitives                                            4.3.0    
+   > System.Security.Cryptography.ProtectedData                                         6.0.0    
+   > System.Security.Cryptography.X509Certificates                                      4.3.0    
+   > System.Security.Permissions                                                        6.0.0    
+   > System.Text.Encoding                                                               4.3.0    
+   > System.Text.Encoding.CodePages                                                     6.0.0    
+   > System.Text.Encoding.Extensions                                                    4.3.0    
+   > System.Text.Json                                                                   4.7.2    
+   > System.Text.RegularExpressions                                                     4.3.0    
+   > System.Threading                                                                   4.3.0    
+   > System.Threading.Channels                                                          6.0.0    
+   > System.Threading.Tasks                                                             4.3.0    
+   > System.Threading.Tasks.Extensions                                                  4.3.0    
+   > System.Threading.Timer                                                             4.3.0    
+   > System.Windows.Extensions                                                          6.0.0    
+   > System.Xml.ReaderWriter                                                            4.3.0    
+   > System.Xml.XDocument                                                               4.3.0    
+
