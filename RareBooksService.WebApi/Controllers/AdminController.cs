@@ -232,7 +232,8 @@ namespace RareBooksService.WebApi.Controllers
                 return Forbid("Просматривать список пользователей может только администратор");
             }
 
-            var users = await _userService.GetAllUsersWithSubscriptionsAsync();
+            // Получаем уже отсортированный список: администраторы первыми, потом по дате регистрации
+            var users = await _userService.GetAllUsersWithSubscriptionsSortedAsync();
 
             _logger.LogInformation("Список пользователей успешно получен. Количество пользователей: {UserCount}", users.Count());
 
@@ -243,6 +244,7 @@ namespace RareBooksService.WebApi.Controllers
                 Email = user.Email,
                 Role = user.Role,
                 HasSubscription = user.HasSubscription,
+                CreatedAt = user.CreatedAt,
                 CurrentSubscription = user.CurrentSubscription != null ? new SubscriptionDto
                 {
                     Id = user.CurrentSubscription.Id,

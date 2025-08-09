@@ -285,6 +285,7 @@ namespace RareBooksService.WebApi.Services
                             AccessFailedCount = exportedUser.AccessFailedCount,
                             HasSubscription = exportedUser.HasSubscription,
                             Role = exportedUser.Role,
+                            CreatedAt = exportedUser.CreatedAt == default ? DateTime.UtcNow : exportedUser.CreatedAt,
                             
                             // Восстанавливаем критически важные поля для авторизации
                             PasswordHash = exportedUser.PasswordHash,

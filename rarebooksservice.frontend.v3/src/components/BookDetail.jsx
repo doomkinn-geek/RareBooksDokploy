@@ -21,6 +21,7 @@ import Cookies from 'js-cookie';
 import { Helmet } from 'react-helmet';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
+import InfoIcon from '@mui/icons-material/Info';
 
 const BookDetail = () => {
     const { id } = useParams();
@@ -34,6 +35,7 @@ const BookDetail = () => {
     const [selectedImageIndex, setSelectedImageIndex] = useState(0);
     const [isFavorite, setIsFavorite] = useState(false);
     const [favoritesLoading, setFavoritesLoading] = useState(false);
+    const [showSubscriptionCTA, setShowSubscriptionCTA] = useState(false);
 
     // Отслеживание загрузки деталей книги
     const [loadingBook, setLoadingBook] = useState(true);
@@ -155,6 +157,21 @@ const BookDetail = () => {
         // основные данные книги (наиболее важные)
         setLoading(loadingBook);
     }, [loadingBook]);
+
+    // Определяем, нужно ли показывать CTA подписки
+    useEffect(() => {
+        if (!book) {
+            setShowSubscriptionCTA(false);
+            return;
+        }
+        const paidOnly = (
+            book.finalPrice === 'Только для подписчиков' ||
+            book.price === 'Только для подписчиков' ||
+            book.endDate === 'Только для подписчиков' ||
+            book.date === 'Только для подписчиков'
+        );
+        setShowSubscriptionCTA(Boolean(paidOnly));
+    }, [book]);
 
     // Эффект для проверки, находится ли книга в избранном
     useEffect(() => {
@@ -331,6 +348,15 @@ const BookDetail = () => {
         }
     };
 
+    const handleSubscribeClick = () => {
+        try {
+            if (id) {
+                localStorage.setItem('returnTo', `/books/${id}`);
+            }
+        } catch (_e) {}
+        navigate('/subscription');
+    };
+
     // Рендеринг содержимого компонента
     return (
         <Container maxWidth="lg" sx={{ py: 5 }}>
@@ -389,6 +415,36 @@ const BookDetail = () => {
             )}
             
             {/* Остальной код компонента */}
+            {showSubscriptionCTA && (
+                <Paper 
+                    elevation={3} 
+                    sx={{ 
+                        p: 3, 
+                        mb: 4, 
+                        borderRadius: '12px', 
+                        bgcolor: 'rgba(255, 171, 0, 0.1)', 
+                        border: '1px solid rgba(255, 171, 0, 0.3)'
+                    }}
+                >
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                        <InfoIcon sx={{ mr: 1, color: '#f57c00' }} />
+                        <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#8d6e63' }}>
+                            Данные о ценах, датах и изображения доступны только по подписке
+                        </Typography>
+                    </Box>
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                        Чтобы увидеть полную информацию по этой книге и получить доступ к инструментам оценки стоимости, оформите подписку.
+                    </Typography>
+                    <Button
+                        variant="contained"
+                        color="secondary"
+                        onClick={handleSubscribeClick}
+                        sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 'bold', px: 3, py: 1 }}
+                    >
+                        Оформить подписку
+                    </Button>
+                </Paper>
+            )}
             {loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
                     <CircularProgress />

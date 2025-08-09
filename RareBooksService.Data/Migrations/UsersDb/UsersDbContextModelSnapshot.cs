@@ -169,6 +169,9 @@ namespace RareBooksService.Data.Migrations.UsersDb
                     b.Property<string>("Email")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
 
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("boolean");

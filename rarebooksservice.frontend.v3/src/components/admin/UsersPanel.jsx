@@ -30,11 +30,31 @@ const UsersPanel = () => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
+    // Хелпер сортировки: администраторы первыми, затем по убыванию даты регистрации (если доступна)
+    const sortUsers = (list) => {
+        if (!Array.isArray(list)) return [];
+        const getRegTime = (u) => {
+            // Пытаемся использовать возможные поля даты регистрации; если их нет, используем старт активной подписки как приблизитель
+            const rawDate = u.createdAt || u.registrationDate || u.created || u.created_on || u.created_on_utc || u.currentSubscription?.startDate || null;
+            const t = rawDate ? new Date(rawDate).getTime() : 0;
+            return Number.isFinite(t) ? t : 0;
+        };
+        const isAdmin = (u) => (u?.role || '').toLowerCase() === 'admin';
+        return [...list].sort((a, b) => {
+            const aAdmin = isAdmin(a);
+            const bAdmin = isAdmin(b);
+            if (aAdmin !== bAdmin) return aAdmin ? -1 : 1;
+            const at = getRegTime(a);
+            const bt = getRegTime(b);
+            return bt - at; // по убыванию
+        });
+    };
+
     // Загрузка пользователей
     const loadUsers = async () => {
         try {
             const response = await getUsers();
-            setUsers(response.data);
+            setUsers(sortUsers(response.data));
         } catch (err) {
             console.error('Error fetching users:', err);
             setError('Ошибка при загрузке пользователей');
@@ -107,11 +127,11 @@ const UsersPanel = () => {
     const handleUpdateUserSubscription = async (userId, hasSubscription) => {
         try {
             await updateUserSubscription(userId, hasSubscription);
-            setUsers((prev) =>
+            setUsers((prev) => sortUsers(
                 prev.map((user) =>
                     user.id === userId ? { ...user, hasSubscription } : user
                 )
-            );
+            ));
         } catch (err) {
             console.error('Error updating subscription:', err);
             setError('Ошибка при обновлении подписки');
@@ -121,9 +141,9 @@ const UsersPanel = () => {
     const handleUpdateUserRole = async (userId, role) => {
         try {
             await updateUserRole(userId, role);
-            setUsers((prev) =>
+            setUsers((prev) => sortUsers(
                 prev.map((user) => (user.id === userId ? { ...user, role } : user))
-            );
+            ));
         } catch (err) {
             console.error('Error updating role:', err);
             setError('Ошибка при обновлении роли');

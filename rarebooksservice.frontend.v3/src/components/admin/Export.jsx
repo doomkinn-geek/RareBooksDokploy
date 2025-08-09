@@ -116,12 +116,12 @@ const Export = () => {
                 if (currentProgress === 100) {
                     clearInterval(newIntervalId);
                     setIsExporting(false);
-                    // Используем рабочий метод скачивания через форму вместо axios
-                    console.log('Экспорт завершен, автоматически скачиваем через форму');
+                    // После завершения используем безопасное скачивание через axios с заголовком Authorization
+                    console.log('Экспорт завершен, автоматически скачиваем файл через авторизованный запрос');
                     
                     // Небольшая задержка перед автоматическим скачиванием
                     setTimeout(() => {
-                        downloadExportFileDirect(taskId);
+                        downloadExportFile(taskId);
                     }, 1000);
                 }
             } catch (err) {

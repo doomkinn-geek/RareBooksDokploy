@@ -1,6 +1,6 @@
 ﻿// src/components/Login.jsx
 import React, { useState, useContext } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { UserContext } from '../context/UserContext';
@@ -35,6 +35,7 @@ const Login = () => {
     const [password, setPassword] = useState('');
     const { setUser } = useContext(UserContext);
     const navigate = useNavigate();
+    const location = useLocation();
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -55,8 +56,17 @@ const Login = () => {
 
             // прописываем пользователя в контекст
             setUser(response.data.user);
-
-            navigate('/');
+            // попытка вернуть на исходную страницу, если была сохранена
+            const stateFrom = location.state && location.state.from;
+            const storedReturnTo = (() => { try { return localStorage.getItem('returnTo'); } catch (_) { return null; } })();
+            if (stateFrom) {
+                navigate(stateFrom, { replace: true });
+            } else if (storedReturnTo) {
+                // Если пользователь оформляет подписку — отправим его на страницу подписки
+                navigate('/subscription', { replace: true });
+            } else {
+                navigate('/');
+            }
         } catch (err) {
             console.error('Ошибка входа:', err);
             if (err.response && err.response.status === 401) {

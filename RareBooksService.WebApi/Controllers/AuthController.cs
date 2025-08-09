@@ -77,7 +77,7 @@ namespace RareBooksService.WebApi.Controllers
 
             _logger.LogInformation("Регистрация пользователя с email: {Email}", model.Email);
 
-            var user = new ApplicationUser { UserName = model.Email, Email = model.Email };
+            var user = new ApplicationUser { UserName = model.Email, Email = model.Email, CreatedAt = DateTime.UtcNow };
             var result = await _userManager.CreateAsync(user, model.Password);
 
             if (result.Succeeded)

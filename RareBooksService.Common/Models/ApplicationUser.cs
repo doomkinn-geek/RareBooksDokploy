@@ -1,10 +1,16 @@
 ﻿using Microsoft.AspNetCore.Identity;
+using System;
 using System.Collections.Generic;
 
 namespace RareBooksService.Common.Models
 {
     public class ApplicationUser : IdentityUser
     {
+        /// <summary>
+        /// Дата и время регистрации пользователя (UTC)
+        /// </summary>
+        public DateTime CreatedAt { get; set; }
+
         public bool HasSubscription { get; set; }
 
         public List<UserSearchHistory> SearchHistory { get; set; }

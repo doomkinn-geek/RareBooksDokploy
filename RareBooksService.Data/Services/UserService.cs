@@ -171,6 +171,27 @@ namespace RareBooksService.Data.Services
             }
         }
 
+        /// <summary>
+        /// Возвращает всех пользователей с подписками, отсортированных: админы первыми, затем по CreatedAt (desc).
+        /// </summary>
+        public async Task<List<ApplicationUser>> GetAllUsersWithSubscriptionsSortedAsync()
+        {
+            try
+            {
+                return await _userContext.Users
+                    .Include(u => u.Subscriptions)
+                    .ThenInclude(s => s.SubscriptionPlan)
+                    .OrderByDescending(u => (u.Role ?? string.Empty).ToLower() == "admin")
+                    .ThenByDescending(u => u.CreatedAt)
+                    .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при получении пользователей с подписками (sorted): {ex.Message}");
+                return new List<ApplicationUser>();
+            }
+        }
+
         /// <summary>Возвращает список избранных книг пользователя.</summary>
         public async Task<IEnumerable<UserFavoriteBook>> GetUserFavoriteBooksAsync(string userId)
         {

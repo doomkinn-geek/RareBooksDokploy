@@ -16,6 +16,7 @@ namespace RareBooksService.Data.Interfaces
         Task<bool> UpdateUserSubscriptionAsync(string userId, bool hasSubscription);
         Task<bool> AssignRoleAsync(string userId, string role);
         Task<List<ApplicationUser>> GetAllUsersWithSubscriptionsAsync();
+        Task<List<ApplicationUser>> GetAllUsersWithSubscriptionsSortedAsync();
 
         // Методы для работы с избранными книгами
         Task<IEnumerable<UserFavoriteBook>> GetUserFavoriteBooksAsync(string userId);

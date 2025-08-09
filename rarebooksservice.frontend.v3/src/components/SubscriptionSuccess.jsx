@@ -1,5 +1,6 @@
 ﻿// src/components/SubscriptionSuccess.jsx
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { API_URL } from '../api';
 import axios from 'axios';
 import Cookies from 'js-cookie';
@@ -9,6 +10,7 @@ const SubscriptionSuccess = () => {
     const [error, setError] = useState('');
     const [checking, setChecking] = useState(true);
     const [success, setSuccess] = useState(false);
+    const navigate = useNavigate();
 
     useEffect(() => {
         checkSubscriptionStatus();
@@ -34,6 +36,17 @@ const SubscriptionSuccess = () => {
             const activeSub = subs.find((s) => s.isActive);
             if (activeSub) {
                 setSuccess(true);
+                // Если оформляли подписку со страницы книги — вернём пользователя туда
+                try {
+                    const returnTo = localStorage.getItem('returnTo');
+                    if (returnTo) {
+                        localStorage.removeItem('returnTo');
+                        // Чуть задержим редирект для отображения статуса
+                        setTimeout(() => {
+                            navigate(returnTo, { replace: true });
+                        }, 500);
+                    }
+                } catch (_e) {}
             } else {
                 setError('Подписка пока не активирована. Подождите немного или обратитесь в поддержку.');
             }

@@ -38,6 +38,7 @@ namespace RareBooksService.WebApi.Services
         public int AccessFailedCount { get; set; }
         public bool HasSubscription { get; set; }
         public string Role { get; set; }
+        public DateTime CreatedAt { get; set; }
         
         // Критически важные поля для авторизации
         public string PasswordHash { get; set; }
@@ -303,6 +304,7 @@ namespace RareBooksService.WebApi.Services
                             AccessFailedCount = user.AccessFailedCount,
                             HasSubscription = user.HasSubscription,
                             Role = user.Role,
+                            CreatedAt = user.CreatedAt,
                             
                             // Критически важные поля для авторизации
                             PasswordHash = user.PasswordHash,

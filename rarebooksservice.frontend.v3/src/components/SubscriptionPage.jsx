@@ -171,6 +171,19 @@ const SubscriptionPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
+    // Если подписка активна и есть сохранённый путь возврата — делаем редирект назад
+    useEffect(() => {
+        try {
+            if (user && isSubscriptionActive()) {
+                const returnTo = localStorage.getItem('returnTo');
+                if (returnTo) {
+                    localStorage.removeItem('returnTo');
+                    navigate(returnTo, { replace: true });
+                }
+            }
+        } catch (_e) {}
+    }, [user, statusCheckComplete]);
+
     // Сбрасываем флаг initialLoadRef при размонтировании компонента
     useEffect(() => {
         return () => {
