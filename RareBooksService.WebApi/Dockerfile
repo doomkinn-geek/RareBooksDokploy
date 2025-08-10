@@ -42,6 +42,11 @@ WORKDIR /app
 # 4) Копируем результат с предыдущего этапа
 COPY --from=build /app/out ./
 
+# Устанавливаем curl для healthcheck внутри контейнера
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 # Экспонируем порт 80 внутри контейнера
 EXPOSE 80
 
