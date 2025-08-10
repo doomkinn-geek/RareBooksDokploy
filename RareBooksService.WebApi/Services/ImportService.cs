@@ -194,8 +194,10 @@ namespace RareBooksService.WebApi.Services
 
                 _logger.LogInformation("Завершена загрузка файла для импорта {ImportId}, начинаем обработку", importTaskId);
 
-                // Запускаем импорт в фоне
-                _ = Task.Run(() => ImportInBackgroundAsync(taskInfo, cancellationToken), cancellationToken);
+                // Запускаем импорт в фоне с собственным токеном задачи,
+                // не зависящим от токена HTTP-запроса (во избежание преждевременной отмены)
+                var backgroundToken = taskInfo.CancellationTokenSource.Token;
+                _ = Task.Run(() => ImportInBackgroundAsync(taskInfo, backgroundToken), CancellationToken.None);
             }
             catch (Exception ex)
             {
@@ -761,6 +763,13 @@ namespace RareBooksService.WebApi.Services
         {
             if (_tasks.TryGetValue(importTaskId, out var info))
             {
+                try
+                {
+                    // Сигнализируем отмену фоновой задачи
+                    info.CancellationTokenSource.Cancel();
+                }
+                catch { /* ignore */ }
+
                 info.IsCancelledOrError = true;
                 info.Message = "Отменено пользователем";
                 
@@ -858,6 +867,7 @@ namespace RareBooksService.WebApi.Services
             public bool IsCompleted { get; set; } = false;
             public bool IsCancelledOrError { get; set; } = false;
             public string Message { get; set; } = "";
+            public CancellationTokenSource CancellationTokenSource { get; } = new CancellationTokenSource();
             
             // Новые поля для отслеживания информации о файлах
             public int CurrentFileIndex { get; set; } = 0;
@@ -879,6 +889,7 @@ namespace RareBooksService.WebApi.Services
                     {
                         // Освобождаем управляемые ресурсы
                         FileStream?.Dispose();
+                        try { CancellationTokenSource?.Dispose(); } catch { }
                     }
                     
                     // Освобождаем неуправляемые ресурсы
