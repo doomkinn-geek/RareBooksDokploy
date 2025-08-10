@@ -48,7 +48,7 @@ namespace RareBooksService.WebApi.Services
             }
 
             // Лениво создаём клиента (или пересоздаём, если настройки изменились)
-            if (_client == null || _client.ShopId != settings.ShopId)
+            if (_client == null)
             {
                 _client = new Client(settings.ShopId, settings.SecretKey);
             }
