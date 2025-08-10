@@ -404,7 +404,7 @@ const SubscriptionPage = () => {
         const { subscription } = user;
 
         // Сортируем планы по возрастанию цены (локальная копия)
-        const sortedPlans = (Array.isArray(plans) ? [...plans] : []).sort((a, b) => {
+        const plansToRender = (Array.isArray(plans) ? [...plans] : []).sort((a, b) => {
             const pa = Number(a?.price ?? Number.POSITIVE_INFINITY);
             const pb = Number(b?.price ?? Number.POSITIVE_INFINITY);
             if (Number.isNaN(pa) && Number.isNaN(pb)) return 0;
@@ -700,7 +700,7 @@ const SubscriptionPage = () => {
                 )}
                 
                 <Grid container spacing={3}>
-                    {(sortedPlans || []).map((plan, index) => {
+                    {(plansToRender || []).map((plan, index) => {
                         // Определяем, является ли этот план текущим для пользователя
                         const isCurrentPlan = user?.subscription?.subscriptionPlanId === plan?.id;
                         
