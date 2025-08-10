@@ -199,11 +199,11 @@ namespace RareBooksService.WebApi.Services
 
                 var plans = await _db.SubscriptionPlans
                     .Where(p => p.IsActive)
+                    .OrderBy(p => p.Price)
                     .ToListAsync();
 
                 _logger.LogInformation("Активные планы подписки выбраны: {Count} шт.", plans.Count);
 
-                // Преобразование в DTO
                 var result = plans.Select(ToDto).ToList();
                 _logger.LogInformation("Сформирован список DTO планов подписки: {Count} шт.", result.Count);
 
@@ -211,9 +211,8 @@ namespace RareBooksService.WebApi.Services
             }
             catch (Exception e)
             {
-                _logger.LogError(e, "Ошибка в GetActiveSubscriptionPlansAsync при выборке планов из БД");
-                // Обязательно пробрасываем исключение выше, чтобы контроллер мог отреагировать
-                throw;
+                _logger.LogError(e, "Ошибка в GetActiveSubscriptionPlansAsync при выборке планов из БД. Возвращаем пустой список как fallback.");
+                return new List<SubscriptionPlanDto>();
             }
         }
 
