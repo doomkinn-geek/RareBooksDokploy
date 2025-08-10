@@ -652,6 +652,16 @@ const SubscriptionPage = () => {
             );
         }
         
+        // Сортируем планы по возрастанию цены, чтобы отображать их в нужном порядке
+        const plansToRender = (Array.isArray(plans) ? [...plans] : []).sort((a, b) => {
+            const pa = Number(a?.price ?? Number.POSITIVE_INFINITY);
+            const pb = Number(b?.price ?? Number.POSITIVE_INFINITY);
+            if (Number.isNaN(pa) && Number.isNaN(pb)) return 0;
+            if (Number.isNaN(pa)) return 1;
+            if (Number.isNaN(pb)) return -1;
+            return pa - pb;
+        });
+
         // Стандартные функции для каждого плана, если они не указаны в описании
         const defaultPlanFeatures = {
             'Минимальный': [
