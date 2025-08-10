@@ -403,6 +403,16 @@ const SubscriptionPage = () => {
 
         const { subscription } = user;
 
+        // Сортируем планы по возрастанию цены
+        const sortedPlans = (Array.isArray(plans) ? [...plans] : []).sort((a, b) => {
+            const pa = Number(a?.price ?? Number.POSITIVE_INFINITY);
+            const pb = Number(b?.price ?? Number.POSITIVE_INFINITY);
+            if (Number.isNaN(pa) && Number.isNaN(pb)) return 0;
+            if (Number.isNaN(pa)) return 1;
+            if (Number.isNaN(pb)) return -1;
+            return pa - pb;
+        });
+
         return (
             <Paper 
                 elevation={3} 
@@ -690,7 +700,7 @@ const SubscriptionPage = () => {
                 )}
                 
                 <Grid container spacing={3}>
-                    {plans.map((plan, index) => {
+                    {sortedPlans.map((plan, index) => {
                         // Определяем, является ли этот план текущим для пользователя
                         const isCurrentPlan = user?.subscription?.subscriptionPlanId === plan?.id;
                         
