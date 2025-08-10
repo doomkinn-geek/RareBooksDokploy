@@ -50,13 +50,13 @@ namespace RareBooksService.WebApi.Controllers
                 // Дополнительный лог об успешно полученных планах
                 _logger.LogInformation("Успешно получен список планов подписки (Count={Count}).", planDtos?.Count ?? 0);
 
-                return Ok(planDtos);
+                return Ok(planDtos ?? new List<SubscriptionPlanDto>());
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при получении планов подписки в методе GetPlans");
-                // Отдаём статус 500 + человекочитаемое сообщение
-                return StatusCode(500, "Внутренняя ошибка при получении планов подписки.");
+                // Возвращаем пустой список, чтобы фронтенд мог отобразить сообщение без падения
+                return Ok(new List<SubscriptionPlanDto>());
             }
         }
 

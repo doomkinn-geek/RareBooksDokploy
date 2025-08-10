@@ -28,7 +28,7 @@ namespace RareBooksService.WebApi.Services
         private readonly string _shopId;
         private readonly string _secretKey;
         private readonly string _returnUrl;
-        private readonly Client _client; // Синхронный, можем сделать asyncClient
+        private Client? _client; // ленивое создание клиента, т.к. настройки могут отсутствовать
         private readonly ILogger<YandexKassaPaymentService> _logger;
 
         public YandexKassaPaymentService(IOptions<YandexKassaSettings> options, ILogger<YandexKassaPaymentService> logger)
@@ -38,14 +38,23 @@ namespace RareBooksService.WebApi.Services
             _secretKey = settings.SecretKey;
             _returnUrl = settings.ReturnUrl;
 
-            // создаём клиент
-            _client = new Client(_shopId, _secretKey);
+            // Клиента создаём лениво при первом использовании — чтобы отсутствие настроек не ломало неиспользующие пути
+            _client = null;
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
             _logger = logger;
         }
 
         public async Task<(string PaymentId, string ConfirmationUrl)> CreatePaymentAsync(ApplicationUser user, SubscriptionPlan plan, bool autoRenew)
         {
+            // Проверяем, что настройки заданы
+            if (string.IsNullOrWhiteSpace(_shopId) || string.IsNullOrWhiteSpace(_secretKey) || string.IsNullOrWhiteSpace(_returnUrl))
+            {
+                throw new InvalidOperationException("Параметры YandexKassa (ShopId/SecretKey/ReturnUrl) не настроены.");
+            }
+
+            // Лениво создаём клиента
+            _client ??= new Client(_shopId, _secretKey);
+
             // Используем асинхронный клиент
             var asyncClient = _client.MakeAsync();
 

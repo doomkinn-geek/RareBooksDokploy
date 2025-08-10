@@ -45,16 +45,19 @@ namespace RareBooksService.WebApi.Services
             _userManager = userManager;
             _logger = logger;
 
+            // Клиент ЮKassa может быть не нужен для получения планов — создадим лениво в методах, где он действительно требуется
             try
             {
-                // Инициализируем клиента
                 var settings = ykSettings.Value;
-                _yooKassaClient = new Client(settings.ShopId, settings.SecretKey);
-                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                if (!string.IsNullOrWhiteSpace(settings?.ShopId) && !string.IsNullOrWhiteSpace(settings?.SecretKey))
+                {
+                    _yooKassaClient = new Client(settings.ShopId, settings.SecretKey);
+                    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                }
             }
-            catch (Exception ex)
+            catch
             {
-                return;
+                // игнорируем: оплатой займётся YandexKassaPaymentService, а планы можно отдавать без клиента
             }
         }
 
