@@ -23,5 +23,8 @@ COPY --from=build /app/dist /usr/share/nginx/html
 # Копируем кастомный конфиг nginx, для редиректа fallback на index.html
 COPY ./nginx.conf /etc/nginx/conf.d/default.conf
 
+# Устанавливаем curl для корректной работы healthcheck
+RUN apk add --no-cache curl
+
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
