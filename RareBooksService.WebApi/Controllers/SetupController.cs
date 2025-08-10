@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using RareBooksService.Common.Models;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using System.IO;
 using System.Text.Json;
 using RareBooksService.WebApi.Services;
@@ -325,15 +326,15 @@ namespace RareBooksService.WebApi.Controllers
 
                 // Гарантируем наличие колонки CreatedAt (fallback на случай, если миграция не подхватилась)
                 var ensureCreatedAtSql = @"
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns 
-        WHERE lower(table_name) = 'aspnetusers' AND lower(column_name) = 'createdat'
-    ) THEN
-        ALTER TABLE \"AspNetUsers\" ADD COLUMN \"CreatedAt\" timestamp with time zone NOT NULL DEFAULT (now() at time zone 'utc');
-    END IF;
-END $$;";
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM information_schema.columns 
+                            WHERE lower(table_name) = 'aspnetusers' AND lower(column_name) = 'createdat'
+                        ) THEN
+                            ALTER TABLE ""AspNetUsers"" ADD COLUMN ""CreatedAt"" timestamp with time zone NOT NULL DEFAULT (now() at time zone 'utc');
+                        END IF;
+                    END $$;";
                 await ctx.Database.ExecuteSqlRawAsync(ensureCreatedAtSql);
                 return "";
             }
