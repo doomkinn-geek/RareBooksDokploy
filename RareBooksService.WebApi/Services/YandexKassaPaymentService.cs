@@ -25,20 +25,13 @@ namespace RareBooksService.WebApi.Services
 
     public class YandexKassaPaymentService : IYandexKassaPaymentService
     {
-        private readonly string _shopId;
-        private readonly string _secretKey;
-        private readonly string _returnUrl;
-        private Client? _client; // ленивое создание клиента, т.к. настройки могут отсутствовать
+        private readonly IOptionsSnapshot<YandexKassaSettings> _options;
+        private Client? _client; // ленивое создание клиента
         private readonly ILogger<YandexKassaPaymentService> _logger;
 
-        public YandexKassaPaymentService(IOptions<YandexKassaSettings> options, ILogger<YandexKassaPaymentService> logger)
+        public YandexKassaPaymentService(IOptionsSnapshot<YandexKassaSettings> options, ILogger<YandexKassaPaymentService> logger)
         {
-            var settings = options.Value;
-            _shopId = settings.ShopId;
-            _secretKey = settings.SecretKey;
-            _returnUrl = settings.ReturnUrl;
-
-            // Клиента создаём лениво при первом использовании — чтобы отсутствие настроек не ломало неиспользующие пути
+            _options = options;
             _client = null;
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
             _logger = logger;
@@ -46,14 +39,19 @@ namespace RareBooksService.WebApi.Services
 
         public async Task<(string PaymentId, string ConfirmationUrl)> CreatePaymentAsync(ApplicationUser user, SubscriptionPlan plan, bool autoRenew)
         {
+            var settings = _options.Value;
+
             // Проверяем, что настройки заданы
-            if (string.IsNullOrWhiteSpace(_shopId) || string.IsNullOrWhiteSpace(_secretKey) || string.IsNullOrWhiteSpace(_returnUrl))
+            if (string.IsNullOrWhiteSpace(settings.ShopId) || string.IsNullOrWhiteSpace(settings.SecretKey) || string.IsNullOrWhiteSpace(settings.ReturnUrl))
             {
                 throw new InvalidOperationException("Параметры YandexKassa (ShopId/SecretKey/ReturnUrl) не настроены.");
             }
 
-            // Лениво создаём клиента
-            _client ??= new Client(_shopId, _secretKey);
+            // Лениво создаём клиента (или пересоздаём, если настройки изменились)
+            if (_client == null || _client.ShopId != settings.ShopId)
+            {
+                _client = new Client(settings.ShopId, settings.SecretKey);
+            }
 
             // Используем асинхронный клиент
             var asyncClient = _client.MakeAsync();
@@ -68,7 +66,7 @@ namespace RareBooksService.WebApi.Services
                 Confirmation = new Confirmation
                 {
                     Type = ConfirmationType.Redirect,
-                    ReturnUrl = _returnUrl // Вернёт после оплаты
+                    ReturnUrl = settings.ReturnUrl // Вернёт после оплаты
                 },
                 Capture = true, // Сразу захватываем платеж
                 Description = $"Оплата подписки: {plan.Name}. Пользователь {user.Email}",
