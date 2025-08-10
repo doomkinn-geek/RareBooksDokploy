@@ -322,6 +322,19 @@ namespace RareBooksService.WebApi.Controllers
 
                 using var ctx = new UsersDbContext(optionsBuilder.Options);
                 await ctx.Database.MigrateAsync();
+
+                // Гарантируем наличие колонки CreatedAt (fallback на случай, если миграция не подхватилась)
+                var ensureCreatedAtSql = @"
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE lower(table_name) = 'aspnetusers' AND lower(column_name) = 'createdat'
+    ) THEN
+        ALTER TABLE \"AspNetUsers\" ADD COLUMN \"CreatedAt\" timestamp with time zone NOT NULL DEFAULT (now() at time zone 'utc');
+    END IF;
+END $$;";
+                await ctx.Database.ExecuteSqlRawAsync(ensureCreatedAtSql);
                 return "";
             }
             catch (Exception ex)
@@ -385,7 +398,8 @@ namespace RareBooksService.WebApi.Controllers
                         Email = email,
                         EmailConfirmed = true,
                         HasSubscription = false,
-                        Role = "Admin" // для удобства
+                        Role = "Admin", // для удобства
+                        CreatedAt = DateTime.UtcNow
                     };
                     var result = await userManager.CreateAsync(adminUser, password);
                     if (!result.Succeeded)
