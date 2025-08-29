@@ -89,6 +89,7 @@ services:
       #- ./nginx/nginx_dev.conf:/etc/nginx/nginx.conf
       - ./nginx/nginx_prod.conf:/etc/nginx/nginx.conf
       - /home/docker/ssl/rare-books.ru:/etc/ssl/rare-books.ru:ro
+      - /var/www/certbot:/var/www/certbot  
     depends_on:
       frontend:
         condition: service_healthy
