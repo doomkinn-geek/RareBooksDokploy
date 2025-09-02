@@ -145,10 +145,28 @@ const RecentSales = () => {
     };
     
     // Обработчик ошибок при загрузке изображений
-    const handleImageError = (e) => {
+    const handleImageError = (e, book = null) => {
         console.warn('Ошибка загрузки изображения:', e.target.src);
+        
+        // Проверяем, можем ли попробовать альтернативный URL
+        if (book && e.target.src.includes(book.thumbnailUrl || '')) {
+            // Если не сработал thumbnail, пробуем imageUrl
+            const imageUrl = book.imageUrl;
+            if (imageUrl && imageUrl !== book.thumbnailUrl) {
+                console.log('Пробуем альтернативный imageUrl:', imageUrl);
+                e.target.onerror = () => {
+                    console.warn('Альтернативный imageUrl тоже не работает, используем placeholder');
+                    e.target.onerror = null;
+                    e.target.src = '/placeholder-book.svg';
+                };
+                e.target.src = imageUrl.startsWith('/') ? window.location.origin + imageUrl : imageUrl;
+                return;
+            }
+        }
+        
+        // Если альтернатив нет или они уже исчерпаны, используем placeholder
         e.target.onerror = null;
-        e.target.src = 'https://via.placeholder.com/200x150/f5f5f5/999999?text=No+Image';
+        e.target.src = '/placeholder-book.svg';
     };
     
     // Форматирование даты
@@ -378,15 +396,42 @@ const RecentSales = () => {
                                 >
                                     {/* Изображения с обработчиком ошибок */}
                                     {(() => {
-                                        // Выбираем лучший доступный URL изображения
-                                        const imageUrl = book?.imageUrl || book?.thumbnailUrl;
+                                        // Функция для нормализации URL изображения
+                                        const normalizeImageUrl = (url) => {
+                                            if (!url || url.trim() === '') return null;
+                                            
+                                            // Если URL уже полный, возвращаем как есть
+                                            if (url.startsWith('http://') || url.startsWith('https://')) {
+                                                return url;
+                                            }
+                                            
+                                            // Если начинается с /, добавляем домен
+                                            if (url.startsWith('/')) {
+                                                return window.location.origin + url;
+                                            }
+                                            
+                                            return url;
+                                        };
                                         
-                                        if (imageUrl && imageUrl.trim() !== '') {
+                                        // Приоритет: thumbnailUrl, затем imageUrl
+                                        const thumbnailUrl = normalizeImageUrl(book?.thumbnailUrl);
+                                        const imageUrl = normalizeImageUrl(book?.imageUrl);
+                                        const finalUrl = thumbnailUrl || imageUrl;
+                                        
+                                        console.log('Image URLs для книги:', book?.title, {
+                                            original_thumbnail: book?.thumbnailUrl,
+                                            original_image: book?.imageUrl,
+                                            normalized_thumbnail: thumbnailUrl,
+                                            normalized_image: imageUrl,
+                                            final_url: finalUrl
+                                        });
+                                        
+                                        if (finalUrl) {
                                             return (
                                                 <img
-                                                    src={imageUrl}
+                                                    src={finalUrl}
                                                     alt={book?.title || 'Книга'}
-                                                    onError={handleImageError}
+                                                    onError={(e) => handleImageError(e, book)}
                                                     style={{ 
                                                         maxWidth: '100%',
                                                         maxHeight: '100%',
@@ -397,7 +442,7 @@ const RecentSales = () => {
                                         } else {
                                             return (
                                                 <img
-                                                    src="https://via.placeholder.com/200x150/f5f5f5/999999?text=No+Image"
+                                                    src="/placeholder-book.svg"
                                                     alt="Нет изображения"
                                                     style={{ 
                                                         maxWidth: '100%',
