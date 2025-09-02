@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test API Setup</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        button { padding: 10px; margin: 5px; background: #007cba; color: white; border: none; cursor: pointer; }
+        .result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; background: #f9f9f9; }
+        .error { background: #ffebee; border-color: #f44336; }
+        .success { background: #e8f5e9; border-color: #4caf50; }
+    </style>
+</head>
+<body>
+    <h1>API Setup Test</h1>
+    
+    <button onclick="testSetupStatus()">Тест GET /api/test/setup-status</button>
+    <button onclick="testNeedSetup()">Тест GET /api/setupcheck/need-setup</button>
+    <button onclick="testSetupPage()">Тест GET /api/setup (получить страницу)</button>
+    <button onclick="testInitialize()">Тест POST /api/setup/initialize</button>
+    
+    <div id="results"></div>
+
+    <script>
+        const resultsDiv = document.getElementById('results');
+        
+        function addResult(title, status, data, isError = false) {
+            const div = document.createElement('div');
+            div.className = 'result ' + (isError ? 'error' : 'success');
+            div.innerHTML = `
+                <h3>${title}</h3>
+                <p><strong>Status:</strong> ${status}</p>
+                <pre>${JSON.stringify(data, null, 2)}</pre>
+            `;
+            resultsDiv.appendChild(div);
+        }
+        
+        async function testSetupStatus() {
+            try {
+                const response = await fetch('/api/test/setup-status');
+                const data = await response.text();
+                addResult('GET /api/test/setup-status', response.status, data, !response.ok);
+            } catch (error) {
+                addResult('GET /api/test/setup-status', 'Error', error.message, true);
+            }
+        }
+        
+        async function testNeedSetup() {
+            try {
+                const response = await fetch('/api/setupcheck/need-setup');
+                const data = await response.text();
+                addResult('GET /api/setupcheck/need-setup', response.status, data, !response.ok);
+            } catch (error) {
+                addResult('GET /api/setupcheck/need-setup', 'Error', error.message, true);
+            }
+        }
+        
+        async function testSetupPage() {
+            try {
+                const response = await fetch('/api/setup');
+                const data = await response.text();
+                addResult('GET /api/setup', response.status, data.substring(0, 200) + '...', !response.ok);
+            } catch (error) {
+                addResult('GET /api/setup', 'Error', error.message, true);
+            }
+        }
+        
+        async function testInitialize() {
+            const payload = {
+                adminEmail: "test@example.com",
+                adminPassword: "test123",
+                booksConnectionString: "Host=localhost;Database=test;Username=test;Password=test",
+                usersConnectionString: "Host=localhost;Database=test;Username=test;Password=test",
+                jwtKey: "test-key-very-long-secret-key-for-jwt",
+                jwtIssuer: "test-issuer",
+                jwtAudience: "test-audience"
+            };
+            
+            try {
+                const response = await fetch('/api/setup/initialize', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.text();
+                addResult('POST /api/setup/initialize', response.status, data, !response.ok);
+            } catch (error) {
+                addResult('POST /api/setup/initialize', 'Error', error.message, true);
+            }
+        }
+    </script>
+</body>
+</html>
