@@ -312,6 +312,13 @@ namespace RareBooksService.WebApi
                 app.Use(async (context, next) =>
                 
                 {
+                    // ВСЕГДА пропускаем OPTIONS запросы (CORS preflight)
+                    if (context.Request.Method == "OPTIONS")
+                    {
+                        await next.Invoke();
+                        return;
+                    }
+
                     // Пропускаем /api/setup/, /api/setupcheck/ и /api/test/
                     if (context.Request.Path.StartsWithSegments("/api/setup") ||
                         context.Request.Path.StartsWithSegments("/api/setupcheck") ||

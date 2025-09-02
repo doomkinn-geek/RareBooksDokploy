@@ -76,6 +76,21 @@ const RecentSales = () => {
             const response = await getRecentSales(5);
             console.log('Полученные данные о продажах:', response.data);
             
+            // Детальное логирование для отладки
+            if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+                console.log('Первая запись данных продаж:', response.data[0]);
+                response.data.forEach((book, index) => {
+                    console.log(`Книга ${index + 1}:`, {
+                        title: book.title,
+                        imageUrl: book.imageUrl,
+                        thumbnailUrl: book.thumbnailUrl,
+                        finalPrice: book.finalPrice
+                    });
+                });
+            } else {
+                console.warn('Получен пустой массив или некорректные данные');
+            }
+            
             // Проверяем, что данные являются массивом
             const salesData = Array.isArray(response.data) ? response.data : [];
             
@@ -85,10 +100,37 @@ const RecentSales = () => {
             }
         } catch (error) {
             console.error('Ошибка при загрузке недавних продаж:', error);
+            console.error('Статус ошибки:', error.response?.status);
+            console.error('Данные ошибки:', error.response?.data);
             
             // Проверяем, смонтирован ли компонент перед обновлением состояния
             if (isMounted.current) {
-                setRecentSalesError(error.response?.data?.message || 'Ошибка при загрузке недавних продаж');
+                let errorMessage = 'Ошибка при загрузке недавних продаж';
+                
+                // Более детальная обработка ошибок
+                if (error.response) {
+                    // Сервер ответил с кодом ошибки
+                    const status = error.response.status;
+                    if (status === 401) {
+                        errorMessage = 'Требуется авторизация для просмотра недавних продаж';
+                    } else if (status === 403) {
+                        errorMessage = 'Недостаточно прав для просмотра недавних продаж';
+                    } else if (status === 404) {
+                        errorMessage = 'Данные о продажах не найдены';
+                    } else if (status >= 500) {
+                        errorMessage = 'Ошибка сервера. Попробуйте позже';
+                    } else {
+                        errorMessage = error.response.data?.message || `Ошибка ${status}`;
+                    }
+                } else if (error.request) {
+                    // Запрос был отправлен, но ответ не получен
+                    errorMessage = 'Нет соединения с сервером';
+                } else {
+                    // Ошибка при настройке запроса
+                    errorMessage = 'Ошибка при отправке запроса';
+                }
+                
+                setRecentSalesError(errorMessage);
                 setRecentSales([]); // Устанавливаем пустой массив при ошибке
             }
         } finally {
@@ -103,9 +145,28 @@ const RecentSales = () => {
     };
     
     // Обработчик ошибок при загрузке изображений
-    const handleImageError = (e) => {
+    const handleImageError = (e, book = null) => {
+        console.warn('Ошибка загрузки изображения:', e.target.src);
+        
+        // Проверяем, можем ли попробовать альтернативный URL
+        if (book && e.target.src.includes(book.thumbnailUrl || '')) {
+            // Если не сработал thumbnail, пробуем imageUrl
+            const imageUrl = book.imageUrl;
+            if (imageUrl && imageUrl !== book.thumbnailUrl) {
+                console.log('Пробуем альтернативный imageUrl:', imageUrl);
+                e.target.onerror = () => {
+                    console.warn('Альтернативный imageUrl тоже не работает, используем placeholder');
+                    e.target.onerror = null;
+                    e.target.src = '/placeholder-book.svg';
+                };
+                e.target.src = imageUrl.startsWith('/') ? window.location.origin + imageUrl : imageUrl;
+                return;
+            }
+        }
+        
+        // Если альтернатив нет или они уже исчерпаны, используем placeholder
         e.target.onerror = null;
-        e.target.src = 'https://via.placeholder.com/200x150?text=Нет+изображения';
+        e.target.src = '/placeholder-book.svg';
     };
     
     // Форматирование даты
@@ -334,39 +395,64 @@ const RecentSales = () => {
                                     className="book-image-container"
                                 >
                                     {/* Изображения с обработчиком ошибок */}
-                                    {book?.imageUrl ? (
-                                        <img
-                                            src={book.imageUrl}
-                                            alt={book.title || 'Книга'}
-                                            onError={handleImageError}
-                                            style={{ 
-                                                maxWidth: '100%',
-                                                maxHeight: '100%',
-                                                objectFit: 'contain'
-                                            }}
-                                        />
-                                    ) : book?.thumbnailUrl ? (
-                                        <img
-                                            src={book.thumbnailUrl}
-                                            alt={book.title || 'Книга'}
-                                            onError={handleImageError}
-                                            style={{ 
-                                                maxWidth: '100%',
-                                                maxHeight: '100%',
-                                                objectFit: 'contain'
-                                            }}
-                                        />
-                                    ) : (
-                                        <img
-                                            src="https://via.placeholder.com/200x150?text=Нет+изображения"
-                                            alt="Нет изображения"
-                                            style={{ 
-                                                maxWidth: '100%',
-                                                maxHeight: '100%',
-                                                objectFit: 'contain'
-                                            }}
-                                        />
-                                    )}
+                                    {(() => {
+                                        // Функция для нормализации URL изображения
+                                        const normalizeImageUrl = (url) => {
+                                            if (!url || url.trim() === '') return null;
+                                            
+                                            // Если URL уже полный, возвращаем как есть
+                                            if (url.startsWith('http://') || url.startsWith('https://')) {
+                                                return url;
+                                            }
+                                            
+                                            // Если начинается с /, добавляем домен
+                                            if (url.startsWith('/')) {
+                                                return window.location.origin + url;
+                                            }
+                                            
+                                            return url;
+                                        };
+                                        
+                                        // Приоритет: thumbnailUrl, затем imageUrl
+                                        const thumbnailUrl = normalizeImageUrl(book?.thumbnailUrl);
+                                        const imageUrl = normalizeImageUrl(book?.imageUrl);
+                                        const finalUrl = thumbnailUrl || imageUrl;
+                                        
+                                        console.log('Image URLs для книги:', book?.title, {
+                                            original_thumbnail: book?.thumbnailUrl,
+                                            original_image: book?.imageUrl,
+                                            normalized_thumbnail: thumbnailUrl,
+                                            normalized_image: imageUrl,
+                                            final_url: finalUrl
+                                        });
+                                        
+                                        if (finalUrl) {
+                                            return (
+                                                <img
+                                                    src={finalUrl}
+                                                    alt={book?.title || 'Книга'}
+                                                    onError={(e) => handleImageError(e, book)}
+                                                    style={{ 
+                                                        maxWidth: '100%',
+                                                        maxHeight: '100%',
+                                                        objectFit: 'contain'
+                                                    }}
+                                                />
+                                            );
+                                        } else {
+                                            return (
+                                                <img
+                                                    src="/placeholder-book.svg"
+                                                    alt="Нет изображения"
+                                                    style={{ 
+                                                        maxWidth: '100%',
+                                                        maxHeight: '100%',
+                                                        objectFit: 'contain'
+                                                    }}
+                                                />
+                                            );
+                                        }
+                                    })()}
                                 </Box>
                                 
                                 {/* Содержимое карточки */}
