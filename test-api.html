@@ -17,6 +17,8 @@
     <button onclick="testNeedSetup()">Тест GET /api/setupcheck/need-setup</button>
     <button onclick="testSetupPage()">Тест GET /api/setup (получить страницу)</button>
     <button onclick="testInitialize()">Тест POST /api/setup/initialize</button>
+    <button onclick="testOptionsRequest()">Тест OPTIONS /api/setup/initialize (CORS)</button>
+    <button onclick="clearResults()">Очистить результаты</button>
     
     <div id="results"></div>
 
@@ -76,6 +78,8 @@
             };
             
             try {
+                console.log('Отправляем POST запрос к /api/setup/initialize...');
+                
                 const response = await fetch('/api/setup/initialize', {
                     method: 'POST',
                     headers: {
@@ -84,11 +88,55 @@
                     body: JSON.stringify(payload)
                 });
                 
+                console.log('Ответ получен:', response);
+                console.log('Status:', response.status);
+                console.log('Headers:', [...response.headers.entries()]);
+                
                 const data = await response.text();
                 addResult('POST /api/setup/initialize', response.status, data, !response.ok);
             } catch (error) {
+                console.error('Ошибка при отправке запроса:', error);
                 addResult('POST /api/setup/initialize', 'Error', error.message, true);
             }
+        }
+        
+        async function testOptionsRequest() {
+            try {
+                console.log('Отправляем OPTIONS запрос к /api/setup/initialize...');
+                
+                const response = await fetch('/api/setup/initialize', {
+                    method: 'OPTIONS',
+                    headers: {
+                        'Origin': window.location.origin,
+                        'Access-Control-Request-Method': 'POST',
+                        'Access-Control-Request-Headers': 'Content-Type',
+                    }
+                });
+                
+                console.log('OPTIONS ответ получен:', response);
+                console.log('CORS Headers:', {
+                    'Access-Control-Allow-Origin': response.headers.get('Access-Control-Allow-Origin'),
+                    'Access-Control-Allow-Methods': response.headers.get('Access-Control-Allow-Methods'),
+                    'Access-Control-Allow-Headers': response.headers.get('Access-Control-Allow-Headers')
+                });
+                
+                const data = await response.text();
+                addResult('OPTIONS /api/setup/initialize (CORS)', response.status, {
+                    responseText: data,
+                    corsHeaders: {
+                        'Access-Control-Allow-Origin': response.headers.get('Access-Control-Allow-Origin'),
+                        'Access-Control-Allow-Methods': response.headers.get('Access-Control-Allow-Methods'),
+                        'Access-Control-Allow-Headers': response.headers.get('Access-Control-Allow-Headers')
+                    }
+                }, !response.ok);
+            } catch (error) {
+                console.error('Ошибка при отправке OPTIONS запроса:', error);
+                addResult('OPTIONS /api/setup/initialize (CORS)', 'Error', error.message, true);
+            }
+        }
+        
+        function clearResults() {
+            resultsDiv.innerHTML = '';
         }
     </script>
 </body>
