@@ -20,7 +20,7 @@ import {
     Tooltip
 } from '@mui/material';
 import Cookies from 'js-cookie';
-import { getRecentSales } from '../api';
+import { getRecentSales, getBookImages, getBookImageFile } from '../api';
 import { UserContext } from '../context/UserContext';
 import { LanguageContext } from '../context/LanguageContext';
 import HistoryIcon from '@mui/icons-material/History';
@@ -40,6 +40,8 @@ const RecentSales = () => {
     const [loadingRecentSales, setLoadingRecentSales] = useState(false);
     const [recentSalesError, setRecentSalesError] = useState(null);
     const [refreshing, setRefreshing] = useState(false);
+    const [bookImages, setBookImages] = useState({}); // Состояние для хранения загруженных изображений
+    const [loadingImages, setLoadingImages] = useState({}); // Состояние для отслеживания загрузки изображений
     const isMounted = useRef(true);
     
     // Защита от ошибок: убедиться, что recentSales всегда массив
@@ -97,6 +99,9 @@ const RecentSales = () => {
             // Проверяем, смонтирован ли компонент перед обновлением состояния
             if (isMounted.current) {
                 setRecentSales(salesData); // Устанавливаем массив или пустой массив
+                
+                // Загружаем изображения для каждой книги
+                loadBookImages(salesData);
             }
         } catch (error) {
             console.error('Ошибка при загрузке недавних продаж:', error);
@@ -144,30 +149,84 @@ const RecentSales = () => {
         }
     };
     
-    // Обработчик ошибок при загрузке изображений
-    const handleImageError = (e, book = null) => {
-        console.warn('Ошибка загрузки изображения:', e.target.src);
+    // Функция для загрузки изображений книг
+    const loadBookImages = async (books) => {
+        if (!books || books.length === 0) return;
         
-        // Проверяем, можем ли попробовать альтернативный URL
-        if (book && e.target.src.includes(book.thumbnailUrl || '')) {
-            // Если не сработал thumbnail, пробуем imageUrl
-            const imageUrl = book.imageUrl;
-            if (imageUrl && imageUrl !== book.thumbnailUrl) {
-                console.log('Пробуем альтернативный imageUrl:', imageUrl);
-                e.target.onerror = () => {
-                    console.warn('Альтернативный imageUrl тоже не работает, используем placeholder');
-                    e.target.onerror = null;
-                    e.target.src = '/placeholder-book.svg';
-                };
-                e.target.src = imageUrl.startsWith('/') ? window.location.origin + imageUrl : imageUrl;
-                return;
+        console.log('Начинаем загрузку изображений для', books.length, 'книг');
+        
+        for (const book of books) {
+            if (!book || !book.bookId) {
+                console.warn('Пропускаем книгу без bookId:', book);
+                continue;
+            }
+            
+            // Устанавливаем флаг загрузки для этой книги
+            setLoadingImages(prev => ({ ...prev, [book.bookId]: true }));
+            
+            try {
+                console.log(`Загружаем изображения для книги ${book.bookId} (${book.title})`);
+                
+                // Получаем список изображений для книги
+                const imagesResponse = await getBookImages(book.bookId);
+                const imageNames = imagesResponse?.data?.images || [];
+                
+                console.log(`Для книги ${book.bookId} найдено ${imageNames.length} изображений:`, imageNames);
+                
+                // Если есть хотя бы одно изображение, загружаем первое
+                if (imageNames.length > 0) {
+                    const firstImageName = imageNames[0];
+                    console.log(`Загружаем первое изображение: ${firstImageName}`);
+                    
+                    // Загружаем первое изображение
+                    const imageResponse = await getBookImageFile(book.bookId, firstImageName);
+                    const imageUrl = URL.createObjectURL(imageResponse.data);
+                    
+                    console.log(`Изображение загружено успешно для книги ${book.bookId}:`, imageUrl);
+                    
+                    // Сохраняем URL изображения в состоянии
+                    if (isMounted.current) {
+                        setBookImages(prev => ({
+                            ...prev,
+                            [book.bookId]: imageUrl
+                        }));
+                    }
+                } else {
+                    console.warn(`Нет изображений для книги ${book.bookId}`);
+                }
+            } catch (error) {
+                console.error(`Ошибка при загрузке изображения для книги ${book.bookId}:`, error);
+                
+                // В случае ошибки, можем попробовать использовать placeholder
+                if (isMounted.current) {
+                    setBookImages(prev => ({
+                        ...prev,
+                        [book.bookId]: '/placeholder-book.svg'
+                    }));
+                }
+            } finally {
+                // Убираем флаг загрузки
+                if (isMounted.current) {
+                    setLoadingImages(prev => ({ ...prev, [book.bookId]: false }));
+                }
             }
         }
         
-        // Если альтернатив нет или они уже исчерпаны, используем placeholder
-        e.target.onerror = null;
-        e.target.src = '/placeholder-book.svg';
+        console.log('Завершена загрузка изображений');
     };
+    
+    // Очистка blob URL при размонтировании компонента
+    useEffect(() => {
+        return () => {
+            Object.values(bookImages).forEach(url => {
+                if (url && typeof url === 'string' && url.startsWith('blob:')) {
+                    URL.revokeObjectURL(url);
+                }
+            });
+        };
+    }, [bookImages]);
+    
+
     
     // Форматирование даты
     const formatDate = (dateString) => {
@@ -394,56 +453,36 @@ const RecentSales = () => {
                                     }}
                                     className="book-image-container"
                                 >
-                                    {/* Изображения с обработчиком ошибок */}
+                                    {/* Изображения с загрузкой через API */}
                                     {(() => {
-                                        // Функция для нормализации URL изображения
-                                        const normalizeImageUrl = (url) => {
-                                            if (!url || url.trim() === '') return null;
-                                            
-                                            // Если URL уже полный, возвращаем как есть
-                                            if (url.startsWith('http://') || url.startsWith('https://')) {
-                                                return url;
-                                            }
-                                            
-                                            // Если начинается с /, добавляем домен
-                                            if (url.startsWith('/')) {
-                                                return window.location.origin + url;
-                                            }
-                                            
-                                            return url;
-                                        };
+                                        const bookId = book?.bookId;
+                                        const isImageLoading = loadingImages[bookId];
+                                        const loadedImageUrl = bookImages[bookId];
                                         
-                                        // Приоритет: thumbnailUrl, затем imageUrl
-                                        const thumbnailUrl = normalizeImageUrl(book?.thumbnailUrl);
-                                        const imageUrl = normalizeImageUrl(book?.imageUrl);
-                                        const finalUrl = thumbnailUrl || imageUrl;
-                                        
-                                        console.log('Image URLs для книги:', book?.title, {
-                                            original_thumbnail: book?.thumbnailUrl,
-                                            original_image: book?.imageUrl,
-                                            normalized_thumbnail: thumbnailUrl,
-                                            normalized_image: imageUrl,
-                                            final_url: finalUrl
-                                        });
-                                        
-                                        if (finalUrl) {
+                                        if (isImageLoading) {
+                                            // Показываем skeleton во время загрузки
                                             return (
-                                                <img
-                                                    src={finalUrl}
-                                                    alt={book?.title || 'Книга'}
-                                                    onError={(e) => handleImageError(e, book)}
-                                                    style={{ 
-                                                        maxWidth: '100%',
-                                                        maxHeight: '100%',
-                                                        objectFit: 'contain'
+                                                <Box
+                                                    sx={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        width: '100%',
+                                                        height: '100%',
+                                                        backgroundColor: '#f5f5f5'
                                                     }}
-                                                />
+                                                >
+                                                    <CircularProgress size={30} />
+                                                </Box>
                                             );
-                                        } else {
+                                        }
+                                        
+                                        if (loadedImageUrl) {
+                                            // Показываем загруженное изображение
                                             return (
                                                 <img
-                                                    src="/placeholder-book.svg"
-                                                    alt="Нет изображения"
+                                                    src={loadedImageUrl}
+                                                    alt={book?.title || 'Книга'}
                                                     style={{ 
                                                         maxWidth: '100%',
                                                         maxHeight: '100%',
@@ -452,6 +491,19 @@ const RecentSales = () => {
                                                 />
                                             );
                                         }
+                                        
+                                        // Показываем placeholder если изображение не загружено
+                                        return (
+                                            <img
+                                                src="/placeholder-book.svg"
+                                                alt="Нет изображения"
+                                                style={{ 
+                                                    maxWidth: '100%',
+                                                    maxHeight: '100%',
+                                                    objectFit: 'contain'
+                                                }}
+                                            />
+                                        );
                                     })()}
                                 </Box>
                                 
