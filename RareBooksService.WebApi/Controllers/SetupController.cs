@@ -70,6 +70,8 @@ namespace RareBooksService.WebApi.Controllers
             public string CacheSettingsLocalCachePath { get; set; }
             public string CacheSettingsDaysToKeep { get; set; }
             public string CacheSettingsMaxCacheSizeMB { get; set; }
+
+            public string TelegramBotToken {  get; set; }
         }
 
         /// <summary>Отдаёт страницу инициализации.</summary>
@@ -282,6 +284,14 @@ namespace RareBooksService.WebApi.Controllers
                 csDict["DaysToKeep"] = int.TryParse(dto.CacheSettingsDaysToKeep, out var daysToKeep) ? daysToKeep : 365;
                 csDict["MaxCacheSizeMB"] = int.TryParse(dto.CacheSettingsMaxCacheSizeMB, out var maxCacheSizeMB) ? maxCacheSizeMB : 6000;
                 dict["CacheSettings"] = csDict;
+
+                var telegramObj = dict["TelegramBot"];
+                var telegramDict = telegramObj is JsonElement telegB
+                    ? JsonSerializer.Deserialize<Dictionary<string, string>>(telegB.GetRawText()) ?? new Dictionary<string, string>()
+                    : telegramObj as Dictionary<string, string> ?? new Dictionary<string, string>();
+
+                telegramDict["Token"] = dto.TelegramBotToken ?? "";
+                dict["TelegramBot"] = telegramDict;
 
                 // 9) Сериализуем обратно
                 var newJson = JsonSerializer.Serialize(dict, new JsonSerializerOptions { WriteIndented = true });

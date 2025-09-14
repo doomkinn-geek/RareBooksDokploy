@@ -223,6 +223,16 @@
             </div>
         </div>
 
+        <!-- раздел для телеграм бота-->
+        <div class="section">
+            <h3>Настройки телеграм бота</h3>
+            <div>
+                <label>Токен :</label>
+                <input type="text" name="telegramBotToken" placeholder="" />
+                <div class="field-description">токен для доступа к телеграм боту </div>
+            </div>            
+        </div>
+
         <button type="submit">Инициализировать систему</button>
         <button type="button" id="testBtn">Тест соединения</button>
     </form>
@@ -288,7 +298,9 @@
                 // Добавляем данные CacheSettings
                 cacheSettingsLocalCachePath: formData.get('cacheSettingsLocalCachePath'),
                 cacheSettingsDaysToKeep: formData.get('cacheSettingsDaysToKeep'),
-                cacheSettingsMaxCacheSizeMB: formData.get('cacheSettingsMaxCacheSizeMB')
+                cacheSettingsMaxCacheSizeMB: formData.get('cacheSettingsMaxCacheSizeMB'),
+
+                telegramBotToken: formData.get('telegramBotToken'),
             };
 
             try {

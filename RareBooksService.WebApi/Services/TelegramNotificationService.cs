@@ -31,7 +31,7 @@ namespace RareBooksService.WebApi.Services
             _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
-            _botToken = configuration["TelegramBot:Token"] ?? "7745135732:AAFp2cJs8boBZZDyb1myO1kcmjwk6K3Mi7U";
+            _botToken = configuration["TelegramBot:Token"] ?? "";
             _baseUrl = $"https://api.telegram.org/bot{_botToken}";
             
             _httpClient.BaseAddress = new Uri(_baseUrl);

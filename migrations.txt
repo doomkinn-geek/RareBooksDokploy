@@ -9,4 +9,6 @@ Remove-Migration -Context BooksDbContext
 
 Add-Migration PlansDescriptionAdded -Context UsersDbContext
 
-Add-Migration BooksInitialCreate -Context BooksDbContext
+Add-Migration BooksReminderAdded -Context BooksDbContext
+
+Add-Migration TelegramIdToUser -Context UsersDbContext
