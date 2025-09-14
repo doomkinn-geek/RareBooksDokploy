@@ -8,7 +8,7 @@ namespace TelegramBotTest
 {
     public static class TelegramTestMethods
     {
-        private static readonly string BOT_TOKEN = "7745135732:AAFp2cJs8boBZZDyb1myO1kcmjwk6K3Mi7U";
+        private static readonly string BOT_TOKEN = "<token>";
         private static readonly string BASE_URL = $"https://api.telegram.org/bot{BOT_TOKEN}";
         private static readonly HttpClient _httpClient = new HttpClient();
 
