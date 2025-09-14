@@ -204,6 +204,7 @@ namespace RareBooksService.WebApi
                 // Регистрация сервисов для системы уведомлений
                 builder.Services.AddHttpClient<ITelegramNotificationService, TelegramNotificationService>();
                 builder.Services.AddScoped<IBookNotificationService, BookNotificationService>();
+                builder.Services.AddScoped<ITelegramBotService, TelegramBotService>();
 
                 // 8)  YandexStorageService ������ ������ ����� AddScoped<IYandexStorageService, YandexStorageService>()
                 //    � � ����� YandexStorageService ���������� IOptions<YandexCloudSettings>

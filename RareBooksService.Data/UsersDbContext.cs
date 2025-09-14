@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using RareBooksService.Common.Models;
+using RareBooksService.Common.Models.Telegram;
 
 namespace RareBooksService.Data
 {
@@ -13,6 +14,7 @@ namespace RareBooksService.Data
         public DbSet<UserFavoriteBook> UserFavoriteBooks { get; set; }
         public DbSet<UserNotificationPreference> UserNotificationPreferences { get; set; }
         public DbSet<BookNotification> BookNotifications { get; set; }
+        public DbSet<TelegramUserState> TelegramUserStates { get; set; }
 
         public UsersDbContext(DbContextOptions<UsersDbContext> options)
             : base(options)
@@ -173,6 +175,27 @@ namespace RareBooksService.Data
 
             modelBuilder.Entity<UserNotificationPreference>()
                 .HasIndex(np => np.IsEnabled);
+
+            // Настройка TelegramUserState
+            modelBuilder.Entity<TelegramUserState>()
+                .HasKey(tus => tus.Id);
+
+            modelBuilder.Entity<TelegramUserState>()
+                .Property(tus => tus.TelegramId)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            modelBuilder.Entity<TelegramUserState>()
+                .Property(tus => tus.State)
+                .HasMaxLength(100);
+
+            modelBuilder.Entity<TelegramUserState>()
+                .Property(tus => tus.StateData)
+                .HasMaxLength(2000);
+
+            modelBuilder.Entity<TelegramUserState>()
+                .HasIndex(tus => tus.TelegramId)
+                .IsUnique();
         }
     }
 }
