@@ -198,9 +198,8 @@ namespace RareBooksService.WebApi.Services
             context.UserNotificationPreferences.Remove(preference);
             await context.SaveChangesAsync(cancellationToken);
 
-            await _telegramService.SendMessageWithKeyboardAsync(chatId, 
+            await _telegramService.SendNotificationAsync(chatId, 
                 "✅ Настройка успешно удалена!", 
-                CreateMainMenuKeyboard(), 
                 cancellationToken);
         }
 

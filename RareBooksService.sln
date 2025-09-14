@@ -29,6 +29,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "nginx-dev", "nginx-dev", "{
 		nginx\nginx.conf = nginx\nginx.conf
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramBotTest", "TelegramBotTest\TelegramBotTest.csproj", "{F6EB1833-11B7-46D7-AB16-88A2A6FA8FEC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -61,6 +63,10 @@ Global
 		{6DBF7E70-C461-421E-ACE6-D963C3B737ED}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6DBF7E70-C461-421E-ACE6-D963C3B737ED}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6DBF7E70-C461-421E-ACE6-D963C3B737ED}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F6EB1833-11B7-46D7-AB16-88A2A6FA8FEC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F6EB1833-11B7-46D7-AB16-88A2A6FA8FEC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F6EB1833-11B7-46D7-AB16-88A2A6FA8FEC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F6EB1833-11B7-46D7-AB16-88A2A6FA8FEC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

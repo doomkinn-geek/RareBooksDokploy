@@ -46,6 +46,10 @@ const SettingsPanel = () => {
         maxCacheSizeMB: 200
     });
 
+    const [telegramBot, setTelegramBot] = useState({
+        token: ''
+    });
+
     // ====================== Загрузка настроек ======================
     useEffect(() => {
         const fetchSettings = async () => {
@@ -80,6 +84,9 @@ const SettingsPanel = () => {
                     localCachePath: data.cacheSettings?.LocalCachePath || 'image_cache',
                     daysToKeep: data.cacheSettings?.DaysToKeep || 30,
                     maxCacheSizeMB: data.cacheSettings?.MaxCacheSizeMB || 200
+                });
+                setTelegramBot({
+                    token: data.telegramBot?.Token ?? ''
                 });
             } catch (err) {
                 console.error('Error fetching admin settings:', err);
@@ -122,6 +129,9 @@ const SettingsPanel = () => {
                     LocalCachePath: cacheSettings.localCachePath,
                     DaysToKeep: cacheSettings.daysToKeep,
                     MaxCacheSizeMB: cacheSettings.maxCacheSizeMB
+                },
+                telegramBot: {
+                    Token: telegramBot.token
                 }
             };
 
@@ -467,6 +477,34 @@ const SettingsPanel = () => {
                                         maxCacheSizeMB: parseInt(e.target.value) || 0
                                     })
                                 }
+                            />
+                        </Grid>
+                    </Grid>
+                </CardContent>
+            </Card>
+
+            {/* Настройки Telegram бота */}
+            <Card sx={{ mb: 2 }}>
+                <CardContent>
+                    <Typography variant="h5" gutterBottom sx={{ color: 'primary.main', mb: 2 }}>
+                        Telegram Bot
+                    </Typography>
+                    <Grid container spacing={2}>
+                        <Grid item xs={12}>
+                            <TextField
+                                fullWidth
+                                label="Токен бота"
+                                type="password"
+                                variant="outlined"
+                                size="small"
+                                value={telegramBot.token}
+                                onChange={(e) =>
+                                    setTelegramBot({
+                                        ...telegramBot,
+                                        token: e.target.value
+                                    })
+                                }
+                                helperText="Токен получен от @BotFather в Telegram"
                             />
                         </Grid>
                     </Grid>

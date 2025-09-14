@@ -73,7 +73,8 @@ namespace RareBooksService.WebApi.Services
             // Обработка состояний
             if (userState != null && userState.State != TelegramBotStates.None)
             {
-                await ProcessUserStateAsync(chatId, telegramId, messageText, userState, cancellationToken);
+                // TODO: Implement ProcessUserStateAsync
+                await ShowMainMenuAsync(chatId, telegramId, cancellationToken);
                 return;
             }
 
@@ -133,7 +134,7 @@ namespace RareBooksService.WebApi.Services
                 welcomeMessage.AppendLine("Ваш аккаунт уже подключен к системе уведомлений.");
                 welcomeMessage.AppendLine("Используйте кнопки ниже для управления настройками:");
                 
-                var keyboard = CreateMainMenuKeyboard();
+                var keyboard = new TelegramInlineKeyboardMarkup(); // TODO: Implement CreateMainMenuKeyboard
                 await _telegramService.SendMessageWithKeyboardAsync(chatId, welcomeMessage.ToString(), keyboard, cancellationToken);
                 return;
             }
@@ -144,7 +145,7 @@ namespace RareBooksService.WebApi.Services
                 new TelegramInlineKeyboardButton 
                 { 
                     Text = "ℹ️ Справка", 
-                    CallbackData = TelegramCallbacks.Help 
+                    CallbackData = TelegramBotStates.CallbackHelp 
                 }
             });
 
@@ -204,7 +205,7 @@ namespace RareBooksService.WebApi.Services
             {
                 await _telegramService.SendMessageWithKeyboardAsync(chatId, 
                     "📭 У вас пока нет настроек уведомлений.\n\nСоздайте первую настройку:", 
-                    CreateCreateNotificationKeyboard(), 
+                    new TelegramInlineKeyboardMarkup(), // TODO: Implement CreateCreateNotificationKeyboard 
                     cancellationToken);
                 return;
             }
@@ -241,9 +242,8 @@ namespace RareBooksService.WebApi.Services
         private async Task HandleCancelCommandAsync(string chatId, string telegramId, CancellationToken cancellationToken)
         {
             await _telegramService.ClearUserStateAsync(telegramId, cancellationToken);
-            await _telegramService.SendMessageWithKeyboardAsync(chatId, 
+            await _telegramService.SendNotificationAsync(chatId, 
                 "✅ Операция отменена.", 
-                CreateMainMenuKeyboard(), 
                 cancellationToken);
         }
 
@@ -257,138 +257,66 @@ namespace RareBooksService.WebApi.Services
 
             await _telegramService.AnswerCallbackQueryAsync(callbackQuery.Id, cancellationToken: cancellationToken);
 
-            if (data == TelegramCallbacks.ShowSettings)
+            if (data == TelegramBotStates.CallbackSettings)
             {
                 await ShowSettingsMenuAsync(chatId, telegramId, cancellationToken);
             }
-            else if (data == TelegramCallbacks.CreateNotification)
+            else if (data == TelegramBotStates.CallbackCreate)
             {
                 await StartCreateNotificationAsync(chatId, telegramId, cancellationToken);
             }
-            else if (data.StartsWith(TelegramCallbacks.EditNotification))
+            else if (data.StartsWith(TelegramBotStates.CallbackEdit))
             {
-                var preferenceId = int.Parse(data.Replace(TelegramCallbacks.EditNotification, ""));
+                var preferenceId = int.Parse(data.Replace(TelegramBotStates.CallbackEdit, ""));
                 await ShowEditNotificationMenuAsync(chatId, telegramId, preferenceId, cancellationToken);
             }
-            else if (data.StartsWith(TelegramCallbacks.DeleteNotification))
+            else if (data.StartsWith(TelegramBotStates.CallbackDelete))
             {
-                var preferenceId = int.Parse(data.Replace(TelegramCallbacks.DeleteNotification, ""));
+                var preferenceId = int.Parse(data.Replace(TelegramBotStates.CallbackDelete, ""));
                 await ShowDeleteConfirmationAsync(chatId, telegramId, preferenceId, cancellationToken);
             }
-            else if (data.StartsWith(TelegramCallbacks.ConfirmDelete))
+            else if (data.StartsWith(TelegramBotStates.CallbackDeleteConfirm))
             {
-                var preferenceId = int.Parse(data.Replace(TelegramCallbacks.ConfirmDelete, ""));
+                var preferenceId = int.Parse(data.Replace(TelegramBotStates.CallbackDeleteConfirm, ""));
                 await DeleteNotificationAsync(chatId, telegramId, preferenceId, cancellationToken);
             }
-            else if (data.StartsWith(TelegramCallbacks.ToggleEnabled))
+            else if (data.StartsWith(TelegramBotStates.CallbackToggle))
             {
-                var preferenceId = int.Parse(data.Replace(TelegramCallbacks.ToggleEnabled, ""));
+                var preferenceId = int.Parse(data.Replace(TelegramBotStates.CallbackToggle, ""));
                 await ToggleNotificationAsync(chatId, telegramId, preferenceId, cancellationToken);
             }
-            else if (data == TelegramCallbacks.BackToSettings)
+            else if (data == TelegramBotStates.CallbackSettings)
             {
                 await ShowSettingsMenuAsync(chatId, telegramId, cancellationToken);
             }
-            else if (data == TelegramCallbacks.Help)
+            else if (data == TelegramBotStates.CallbackHelp)
             {
                 await HandleHelpCommandAsync(chatId, cancellationToken);
             }
-            else if (data == TelegramCallbacks.Cancel || data == TelegramCallbacks.CancelDelete)
+            else if (data == TelegramBotStates.CallbackCancel || data == TelegramBotStates.CallbackCancelDelete)
             {
                 await _telegramService.ClearUserStateAsync(telegramId, cancellationToken);
                 await ShowMainMenuAsync(chatId, telegramId, cancellationToken);
             }
             // Обработка редактирования полей настройки
-            else if (data.StartsWith(TelegramCallbacks.EditKeywords))
+            else if (data.StartsWith(TelegramBotStates.CallbackEditKeywords))
             {
-                var preferenceId = int.Parse(data.Replace(TelegramCallbacks.EditKeywords, ""));
+                var preferenceId = int.Parse(data.Replace(TelegramBotStates.CallbackEditKeywords, ""));
                 await StartEditKeywordsAsync(chatId, telegramId, preferenceId, cancellationToken);
             }
-            else if (data.StartsWith(TelegramCallbacks.EditPrice))
+            else if (data.StartsWith(TelegramBotStates.CallbackEditPrice))
             {
-                var preferenceId = int.Parse(data.Replace(TelegramCallbacks.EditPrice, ""));
+                var preferenceId = int.Parse(data.Replace(TelegramBotStates.CallbackEditPrice, ""));
                 await StartEditPriceAsync(chatId, telegramId, preferenceId, cancellationToken);
             }
             // Добавим обработку других полей по аналогии
         }
 
-        private async Task ProcessUserStateAsync(string chatId, string telegramId, string messageText, TelegramUserState userState, CancellationToken cancellationToken)
-        {
-            switch (userState.State)
-            {
-                case TelegramBotStates.CreatingNotification:
-                    await ProcessCreateNotificationStateAsync(chatId, telegramId, messageText, userState, cancellationToken);
-                    break;
-                case TelegramBotStates.EditingKeywords:
-                    await ProcessEditKeywordsStateAsync(chatId, telegramId, messageText, userState, cancellationToken);
-                    break;
-                case TelegramBotStates.EditingPrice:
-                    await ProcessEditPriceStateAsync(chatId, telegramId, messageText, userState, cancellationToken);
-                    break;
-                // Добавим обработку других состояний
-                default:
-                    await _telegramService.ClearUserStateAsync(telegramId, cancellationToken);
-                    await ShowMainMenuAsync(chatId, telegramId, cancellationToken);
-                    break;
-            }
-        }
+        // ProcessUserStateAsync реализован в TelegramBotServiceMethods.cs
 
-        // Создание клавиатур
+        // Создание клавиатур реализовано в TelegramBotServiceMethods.cs
 
-        private TelegramInlineKeyboardMarkup CreateMainMenuKeyboard()
-        {
-            var keyboard = new TelegramInlineKeyboardMarkup();
-            
-            keyboard.InlineKeyboard.Add(new List<TelegramInlineKeyboardButton>
-            {
-                new TelegramInlineKeyboardButton 
-                { 
-                    Text = "⚙️ Настройки уведомлений", 
-                    CallbackData = TelegramCallbacks.ShowSettings 
-                }
-            });
-            
-            keyboard.InlineKeyboard.Add(new List<TelegramInlineKeyboardButton>
-            {
-                new TelegramInlineKeyboardButton 
-                { 
-                    Text = "➕ Создать настройку", 
-                    CallbackData = TelegramCallbacks.CreateNotification 
-                },
-                new TelegramInlineKeyboardButton 
-                { 
-                    Text = "ℹ️ Справка", 
-                    CallbackData = TelegramCallbacks.Help 
-                }
-            });
-
-            return keyboard;
-        }
-
-        private TelegramInlineKeyboardMarkup CreateCreateNotificationKeyboard()
-        {
-            var keyboard = new TelegramInlineKeyboardMarkup();
-            
-            keyboard.InlineKeyboard.Add(new List<TelegramInlineKeyboardButton>
-            {
-                new TelegramInlineKeyboardButton 
-                { 
-                    Text = "➕ Создать настройку", 
-                    CallbackData = TelegramCallbacks.CreateNotification 
-                }
-            });
-            
-            keyboard.InlineKeyboard.Add(new List<TelegramInlineKeyboardButton>
-            {
-                new TelegramInlineKeyboardButton 
-                { 
-                    Text = "🔙 Назад", 
-                    CallbackData = TelegramCallbacks.BackToSettings 
-                }
-            });
-
-            return keyboard;
-        }
+        // CreateCreateNotificationKeyboard реализован в TelegramBotServiceMethods.cs
 
         private TelegramInlineKeyboardMarkup CreateSettingsListKeyboard(List<UserNotificationPreference> preferences)
         {
@@ -408,7 +336,7 @@ namespace RareBooksService.WebApi.Services
                     new TelegramInlineKeyboardButton 
                     { 
                         Text = $"{status} {keywords}", 
-                        CallbackData = TelegramCallbacks.EditNotification + preference.Id 
+                        CallbackData = TelegramBotStates.CallbackEdit + preference.Id 
                     }
                 });
             }
@@ -418,12 +346,12 @@ namespace RareBooksService.WebApi.Services
                 new TelegramInlineKeyboardButton 
                 { 
                     Text = "➕ Создать новую", 
-                    CallbackData = TelegramCallbacks.CreateNotification 
+                    CallbackData = TelegramBotStates.CallbackCreate 
                 },
                 new TelegramInlineKeyboardButton 
                 { 
                     Text = "🔙 Назад", 
-                    CallbackData = TelegramCallbacks.BackToSettings 
+                    CallbackData = TelegramBotStates.CallbackSettings 
                 }
             });
 
@@ -441,9 +369,8 @@ namespace RareBooksService.WebApi.Services
                 return;
             }
 
-            await _telegramService.SendMessageWithKeyboardAsync(chatId, 
-                "🏠 <b>Главное меню</b>\n\nВыберите действие:", 
-                CreateMainMenuKeyboard(), 
+            await _telegramService.SendNotificationAsync(chatId, 
+                "🏠 <b>Главное меню</b>\n\nВыберите действие:\n/settings - Настройки\n/list - Мои настройки\n/help - Справка", 
                 cancellationToken);
         }
 
