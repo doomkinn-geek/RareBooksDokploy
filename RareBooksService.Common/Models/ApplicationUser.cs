@@ -18,6 +18,16 @@ namespace RareBooksService.Common.Models
 
         public string Role { get; set; } = "User";
 
+        /// <summary>
+        /// Telegram ID пользователя для отправки уведомлений
+        /// </summary>
+        public string? TelegramId { get; set; }
+
+        /// <summary>
+        /// Имя пользователя в Telegram
+        /// </summary>
+        public string? TelegramUsername { get; set; }
+
         // Множество подписок пользователя (история). 
         // Связь (1 ко многим) — но нам нужно уметь быстро найти активную.
         public List<Subscription> Subscriptions { get; set; }
@@ -36,5 +46,13 @@ namespace RareBooksService.Common.Models
         // Избранные книги пользователя
         public List<UserFavoriteBook> FavoriteBooks { get; set; } 
             = new List<UserFavoriteBook>();
+
+        // Настройки уведомлений пользователя
+        public List<UserNotificationPreference> NotificationPreferences { get; set; }
+            = new List<UserNotificationPreference>();
+
+        // История уведомлений пользователя
+        public List<BookNotification> BookNotifications { get; set; }
+            = new List<BookNotification>();
     }
 }

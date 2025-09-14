@@ -553,3 +553,76 @@ export const getFavoriteBooks = (page = 1, pageSize = 10) =>
         params: { page, pageSize },
         headers: getAuthHeaders()
     });
+
+// ===== Функции для работы с системой уведомлений =====
+
+// Получение настроек уведомлений пользователя
+export function getNotificationPreferences() {
+    return axios.get(`${API_URL}/notification/preferences`, {
+        headers: getAuthHeaders()
+    });
+}
+
+// Создание новых настроек уведомлений
+export function createNotificationPreference(preference) {
+    return axios.post(`${API_URL}/notification/preferences`, preference, {
+        headers: getAuthHeaders()
+    });
+}
+
+// Получение конкретной настройки уведомлений
+export function getNotificationPreference(id) {
+    return axios.get(`${API_URL}/notification/preferences/${id}`, {
+        headers: getAuthHeaders()
+    });
+}
+
+// Обновление настроек уведомлений
+export function updateNotificationPreference(id, preference) {
+    return axios.put(`${API_URL}/notification/preferences/${id}`, preference, {
+        headers: getAuthHeaders()
+    });
+}
+
+// Удаление настроек уведомлений
+export function deleteNotificationPreference(id) {
+    return axios.delete(`${API_URL}/notification/preferences/${id}`, {
+        headers: getAuthHeaders()
+    });
+}
+
+// Получение истории уведомлений
+export function getNotificationHistory(page = 1, pageSize = 20) {
+    return axios.get(`${API_URL}/notification/history`, {
+        params: { page, pageSize },
+        headers: getAuthHeaders()
+    });
+}
+
+// Связывание аккаунта с Telegram
+export function connectTelegram(telegramData) {
+    return axios.post(`${API_URL}/notification/telegram/connect`, telegramData, {
+        headers: getAuthHeaders()
+    });
+}
+
+// Отвязывание аккаунта от Telegram
+export function disconnectTelegram() {
+    return axios.post(`${API_URL}/notification/telegram/disconnect`, {}, {
+        headers: getAuthHeaders()
+    });
+}
+
+// Получение статуса подключения к Telegram
+export function getTelegramStatus() {
+    return axios.get(`${API_URL}/notification/telegram/status`, {
+        headers: getAuthHeaders()
+    });
+}
+
+// Отправка тестового уведомления
+export function sendTestNotification(deliveryMethod) {
+    return axios.post(`${API_URL}/notification/test`, { deliveryMethod }, {
+        headers: getAuthHeaders()
+    });
+}

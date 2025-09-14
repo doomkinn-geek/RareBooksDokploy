@@ -308,6 +308,26 @@ namespace RareBooksService.WebApi.Services
                             realLotFetchingService2.SetCancellationCheckFunc(null);
                         }
                     }
+                }),
+
+                ("ProcessBookNotificationsAsync", async ct =>
+                {
+                    using var scope = _serviceProvider.CreateScope();
+                    var notificationService = scope.ServiceProvider.GetRequiredService<IBookNotificationService>();
+
+                    _currentOperationName = "ProcessBookNotificationsAsync";
+                    ResetProgress();
+                    _logger.LogInformation("Обработка уведомлений о новых книгах...");
+
+                    try
+                    {
+                        await notificationService.ProcessNotificationsAsync(ct);
+                        _logger.LogInformation("Обработка уведомлений завершена");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Ошибка при обработке уведомлений");
+                    }
                 })
             };
         }
@@ -399,8 +419,8 @@ namespace RareBooksService.WebApi.Services
                     _currentStepIndex++;
                 }
 
-                // Если дошли сюда, значит выполнили все 4 операции
-                _logger.LogInformation("=== Все 4 операции завершены. ===");
+                // Если дошли сюда, значит выполнили все операции
+                _logger.LogInformation("=== Все операции завершены. ===");
                 // Не сбрасываем индекс здесь, это будет сделано в начале следующего выполнения ExecuteAsync
             }
             finally

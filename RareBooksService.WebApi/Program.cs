@@ -201,6 +201,10 @@ namespace RareBooksService.WebApi
                 builder.Services.AddScoped<ICategoryCleanupService, CategoryCleanupService>();
                 builder.Services.AddScoped<IBooksService, BooksService>();
 
+                // Регистрация сервисов для системы уведомлений
+                builder.Services.AddHttpClient<ITelegramNotificationService, TelegramNotificationService>();
+                builder.Services.AddScoped<IBookNotificationService, BookNotificationService>();
+
                 // 8)  YandexStorageService ������ ������ ����� AddScoped<IYandexStorageService, YandexStorageService>()
                 //    � � ����� YandexStorageService ���������� IOptions<YandexCloudSettings>
                 builder.Services.AddScoped<IYandexStorageService, YandexStorageService>();
@@ -241,6 +245,7 @@ namespace RareBooksService.WebApi
 
                 builder.Services.AddHostedService(sp => (BookUpdateService)sp.GetRequiredService<IBookUpdateService>());
                 builder.Services.AddHostedService<SubscriptionRenewalBackgroundService>();
+                builder.Services.AddHostedService<NotificationBackgroundService>();
 
 
 

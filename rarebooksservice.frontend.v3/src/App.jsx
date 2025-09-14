@@ -47,6 +47,8 @@ import InitialSetupPage from './components/InitialSetupPage';
 import TermsOfService from './components/TermsOfService';
 import Contacts from './components/Contacts';
 import Categories from './components/Categories';
+import NotificationSettings from './components/NotificationSettings';
+import TelegramBotGuide from './components/TelegramBotGuide';
 import theme from './theme';
 import './style.css';
 import Cookies from 'js-cookie';
@@ -61,6 +63,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import CategoryIcon from '@mui/icons-material/Category';
 import CloseIcon from '@mui/icons-material/Close';
 import FavoriteIcon from '@mui/icons-material/Favorite';
+import NotificationsIcon from '@mui/icons-material/Notifications';
 
 const NavBar = () => {
     const { user, setUser } = useContext(UserContext);
@@ -145,10 +148,16 @@ const NavBar = () => {
                         <ListItemText primary={language === 'RU' ? 'Каталог' : 'Catalog'} />
                     </ListItem>
                     {user && (
-                        <ListItem button onClick={() => handleNavigate('/favorites')}>
-                            <ListItemIcon><FavoriteIcon /></ListItemIcon>
-                            <ListItemText primary={language === 'RU' ? 'Избранное' : 'Favorites'} />
-                        </ListItem>
+                        <>
+                            <ListItem button onClick={() => handleNavigate('/favorites')}>
+                                <ListItemIcon><FavoriteIcon /></ListItemIcon>
+                                <ListItemText primary={language === 'RU' ? 'Избранное' : 'Favorites'} />
+                            </ListItem>
+                            <ListItem button onClick={() => handleNavigate('/notifications')}>
+                                <ListItemIcon><NotificationsIcon /></ListItemIcon>
+                                <ListItemText primary={language === 'RU' ? 'Уведомления' : 'Notifications'} />
+                            </ListItem>
+                        </>
                     )}
                 </List>
                 <Divider sx={{ my: 2 }} />
@@ -229,14 +238,24 @@ const NavBar = () => {
                                 {language === 'RU' ? 'Каталог' : 'Catalog'}
                             </Button>
                             {user && (
-                                <Button 
-                                    color="inherit" 
-                                    component={Link} 
-                                    to="/favorites"
-                                    startIcon={<FavoriteIcon />}
-                                >
-                                    {language === 'RU' ? 'Избранное' : 'Favorites'}
-                                </Button>
+                                <>
+                                    <Button 
+                                        color="inherit" 
+                                        component={Link} 
+                                        to="/favorites"
+                                        startIcon={<FavoriteIcon />}
+                                    >
+                                        {language === 'RU' ? 'Избранное' : 'Favorites'}
+                                    </Button>
+                                    <Button 
+                                        color="inherit" 
+                                        component={Link} 
+                                        to="/notifications"
+                                        startIcon={<NotificationsIcon />}
+                                    >
+                                        {language === 'RU' ? 'Уведомления' : 'Notifications'}
+                                    </Button>
+                                </>
                             )}
                         </Box>
                     )}
@@ -394,6 +413,7 @@ const AppContent = () => {
                             <Route path="/admin" element={<AdminPanel />} />
                             <Route path="/books/:id" element={<BookDetail />} />
                             <Route path="/favorites" element={<FavoriteBooks />} />
+                            <Route path="/notifications" element={<NotificationSettings />} />
                             <Route path="/searchByTitle/:title" element={<BookSearchByTitle />} />
                             <Route path="/searchByDescription/:description" element={<BookSearchByDescription />} />
                             <Route path="/searchByCategory/:categoryId" element={<SearchByCategory />} />
@@ -410,6 +430,7 @@ const AppContent = () => {
                         <Route path="/register" element={<Register />} />
                         <Route path="/terms" element={<TermsOfService />} />
                         <Route path="/contacts" element={<Contacts />} />
+                        <Route path="/telegram-guide" element={<TelegramBotGuide />} />
                         <Route path="/subscription-success" element={<SubscriptionSuccess />} />
                     </Routes>
                 </Container>
@@ -442,6 +463,9 @@ const AppContent = () => {
                             </Button>
                             <Button component={Link} to="/contacts" color="inherit" sx={{ px: { xs: 1, sm: 2 } }}>
                                 {language === 'RU' ? 'Контакты' : 'Contacts'}
+                            </Button>
+                            <Button component={Link} to="/telegram-guide" color="inherit" sx={{ px: { xs: 1, sm: 2 } }}>
+                                {language === 'RU' ? 'Telegram бот' : 'Telegram Bot'}
                             </Button>
                         </Box>
                         <Typography variant="body2" color="text.secondary" align={isMobile ? 'center' : 'right'}>
