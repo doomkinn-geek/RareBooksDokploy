@@ -185,7 +185,8 @@ namespace RareBooksService.WebApi.Controllers
                       ""TypeOfAccessImages"": {}, 
                       ""YandexDisk"": {},
                       ""YandexKassa"": {},
-                      ""CacheSettings"": {}
+                      ""CacheSettings"": {},
+                      ""TelegramBot"": {}
                     }";
                 }
 
