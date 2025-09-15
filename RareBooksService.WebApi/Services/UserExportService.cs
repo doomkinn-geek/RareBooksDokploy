@@ -40,6 +40,10 @@ namespace RareBooksService.WebApi.Services
         public string Role { get; set; }
         public DateTime CreatedAt { get; set; }
         
+        // Telegram поля
+        public string TelegramId { get; set; }
+        public string TelegramUsername { get; set; }
+        
         // Критически важные поля для авторизации
         public string PasswordHash { get; set; }
         public string SecurityStamp { get; set; }
@@ -49,6 +53,10 @@ namespace RareBooksService.WebApi.Services
         public List<ExportedUserSearchHistory> SearchHistory { get; set; } = new();
         public List<ExportedSubscription> Subscriptions { get; set; } = new();
         public List<ExportedUserFavoriteBook> FavoriteBooks { get; set; } = new();
+        public List<ExportedNotificationPreference> NotificationPreferences { get; set; } = new();
+        public List<ExportedBookNotification> BookNotifications { get; set; } = new();
+        public List<ExportedTelegramUserState> TelegramUserStates { get; set; } = new();
+        public List<ExportedTelegramLinkToken> TelegramLinkTokens { get; set; } = new();
     }
 
     public class ExportedUserSearchHistory
@@ -76,6 +84,53 @@ namespace RareBooksService.WebApi.Services
     {
         public int BookId { get; set; }
         public DateTime AddedDate { get; set; }
+    }
+
+    public class ExportedNotificationPreference
+    {
+        public string Keywords { get; set; }
+        public string Cities { get; set; }
+        public string CategoryIds { get; set; }
+        public int? MinPrice { get; set; }
+        public int? MaxPrice { get; set; }
+        public int? MinYear { get; set; }
+        public int? MaxYear { get; set; }
+        public string DeliveryMethod { get; set; }
+        public bool IsEnabled { get; set; }
+        public int NotificationFrequencyMinutes { get; set; }
+        public DateTime? LastNotificationSent { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    public class ExportedBookNotification
+    {
+        public int BookId { get; set; }
+        public string BookTitle { get; set; }
+        public string Author { get; set; }
+        public decimal? Price { get; set; }
+        public string Status { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? SentAt { get; set; }
+        public string ErrorMessage { get; set; }
+        public int RetryCount { get; set; }
+    }
+
+    public class ExportedTelegramUserState
+    {
+        public string TelegramId { get; set; }
+        public string State { get; set; }
+        public string StateData { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+    public class ExportedTelegramLinkToken
+    {
+        public string Token { get; set; }
+        public DateTime ExpiresAt { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public bool IsUsed { get; set; }
+        public DateTime? UsedAt { get; set; }
     }
 
     public class UserExportService : IUserExportService
@@ -269,6 +324,8 @@ namespace RareBooksService.WebApi.Services
                         .Include(u => u.Subscriptions)
                             .ThenInclude(s => s.SubscriptionPlan)
                         .Include(u => u.FavoriteBooks)
+                        .Include(u => u.NotificationPreferences)
+                        .Include(u => u.BookNotifications)
                         .OrderBy(u => u.Id)
                         .Skip(processed)
                         .Take(ChunkSize)
@@ -282,6 +339,22 @@ namespace RareBooksService.WebApi.Services
                     }
 
                     _logger.LogDebug($"Обрабатываем chunk пользователей: {usersChunk.Count} пользователей, TaskId: {taskId}");
+
+                    // Получаем список ID пользователей в этом chunk
+                    var userIds = usersChunk.Select(u => u.Id).ToList();
+                    var telegramIds = usersChunk.Where(u => !string.IsNullOrEmpty(u.TelegramId)).Select(u => u.TelegramId).ToList();
+
+                    // Получаем Telegram состояния для пользователей в chunk
+                    var telegramStates = await usersContext.TelegramUserStates
+                        .Where(ts => telegramIds.Contains(ts.TelegramId))
+                        .AsNoTracking()
+                        .ToListAsync(token);
+
+                    // Получаем Telegram токены привязки для пользователей в chunk
+                    var telegramTokens = await usersContext.TelegramLinkTokens
+                        .Where(tlt => userIds.Contains(tlt.UserId))
+                        .AsNoTracking()
+                        .ToListAsync(token);
 
                     // Конвертируем в DTO
                     foreach (var user in usersChunk)
@@ -305,6 +378,10 @@ namespace RareBooksService.WebApi.Services
                             HasSubscription = user.HasSubscription,
                             Role = user.Role,
                             CreatedAt = user.CreatedAt,
+                            
+                            // Telegram поля
+                            TelegramId = user.TelegramId,
+                            TelegramUsername = user.TelegramUsername,
                             
                             // Критически важные поля для авторизации
                             PasswordHash = user.PasswordHash,
@@ -333,7 +410,52 @@ namespace RareBooksService.WebApi.Services
                             {
                                 BookId = fb.BookId,
                                 AddedDate = fb.AddedDate
-                            }).ToList() ?? new List<ExportedUserFavoriteBook>()
+                            }).ToList() ?? new List<ExportedUserFavoriteBook>(),
+                            NotificationPreferences = user.NotificationPreferences?.Select(np => new ExportedNotificationPreference
+                            {
+                                Keywords = np.Keywords,
+                                Cities = np.Cities,
+                                CategoryIds = np.CategoryIds,
+                                MinPrice = np.MinPrice,
+                                MaxPrice = np.MaxPrice,
+                                MinYear = np.MinYear,
+                                MaxYear = np.MaxYear,
+                                DeliveryMethod = np.DeliveryMethod,
+                                IsEnabled = np.IsEnabled,
+                                NotificationFrequencyMinutes = np.NotificationFrequencyMinutes,
+                                LastNotificationSent = np.LastNotificationSent,
+                                CreatedAt = np.CreatedAt
+                            }).ToList() ?? new List<ExportedNotificationPreference>(),
+                            BookNotifications = user.BookNotifications?.Select(bn => new ExportedBookNotification
+                            {
+                                BookId = bn.BookId,
+                                BookTitle = bn.BookTitle,
+                                Author = bn.Author,
+                                Price = bn.Price,
+                                Status = bn.Status,
+                                CreatedAt = bn.CreatedAt,
+                                SentAt = bn.SentAt,
+                                ErrorMessage = bn.ErrorMessage,
+                                RetryCount = bn.RetryCount
+                            }).ToList() ?? new List<ExportedBookNotification>(),
+                            TelegramUserStates = !string.IsNullOrEmpty(user.TelegramId) 
+                                ? telegramStates.Where(ts => ts.TelegramId == user.TelegramId).Select(ts => new ExportedTelegramUserState
+                                {
+                                    TelegramId = ts.TelegramId,
+                                    State = ts.State,
+                                    StateData = ts.StateData,
+                                    CreatedAt = ts.CreatedAt,
+                                    UpdatedAt = ts.UpdatedAt
+                                }).ToList() 
+                                : new List<ExportedTelegramUserState>(),
+                            TelegramLinkTokens = telegramTokens.Where(tlt => tlt.UserId == user.Id).Select(tlt => new ExportedTelegramLinkToken
+                            {
+                                Token = tlt.Token,
+                                ExpiresAt = tlt.ExpiresAt,
+                                CreatedAt = tlt.CreatedAt,
+                                IsUsed = tlt.IsUsed,
+                                UsedAt = tlt.UsedAt
+                            }).ToList()
                         };
 
                         allExportedUsers.Add(exportedUser);

@@ -41,6 +41,10 @@ namespace RareBooksService.WebApi.Services
         public int SearchHistoryImported { get; set; }
         public int SubscriptionsImported { get; set; }
         public int FavoriteBooksImported { get; set; }
+        public int NotificationPreferencesImported { get; set; }
+        public int BookNotificationsImported { get; set; }
+        public int TelegramStatesImported { get; set; }
+        public int TelegramTokensImported { get; set; }
         public List<string> Errors { get; set; } = new();
     }
 
@@ -287,6 +291,10 @@ namespace RareBooksService.WebApi.Services
                             Role = exportedUser.Role,
                             CreatedAt = exportedUser.CreatedAt == default ? DateTime.UtcNow : exportedUser.CreatedAt,
                             
+                            // Telegram поля
+                            TelegramId = exportedUser.TelegramId,
+                            TelegramUsername = exportedUser.TelegramUsername,
+                            
                             // Восстанавливаем критически важные поля для авторизации
                             PasswordHash = exportedUser.PasswordHash,
                             SecurityStamp = exportedUser.SecurityStamp ?? Guid.NewGuid().ToString(),
@@ -367,6 +375,84 @@ namespace RareBooksService.WebApi.Services
                             }
                         }
 
+                        // Импортируем настройки уведомлений
+                        foreach (var notificationPref in exportedUser.NotificationPreferences)
+                        {
+                            var newNotificationPref = new UserNotificationPreference
+                            {
+                                UserId = finalUserId,
+                                Keywords = notificationPref.Keywords,
+                                Cities = notificationPref.Cities,
+                                CategoryIds = notificationPref.CategoryIds,
+                                MinPrice = notificationPref.MinPrice,
+                                MaxPrice = notificationPref.MaxPrice,
+                                MinYear = notificationPref.MinYear,
+                                MaxYear = notificationPref.MaxYear,
+                                DeliveryMethod = notificationPref.DeliveryMethod,
+                                IsEnabled = notificationPref.IsEnabled,
+                                NotificationFrequencyMinutes = notificationPref.NotificationFrequencyMinutes,
+                                LastNotificationSent = notificationPref.LastNotificationSent,
+                                CreatedAt = notificationPref.CreatedAt == default ? DateTime.UtcNow : notificationPref.CreatedAt,
+                                UpdatedAt = DateTime.UtcNow
+                            };
+                            usersContext.UserNotificationPreferences.Add(newNotificationPref);
+                            stats.NotificationPreferencesImported++;
+                        }
+
+                        // Импортируем уведомления о книгах
+                        foreach (var bookNotification in exportedUser.BookNotifications)
+                        {
+                            var newBookNotification = new BookNotification
+                            {
+                                UserId = finalUserId,
+                                BookId = bookNotification.BookId,
+                                BookTitle = bookNotification.BookTitle,
+                                Author = bookNotification.Author,
+                                Price = bookNotification.Price,
+                                Status = bookNotification.Status,
+                                CreatedAt = bookNotification.CreatedAt == default ? DateTime.UtcNow : bookNotification.CreatedAt,
+                                SentAt = bookNotification.SentAt,
+                                ErrorMessage = bookNotification.ErrorMessage,
+                                RetryCount = bookNotification.RetryCount
+                            };
+                            usersContext.BookNotifications.Add(newBookNotification);
+                            stats.BookNotificationsImported++;
+                        }
+
+                        // Импортируем состояния Telegram (если есть TelegramId)
+                        if (!string.IsNullOrEmpty(exportedUser.TelegramId))
+                        {
+                            foreach (var telegramState in exportedUser.TelegramUserStates)
+                            {
+                                var newTelegramState = new TelegramUserState
+                                {
+                                    TelegramId = telegramState.TelegramId,
+                                    State = telegramState.State,
+                                    StateData = telegramState.StateData,
+                                    CreatedAt = telegramState.CreatedAt == default ? DateTime.UtcNow : telegramState.CreatedAt,
+                                    UpdatedAt = telegramState.UpdatedAt == default ? DateTime.UtcNow : telegramState.UpdatedAt
+                                };
+                                usersContext.TelegramUserStates.Add(newTelegramState);
+                                stats.TelegramStatesImported++;
+                            }
+                        }
+
+                        // Импортируем токены привязки Telegram
+                        foreach (var telegramToken in exportedUser.TelegramLinkTokens)
+                        {
+                            var newTelegramToken = new TelegramLinkToken
+                            {
+                                UserId = finalUserId,
+                                Token = telegramToken.Token,
+                                ExpiresAt = telegramToken.ExpiresAt,
+                                CreatedAt = telegramToken.CreatedAt == default ? DateTime.UtcNow : telegramToken.CreatedAt,
+                                IsUsed = telegramToken.IsUsed,
+                                UsedAt = telegramToken.UsedAt
+                            };
+                            usersContext.TelegramLinkTokens.Add(newTelegramToken);
+                            stats.TelegramTokensImported++;
+                        }
+
                         // Сохраняем связанные данные
                         await usersContext.SaveChangesAsync();
 
@@ -388,7 +474,11 @@ namespace RareBooksService.WebApi.Services
                 progress.Message = $"Импорт завершён. Пользователей: {stats.UsersImported}/{stats.UsersProcessed}, " +
                                  $"История поиска: {stats.SearchHistoryImported}, " +
                                  $"Подписки: {stats.SubscriptionsImported}, " +
-                                 $"Избранное: {stats.FavoriteBooksImported}";
+                                 $"Избранное: {stats.FavoriteBooksImported}, " +
+                                 $"Настройки уведомлений: {stats.NotificationPreferencesImported}, " +
+                                 $"Уведомления о книгах: {stats.BookNotificationsImported}, " +
+                                 $"Состояния Telegram: {stats.TelegramStatesImported}, " +
+                                 $"Токены Telegram: {stats.TelegramTokensImported}";
 
                 if (stats.Errors.Any())
                 {
@@ -404,7 +494,12 @@ namespace RareBooksService.WebApi.Services
                 }
                 catch { /* ignore */ }
 
-                _logger.LogInformation($"Импорт пользователей {importTaskId} завершён: {stats.UsersImported} импортировано, {stats.Errors.Count} ошибок");
+                _logger.LogInformation($"Импорт пользователей {importTaskId} завершён: {stats.UsersImported} пользователей, " +
+                    $"{stats.NotificationPreferencesImported} настроек уведомлений, " +
+                    $"{stats.BookNotificationsImported} уведомлений о книгах, " +
+                    $"{stats.TelegramStatesImported} состояний Telegram, " +
+                    $"{stats.TelegramTokensImported} токенов Telegram, " +
+                    $"{stats.Errors.Count} ошибок");
             }
             catch (OperationCanceledException)
             {
