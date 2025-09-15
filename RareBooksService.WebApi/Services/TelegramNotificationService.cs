@@ -67,7 +67,7 @@ namespace RareBooksService.WebApi.Services
             _logger.LogInformation("[TELEGRAM-INIT] All Telegram config keys: {ConfigKeys}", 
                 string.Join(", ", configuration.AsEnumerable().Where(x => x.Key.Contains("Telegram")).Select(x => x.Key)));
             
-            // BaseAddress теперь устанавливается в Program.cs при регистрации HttpClient
+            // Теперь будем использовать полные URL вместо BaseAddress
         }
 
         public string GetBotUsername() => _botUsername;
@@ -76,7 +76,8 @@ namespace RareBooksService.WebApi.Services
         {
             try
             {
-                var response = await _httpClient.GetAsync("/getMe", cancellationToken);
+                var url = $"{_baseUrl}/getMe";
+                var response = await _httpClient.GetAsync(url, cancellationToken);
                 if (response.IsSuccessStatusCode)
                 {
                     var content = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -96,7 +97,8 @@ namespace RareBooksService.WebApi.Services
         {
             try
             {
-                var response = await _httpClient.GetAsync($"/getChat?chat_id={chatId}", cancellationToken);
+                var url = $"{_baseUrl}/getChat?chat_id={chatId}";
+                var response = await _httpClient.GetAsync(url, cancellationToken);
                 if (response.IsSuccessStatusCode)
                 {
                     var content = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -136,8 +138,9 @@ namespace RareBooksService.WebApi.Services
                 var json = JsonConvert.SerializeObject(payload);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                _logger.LogInformation("[TELEGRAM-SEND] Отправляем POST запрос на /sendMessage");
-                var response = await _httpClient.PostAsync("/sendMessage", content, cancellationToken);
+                var url = $"{_baseUrl}/sendMessage";
+                _logger.LogInformation("[TELEGRAM-SEND] Отправляем POST запрос на {Url}", url);
+                var response = await _httpClient.PostAsync(url, content, cancellationToken);
                 
                 if (response.IsSuccessStatusCode)
                 {
@@ -250,7 +253,8 @@ namespace RareBooksService.WebApi.Services
                 });
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                var response = await _httpClient.PostAsync("/sendMessage", content, cancellationToken);
+                var url = $"{_baseUrl}/sendMessage";
+                var response = await _httpClient.PostAsync(url, content, cancellationToken);
                 
                 if (response.IsSuccessStatusCode)
                 {
@@ -290,7 +294,8 @@ namespace RareBooksService.WebApi.Services
                 });
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                var response = await _httpClient.PostAsync("/editMessageText", content, cancellationToken);
+                var url = $"{_baseUrl}/editMessageText";
+                var response = await _httpClient.PostAsync(url, content, cancellationToken);
                 
                 if (response.IsSuccessStatusCode)
                 {
