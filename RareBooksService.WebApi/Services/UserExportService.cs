@@ -95,7 +95,7 @@ namespace RareBooksService.WebApi.Services
         public int? MaxPrice { get; set; }
         public int? MinYear { get; set; }
         public int? MaxYear { get; set; }
-        public string DeliveryMethod { get; set; }
+            public int DeliveryMethod { get; set; }
         public bool IsEnabled { get; set; }
         public int NotificationFrequencyMinutes { get; set; }
         public DateTime? LastNotificationSent { get; set; }
@@ -106,13 +106,12 @@ namespace RareBooksService.WebApi.Services
     {
         public int BookId { get; set; }
         public string BookTitle { get; set; }
-        public string Author { get; set; }
-        public decimal? Price { get; set; }
-        public string Status { get; set; }
+        public decimal BookPrice { get; set; }
+        public int Status { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? SentAt { get; set; }
         public string ErrorMessage { get; set; }
-        public int RetryCount { get; set; }
+            public int AttemptsCount { get; set; }
     }
 
     public class ExportedTelegramUserState
@@ -416,11 +415,11 @@ namespace RareBooksService.WebApi.Services
                                 Keywords = np.Keywords,
                                 Cities = np.Cities,
                                 CategoryIds = np.CategoryIds,
-                                MinPrice = np.MinPrice,
-                                MaxPrice = np.MaxPrice,
-                                MinYear = np.MinYear,
-                                MaxYear = np.MaxYear,
-                                DeliveryMethod = np.DeliveryMethod,
+                    MinPrice = (int?)np.MinPrice,
+                    MaxPrice = (int?)np.MaxPrice,
+                    MinYear = np.MinYear,
+                    MaxYear = np.MaxYear,
+                                DeliveryMethod = (int)np.DeliveryMethod,
                                 IsEnabled = np.IsEnabled,
                                 NotificationFrequencyMinutes = np.NotificationFrequencyMinutes,
                                 LastNotificationSent = np.LastNotificationSent,
@@ -429,14 +428,13 @@ namespace RareBooksService.WebApi.Services
                             BookNotifications = user.BookNotifications?.Select(bn => new ExportedBookNotification
                             {
                                 BookId = bn.BookId,
-                                BookTitle = bn.BookTitle,
-                                Author = bn.Author,
-                                Price = bn.Price,
-                                Status = bn.Status,
+                    BookTitle = bn.BookTitle,
+                    BookPrice = bn.BookPrice,
+                                Status = (int)bn.Status,
                                 CreatedAt = bn.CreatedAt,
                                 SentAt = bn.SentAt,
                                 ErrorMessage = bn.ErrorMessage,
-                                RetryCount = bn.RetryCount
+                                AttemptsCount = bn.AttemptsCount
                             }).ToList() ?? new List<ExportedBookNotification>(),
                             TelegramUserStates = !string.IsNullOrEmpty(user.TelegramId) 
                                 ? telegramStates.Where(ts => ts.TelegramId == user.TelegramId).Select(ts => new ExportedTelegramUserState

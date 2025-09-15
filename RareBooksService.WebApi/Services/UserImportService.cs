@@ -1,6 +1,7 @@
  using Microsoft.EntityFrameworkCore;
 using RareBooksService.Data;
 using RareBooksService.Common.Models;
+using RareBooksService.Common.Models.Telegram;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using System.IO.Compression;
@@ -384,11 +385,11 @@ namespace RareBooksService.WebApi.Services
                                 Keywords = notificationPref.Keywords,
                                 Cities = notificationPref.Cities,
                                 CategoryIds = notificationPref.CategoryIds,
-                                MinPrice = notificationPref.MinPrice,
-                                MaxPrice = notificationPref.MaxPrice,
-                                MinYear = notificationPref.MinYear,
-                                MaxYear = notificationPref.MaxYear,
-                                DeliveryMethod = notificationPref.DeliveryMethod,
+                                MinPrice = notificationPref.MinPrice ?? 0,
+                                MaxPrice = notificationPref.MaxPrice ?? 0,
+                                MinYear = notificationPref.MinYear ?? 0,
+                                MaxYear = notificationPref.MaxYear ?? 0,
+                                DeliveryMethod = (NotificationDeliveryMethod)notificationPref.DeliveryMethod,
                                 IsEnabled = notificationPref.IsEnabled,
                                 NotificationFrequencyMinutes = notificationPref.NotificationFrequencyMinutes,
                                 LastNotificationSent = notificationPref.LastNotificationSent,
@@ -407,13 +408,12 @@ namespace RareBooksService.WebApi.Services
                                 UserId = finalUserId,
                                 BookId = bookNotification.BookId,
                                 BookTitle = bookNotification.BookTitle,
-                                Author = bookNotification.Author,
-                                Price = bookNotification.Price,
-                                Status = bookNotification.Status,
+                                BookPrice = bookNotification.BookPrice,
+                                Status = (NotificationStatus)bookNotification.Status,
                                 CreatedAt = bookNotification.CreatedAt == default ? DateTime.UtcNow : bookNotification.CreatedAt,
                                 SentAt = bookNotification.SentAt,
                                 ErrorMessage = bookNotification.ErrorMessage,
-                                RetryCount = bookNotification.RetryCount
+                                AttemptsCount = bookNotification.AttemptsCount
                             };
                             usersContext.BookNotifications.Add(newBookNotification);
                             stats.BookNotificationsImported++;

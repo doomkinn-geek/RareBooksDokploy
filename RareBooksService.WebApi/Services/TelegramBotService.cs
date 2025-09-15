@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using RareBooksService.Common.Models;
 using RareBooksService.Common.Models.Telegram;
 using RareBooksService.Data;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -120,6 +121,9 @@ namespace RareBooksService.WebApi.Services
                 case "/login":
                     await HandleLoginCommandAsync(chatId, telegramId, command, cancellationToken);
                     break;
+                case "/lots":
+                    await HandleLotsCommandAsync(chatId, telegramId, command, cancellationToken);
+                    break;
                 default:
                     _logger.LogWarning("Неизвестная команда: '{Command}' от пользователя {TelegramId}", command, telegramId);
                     await _telegramService.SendMessageWithKeyboardAsync(chatId, 
@@ -187,12 +191,19 @@ namespace RareBooksService.WebApi.Services
             helpMessage.AppendLine("/help - Показать эту справку");
             helpMessage.AppendLine("/settings - Управление настройками уведомлений");
             helpMessage.AppendLine("/list - Показать ваши настройки");
+            helpMessage.AppendLine("/lots - Показать активные лоты по вашим критериям");
             helpMessage.AppendLine("/cancel - Отменить текущую операцию");
             helpMessage.AppendLine();
             helpMessage.AppendLine("🚀 <b>Быстрый старт:</b>");
             helpMessage.AppendLine("1. <code>/register email@example.com пароль</code>");
             helpMessage.AppendLine("2. <code>/settings</code> - настройте уведомления");
-            helpMessage.AppendLine("3. Получайте уведомления о новых книгах!");
+            helpMessage.AppendLine("3. <code>/lots</code> - смотрите активные лоты");
+            helpMessage.AppendLine("4. Получайте уведомления о новых книгах!");
+            helpMessage.AppendLine();
+            helpMessage.AppendLine("📚 <b>Поиск лотов:</b>");
+            helpMessage.AppendLine("• <code>/lots</code> - показать активные лоты (стр. 1)");
+            helpMessage.AppendLine("• <code>/lots 2</code> - показать страницу 2");
+            helpMessage.AppendLine("• Лоты фильтруются по вашим настройкам");
             helpMessage.AppendLine();
             helpMessage.AppendLine("📝 <b>Альтернативный способ:</b>");
             helpMessage.AppendLine("• Зайдите на rare-books.ru");
@@ -662,6 +673,242 @@ namespace RareBooksService.WebApi.Services
             }
         }
 
+        private async Task HandleLotsCommandAsync(string chatId, string telegramId, string command, CancellationToken cancellationToken)
+        {
+            try
+            {
+                // Проверяем, привязан ли пользователь
+                var user = await _telegramService.FindUserByTelegramIdAsync(telegramId, cancellationToken);
+                if (user == null)
+                {
+                    await _telegramService.SendNotificationAsync(chatId,
+                        "❌ Для просмотра лотов необходимо зарегистрироваться или войти в аккаунт.\n\n" +
+                        "Используйте:\n" +
+                        "• <code>/register email@example.com пароль</code>\n" +
+                        "• <code>/login email@example.com пароль</code>",
+                        cancellationToken);
+                    return;
+                }
+
+                var parts = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                int page = 1;
+                int pageSize = 5;
+
+                // Парсим номер страницы, если указан
+                if (parts.Length > 1 && int.TryParse(parts[1], out int requestedPage) && requestedPage > 0)
+                {
+                    page = requestedPage;
+                }
+
+                _logger.LogInformation("Пользователь {TelegramId} запросил активные лоты, страница {Page}", telegramId, page);
+
+                using var scope = _scopeFactory.CreateScope();
+                var usersContext = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
+                var booksContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+
+                // Получаем настройки уведомлений пользователя
+                var notificationPreferences = await usersContext.UserNotificationPreferences
+                    .Where(np => np.UserId == user.Id && np.IsEnabled)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (notificationPreferences == null)
+                {
+                    await _telegramService.SendNotificationAsync(chatId,
+                        "📝 У вас нет активных настроек поиска.\n\n" +
+                        "Используйте <code>/settings</code> для настройки критериев поиска книг.",
+                        cancellationToken);
+                    return;
+                }
+
+                // Поиск активных лотов по критериям
+                var activeLotsResult = await SearchActiveLotsAsync(booksContext, notificationPreferences, page, pageSize, cancellationToken);
+
+                if (activeLotsResult.TotalCount == 0)
+                {
+                    await _telegramService.SendNotificationAsync(chatId,
+                        "📭 <b>По вашим критериям нет активных лотов</b>\n\n" +
+                        "Попробуйте:\n" +
+                        "• Изменить настройки поиска: <code>/settings</code>\n" +
+                        "• Расширить ценовой диапазон\n" +
+                        "• Убрать фильтры по городу или году",
+                        cancellationToken);
+                    return;
+                }
+
+                // Форматируем результаты для отображения
+                var message = await FormatLotsMessageAsync(activeLotsResult, page, pageSize, notificationPreferences, cancellationToken);
+
+                await _telegramService.SendNotificationAsync(chatId, message, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при обработке команды /lots для пользователя {TelegramId}", telegramId);
+                await _telegramService.SendNotificationAsync(chatId,
+                    "❌ Произошла ошибка при поиске лотов. Попробуйте позже.",
+                    cancellationToken);
+            }
+        }
+
+        private async Task<LotsSearchResult> SearchActiveLotsAsync(BooksDbContext booksContext, UserNotificationPreference preferences, int page, int pageSize, CancellationToken cancellationToken)
+        {
+            var query = booksContext.BooksInfo.Include(b => b.Category).AsQueryable();
+
+            // Фильтр: только активные торги (торги еще не закончились)
+            var now = DateTime.UtcNow;
+            query = query.Where(b => b.EndDate > now);
+
+            // Фильтр по ключевым словам
+            var keywords = preferences.GetKeywordsList();
+            if (keywords.Any())
+            {
+                foreach (var keyword in keywords)
+                {
+                    query = query.Where(b => 
+                        b.NormalizedTitle.Contains(keyword) || 
+                        b.NormalizedDescription.Contains(keyword) ||
+                        b.Tags.Any(tag => tag.ToLower().Contains(keyword)));
+                }
+            }
+
+            // Фильтр по категориям
+            var categoryIds = preferences.GetCategoryIdsList();
+            if (categoryIds.Any())
+            {
+                query = query.Where(b => categoryIds.Contains(b.CategoryId));
+            }
+
+            // Фильтр по цене
+            if (preferences.MinPrice > 0)
+            {
+                query = query.Where(b => (decimal)b.Price >= preferences.MinPrice);
+            }
+            if (preferences.MaxPrice > 0)
+            {
+                query = query.Where(b => (decimal)b.Price <= preferences.MaxPrice);
+            }
+
+            // Фильтр по году издания
+            if (preferences.MinYear > 0)
+            {
+                query = query.Where(b => b.YearPublished >= preferences.MinYear);
+            }
+            if (preferences.MaxYear > 0)
+            {
+                query = query.Where(b => b.YearPublished <= preferences.MaxYear);
+            }
+
+            // Фильтр по городам
+            var cities = preferences.GetCitiesList();
+            if (cities.Any())
+            {
+                foreach (var city in cities)
+                {
+                    query = query.Where(b => b.City.ToLower().Contains(city));
+                }
+            }
+
+            // Сортировка по дате окончания (ближайшие к завершению - первыми)
+            query = query.OrderBy(b => b.EndDate);
+
+            var totalCount = await query.CountAsync(cancellationToken);
+            var books = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .AsNoTracking()
+                .ToListAsync(cancellationToken);
+
+            return new LotsSearchResult
+            {
+                Books = books,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+
+        private async Task<string> FormatLotsMessageAsync(LotsSearchResult result, int page, int pageSize, UserNotificationPreference preferences, CancellationToken cancellationToken)
+        {
+            var message = new StringBuilder();
+
+            var totalPages = (int)Math.Ceiling((double)result.TotalCount / pageSize);
+
+            message.AppendLine("📚 <b>Активные лоты по вашим критериям</b>");
+            message.AppendLine();
+            message.AppendLine($"📊 Найдено: {result.TotalCount} лотов");
+            message.AppendLine($"📄 Страница: {page}/{totalPages}");
+            message.AppendLine();
+
+            // Показываем активные критерии
+            var criteriaLines = new List<string>();
+            if (!string.IsNullOrEmpty(preferences.Keywords))
+                criteriaLines.Add($"🔍 Ключевые слова: {preferences.Keywords}");
+            if (preferences.MinPrice > 0 || preferences.MaxPrice > 0)
+                criteriaLines.Add($"💰 Цена: {(preferences.MinPrice > 0 ? $"от {preferences.MinPrice:N0} ₽" : "")} {(preferences.MaxPrice > 0 ? $"до {preferences.MaxPrice:N0} ₽" : "")}".Trim());
+            if (preferences.MinYear > 0 || preferences.MaxYear > 0)
+                criteriaLines.Add($"📅 Год: {(preferences.MinYear > 0 ? $"от {preferences.MinYear}" : "")} {(preferences.MaxYear > 0 ? $"до {preferences.MaxYear}" : "")}".Trim());
+            if (!string.IsNullOrEmpty(preferences.Cities))
+                criteriaLines.Add($"🏙️ Города: {preferences.Cities}");
+
+            if (criteriaLines.Any())
+            {
+                message.AppendLine("<b>Активные критерии:</b>");
+                foreach (var criteria in criteriaLines)
+                {
+                    message.AppendLine($"  {criteria}");
+                }
+                message.AppendLine();
+            }
+
+            int index = (page - 1) * pageSize + 1;
+            foreach (var book in result.Books)
+            {
+                var timeLeft = book.EndDate - DateTime.UtcNow;
+                var timeLeftStr = timeLeft.TotalDays >= 1 
+                    ? $"{(int)timeLeft.TotalDays} дн."
+                    : timeLeft.TotalHours >= 1 
+                        ? $"{(int)timeLeft.TotalHours} ч."
+                        : $"{(int)timeLeft.TotalMinutes} мин.";
+
+                message.AppendLine($"<b>{index}. {book.Title}</b>");
+                message.AppendLine($"💰 Текущая цена: <b>{book.Price:N0} ₽</b>");
+                message.AppendLine($"⏰ Осталось: {timeLeftStr}");
+                message.AppendLine($"🏙️ Город: {book.City}");
+                if (book.YearPublished.HasValue)
+                    message.AppendLine($"📅 Год издания: {book.YearPublished}");
+                message.AppendLine($"📂 Категория: {book.Category?.Name ?? "Не указана"}");
+                if (book.BidsCount > 0)
+                    message.AppendLine($"👥 Ставок: {book.BidsCount}");
+                
+                // Ограничиваем длину описания
+                if (!string.IsNullOrEmpty(book.Description))
+                {
+                    var shortDescription = book.Description.Length > 100 
+                        ? book.Description.Substring(0, 100) + "..."
+                        : book.Description;
+                    message.AppendLine($"📝 {shortDescription}");
+                }
+                
+                message.AppendLine();
+                index++;
+            }
+
+            // Пагинация
+            if (totalPages > 1)
+            {
+                message.AppendLine("📖 <b>Навигация:</b>");
+                if (page > 1)
+                    message.AppendLine($"  <code>/lots {page - 1}</code> - предыдущая страница");
+                if (page < totalPages)
+                    message.AppendLine($"  <code>/lots {page + 1}</code> - следующая страница");
+                message.AppendLine($"  <code>/lots [номер страницы]</code> - перейти на страницу");
+                message.AppendLine();
+            }
+
+            message.AppendLine("⚙️ <code>/settings</code> - изменить критерии поиска");
+
+            return message.ToString();
+        }
+
         private async Task<DirectAuthResult> RegisterUserDirectlyAsync(string email, string password, string telegramId, CancellationToken cancellationToken)
         {
             using var scope = _scopeFactory.CreateScope();
@@ -813,5 +1060,13 @@ namespace RareBooksService.WebApi.Services
         {
             return new DirectAuthResult(false, errorMessage, null);
         }
+    }
+
+    public class LotsSearchResult
+    {
+        public List<RegularBaseBook> Books { get; set; } = new();
+        public int TotalCount { get; set; }
+        public int Page { get; set; }
+        public int PageSize { get; set; }
     }
 }
