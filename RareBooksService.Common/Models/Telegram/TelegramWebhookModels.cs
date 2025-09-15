@@ -11,10 +11,10 @@ namespace RareBooksService.Common.Models.Telegram
         public long UpdateId { get; set; }
 
         [JsonPropertyName("message")]
-        public TelegramMessage Message { get; set; }
+        public TelegramMessage? Message { get; set; }
 
         [JsonPropertyName("callback_query")]
-        public TelegramCallbackQuery CallbackQuery { get; set; }
+        public TelegramCallbackQuery? CallbackQuery { get; set; }
     }
 
     /// <summary>
@@ -26,19 +26,19 @@ namespace RareBooksService.Common.Models.Telegram
         public int MessageId { get; set; }
 
         [JsonPropertyName("from")]
-        public TelegramUser From { get; set; }
+        public TelegramUser? From { get; set; }
 
         [JsonPropertyName("chat")]
-        public TelegramChat Chat { get; set; }
+        public TelegramChat? Chat { get; set; }
 
         [JsonPropertyName("date")]
         public long Date { get; set; }
 
         [JsonPropertyName("text")]
-        public string Text { get; set; }
+        public string? Text { get; set; }
 
         [JsonPropertyName("reply_markup")]
-        public TelegramInlineKeyboardMarkup ReplyMarkup { get; set; }
+        public TelegramInlineKeyboardMarkup? ReplyMarkup { get; set; }
     }
 
     /// <summary>
@@ -53,16 +53,16 @@ namespace RareBooksService.Common.Models.Telegram
         public bool IsBot { get; set; }
 
         [JsonPropertyName("first_name")]
-        public string FirstName { get; set; }
+        public string? FirstName { get; set; }
 
         [JsonPropertyName("last_name")]
-        public string LastName { get; set; }
+        public string? LastName { get; set; }
 
         [JsonPropertyName("username")]
-        public string Username { get; set; }
+        public string? Username { get; set; }
 
         [JsonPropertyName("language_code")]
-        public string LanguageCode { get; set; }
+        public string? LanguageCode { get; set; }
     }
 
     /// <summary>
@@ -74,16 +74,16 @@ namespace RareBooksService.Common.Models.Telegram
         public long Id { get; set; }
 
         [JsonPropertyName("type")]
-        public string Type { get; set; }
+        public string? Type { get; set; }
 
         [JsonPropertyName("first_name")]
-        public string FirstName { get; set; }
+        public string? FirstName { get; set; }
 
         [JsonPropertyName("last_name")]
-        public string LastName { get; set; }
+        public string? LastName { get; set; }
 
         [JsonPropertyName("username")]
-        public string Username { get; set; }
+        public string? Username { get; set; }
     }
 
     /// <summary>
@@ -92,16 +92,16 @@ namespace RareBooksService.Common.Models.Telegram
     public class TelegramCallbackQuery
     {
         [JsonPropertyName("id")]
-        public string Id { get; set; }
+        public string? Id { get; set; }
 
         [JsonPropertyName("from")]
-        public TelegramUser From { get; set; }
+        public TelegramUser? From { get; set; }
 
         [JsonPropertyName("message")]
-        public TelegramMessage Message { get; set; }
+        public TelegramMessage? Message { get; set; }
 
         [JsonPropertyName("data")]
-        public string Data { get; set; }
+        public string? Data { get; set; }
     }
 
     /// <summary>
@@ -110,7 +110,7 @@ namespace RareBooksService.Common.Models.Telegram
     public class TelegramInlineKeyboardMarkup
     {
         [JsonPropertyName("inline_keyboard")]
-        public List<List<TelegramInlineKeyboardButton>> InlineKeyboard { get; set; }
+        public List<List<TelegramInlineKeyboardButton>>? InlineKeyboard { get; set; }
 
         public TelegramInlineKeyboardMarkup()
         {
@@ -124,13 +124,13 @@ namespace RareBooksService.Common.Models.Telegram
     public class TelegramInlineKeyboardButton
     {
         [JsonPropertyName("text")]
-        public string Text { get; set; }
+        public string? Text { get; set; }
 
         [JsonPropertyName("callback_data")]
-        public string CallbackData { get; set; }
+        public string? CallbackData { get; set; }
 
         [JsonPropertyName("url")]
-        public string Url { get; set; }
+        public string? Url { get; set; }
     }
 
     /// <summary>
@@ -139,7 +139,7 @@ namespace RareBooksService.Common.Models.Telegram
     public class TelegramReplyKeyboardMarkup
     {
         [JsonPropertyName("keyboard")]
-        public List<List<TelegramKeyboardButton>> Keyboard { get; set; }
+        public List<List<TelegramKeyboardButton>>? Keyboard { get; set; }
 
         [JsonPropertyName("resize_keyboard")]
         public bool ResizeKeyboard { get; set; } = true;
@@ -159,7 +159,7 @@ namespace RareBooksService.Common.Models.Telegram
     public class TelegramKeyboardButton
     {
         [JsonPropertyName("text")]
-        public string Text { get; set; }
+        public string? Text { get; set; }
 
         [JsonPropertyName("request_contact")]
         public bool RequestContact { get; set; } = false;
@@ -183,9 +183,9 @@ namespace RareBooksService.Common.Models.Telegram
     public class TelegramUserState
     {
         public int Id { get; set; }
-        public string TelegramId { get; set; }
-        public string State { get; set; }
-        public string StateData { get; set; }
+        public string? TelegramId { get; set; }
+        public string? State { get; set; }
+        public string? StateData { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
