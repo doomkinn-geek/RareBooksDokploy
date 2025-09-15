@@ -3,7 +3,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using System.Text.Json;
 using System.Text;
+using System.IO;
 using RareBooksService.WebApi.Services;
+using RareBooksService.Common.Models.Telegram;
+using SystemFile = System.IO.File;
 
 namespace RareBooksService.WebApi.Controllers
 {
@@ -125,20 +128,33 @@ namespace RareBooksService.WebApi.Controllers
                 try
                 {
                     var appSettingsPath = Path.Combine(Directory.GetCurrentDirectory(), "appsettings.json");
-                    if (File.Exists(appSettingsPath))
+                    if (SystemFile.Exists(appSettingsPath))
                     {
-                        var configContent = await File.ReadAllTextAsync(appSettingsPath);
+                        var configContent = await SystemFile.ReadAllTextAsync(appSettingsPath);
                         var configJson = JsonSerializer.Deserialize<JsonElement>(configContent);
                         
                         var hasTelegramSection = configJson.TryGetProperty("TelegramBot", out var telegramSection);
-                        var hasTokenInFile = hasTelegramSection && telegramSection.TryGetProperty("Token", out var tokenProp);
+                        string tokenFromFile = "NOT_SET";
+                        
+                        if (hasTelegramSection && telegramSection.TryGetProperty("Token", out var tokenProp))
+                        {
+                            if (tokenProp.ValueKind == JsonValueKind.String)
+                            {
+                                var tokenValue = tokenProp.GetString();
+                                tokenFromFile = !string.IsNullOrEmpty(tokenValue) 
+                                    ? $"{tokenValue.Substring(0, Math.Min(10, tokenValue.Length))}***" 
+                                    : "EMPTY";
+                            }
+                        }
+                        
+                        var hasTokenInFile = hasTelegramSection && telegramSection.TryGetProperty("Token", out _);
                         
                         result.checks["config_file"] = new
                         {
                             fileExists = true,
                             hasTelegramSection = hasTelegramSection,
                             hasTokenInFile = hasTokenInFile,
-                            tokenFromFile = hasTokenInFile ? $"{tokenProp.GetString()?.Substring(0, Math.Min(10, tokenProp.GetString()?.Length ?? 0))}***" : "NOT_SET"
+                            tokenFromFile = tokenFromFile
                         };
                     }
                     else
@@ -329,16 +345,5 @@ namespace RareBooksService.WebApi.Controllers
                 });
             }
         }
-    }
-
-    public class TestSendRequest
-    {
-        public string ChatId { get; set; } = string.Empty;
-        public string? Message { get; set; }
-    }
-
-    public class SetupWebhookRequest
-    {
-        public string BaseUrl { get; set; } = string.Empty;
     }
 }

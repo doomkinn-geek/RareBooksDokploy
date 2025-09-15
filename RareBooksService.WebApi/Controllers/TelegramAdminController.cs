@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using RareBooksService.WebApi.Services;
+using RareBooksService.Common.Models.Telegram;
 
 namespace RareBooksService.WebApi.Controllers
 {
@@ -174,14 +175,6 @@ namespace RareBooksService.WebApi.Controllers
                 return StatusCode(500, new { error = "Внутренняя ошибка сервера" });
             }
         }
-    }
-
-    /// <summary>
-    /// DTO для настройки webhook
-    /// </summary>
-    public class SetupWebhookRequest
-    {
-        public string BaseUrl { get; set; }
     }
 
     /// <summary>

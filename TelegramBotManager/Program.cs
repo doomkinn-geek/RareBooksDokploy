@@ -94,7 +94,7 @@ namespace TelegramBotManager
             var receiverOptions = new ReceiverOptions
             {
                 AllowedUpdates = { }, // получаем все обновления
-                ThrowPendingUpdates = true
+                DropPendingUpdates = true
             };
 
             _botClient.StartReceiving(
