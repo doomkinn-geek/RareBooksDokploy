@@ -327,13 +327,63 @@ namespace RareBooksService.WebApi.Controllers
         {
             try
             {
-                // Здесь можно добавить логику чтения логов из файла или базы данных
-                // Пока возвращаем заглушку
+                var logs = new List<string>();
+                var sinceTime = DateTime.UtcNow.AddHours(-hours);
+
+                // Попробуем найти файлы логов в обычных местах
+                var possibleLogPaths = new[]
+                {
+                    Path.Combine(Directory.GetCurrentDirectory(), "logs"),
+                    Path.Combine(Directory.GetCurrentDirectory(), "Logs"),
+                    "/var/log/rarebooksservice",
+                    "/home/www/logs",
+                    "/var/www/logs"
+                };
+
+                foreach (var logDir in possibleLogPaths)
+                {
+                    if (Directory.Exists(logDir))
+                    {
+                        var logFiles = Directory.GetFiles(logDir, "*.log")
+                            .Concat(Directory.GetFiles(logDir, "*.txt"))
+                            .Where(f => SystemFile.GetLastWriteTime(f) > sinceTime)
+                            .OrderByDescending(f => SystemFile.GetLastWriteTime(f))
+                            .Take(3);
+
+                        foreach (var file in logFiles)
+                        {
+                            try
+                            {
+                                var lines = await SystemFile.ReadAllLinesAsync(file);
+                                var recentLines = lines
+                                    .Where(line => line.Contains("WEBHOOK") || 
+                                                  line.Contains("Telegram") || 
+                                                  line.Contains("400") ||
+                                                  line.Contains("ERROR"))
+                                    .TakeLast(20);
+                                
+                                if (recentLines.Any())
+                                {
+                                    logs.Add($"=== {Path.GetFileName(file)} ===");
+                                    logs.AddRange(recentLines);
+                                    logs.Add("");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                logs.Add($"Error reading {file}: {ex.Message}");
+                            }
+                        }
+                    }
+                }
+
                 return Ok(new
                 {
-                    message = "Log reading not implemented yet",
-                    suggestion = "Check application logs manually or implement custom log reader",
-                    timeRange = $"Last {hours} hours"
+                    timestamp = DateTime.UtcNow,
+                    timeRange = $"Last {hours} hours",
+                    logEntries = logs,
+                    totalEntries = logs.Count,
+                    searchedPaths = possibleLogPaths
                 });
             }
             catch (Exception ex)
@@ -341,7 +391,8 @@ namespace RareBooksService.WebApi.Controllers
                 return StatusCode(500, new
                 {
                     error = "Log reading failed",
-                    message = ex.Message
+                    message = ex.Message,
+                    details = ex.ToString()
                 });
             }
         }
