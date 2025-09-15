@@ -29,21 +29,73 @@ namespace RareBooksService.WebApi.Controllers
         {
             try
             {
-                _logger.LogInformation("Получено обновление от Telegram: {UpdateId}", update?.UpdateId);
+                _logger.LogInformation("[WEBHOOK] Получено обновление от Telegram: {UpdateId}", update?.UpdateId);
 
                 if (update == null)
                 {
-                    _logger.LogWarning("Получено пустое обновление от Telegram");
-                    return BadRequest("Update is null");
+                    _logger.LogWarning("[WEBHOOK] Получено пустое обновление от Telegram");
+                    // ВАЖНО: всегда возвращаем 200 OK для Telegram, даже при ошибках
+                    return Ok(new { status = "ignored", reason = "Update is null" });
                 }
 
+                _logger.LogInformation("[WEBHOOK] Обрабатываем обновление {UpdateId}", update.UpdateId);
                 await _botService.ProcessUpdateAsync(update);
-                return Ok();
+                
+                _logger.LogInformation("[WEBHOOK] Обновление {UpdateId} успешно обработано", update.UpdateId);
+                return Ok(new { status = "success", updateId = update.UpdateId });
+            }
+            catch (JsonException jsonEx)
+            {
+                _logger.LogError(jsonEx, "[WEBHOOK] Ошибка десериализации JSON от Telegram");
+                // Всегда возвращаем 200 OK для Telegram
+                return Ok(new { status = "error", reason = "JSON parsing failed" });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка при обработке webhook от Telegram");
-                return StatusCode(500, "Internal server error");
+                _logger.LogError(ex, "[WEBHOOK] Ошибка при обработке webhook от Telegram");
+                // Всегда возвращаем 200 OK для Telegram
+                return Ok(new { status = "error", reason = "Processing failed" });
+            }
+        }
+
+        /// <summary>
+        /// Диагностический endpoint для просмотра сырых данных от Telegram
+        /// </summary>
+        [HttpPost("webhook-debug")]
+        public async Task<IActionResult> WebhookDebug()
+        {
+            try
+            {
+                // Читаем сырое тело запроса
+                var requestBody = await new StreamReader(Request.Body).ReadToEndAsync();
+                
+                _logger.LogInformation("[WEBHOOK-DEBUG] Получен запрос от Telegram: {RequestBody}", requestBody);
+                
+                // Пытаемся десериализовать
+                TelegramUpdate update = null;
+                try
+                {
+                    update = JsonSerializer.Deserialize<TelegramUpdate>(requestBody);
+                    _logger.LogInformation("[WEBHOOK-DEBUG] Десериализация успешна: UpdateId={UpdateId}", update?.UpdateId);
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogError(ex, "[WEBHOOK-DEBUG] Ошибка десериализации JSON");
+                }
+
+                return Ok(new 
+                { 
+                    status = "debug",
+                    timestamp = DateTime.UtcNow,
+                    rawBody = requestBody,
+                    deserializedUpdate = update,
+                    headers = Request.Headers.ToDictionary(h => h.Key, h => h.Value.ToString())
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[WEBHOOK-DEBUG] Ошибка в debug endpoint");
+                return Ok(new { status = "debug-error", error = ex.Message });
             }
         }
 
