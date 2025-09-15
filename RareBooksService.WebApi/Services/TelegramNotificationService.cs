@@ -63,10 +63,11 @@ namespace RareBooksService.WebApi.Services
             _logger.LogInformation("[TELEGRAM-INIT] Token preview: {TokenPreview}", 
                 string.IsNullOrEmpty(_botToken) ? "EMPTY" : $"{_botToken.Substring(0, Math.Min(10, _botToken.Length))}***");
             _logger.LogInformation("[TELEGRAM-INIT] Base URL: {BaseUrl}", _baseUrl);
+            _logger.LogInformation("[TELEGRAM-INIT] HttpClient BaseAddress: {HttpClientBaseAddress}", _httpClient.BaseAddress);
             _logger.LogInformation("[TELEGRAM-INIT] All Telegram config keys: {ConfigKeys}", 
                 string.Join(", ", configuration.AsEnumerable().Where(x => x.Key.Contains("Telegram")).Select(x => x.Key)));
             
-            _httpClient.BaseAddress = new Uri(_baseUrl);
+            // BaseAddress теперь устанавливается в Program.cs при регистрации HttpClient
         }
 
         public string GetBotUsername() => _botUsername;

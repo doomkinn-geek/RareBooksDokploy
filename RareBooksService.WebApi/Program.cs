@@ -202,7 +202,14 @@ namespace RareBooksService.WebApi
                 builder.Services.AddScoped<IBooksService, BooksService>();
 
                 // Регистрация сервисов для системы уведомлений
-                builder.Services.AddHttpClient<ITelegramNotificationService, TelegramNotificationService>();
+                builder.Services.AddHttpClient<ITelegramNotificationService, TelegramNotificationService>((serviceProvider, httpClient) =>
+                {
+                    var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+                    var botToken = configuration["TelegramBot:Token"] ?? "";
+                    var baseUrl = $"https://api.telegram.org/bot{botToken}";
+                    httpClient.BaseAddress = new Uri(baseUrl);
+                    httpClient.Timeout = TimeSpan.FromSeconds(30);
+                });
                 builder.Services.AddScoped<IBookNotificationService, BookNotificationService>();
                 builder.Services.AddScoped<ITelegramBotService, TelegramBotService>();
                 builder.Services.AddScoped<ITelegramLinkService, TelegramLinkService>();
