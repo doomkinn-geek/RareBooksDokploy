@@ -31,6 +31,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "nginx-dev", "nginx-dev", "{
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramBotTest", "TelegramBotTest\TelegramBotTest.csproj", "{F6EB1833-11B7-46D7-AB16-88A2A6FA8FEC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramBotManager", "TelegramBotManager\TelegramBotManager.csproj", "{4BA99BC4-FE5B-E3E8-F297-7EB16599951C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -67,6 +69,10 @@ Global
 		{F6EB1833-11B7-46D7-AB16-88A2A6FA8FEC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F6EB1833-11B7-46D7-AB16-88A2A6FA8FEC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F6EB1833-11B7-46D7-AB16-88A2A6FA8FEC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4BA99BC4-FE5B-E3E8-F297-7EB16599951C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4BA99BC4-FE5B-E3E8-F297-7EB16599951C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4BA99BC4-FE5B-E3E8-F297-7EB16599951C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4BA99BC4-FE5B-E3E8-F297-7EB16599951C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

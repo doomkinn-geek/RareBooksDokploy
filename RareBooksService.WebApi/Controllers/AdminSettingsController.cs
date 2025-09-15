@@ -70,6 +70,7 @@ namespace RareBooksService.WebApi.Controllers
                 var smtpNode = rootNode["Smtp"]?.AsObject();
 
                 var cacheSettingsNode = rootNode["CacheSettings"]?.AsObject();
+                var telegramBotNode = rootNode["TelegramBot"]?.AsObject();
 
                 return Ok(new
                 {
@@ -78,8 +79,8 @@ namespace RareBooksService.WebApi.Controllers
                     TypeOfAccessImages = typeOfAccessImagesNode,
                     YandexCloud = yandexCloudNode,
                     Smtp = smtpNode,
-
-                    CacheSettings = cacheSettingsNode
+                    CacheSettings = cacheSettingsNode,
+                    TelegramBot = telegramBotNode
                 });
             }
             catch (Exception ex)
@@ -175,6 +176,14 @@ namespace RareBooksService.WebApi.Controllers
                     cacheNode["DaysToKeep"] = dto.CacheSettings.DaysToKeep;
                     cacheNode["MaxCacheSizeMB"] = dto.CacheSettings.MaxCacheSizeMB;
                     rootNode["CacheSettings"] = cacheNode;
+                }
+
+                // ========== (3) TelegramBot =========
+                if (dto.TelegramBot != null)
+                {
+                    var telegramNode = rootNode["TelegramBot"] as JsonObject ?? new JsonObject();
+                    telegramNode["Token"] = dto.TelegramBot.Token;
+                    rootNode["TelegramBot"] = telegramNode;
                 }
 
                 // Записываем обновлённый JSON обратно в файл

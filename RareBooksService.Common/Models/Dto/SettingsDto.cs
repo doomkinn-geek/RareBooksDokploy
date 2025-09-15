@@ -15,5 +15,6 @@ namespace RareBooksService.Common.Models.Dto
         // Новый блок настроек SMTP
         public SmtpDto? Smtp { get; set; }
         public CacheSettingsDto? CacheSettings { get; set; }
+        public TelegramBotDto? TelegramBot { get; set; }
     }
 }
