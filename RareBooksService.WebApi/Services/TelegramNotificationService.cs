@@ -57,6 +57,15 @@ namespace RareBooksService.WebApi.Services
             _botToken = configuration["TelegramBot:Token"] ?? "";
             _baseUrl = $"https://api.telegram.org/bot{_botToken}";
             
+            // ДИАГНОСТИЧЕСКОЕ ЛОГИРОВАНИЕ
+            _logger.LogInformation("[TELEGRAM-INIT] Bot Token читается из конфигурации");
+            _logger.LogInformation("[TELEGRAM-INIT] Token length: {TokenLength}", _botToken?.Length ?? 0);
+            _logger.LogInformation("[TELEGRAM-INIT] Token preview: {TokenPreview}", 
+                string.IsNullOrEmpty(_botToken) ? "EMPTY" : $"{_botToken.Substring(0, Math.Min(10, _botToken.Length))}***");
+            _logger.LogInformation("[TELEGRAM-INIT] Base URL: {BaseUrl}", _baseUrl);
+            _logger.LogInformation("[TELEGRAM-INIT] All Telegram config keys: {ConfigKeys}", 
+                string.Join(", ", configuration.AsEnumerable().Where(x => x.Key.Contains("Telegram")).Select(x => x.Key)));
+            
             _httpClient.BaseAddress = new Uri(_baseUrl);
         }
 
@@ -109,6 +118,12 @@ namespace RareBooksService.WebApi.Services
         {
             try
             {
+                // ДИАГНОСТИЧЕСКОЕ ЛОГИРОВАНИЕ
+                _logger.LogInformation("[TELEGRAM-SEND] Отправка сообщения в чат {ChatId}", chatId);
+                _logger.LogInformation("[TELEGRAM-SEND] Base URL: {BaseUrl}", _httpClient.BaseAddress);
+                _logger.LogInformation("[TELEGRAM-SEND] Token length: {TokenLength}", _botToken?.Length ?? 0);
+                _logger.LogInformation("[TELEGRAM-SEND] Full URL будет: {FullUrl}", $"{_httpClient.BaseAddress}sendMessage");
+                
                 var payload = new
                 {
                     chat_id = chatId,
@@ -120,6 +135,7 @@ namespace RareBooksService.WebApi.Services
                 var json = JsonConvert.SerializeObject(payload);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
+                _logger.LogInformation("[TELEGRAM-SEND] Отправляем POST запрос на /sendMessage");
                 var response = await _httpClient.PostAsync("/sendMessage", content, cancellationToken);
                 
                 if (response.IsSuccessStatusCode)
