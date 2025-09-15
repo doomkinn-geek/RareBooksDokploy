@@ -27,6 +27,16 @@ namespace RareBooksService.WebApi.Controllers
         [HttpPost("webhook")]
         public async Task<IActionResult> Webhook([FromBody] TelegramUpdate update)
         {
+            _logger.LogInformation("[WEBHOOK] === НАЧАЛО ОБРАБОТКИ WEBHOOK ===");
+            _logger.LogInformation("[WEBHOOK] ModelState.IsValid: {IsValid}", ModelState.IsValid);
+            
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
+                _logger.LogError("[WEBHOOK] Model validation failed: {Errors}", string.Join(", ", errors));
+                return Ok(new { status = "error", reason = "Model validation failed", errors = errors });
+            }
+            
             try
             {
                 _logger.LogInformation("[WEBHOOK] Получено обновление от Telegram: {UpdateId}", update?.UpdateId);
@@ -34,11 +44,19 @@ namespace RareBooksService.WebApi.Controllers
                 if (update == null)
                 {
                     _logger.LogWarning("[WEBHOOK] Получено пустое обновление от Telegram");
-                    // ВАЖНО: всегда возвращаем 200 OK для Telegram, даже при ошибках
                     return Ok(new { status = "ignored", reason = "Update is null" });
                 }
 
                 _logger.LogInformation("[WEBHOOK] Обрабатываем обновление {UpdateId}", update.UpdateId);
+                _logger.LogInformation("[WEBHOOK] Update details: Message={HasMessage}, CallbackQuery={HasCallback}", 
+                    update.Message != null, update.CallbackQuery != null);
+                
+                if (update.Message != null)
+                {
+                    _logger.LogInformation("[WEBHOOK] Message from: {FromId}, chat: {ChatId}, text: {Text}", 
+                        update.Message.From?.Id, update.Message.Chat?.Id, update.Message.Text);
+                }
+                
                 await _botService.ProcessUpdateAsync(update);
                 
                 _logger.LogInformation("[WEBHOOK] Обновление {UpdateId} успешно обработано", update.UpdateId);
@@ -47,14 +65,12 @@ namespace RareBooksService.WebApi.Controllers
             catch (JsonException jsonEx)
             {
                 _logger.LogError(jsonEx, "[WEBHOOK] Ошибка десериализации JSON от Telegram");
-                // Всегда возвращаем 200 OK для Telegram
-                return Ok(new { status = "error", reason = "JSON parsing failed" });
+                return Ok(new { status = "error", reason = "JSON parsing failed", error = jsonEx.Message });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[WEBHOOK] Ошибка при обработке webhook от Telegram");
-                // Всегда возвращаем 200 OK для Telegram
-                return Ok(new { status = "error", reason = "Processing failed" });
+                return Ok(new { status = "error", reason = "Processing failed", error = ex.Message });
             }
         }
 
