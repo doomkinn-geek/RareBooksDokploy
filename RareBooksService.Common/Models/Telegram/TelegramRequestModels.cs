@@ -17,3 +17,4 @@ namespace RareBooksService.Common.Models.Telegram
         public string? Message { get; set; }
     }
 }
+

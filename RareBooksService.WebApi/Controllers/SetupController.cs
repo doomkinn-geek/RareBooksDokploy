@@ -286,6 +286,10 @@ namespace RareBooksService.WebApi.Controllers
                 csDict["MaxCacheSizeMB"] = int.TryParse(dto.CacheSettingsMaxCacheSizeMB, out var maxCacheSizeMB) ? maxCacheSizeMB : 6000;
                 dict["CacheSettings"] = csDict;
 
+                // 9) TelegramBot
+                if (!dict.ContainsKey("TelegramBot"))
+                    dict["TelegramBot"] = new Dictionary<string, string>();
+
                 var telegramObj = dict["TelegramBot"];
                 var telegramDict = telegramObj is JsonElement telegB
                     ? JsonSerializer.Deserialize<Dictionary<string, string>>(telegB.GetRawText()) ?? new Dictionary<string, string>()
@@ -294,7 +298,8 @@ namespace RareBooksService.WebApi.Controllers
                 telegramDict["Token"] = dto.TelegramBotToken ?? "";
                 dict["TelegramBot"] = telegramDict;
 
-                // 9) Сериализуем обратно
+
+                // 10и) Сериализуем обратно
                 var newJson = JsonSerializer.Serialize(dict, new JsonSerializerOptions { WriteIndented = true });
                 await System.IO.File.WriteAllTextAsync(appSettingsPath, newJson);
 

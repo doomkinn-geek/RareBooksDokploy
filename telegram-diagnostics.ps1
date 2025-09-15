@@ -182,3 +182,4 @@ Write-Host "   • Найдите your_chat_id в ответе" -ForegroundColor
 Write-Host ""
 Write-Host "🎯 Диагностика завершена!" -ForegroundColor Green
 Write-Host "═══════════════════════════════════════════════════════════" -ForegroundColor Gray
+

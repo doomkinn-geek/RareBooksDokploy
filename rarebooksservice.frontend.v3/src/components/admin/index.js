@@ -8,4 +8,5 @@ export { default as SubscriptionPlanExport } from './SubscriptionPlanExport';
 export { default as SubscriptionPlanImport } from './SubscriptionPlanImport';
 export { default as CategoryCleanup } from './CategoryCleanup'; 
 export { default as UsersPanel } from './UsersPanel'; 
-export { default as SettingsPanel } from './SettingsPanel'; 
+export { default as SettingsPanel } from './SettingsPanel';
+export { default as TelegramAdmin } from './TelegramAdmin'; 

@@ -17,7 +17,7 @@ import {
     useMediaQuery, useTheme, Drawer, List, ListItem, ListItemText,
     IconButton, AppBar, Toolbar
 } from '@mui/material';
-import { CategoryCleanup, SubPlans, BookUpdate, Import, Export, UserImport, UserExport, SubscriptionPlanExport, SubscriptionPlanImport, UsersPanel, SettingsPanel } from './admin';
+import { CategoryCleanup, SubPlans, BookUpdate, Import, Export, UserImport, UserExport, SubscriptionPlanExport, SubscriptionPlanImport, UsersPanel, SettingsPanel, TelegramAdmin } from './admin';
 import MenuIcon from '@mui/icons-material/Menu';
 
 const AdminPanel = () => {
@@ -28,7 +28,7 @@ const AdminPanel = () => {
     // Состояние для drawer (бокового меню)
     const [drawerOpen, setDrawerOpen] = useState(false);
     
-    // Вкладки: 'users' | 'export' | 'settings' | 'import' | 'bookupdate' | 'subplans' | 'categories' | 'userexport' | 'userimport' | 'subscriptionplanexport' | 'subscriptionplanimport'
+    // Вкладки: 'users' | 'export' | 'settings' | 'import' | 'bookupdate' | 'subplans' | 'categories' | 'userexport' | 'userimport' | 'subscriptionplanexport' | 'subscriptionplanimport' | 'telegram'
     const [currentTab, setCurrentTab] = useState('users');
 
     // ----- Состояния пользователей
@@ -499,7 +499,8 @@ const AdminPanel = () => {
         userexport: 'Экспорт пользователей',
         userimport: 'Импорт пользователей',
         subscriptionplanexport: 'Экспорт планов подписок',
-        subscriptionplanimport: 'Импорт планов подписок'
+        subscriptionplanimport: 'Импорт планов подписок',
+        telegram: 'Telegram бот'
     };
 
     // ====================== Рендер контента по вкладкам ======================
@@ -604,6 +605,7 @@ const AdminPanel = () => {
                         <Tab label="Импорт пользователей" value="userimport" />
                         <Tab label="Экспорт планов подписок" value="subscriptionplanexport" />
                         <Tab label="Импорт планов подписок" value="subscriptionplanimport" />
+                        <Tab label="Telegram бот" value="telegram" />
                     </Tabs>
                 </Box>
                 )}
@@ -738,6 +740,11 @@ const AdminPanel = () => {
                         )}
                         <SubscriptionPlanImport />
                     </Box>
+                )}
+
+                {/* ============ Вкладка "telegram" ============ */}
+                {currentTab === 'telegram' && (
+                    <TelegramAdmin />
                 )}
             </Box>
             </Paper>
