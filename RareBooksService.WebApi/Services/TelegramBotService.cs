@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using RareBooksService.Common.Models;
 using RareBooksService.Common.Models.Telegram;
 using RareBooksService.Data;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 
@@ -86,7 +88,13 @@ namespace RareBooksService.WebApi.Services
 
         private async Task ProcessCommandAsync(string chatId, string telegramId, string command, CancellationToken cancellationToken)
         {
-            switch (command.ToLower())
+            _logger.LogInformation("Обрабатываем команду: '{Command}' от пользователя {TelegramId}", command, telegramId);
+            
+            // Разделяем команду и параметры
+            var commandParts = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var baseCommand = commandParts[0].ToLower();
+            
+            switch (baseCommand)
             {
                 case "/start":
                     await HandleStartCommandAsync(chatId, telegramId, cancellationToken);
@@ -106,7 +114,14 @@ namespace RareBooksService.WebApi.Services
                 case "/link":
                     await HandleLinkCommandAsync(chatId, telegramId, command, cancellationToken);
                     break;
+                case "/register":
+                    await HandleRegisterCommandAsync(chatId, telegramId, command, cancellationToken);
+                    break;
+                case "/login":
+                    await HandleLoginCommandAsync(chatId, telegramId, command, cancellationToken);
+                    break;
                 default:
+                    _logger.LogWarning("Неизвестная команда: '{Command}' от пользователя {TelegramId}", command, telegramId);
                     await _telegramService.SendMessageWithKeyboardAsync(chatId, 
                         "❓ Неизвестная команда. Используйте /help для просмотра доступных команд.", 
                         cancellationToken: cancellationToken);
@@ -162,19 +177,27 @@ namespace RareBooksService.WebApi.Services
             var helpMessage = new StringBuilder();
             helpMessage.AppendLine("📖 <b>Справка по командам бота</b>");
             helpMessage.AppendLine();
-            helpMessage.AppendLine("<b>Основные команды:</b>");
+            helpMessage.AppendLine("🔑 <b>Регистрация и вход:</b>");
+            helpMessage.AppendLine("/register EMAIL ПАРОЛЬ - Создать новый аккаунт");
+            helpMessage.AppendLine("/login EMAIL ПАРОЛЬ - Войти в существующий аккаунт");
+            helpMessage.AppendLine("/link ТОКЕН - Привязка через токен с сайта");
+            helpMessage.AppendLine();
+            helpMessage.AppendLine("🔧 <b>Основные команды:</b>");
             helpMessage.AppendLine("/start - Запуск бота и получение вашего ID");
             helpMessage.AppendLine("/help - Показать эту справку");
             helpMessage.AppendLine("/settings - Управление настройками уведомлений");
             helpMessage.AppendLine("/list - Показать ваши настройки");
             helpMessage.AppendLine("/cancel - Отменить текущую операцию");
             helpMessage.AppendLine();
-            helpMessage.AppendLine("<b>Как начать:</b>");
-            helpMessage.AppendLine("1. Получите ваш Telegram ID командой /start");
-            helpMessage.AppendLine("2. Зайдите на сайт в раздел \"Уведомления\"");
-            helpMessage.AppendLine("3. Подключите ваш Telegram ID");
-            helpMessage.AppendLine("4. Создайте настройки уведомлений");
-            helpMessage.AppendLine("5. Управляйте настройками через этот бот!");
+            helpMessage.AppendLine("🚀 <b>Быстрый старт:</b>");
+            helpMessage.AppendLine("1. <code>/register email@example.com пароль</code>");
+            helpMessage.AppendLine("2. <code>/settings</code> - настройте уведомления");
+            helpMessage.AppendLine("3. Получайте уведомления о новых книгах!");
+            helpMessage.AppendLine();
+            helpMessage.AppendLine("📝 <b>Альтернативный способ:</b>");
+            helpMessage.AppendLine("• Зайдите на rare-books.ru");
+            helpMessage.AppendLine("• Перейдите в \"Уведомления\"");
+            helpMessage.AppendLine("• Получите токен и используйте /link");
 
             await _telegramService.SendNotificationAsync(chatId, helpMessage.ToString(), cancellationToken);
         }
@@ -394,15 +417,17 @@ namespace RareBooksService.WebApi.Services
                 var message = new StringBuilder();
                 message.AppendLine("🔗 <b>Привязка аккаунта к Telegram</b>");
                 message.AppendLine();
-                message.AppendLine("Для привязки вашего аккаунта:");
+                message.AppendLine("💡 <b>Простой способ (рекомендуется):</b>");
+                message.AppendLine("• <code>/register email@example.com пароль</code> - создать новый аккаунт");
+                message.AppendLine("• <code>/login email@example.com пароль</code> - войти в существующий аккаунт");
+                message.AppendLine();
+                message.AppendLine("📋 <b>Через сайт (альтернативный способ):</b>");
                 message.AppendLine("1. Зайдите на сайт rare-books.ru");
                 message.AppendLine("2. Авторизуйтесь в своем аккаунте");
                 message.AppendLine("3. Перейдите в раздел \"Уведомления\"");
                 message.AppendLine("4. Нажмите \"Привязать Telegram\"");
                 message.AppendLine("5. Скопируйте полученный токен");
                 message.AppendLine("6. Отправьте команду: <code>/link ВАШ_ТОКЕН</code>");
-                message.AppendLine();
-                message.AppendLine("Например: <code>/link ABC12345</code>");
 
                 await _telegramService.SendNotificationAsync(chatId, message.ToString(), cancellationToken);
                 return;
@@ -458,6 +483,165 @@ namespace RareBooksService.WebApi.Services
             }
         }
 
+        private async Task HandleRegisterCommandAsync(string chatId, string telegramId, string command, CancellationToken cancellationToken)
+        {
+            var parts = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            
+            if (parts.Length == 1)
+            {
+                // Справка по команде
+                var helpMessage = new StringBuilder();
+                helpMessage.AppendLine("📝 <b>Регистрация нового аккаунта</b>");
+                helpMessage.AppendLine();
+                helpMessage.AppendLine("Формат команды:");
+                helpMessage.AppendLine("<code>/register EMAIL ПАРОЛЬ</code>");
+                helpMessage.AppendLine();
+                helpMessage.AppendLine("Пример:");
+                helpMessage.AppendLine("<code>/register ivan@example.com MyPassword123</code>");
+                helpMessage.AppendLine();
+                helpMessage.AppendLine("⚠️ <b>Требования к паролю:</b>");
+                helpMessage.AppendLine("• Минимум 6 символов");
+                helpMessage.AppendLine("• Желательно использовать цифры и буквы");
+
+                await _telegramService.SendNotificationAsync(chatId, helpMessage.ToString(), cancellationToken);
+                return;
+            }
+
+            if (parts.Length != 3)
+            {
+                await _telegramService.SendNotificationAsync(chatId, 
+                    "❌ Неверный формат команды. Используйте: <code>/register EMAIL ПАРОЛЬ</code>", 
+                    cancellationToken);
+                return;
+            }
+
+            var email = parts[1].Trim();
+            var password = parts[2].Trim();
+
+            try
+            {
+                // Проверка уже привязанного аккаунта
+                var existingUser = await _telegramService.FindUserByTelegramIdAsync(telegramId, cancellationToken);
+                if (existingUser != null)
+                {
+                    await _telegramService.SendNotificationAsync(chatId, 
+                        $"⚠️ У вас уже есть привязанный аккаунт: {existingUser.Email}", 
+                        cancellationToken);
+                    return;
+                }
+
+                var result = await RegisterUserDirectlyAsync(email, password, telegramId, cancellationToken);
+
+                if (result.Success)
+                {
+                    var successMessage = new StringBuilder();
+                    successMessage.AppendLine("🎉 <b>Аккаунт успешно создан и привязан!</b>");
+                    successMessage.AppendLine();
+                    successMessage.AppendLine($"📧 Email: {email}");
+                    successMessage.AppendLine($"🆔 Telegram ID: {telegramId}");
+                    successMessage.AppendLine();
+                    successMessage.AppendLine("Теперь вы можете:");
+                    successMessage.AppendLine("• /settings - настройка уведомлений");
+                    successMessage.AppendLine("• /list - просмотр настроек");
+                    successMessage.AppendLine("• Получать уведомления о новых книгах");
+
+                    await _telegramService.SendNotificationAsync(chatId, successMessage.ToString(), cancellationToken);
+                }
+                else
+                {
+                    await _telegramService.SendNotificationAsync(chatId, 
+                        $"❌ <b>Ошибка регистрации:</b> {result.ErrorMessage}", 
+                        cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при регистрации пользователя через Telegram ID {TelegramId}", telegramId);
+                await _telegramService.SendNotificationAsync(chatId, 
+                    "❌ Произошла ошибка при регистрации. Попробуйте позже.", 
+                    cancellationToken);
+            }
+        }
+
+        private async Task HandleLoginCommandAsync(string chatId, string telegramId, string command, CancellationToken cancellationToken)
+        {
+            var parts = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            
+            if (parts.Length == 1)
+            {
+                // Справка по команде
+                var helpMessage = new StringBuilder();
+                helpMessage.AppendLine("🔑 <b>Вход в существующий аккаунт</b>");
+                helpMessage.AppendLine();
+                helpMessage.AppendLine("Формат команды:");
+                helpMessage.AppendLine("<code>/login EMAIL ПАРОЛЬ</code>");
+                helpMessage.AppendLine();
+                helpMessage.AppendLine("Пример:");
+                helpMessage.AppendLine("<code>/login ivan@example.com MyPassword123</code>");
+                helpMessage.AppendLine();
+                helpMessage.AppendLine("📝 Если у вас нет аккаунта, используйте:");
+                helpMessage.AppendLine("<code>/register EMAIL ПАРОЛЬ</code>");
+
+                await _telegramService.SendNotificationAsync(chatId, helpMessage.ToString(), cancellationToken);
+                return;
+            }
+
+            if (parts.Length != 3)
+            {
+                await _telegramService.SendNotificationAsync(chatId, 
+                    "❌ Неверный формат команды. Используйте: <code>/login EMAIL ПАРОЛЬ</code>", 
+                    cancellationToken);
+                return;
+            }
+
+            var email = parts[1].Trim();
+            var password = parts[2].Trim();
+
+            try
+            {
+                // Проверка уже привязанного аккаунта
+                var existingUser = await _telegramService.FindUserByTelegramIdAsync(telegramId, cancellationToken);
+                if (existingUser != null)
+                {
+                    await _telegramService.SendNotificationAsync(chatId, 
+                        $"⚠️ У вас уже есть привязанный аккаунт: {existingUser.Email}", 
+                        cancellationToken);
+                    return;
+                }
+
+                var result = await LoginUserDirectlyAsync(email, password, telegramId, cancellationToken);
+
+                if (result.Success)
+                {
+                    var successMessage = new StringBuilder();
+                    successMessage.AppendLine("🎉 <b>Успешный вход и привязка!</b>");
+                    successMessage.AppendLine();
+                    successMessage.AppendLine($"📧 Email: {email}");
+                    successMessage.AppendLine($"🆔 Telegram ID: {telegramId}");
+                    successMessage.AppendLine();
+                    successMessage.AppendLine("Теперь вы можете:");
+                    successMessage.AppendLine("• /settings - настройка уведомлений");
+                    successMessage.AppendLine("• /list - просмотр настроек");
+                    successMessage.AppendLine("• Получать уведомления о новых книгах");
+
+                    await _telegramService.SendNotificationAsync(chatId, successMessage.ToString(), cancellationToken);
+                }
+                else
+                {
+                    await _telegramService.SendNotificationAsync(chatId, 
+                        $"❌ <b>Ошибка входа:</b> {result.ErrorMessage}", 
+                        cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при входе пользователя через Telegram ID {TelegramId}", telegramId);
+                await _telegramService.SendNotificationAsync(chatId, 
+                    "❌ Произошла ошибка при входе. Попробуйте позже.", 
+                    cancellationToken);
+            }
+        }
+
         private async Task ProcessUserStateAsync(string chatId, string telegramId, string messageText, TelegramUserState userState, CancellationToken cancellationToken)
         {
             switch (userState.State)
@@ -478,6 +662,158 @@ namespace RareBooksService.WebApi.Services
             }
         }
 
+        private async Task<DirectAuthResult> RegisterUserDirectlyAsync(string email, string password, string telegramId, CancellationToken cancellationToken)
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var context = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
+
+            try
+            {
+                // Проверяем валидность email
+                if (string.IsNullOrWhiteSpace(email) || !email.Contains("@"))
+                {
+                    return DirectAuthResult.Fail("Некорректный email адрес");
+                }
+
+                // Проверяем длину пароля
+                if (string.IsNullOrWhiteSpace(password) || password.Length < 6)
+                {
+                    return DirectAuthResult.Fail("Пароль должен содержать минимум 6 символов");
+                }
+
+                // Проверяем, не существует ли уже пользователь с таким email
+                var existingUser = await userManager.FindByEmailAsync(email);
+                if (existingUser != null)
+                {
+                    return DirectAuthResult.Fail("Пользователь с таким email уже существует. Используйте /login для входа");
+                }
+
+                // Проверяем, не привязан ли этот Telegram ID к другому аккаунту
+                var userWithTelegramId = await context.Users
+                    .FirstOrDefaultAsync(u => u.TelegramId == telegramId, cancellationToken);
+                if (userWithTelegramId != null)
+                {
+                    return DirectAuthResult.Fail($"Этот Telegram аккаунт уже привязан к {userWithTelegramId.Email}");
+                }
+
+                // Создаем нового пользователя
+                var newUser = new ApplicationUser
+                {
+                    UserName = email,
+                    Email = email,
+                    EmailConfirmed = true, // Автоматически подтверждаем email для Telegram регистрации
+                    TelegramId = telegramId,
+                    Role = "User",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                var result = await userManager.CreateAsync(newUser, password);
+
+                if (result.Succeeded)
+                {
+                    _logger.LogInformation("Пользователь {Email} успешно зарегистрирован через Telegram ID {TelegramId}", email, telegramId);
+                    return DirectAuthResult.Success(newUser);
+                }
+                else
+                {
+                    var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                    return DirectAuthResult.Fail($"Ошибка создания аккаунта: {errors}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при регистрации пользователя {Email} через Telegram", email);
+                return DirectAuthResult.Fail("Внутренняя ошибка сервера");
+            }
+        }
+
+        private async Task<DirectAuthResult> LoginUserDirectlyAsync(string email, string password, string telegramId, CancellationToken cancellationToken)
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var signInManager = scope.ServiceProvider.GetRequiredService<SignInManager<ApplicationUser>>();
+            var context = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
+
+            try
+            {
+                // Проверяем валидность email
+                if (string.IsNullOrWhiteSpace(email) || !email.Contains("@"))
+                {
+                    return DirectAuthResult.Fail("Некорректный email адрес");
+                }
+
+                // Находим пользователя
+                var user = await userManager.FindByEmailAsync(email);
+                if (user == null)
+                {
+                    return DirectAuthResult.Fail("Пользователь с таким email не найден. Используйте /register для создания аккаунта");
+                }
+
+                // Проверяем пароль
+                var passwordCheck = await signInManager.CheckPasswordSignInAsync(user, password, false);
+                if (!passwordCheck.Succeeded)
+                {
+                    return DirectAuthResult.Fail("Неверный пароль");
+                }
+
+                // Проверяем, не привязан ли уже к другому Telegram
+                if (!string.IsNullOrEmpty(user.TelegramId) && user.TelegramId != telegramId)
+                {
+                    return DirectAuthResult.Fail("Этот аккаунт уже привязан к другому Telegram");
+                }
+
+                // Проверяем, не привязан ли этот Telegram ID к другому аккаунту
+                if (string.IsNullOrEmpty(user.TelegramId))
+                {
+                    var userWithTelegramId = await context.Users
+                        .FirstOrDefaultAsync(u => u.TelegramId == telegramId, cancellationToken);
+                    if (userWithTelegramId != null)
+                    {
+                        return DirectAuthResult.Fail($"Этот Telegram аккаунт уже привязан к {userWithTelegramId.Email}");
+                    }
+
+                    // Привязываем Telegram ID
+                    user.TelegramId = telegramId;
+                    user.UpdatedAt = DateTime.UtcNow;
+                    await userManager.UpdateAsync(user);
+                }
+
+                _logger.LogInformation("Пользователь {Email} успешно вошел через Telegram ID {TelegramId}", email, telegramId);
+                return DirectAuthResult.Success(user);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при входе пользователя {Email} через Telegram", email);
+                return DirectAuthResult.Fail("Внутренняя ошибка сервера");
+            }
+        }
+
         // Методы реализованы в TelegramBotServiceExtended.cs
+    }
+
+    public class DirectAuthResult
+    {
+        public bool Success { get; private set; }
+        public string ErrorMessage { get; private set; }
+        public ApplicationUser User { get; private set; }
+
+        private DirectAuthResult(bool success, string errorMessage, ApplicationUser user)
+        {
+            Success = success;
+            ErrorMessage = errorMessage;
+            User = user;
+        }
+
+        public static DirectAuthResult Success(ApplicationUser user)
+        {
+            return new DirectAuthResult(true, null, user);
+        }
+
+        public static DirectAuthResult Fail(string errorMessage)
+        {
+            return new DirectAuthResult(false, errorMessage, null);
+        }
     }
 }
