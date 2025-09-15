@@ -6,7 +6,6 @@ using System.Text.Json;
 
 namespace RareBooksService.WebApi.Controllers
 {
-    [ApiController]
     [Route("api/telegram")]
     public class TelegramWebhookController : ControllerBase
     {
@@ -28,12 +27,27 @@ namespace RareBooksService.WebApi.Controllers
         public async Task<IActionResult> Webhook([FromBody] TelegramUpdate update)
         {
             _logger.LogInformation("[WEBHOOK] === НАЧАЛО ОБРАБОТКИ WEBHOOK ===");
+            _logger.LogInformation("[WEBHOOK] Raw Request Info - ContentType: {ContentType}, ContentLength: {ContentLength}, Method: {Method}", 
+                Request.ContentType, Request.ContentLength, Request.Method);
             _logger.LogInformation("[WEBHOOK] ModelState.IsValid: {IsValid}", ModelState.IsValid);
-            
+
+            // Логируем детали валидации НЕЗАВИСИМО от результата
             if (!ModelState.IsValid)
             {
                 var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
                 _logger.LogError("[WEBHOOK] Model validation failed: {Errors}", string.Join(", ", errors));
+                
+                // Логируем также детали ModelState для глубокой диагностики
+                foreach (var key in ModelState.Keys)
+                {
+                    var modelStateEntry = ModelState[key];
+                    foreach (var error in modelStateEntry.Errors)
+                    {
+                        _logger.LogError("[WEBHOOK] ModelState Error - Key: {Key}, Error: {Error}, Exception: {Exception}", 
+                            key, error.ErrorMessage, error.Exception?.Message);
+                    }
+                }
+                
                 return Ok(new { status = "error", reason = "Model validation failed", errors = errors });
             }
             
