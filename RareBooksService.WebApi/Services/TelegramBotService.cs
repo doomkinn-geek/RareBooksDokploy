@@ -532,7 +532,7 @@ namespace RareBooksService.WebApi.Services
 
                 var result = await RegisterUserDirectlyAsync(email, password, telegramId, cancellationToken);
 
-                if (result.Success)
+                if (result.IsSuccess)
                 {
                     var successMessage = new StringBuilder();
                     successMessage.AppendLine("🎉 <b>Аккаунт успешно создан и привязан!</b>");
@@ -611,7 +611,7 @@ namespace RareBooksService.WebApi.Services
 
                 var result = await LoginUserDirectlyAsync(email, password, telegramId, cancellationToken);
 
-                if (result.Success)
+                if (result.IsSuccess)
                 {
                     var successMessage = new StringBuilder();
                     successMessage.AppendLine("🎉 <b>Успешный вход и привязка!</b>");
@@ -705,8 +705,7 @@ namespace RareBooksService.WebApi.Services
                     EmailConfirmed = true, // Автоматически подтверждаем email для Telegram регистрации
                     TelegramId = telegramId,
                     Role = "User",
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.UtcNow
                 };
 
                 var result = await userManager.CreateAsync(newUser, password);
@@ -776,7 +775,6 @@ namespace RareBooksService.WebApi.Services
 
                     // Привязываем Telegram ID
                     user.TelegramId = telegramId;
-                    user.UpdatedAt = DateTime.UtcNow;
                     await userManager.UpdateAsync(user);
                 }
 
@@ -795,13 +793,13 @@ namespace RareBooksService.WebApi.Services
 
     public class DirectAuthResult
     {
-        public bool Success { get; private set; }
+        public bool IsSuccess { get; private set; }
         public string ErrorMessage { get; private set; }
         public ApplicationUser User { get; private set; }
 
-        private DirectAuthResult(bool success, string errorMessage, ApplicationUser user)
+        private DirectAuthResult(bool isSuccess, string errorMessage, ApplicationUser user)
         {
-            Success = success;
+            IsSuccess = isSuccess;
             ErrorMessage = errorMessage;
             User = user;
         }
