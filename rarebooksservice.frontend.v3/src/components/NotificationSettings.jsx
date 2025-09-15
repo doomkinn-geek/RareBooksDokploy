@@ -32,7 +32,11 @@ import {
     Card,
     CardContent,
     CardActions,
-    Divider
+    Divider,
+    List,
+    ListItem,
+    ListItemIcon,
+    ListItemText
 } from '@mui/material';
 import {
     Add as AddIcon,
@@ -89,7 +93,11 @@ const NotificationSettings = () => {
     // Форма подключения Telegram
     const [telegramForm, setTelegramForm] = useState({
         telegramId: '',
-        telegramUsername: ''
+        telegramUsername: '',
+        token: '',
+        expiresAt: null,
+        instructions: [],
+        step: 'initial' // 'initial', 'token-generated', 'completed'
     });
 
     useEffect(() => {
@@ -206,14 +214,30 @@ const NotificationSettings = () => {
 
     const handleConnectTelegram = async () => {
         try {
-            await connectTelegram(telegramForm);
-            showSnackbar(t.telegramConnectedSuccess);
-            setOpenTelegramDialog(false);
-            setTelegramForm({ telegramId: '', telegramUsername: '' });
-            loadData();
+            const response = await fetch('/api/notification/telegram/generate-link-token', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('jwt')}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Ошибка при генерации токена');
+            }
+
+            const data = await response.json();
+            setTelegramForm({
+                ...telegramForm,
+                token: data.token,
+                expiresAt: data.expiresAt,
+                instructions: data.instructions,
+                step: 'token-generated'
+            });
         } catch (error) {
-            console.error('Error connecting Telegram:', error);
-            showSnackbar(error.response?.data?.message || t.error, 'error');
+            console.error('Error generating link token:', error);
+            showSnackbar(error.message || t.error, 'error');
         }
     };
 
@@ -641,32 +665,107 @@ const NotificationSettings = () => {
             </Dialog>
 
             {/* Диалог подключения Telegram */}
-            <Dialog open={openTelegramDialog} onClose={() => setOpenTelegramDialog(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>{t.connectTelegram}</DialogTitle>
+            <Dialog open={openTelegramDialog} onClose={() => setOpenTelegramDialog(false)} maxWidth="md" fullWidth>
+                <DialogTitle>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <TelegramIcon />
+                        {t.connectTelegram}
+                    </Box>
+                </DialogTitle>
                 <DialogContent>
-                    <TextField
-                        autoFocus
-                        margin="dense"
-                        label={t.telegramId}
-                        fullWidth
-                        variant="outlined"
-                        value={telegramForm.telegramId}
-                        onChange={(e) => setTelegramForm({ ...telegramForm, telegramId: e.target.value })}
-                        sx={{ mb: 2 }}
-                    />
-                    <TextField
-                        margin="dense"
-                        label={t.telegramUsername}
-                        fullWidth
-                        variant="outlined"
-                        value={telegramForm.telegramUsername}
-                        onChange={(e) => setTelegramForm({ ...telegramForm, telegramUsername: e.target.value })}
-                        helperText="Опционально"
-                    />
+                    {telegramForm.step === 'initial' && (
+                        <>
+                            <Alert severity="info" sx={{ mb: 2 }}>
+                                Мы создадим одноразовый токен для безопасной привязки вашего Telegram аккаунта
+                            </Alert>
+                            <Typography variant="body2" sx={{ mb: 2 }}>
+                                Нажмите кнопку ниже для генерации токена привязки
+                            </Typography>
+                        </>
+                    )}
+
+                    {telegramForm.step === 'token-generated' && (
+                        <>
+                            <Alert severity="success" sx={{ mb: 2 }}>
+                                Токен создан! Следуйте инструкциям ниже:
+                            </Alert>
+                            
+                            <Card sx={{ mb: 2, p: 2, bgcolor: 'grey.50' }}>
+                                <Typography variant="h6" gutterBottom>
+                                    Ваш токен:
+                                </Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                                    <TextField
+                                        fullWidth
+                                        value={telegramForm.token}
+                                        InputProps={{
+                                            readOnly: true,
+                                            style: { fontFamily: 'monospace', fontSize: '1.2em', fontWeight: 'bold' }
+                                        }}
+                                    />
+                                    <Button
+                                        variant="outlined"
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(telegramForm.token);
+                                            showSnackbar('Токен скопирован!');
+                                        }}
+                                    >
+                                        Копировать
+                                    </Button>
+                                </Box>
+                                <Typography variant="body2" color="text.secondary">
+                                    Действителен до: {new Date(telegramForm.expiresAt).toLocaleString()}
+                                </Typography>
+                            </Card>
+
+                            <Typography variant="h6" gutterBottom>
+                                Инструкции:
+                            </Typography>
+                            <List>
+                                {telegramForm.instructions.map((instruction, index) => (
+                                    <ListItem key={index}>
+                                        <ListItemIcon>
+                                            <Chip label={index + 1} size="small" color="primary" />
+                                        </ListItemIcon>
+                                        <ListItemText primary={instruction} />
+                                    </ListItem>
+                                ))}
+                            </List>
+
+                            <Alert severity="warning" sx={{ mt: 2 }}>
+                                После успешной привязки в боте обновите эту страницу для отображения нового статуса
+                            </Alert>
+                        </>
+                    )}
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setOpenTelegramDialog(false)}>{t.cancel}</Button>
-                    <Button onClick={handleConnectTelegram} variant="contained">{t.connectTelegram}</Button>
+                    <Button onClick={() => {
+                        setOpenTelegramDialog(false);
+                        setTelegramForm({
+                            telegramId: '',
+                            telegramUsername: '',
+                            token: '',
+                            expiresAt: null,
+                            instructions: [],
+                            step: 'initial'
+                        });
+                    }}>
+                        {telegramForm.step === 'token-generated' ? 'Закрыть' : t.cancel}
+                    </Button>
+                    {telegramForm.step === 'initial' && (
+                        <Button onClick={handleConnectTelegram} variant="contained">
+                            Создать токен
+                        </Button>
+                    )}
+                    {telegramForm.step === 'token-generated' && (
+                        <Button 
+                            onClick={() => window.location.reload()} 
+                            variant="contained"
+                            color="primary"
+                        >
+                            Обновить страницу
+                        </Button>
+                    )}
                 </DialogActions>
             </Dialog>
 

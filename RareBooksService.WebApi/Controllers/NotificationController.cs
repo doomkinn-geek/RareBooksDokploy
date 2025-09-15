@@ -18,6 +18,7 @@ namespace RareBooksService.WebApi.Controllers
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IBookNotificationService _notificationService;
         private readonly ITelegramNotificationService _telegramService;
+        private readonly ITelegramLinkService _linkService;
         private readonly ILogger<NotificationController> _logger;
 
         public NotificationController(
@@ -25,12 +26,14 @@ namespace RareBooksService.WebApi.Controllers
             UserManager<ApplicationUser> userManager,
             IBookNotificationService notificationService,
             ITelegramNotificationService telegramService,
+            ITelegramLinkService linkService,
             ILogger<NotificationController> logger)
         {
             _context = context ?? throw new ArgumentNullException(nameof(context));
             _userManager = userManager ?? throw new ArgumentNullException(nameof(userManager));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _telegramService = telegramService ?? throw new ArgumentNullException(nameof(telegramService));
+            _linkService = linkService ?? throw new ArgumentNullException(nameof(linkService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -303,7 +306,49 @@ namespace RareBooksService.WebApi.Controllers
         }
 
         /// <summary>
-        /// Связать аккаунт с Telegram
+        /// Сгенерировать токен для привязки Telegram аккаунта
+        /// </summary>
+        [HttpPost("telegram/generate-link-token")]
+        public async Task<ActionResult<GenerateLinkTokenResponseDto>> GenerateLinkToken()
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (userId == null) return Unauthorized();
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null) return NotFound("Пользователь не найден");
+
+            // Проверяем, не привязан ли уже Telegram
+            if (!string.IsNullOrEmpty(user.TelegramId))
+            {
+                return BadRequest(new { message = "Telegram аккаунт уже привязан к этому пользователю" });
+            }
+
+            try
+            {
+                var token = await _linkService.GenerateLinkTokenAsync(userId);
+                
+                return Ok(new GenerateLinkTokenResponseDto
+                {
+                    Token = token,
+                    ExpiresAt = DateTime.UtcNow.AddHours(24),
+                    Instructions = new[]
+                    {
+                        "1. Откройте Telegram и найдите бота @RareBooksReminderBot",
+                        "2. Отправьте команду: /start",
+                        "3. Отправьте команду: /link " + token,
+                        "4. Следуйте инструкциям бота"
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при генерации токена привязки для пользователя {UserId}", userId);
+                return StatusCode(500, new { message = "Ошибка при генерации токена" });
+            }
+        }
+
+        /// <summary>
+        /// Связать аккаунт с Telegram (старый метод для совместимости)
         /// </summary>
         [HttpPost("telegram/connect")]
         public async Task<ActionResult> ConnectTelegram([FromBody] ConnectTelegramDto dto)
@@ -471,5 +516,13 @@ namespace RareBooksService.WebApi.Controllers
                 return BadRequest(new { message = "Не удалось отправить тестовое уведомление", error = errorMessage });
             }
         }
+    }
+
+    // DTO классы
+    public class GenerateLinkTokenResponseDto
+    {
+        public string Token { get; set; }
+        public DateTime ExpiresAt { get; set; }
+        public string[] Instructions { get; set; }
     }
 }

@@ -19,15 +19,18 @@ namespace RareBooksService.WebApi.Services
         private readonly ITelegramNotificationService _telegramService;
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<TelegramBotService> _logger;
+        private readonly ITelegramLinkService _linkService;
 
         public TelegramBotService(
             ITelegramNotificationService telegramService,
             IServiceScopeFactory scopeFactory,
-            ILogger<TelegramBotService> logger)
+            ILogger<TelegramBotService> logger,
+            ITelegramLinkService linkService)
         {
             _telegramService = telegramService ?? throw new ArgumentNullException(nameof(telegramService));
             _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _linkService = linkService ?? throw new ArgumentNullException(nameof(linkService));
         }
 
         public async Task ProcessUpdateAsync(TelegramUpdate update, CancellationToken cancellationToken = default)
@@ -73,8 +76,7 @@ namespace RareBooksService.WebApi.Services
             // Обработка состояний
             if (userState != null && userState.State != TelegramBotStates.None)
             {
-                // TODO: Implement ProcessUserStateAsync
-                await ShowMainMenuAsync(chatId, telegramId, cancellationToken);
+                await ProcessUserStateAsync(chatId, telegramId, messageText, userState, cancellationToken);
                 return;
             }
 
@@ -100,6 +102,9 @@ namespace RareBooksService.WebApi.Services
                     break;
                 case "/cancel":
                     await HandleCancelCommandAsync(chatId, telegramId, cancellationToken);
+                    break;
+                case "/link":
+                    await HandleLinkCommandAsync(chatId, telegramId, command, cancellationToken);
                     break;
                 default:
                     await _telegramService.SendMessageWithKeyboardAsync(chatId, 
@@ -145,7 +150,7 @@ namespace RareBooksService.WebApi.Services
                 new TelegramInlineKeyboardButton 
                 { 
                     Text = "ℹ️ Справка", 
-                    CallbackData = TelegramBotStates.CallbackHelp 
+                    CallbackData = TelegramCallbacks.Help 
                 }
             });
 
@@ -377,6 +382,100 @@ namespace RareBooksService.WebApi.Services
         private async Task ShowSettingsMenuAsync(string chatId, string telegramId, CancellationToken cancellationToken)
         {
             await HandleListCommandAsync(chatId, telegramId, cancellationToken);
+        }
+
+        private async Task HandleLinkCommandAsync(string chatId, string telegramId, string command, CancellationToken cancellationToken)
+        {
+            var parts = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            
+            if (parts.Length == 1)
+            {
+                // Просто команда /link без токена
+                var message = new StringBuilder();
+                message.AppendLine("🔗 <b>Привязка аккаунта к Telegram</b>");
+                message.AppendLine();
+                message.AppendLine("Для привязки вашего аккаунта:");
+                message.AppendLine("1. Зайдите на сайт rare-books.ru");
+                message.AppendLine("2. Авторизуйтесь в своем аккаунте");
+                message.AppendLine("3. Перейдите в раздел \"Уведомления\"");
+                message.AppendLine("4. Нажмите \"Привязать Telegram\"");
+                message.AppendLine("5. Скопируйте полученный токен");
+                message.AppendLine("6. Отправьте команду: <code>/link ВАШ_ТОКЕН</code>");
+                message.AppendLine();
+                message.AppendLine("Например: <code>/link ABC12345</code>");
+
+                await _telegramService.SendNotificationAsync(chatId, message.ToString(), cancellationToken);
+                return;
+            }
+
+            if (parts.Length != 2)
+            {
+                await _telegramService.SendNotificationAsync(chatId, 
+                    "❌ Неверный формат команды. Используйте: <code>/link ВАШ_ТОКЕН</code>", 
+                    cancellationToken);
+                return;
+            }
+
+            var token = parts[1].Trim().ToUpper();
+
+            try
+            {
+                // Получаем информацию о пользователе в Telegram
+                var telegramUser = await _telegramService.GetUserInfoAsync(chatId, cancellationToken);
+                var telegramUsername = telegramUser?.Username;
+
+                var result = await _linkService.LinkTelegramAccountAsync(token, telegramId, telegramUsername, cancellationToken);
+
+                if (result.Success)
+                {
+                    var successMessage = new StringBuilder();
+                    successMessage.AppendLine("🎉 <b>Аккаунт успешно привязан!</b>");
+                    successMessage.AppendLine();
+                    successMessage.AppendLine($"Пользователь: {result.User.UserName ?? result.User.Email}");
+                    successMessage.AppendLine();
+                    successMessage.AppendLine("Теперь вы можете:");
+                    successMessage.AppendLine("• Управлять настройками уведомлений через бота");
+                    successMessage.AppendLine("• Получать уведомления о новых интересных книгах");
+                    successMessage.AppendLine("• Использовать команды:");
+                    successMessage.AppendLine("  /settings - управление настройками");
+                    successMessage.AppendLine("  /list - просмотр ваших настроек");
+
+                    await _telegramService.SendNotificationAsync(chatId, successMessage.ToString(), cancellationToken);
+                }
+                else
+                {
+                    await _telegramService.SendNotificationAsync(chatId, 
+                        $"❌ <b>Ошибка привязки:</b> {result.ErrorMessage}", 
+                        cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при привязке аккаунта для Telegram ID {TelegramId}", telegramId);
+                await _telegramService.SendNotificationAsync(chatId, 
+                    "❌ Произошла ошибка при привязке аккаунта. Попробуйте позже.", 
+                    cancellationToken);
+            }
+        }
+
+        private async Task ProcessUserStateAsync(string chatId, string telegramId, string messageText, TelegramUserState userState, CancellationToken cancellationToken)
+        {
+            switch (userState.State)
+            {
+                case TelegramBotStates.EditingKeywords:
+                    await ProcessEditKeywordsStateAsync(chatId, telegramId, messageText, userState, cancellationToken);
+                    break;
+                case TelegramBotStates.EditingPrice:
+                    await ProcessEditPriceStateAsync(chatId, telegramId, messageText, userState, cancellationToken);
+                    break;
+                case TelegramBotStates.CreatingNotification:
+                    await ProcessCreateNotificationStateAsync(chatId, telegramId, messageText, userState, cancellationToken);
+                    break;
+                default:
+                    await _telegramService.ClearUserStateAsync(telegramId, cancellationToken);
+                    await ShowMainMenuAsync(chatId, telegramId, cancellationToken);
+                    break;
+            }
         }
 
         // Методы реализованы в TelegramBotServiceExtended.cs

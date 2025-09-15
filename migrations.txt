@@ -14,3 +14,5 @@ Add-Migration BooksReminderAdded -Context BooksDbContext
 Add-Migration TelegramIdToUser -Context UsersDbContext
 
 Add-Migration TelegramBotExtended -Context UsersDbContext
+
+Add-Migration TelegramLinkTokenAdded -Context UsersDbContext

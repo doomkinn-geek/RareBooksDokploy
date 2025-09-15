@@ -15,6 +15,7 @@ namespace RareBooksService.Data
         public DbSet<UserNotificationPreference> UserNotificationPreferences { get; set; }
         public DbSet<BookNotification> BookNotifications { get; set; }
         public DbSet<TelegramUserState> TelegramUserStates { get; set; }
+        public DbSet<TelegramLinkToken> TelegramLinkTokens { get; set; }
 
         public UsersDbContext(DbContextOptions<UsersDbContext> options)
             : base(options)
