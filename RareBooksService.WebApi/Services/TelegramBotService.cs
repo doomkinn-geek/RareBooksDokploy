@@ -751,37 +751,46 @@ namespace RareBooksService.WebApi.Services
 
         private async Task<LotsSearchResult> SearchActiveLotsAsync(BooksDbContext booksContext, UserNotificationPreference preferences, int page, int pageSize, CancellationToken cancellationToken)
         {
+            _logger.LogInformation("Начало поиска активных лотов...");
+            
             var query = booksContext.BooksInfo.Include(b => b.Category).AsQueryable();
 
             // Фильтр: только активные торги (торги еще не закончились)
             var now = DateTime.UtcNow;
             query = query.Where(b => b.EndDate > now);
 
+            _logger.LogInformation("Применен фильтр по активным торгам");
+
             // Фильтр по категориям (делаем в SQL)
             var categoryIds = preferences.GetCategoryIdsList();
             if (categoryIds.Any())
             {
                 query = query.Where(b => categoryIds.Contains(b.CategoryId));
+                _logger.LogInformation("Применен фильтр по категориям: {CategoryIds}", string.Join(", ", categoryIds));
             }
 
             // Фильтр по цене (делаем в SQL)
             if (preferences.MinPrice > 0)
             {
                 query = query.Where(b => (decimal)b.Price >= preferences.MinPrice);
+                _logger.LogInformation("Применен фильтр минимальной цены: {MinPrice}", preferences.MinPrice);
             }
             if (preferences.MaxPrice > 0)
             {
                 query = query.Where(b => (decimal)b.Price <= preferences.MaxPrice);
+                _logger.LogInformation("Применен фильтр максимальной цены: {MaxPrice}", preferences.MaxPrice);
             }
 
             // Фильтр по году издания (делаем в SQL)
             if (preferences.MinYear > 0)
             {
                 query = query.Where(b => b.YearPublished >= preferences.MinYear);
+                _logger.LogInformation("Применен фильтр минимального года: {MinYear}", preferences.MinYear);
             }
             if (preferences.MaxYear > 0)
             {
                 query = query.Where(b => b.YearPublished <= preferences.MaxYear);
+                _logger.LogInformation("Применен фильтр максимального года: {MaxYear}", preferences.MaxYear);
             }
 
             // Фильтр по городам (делаем в SQL)
@@ -794,21 +803,32 @@ namespace RareBooksService.WebApi.Services
                 {
                     query = query.Where(b => EF.Functions.ILike(b.City, $"%{city}%"));
                 }
+                _logger.LogInformation("Применен фильтр по городам: {Cities}", string.Join(", ", normalizedCities));
             }
 
             // Сортировка по дате окончания (ближайшие к завершению - первыми)
             query = query.OrderBy(b => b.EndDate);
 
-            // Загружаем данные из БД БЕЗ фильтрации по ключевым словам
-            var allBooks = await query
-                .AsNoTracking()
-                .ToListAsync(cancellationToken);
+            _logger.LogInformation("Начинаем выполнение SQL запроса...");
 
-            // Теперь фильтруем по ключевым словам в памяти (включая теги)
+            // КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: берем ограниченное количество записей, а не все
             var keywords = preferences.GetKeywordsList();
+            List<RegularBaseBook> allBooks;
+            
             if (keywords.Any())
             {
+                // Если есть ключевые слова, берем больше записей для фильтрации в памяти
+                // Но не все - это было причиной зависания!
+                var batchSize = Math.Max(pageSize * 10, 200); // Минимум 200, максимум в 10 раз больше pageSize
+                allBooks = await query
+                    .Take(batchSize)
+                    .AsNoTracking()
+                    .ToListAsync(cancellationToken);
+                
+                _logger.LogInformation("Загружено {Count} записей для фильтрации по ключевым словам", allBooks.Count);
+
                 var normalizedKeywords = keywords.Select(k => k.ToLower()).ToList();
+                _logger.LogInformation("Фильтруем по ключевым словам: {Keywords}", string.Join(", ", normalizedKeywords));
                 
                 allBooks = allBooks.Where(book =>
                 {
@@ -824,14 +844,62 @@ namespace RareBooksService.WebApi.Services
 
                     return matchesText || matchesTags;
                 }).ToList();
+
+                _logger.LogInformation("После фильтрации по ключевым словам осталось {Count} записей", allBooks.Count);
+            }
+            else
+            {
+                // Если нет ключевых слов, используем обычную пагинацию в SQL
+                allBooks = await query
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .AsNoTracking()
+                    .ToListAsync(cancellationToken);
+
+                _logger.LogInformation("Загружено {Count} записей с пагинацией в SQL", allBooks.Count);
             }
 
-            // Применяем пагинацию в памяти
+            // Применяем пагинацию в памяти только если фильтровали по ключевым словам
             var totalCount = allBooks.Count;
-            var books = allBooks
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToList();
+            List<RegularBaseBook> books;
+            
+            if (keywords.Any())
+            {
+                // Для точного подсчета нужен отдельный запрос
+                var countQuery = booksContext.BooksInfo.AsQueryable();
+                countQuery = countQuery.Where(b => b.EndDate > now);
+                
+                if (categoryIds.Any())
+                    countQuery = countQuery.Where(b => categoryIds.Contains(b.CategoryId));
+                if (preferences.MinPrice > 0)
+                    countQuery = countQuery.Where(b => (decimal)b.Price >= preferences.MinPrice);
+                if (preferences.MaxPrice > 0)
+                    countQuery = countQuery.Where(b => (decimal)b.Price <= preferences.MaxPrice);
+                if (preferences.MinYear > 0)
+                    countQuery = countQuery.Where(b => b.YearPublished >= preferences.MinYear);
+                if (preferences.MaxYear > 0)
+                    countQuery = countQuery.Where(b => b.YearPublished <= preferences.MaxYear);
+                if (cities.Any())
+                {
+                    var normalizedCities = cities.Select(c => c.ToLower()).ToList();
+                    foreach (var city in normalizedCities)
+                        countQuery = countQuery.Where(b => EF.Functions.ILike(b.City, $"%{city}%"));
+                }
+                
+                // Примерный подсчет (для производительности)
+                totalCount = Math.Min(await countQuery.CountAsync(cancellationToken), 1000);
+                
+                books = allBooks
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+            }
+            else
+            {
+                books = allBooks;
+            }
+
+            _logger.LogInformation("Итоговый результат: {BooksCount} книг из {TotalCount} найденных", books.Count, totalCount);
 
             return new LotsSearchResult
             {
