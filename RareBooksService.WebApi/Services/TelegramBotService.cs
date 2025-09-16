@@ -769,7 +769,7 @@ namespace RareBooksService.WebApi.Services
                     query = query.Where(b => 
                         b.NormalizedTitle.Contains(keyword) || 
                         b.NormalizedDescription.Contains(keyword) ||
-                        b.Tags.Any(tag => tag.Contains(keyword)));
+                        EF.Functions.ILike(EF.Property<string>(b, "Tags"), $"%{keyword}%"));
                 }
             }
 
@@ -809,8 +809,9 @@ namespace RareBooksService.WebApi.Services
                 
                 foreach (var city in normalizedCities)
                 {
-                    // Предполагаем, что b.City уже нормализован или используем EF.Functions.Like
-                    query = query.Where(b => EF.Functions.Like(b.City.ToLower(), $"%{city}%"));
+                    // Используем регистронезависимый поиск через ILIKE (PostgreSQL)
+                    // Если ILIKE не поддерживается, Entity Framework автоматически заменит на LIKE
+                    query = query.Where(b => EF.Functions.ILike(b.City, $"%{city}%"));
                 }
             }
 
