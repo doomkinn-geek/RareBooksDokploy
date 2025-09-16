@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using RareBooksService.WebApi.Services;
 
 namespace RareBooksService.WebApi.Controllers
 {
@@ -6,6 +7,13 @@ namespace RareBooksService.WebApi.Controllers
     [Route("api/[controller]")]
     public class TestController : ControllerBase
     {
+        private readonly ISetupStateService _setupStateService;
+
+        public TestController(ISetupStateService setupStateService)
+        {
+            _setupStateService = setupStateService;
+        }
+
         [HttpGet("setup-status")]
         public IActionResult GetSetupStatus()
         {
@@ -15,7 +23,13 @@ namespace RareBooksService.WebApi.Controllers
                 { 
                     success = true, 
                     message = "Test endpoint working",
-                    timestamp = DateTime.UtcNow
+                    timestamp = DateTime.UtcNow,
+                    isSetupNeeded = _setupStateService.IsInitialSetupNeeded,
+                    diagnostics = new
+                    {
+                        serverStatus = "OK",
+                        middlewareBypass = "Working"
+                    }
                 });
             }
             catch (Exception ex)
