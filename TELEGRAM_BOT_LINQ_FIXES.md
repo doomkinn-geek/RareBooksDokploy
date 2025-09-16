@@ -1,10 +1,17 @@
 # 🤖 Исправления LINQ запросов в TelegramBotService
 
-## 🚨 Проблема:
+## 🚨 Проблемы:
 При выполнении команды `/lots` в Telegram боте возникали ошибки Entity Framework:
+
+### 1. Первичные ошибки LINQ:
 ```
 The LINQ expression 'tag => tag.Contains(__keyword_1)' could not be translated
 The LINQ expression 'b.City.ToLower().Contains(city)' could not be translated
+```
+
+### 2. Ошибка приведения типов:
+```
+Invalid cast from 'System.String' to 'System.Collections.Generic.List`1[System.String]'
 ```
 
 ## 🔍 Анализ причин:
@@ -25,58 +32,116 @@ EF.Functions.Like(b.City.ToLower(), $"%{city}%")
 
 **Причина:** `ToLower()` внутри `EF.Functions.Like` не может быть переведено в SQL запрос.
 
-## ✅ Исправления:
+## ✅ Итоговое решение:
 
-### 1. Поиск по тегам:
-**Стало:**
+Используем **гибридный подход**: эффективные SQL фильтры + безопасная фильтрация в памяти.
+
+### 1. SQL фильтры (эффективные):
 ```csharp
-EF.Functions.ILike(EF.Property<string>(b, "Tags"), $"%{keyword}%")
+// Активные торги, категории, цены, года, города
+query = query.Where(b => b.EndDate > now);
+query = query.Where(b => categoryIds.Contains(b.CategoryId));
+query = query.Where(b => EF.Functions.ILike(b.City, $"%{city}%"));
+// ... другие "тяжелые" фильтры
 ```
 
-**Объяснение:**
-- `EF.Property<string>(b, "Tags")` - обращается к сырому строковому значению в БД (до конвертации)
-- `EF.Functions.ILike` - регистронезависимый поиск (PostgreSQL ILIKE)
-- Поиск ведется по строке "tag1;tag2;tag3" напрямую
-
-### 2. Поиск по городам:
-**Стало:**
+### 2. Фильтрация в памяти (безопасная):
 ```csharp
-EF.Functions.ILike(b.City, $"%{city}%")
+// Загружаем данные из БД
+var allBooks = await query.AsNoTracking().ToListAsync(cancellationToken);
+
+// Фильтруем по ключевым словам в памяти
+allBooks = allBooks.Where(book =>
+{
+    var matchesText = normalizedKeywords.Any(keyword =>
+        (book.NormalizedTitle?.Contains(keyword) == true) ||
+        (book.NormalizedDescription?.Contains(keyword) == true));
+
+    var matchesTags = book.Tags?.Any(tag =>
+        normalizedKeywords.Any(keyword =>
+            tag.ToLower().Contains(keyword))) == true;
+
+    return matchesText || matchesTags;
+}).ToList();
 ```
 
-**Объяснение:**
-- Убрали `ToLower()` из SQL запроса
-- Используем `ILike` для регистронезависимого поиска
-- Entity Framework автоматически заменит на `LIKE` если `ILIKE` не поддерживается
+### 3. Почему этот подход работает:
+- **Избегает проблем с Entity Framework конвертерами** - не используем `EF.Property<string>`
+- **Эффективен** - большинство фильтров выполняется в SQL
+- **Безопасен** - поиск по тегам в памяти после загрузки объектов
+- **Стабилен** - нет конфликтов типов
 
 ## 🎯 Полный исправленный код:
 
 ```csharp
-// Фильтр по ключевым словам
-var keywords = preferences.GetKeywordsList();
-if (keywords.Any())
+private async Task<LotsSearchResult> SearchActiveLotsAsync(BooksDbContext booksContext, UserNotificationPreference preferences, int page, int pageSize, CancellationToken cancellationToken)
 {
-    var normalizedKeywords = keywords.Select(k => k.ToLower()).ToList();
-    
-    foreach (var keyword in normalizedKeywords)
-    {
-        query = query.Where(b => 
-            b.NormalizedTitle.Contains(keyword) || 
-            b.NormalizedDescription.Contains(keyword) ||
-            EF.Functions.ILike(EF.Property<string>(b, "Tags"), $"%{keyword}%"));
-    }
-}
+    var query = booksContext.BooksInfo.Include(b => b.Category).AsQueryable();
 
-// Фильтр по городам
-var cities = preferences.GetCitiesList();
-if (cities.Any())
-{
-    var normalizedCities = cities.Select(c => c.ToLower()).ToList();
-    
-    foreach (var city in normalizedCities)
+    // Фильтр: только активные торги
+    var now = DateTime.UtcNow;
+    query = query.Where(b => b.EndDate > now);
+
+    // SQL фильтры (эффективные)
+    var categoryIds = preferences.GetCategoryIdsList();
+    if (categoryIds.Any())
+        query = query.Where(b => categoryIds.Contains(b.CategoryId));
+
+    if (preferences.MinPrice > 0)
+        query = query.Where(b => (decimal)b.Price >= preferences.MinPrice);
+    if (preferences.MaxPrice > 0)
+        query = query.Where(b => (decimal)b.Price <= preferences.MaxPrice);
+
+    if (preferences.MinYear > 0)
+        query = query.Where(b => b.YearPublished >= preferences.MinYear);
+    if (preferences.MaxYear > 0)
+        query = query.Where(b => b.YearPublished <= preferences.MaxYear);
+
+    // Фильтр по городам
+    var cities = preferences.GetCitiesList();
+    if (cities.Any())
     {
-        query = query.Where(b => EF.Functions.ILike(b.City, $"%{city}%"));
+        var normalizedCities = cities.Select(c => c.ToLower()).ToList();
+        foreach (var city in normalizedCities)
+            query = query.Where(b => EF.Functions.ILike(b.City, $"%{city}%"));
     }
+
+    query = query.OrderBy(b => b.EndDate);
+
+    // Загружаем данные из БД
+    var allBooks = await query.AsNoTracking().ToListAsync(cancellationToken);
+
+    // Фильтрация в памяти (безопасная для тегов)
+    var keywords = preferences.GetKeywordsList();
+    if (keywords.Any())
+    {
+        var normalizedKeywords = keywords.Select(k => k.ToLower()).ToList();
+        
+        allBooks = allBooks.Where(book =>
+        {
+            var matchesText = normalizedKeywords.Any(keyword =>
+                (book.NormalizedTitle?.Contains(keyword) == true) ||
+                (book.NormalizedDescription?.Contains(keyword) == true));
+
+            var matchesTags = book.Tags?.Any(tag =>
+                normalizedKeywords.Any(keyword =>
+                    tag.ToLower().Contains(keyword))) == true;
+
+            return matchesText || matchesTags;
+        }).ToList();
+    }
+
+    // Пагинация в памяти
+    var totalCount = allBooks.Count;
+    var books = allBooks.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+    return new LotsSearchResult
+    {
+        Books = books,
+        TotalCount = totalCount,
+        Page = page,
+        PageSize = pageSize
+    };
 }
 ```
 

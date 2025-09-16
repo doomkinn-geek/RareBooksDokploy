@@ -757,30 +757,14 @@ namespace RareBooksService.WebApi.Services
             var now = DateTime.UtcNow;
             query = query.Where(b => b.EndDate > now);
 
-            // Фильтр по ключевым словам
-            var keywords = preferences.GetKeywordsList();
-            if (keywords.Any())
-            {
-                // Нормализуем ключевые слова к нижнему регистру заранее
-                var normalizedKeywords = keywords.Select(k => k.ToLower()).ToList();
-                
-                foreach (var keyword in normalizedKeywords)
-                {
-                    query = query.Where(b => 
-                        b.NormalizedTitle.Contains(keyword) || 
-                        b.NormalizedDescription.Contains(keyword) ||
-                        EF.Functions.ILike(EF.Property<string>(b, "Tags"), $"%{keyword}%"));
-                }
-            }
-
-            // Фильтр по категориям
+            // Фильтр по категориям (делаем в SQL)
             var categoryIds = preferences.GetCategoryIdsList();
             if (categoryIds.Any())
             {
                 query = query.Where(b => categoryIds.Contains(b.CategoryId));
             }
 
-            // Фильтр по цене
+            // Фильтр по цене (делаем в SQL)
             if (preferences.MinPrice > 0)
             {
                 query = query.Where(b => (decimal)b.Price >= preferences.MinPrice);
@@ -790,7 +774,7 @@ namespace RareBooksService.WebApi.Services
                 query = query.Where(b => (decimal)b.Price <= preferences.MaxPrice);
             }
 
-            // Фильтр по году издания
+            // Фильтр по году издания (делаем в SQL)
             if (preferences.MinYear > 0)
             {
                 query = query.Where(b => b.YearPublished >= preferences.MinYear);
@@ -800,17 +784,14 @@ namespace RareBooksService.WebApi.Services
                 query = query.Where(b => b.YearPublished <= preferences.MaxYear);
             }
 
-            // Фильтр по городам
+            // Фильтр по городам (делаем в SQL)
             var cities = preferences.GetCitiesList();
             if (cities.Any())
             {
-                // Нормализуем названия городов к нижнему регистру заранее
                 var normalizedCities = cities.Select(c => c.ToLower()).ToList();
                 
                 foreach (var city in normalizedCities)
                 {
-                    // Используем регистронезависимый поиск через ILIKE (PostgreSQL)
-                    // Если ILIKE не поддерживается, Entity Framework автоматически заменит на LIKE
                     query = query.Where(b => EF.Functions.ILike(b.City, $"%{city}%"));
                 }
             }
@@ -818,12 +799,39 @@ namespace RareBooksService.WebApi.Services
             // Сортировка по дате окончания (ближайшие к завершению - первыми)
             query = query.OrderBy(b => b.EndDate);
 
-            var totalCount = await query.CountAsync(cancellationToken);
-            var books = await query
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
+            // Загружаем данные из БД БЕЗ фильтрации по ключевым словам
+            var allBooks = await query
                 .AsNoTracking()
                 .ToListAsync(cancellationToken);
+
+            // Теперь фильтруем по ключевым словам в памяти (включая теги)
+            var keywords = preferences.GetKeywordsList();
+            if (keywords.Any())
+            {
+                var normalizedKeywords = keywords.Select(k => k.ToLower()).ToList();
+                
+                allBooks = allBooks.Where(book =>
+                {
+                    // Проверяем заголовок и описание
+                    var matchesText = normalizedKeywords.Any(keyword =>
+                        (book.NormalizedTitle?.Contains(keyword) == true) ||
+                        (book.NormalizedDescription?.Contains(keyword) == true));
+
+                    // Проверяем теги (теперь это безопасно, так как объекты уже загружены)
+                    var matchesTags = book.Tags?.Any(tag =>
+                        normalizedKeywords.Any(keyword =>
+                            tag.ToLower().Contains(keyword))) == true;
+
+                    return matchesText || matchesTags;
+                }).ToList();
+            }
+
+            // Применяем пагинацию в памяти
+            var totalCount = allBooks.Count;
+            var books = allBooks
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
 
             return new LotsSearchResult
             {
