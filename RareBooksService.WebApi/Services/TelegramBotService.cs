@@ -910,88 +910,121 @@ namespace RareBooksService.WebApi.Services
             };
         }
 
-        private async Task<string> FormatLotsMessageAsync(LotsSearchResult result, int page, int pageSize, UserNotificationPreference preferences, CancellationToken cancellationToken)
-        {
-            var message = new StringBuilder();
+         private async Task<string> FormatLotsMessageAsync(LotsSearchResult result, int page, int pageSize, UserNotificationPreference preferences, CancellationToken cancellationToken)
+         {
+             var message = new StringBuilder();
 
-            var totalPages = (int)Math.Ceiling((double)result.TotalCount / pageSize);
+             var totalPages = (int)Math.Ceiling((double)result.TotalCount / pageSize);
 
-            message.AppendLine("📚 <b>Активные лоты по вашим критериям</b>");
-            message.AppendLine();
-            message.AppendLine($"📊 Найдено: {result.TotalCount} лотов");
-            message.AppendLine($"📄 Страница: {page}/{totalPages}");
-            message.AppendLine();
+             message.AppendLine("📚 <b>Активные лоты по вашим критериям</b>");
+             message.AppendLine();
+             message.AppendLine($"📊 Найдено: {result.TotalCount} лотов");
+             message.AppendLine($"📄 Страница: {page}/{totalPages}");
+             message.AppendLine();
 
-            // Показываем активные критерии
-            var criteriaLines = new List<string>();
-            if (!string.IsNullOrEmpty(preferences.Keywords))
-                criteriaLines.Add($"🔍 Ключевые слова: {preferences.Keywords}");
-            if (preferences.MinPrice > 0 || preferences.MaxPrice > 0)
-                criteriaLines.Add($"💰 Цена: {(preferences.MinPrice > 0 ? $"от {preferences.MinPrice:N0} ₽" : "")} {(preferences.MaxPrice > 0 ? $"до {preferences.MaxPrice:N0} ₽" : "")}".Trim());
-            if (preferences.MinYear > 0 || preferences.MaxYear > 0)
-                criteriaLines.Add($"📅 Год: {(preferences.MinYear > 0 ? $"от {preferences.MinYear}" : "")} {(preferences.MaxYear > 0 ? $"до {preferences.MaxYear}" : "")}".Trim());
-            if (!string.IsNullOrEmpty(preferences.Cities))
-                criteriaLines.Add($"🏙️ Города: {preferences.Cities}");
+             // Показываем активные критерии
+             var criteriaLines = new List<string>();
+             if (!string.IsNullOrEmpty(preferences.Keywords))
+                 criteriaLines.Add($"🔍 Ключевые слова: {preferences.Keywords}");
+             if (preferences.MinPrice > 0 || preferences.MaxPrice > 0)
+                 criteriaLines.Add($"💰 Цена: {(preferences.MinPrice > 0 ? $"от {preferences.MinPrice:N0} ₽" : "")} {(preferences.MaxPrice > 0 ? $"до {preferences.MaxPrice:N0} ₽" : "")}".Trim());
+             if (preferences.MinYear > 0 || preferences.MaxYear > 0)
+                 criteriaLines.Add($"📅 Год: {(preferences.MinYear > 0 ? $"от {preferences.MinYear}" : "")} {(preferences.MaxYear > 0 ? $"до {preferences.MaxYear}" : "")}".Trim());
+             if (!string.IsNullOrEmpty(preferences.Cities))
+                 criteriaLines.Add($"🏙️ Города: {preferences.Cities}");
 
-            if (criteriaLines.Any())
-            {
-                message.AppendLine("<b>Активные критерии:</b>");
-                foreach (var criteria in criteriaLines)
-                {
-                    message.AppendLine($"  {criteria}");
-                }
-                message.AppendLine();
-            }
+             if (criteriaLines.Any())
+             {
+                 message.AppendLine("<b>Активные критерии:</b>");
+                 foreach (var criteria in criteriaLines)
+                 {
+                     message.AppendLine($"  {criteria}");
+                 }
+                 message.AppendLine();
+             }
 
-            int index = (page - 1) * pageSize + 1;
-            foreach (var book in result.Books)
-            {
-                var timeLeft = book.EndDate - DateTime.UtcNow;
-                var timeLeftStr = timeLeft.TotalDays >= 1 
-                    ? $"{(int)timeLeft.TotalDays} дн."
-                    : timeLeft.TotalHours >= 1 
-                        ? $"{(int)timeLeft.TotalHours} ч."
-                        : $"{(int)timeLeft.TotalMinutes} мин.";
+             int index = (page - 1) * pageSize + 1;
+             foreach (var book in result.Books)
+             {
+                 var timeLeft = book.EndDate - DateTime.UtcNow;
+                 var timeLeftStr = timeLeft.TotalDays >= 1 
+                     ? $"{(int)timeLeft.TotalDays} дн. {(int)timeLeft.Hours} ч."
+                     : timeLeft.TotalHours >= 1 
+                         ? $"{(int)timeLeft.TotalHours} ч. {(int)timeLeft.Minutes} мин."
+                         : $"{(int)timeLeft.TotalMinutes} мин.";
 
-                message.AppendLine($"<b>{index}. {book.Title}</b>");
-                message.AppendLine($"💰 Текущая цена: <b>{book.Price:N0} ₽</b>");
-                message.AppendLine($"⏰ Осталось: {timeLeftStr}");
-                message.AppendLine($"🏙️ Город: {book.City}");
-                if (book.YearPublished.HasValue)
-                    message.AppendLine($"📅 Год издания: {book.YearPublished}");
-                message.AppendLine($"📂 Категория: {book.Category?.Name ?? "Не указана"}");
-                if (book.BidsCount > 0)
-                    message.AppendLine($"👥 Ставок: {book.BidsCount}");
-                
-                // Ограничиваем длину описания
-                if (!string.IsNullOrEmpty(book.Description))
-                {
-                    var shortDescription = book.Description.Length > 100 
-                        ? book.Description.Substring(0, 100) + "..."
-                        : book.Description;
-                    message.AppendLine($"📝 {shortDescription}");
-                }
-                
-                message.AppendLine();
-                index++;
-            }
+                 // Заголовок с номером и названием
+                 message.AppendLine($"<b>{index}. {book.Title}</b>");
+                 
+                 // Основная информация
+                 message.AppendLine($"💰 Текущая цена: <b>{book.Price:N0} ₽</b>");
+                 
+                 // Показываем стартовую цену, если она отличается от текущей
+                 if (book.StartPrice > 0 && Math.Abs(book.StartPrice - book.Price) > 0.01)
+                 {
+                     message.AppendLine($"💸 Стартовая цена: {book.StartPrice:N0} ₽");
+                 }
+                 
+                 message.AppendLine($"⏰ До окончания: <b>{timeLeftStr}</b>");
+                 message.AppendLine($"🏙️ Город: {book.City}");
+                 
+                 if (book.YearPublished.HasValue)
+                     message.AppendLine($"📅 Год издания: {book.YearPublished}");
+                 
+                 message.AppendLine($"📂 Категория: {book.Category?.Name ?? "Не указана"}");
+                 
+                 // Информация о ставках
+                 if (book.BidsCount > 0)
+                     message.AppendLine($"👥 Ставок: <b>{book.BidsCount}</b>");
+                 else
+                     message.AppendLine($"👥 Ставок пока нет");
+                 
+                 // Продавец
+                 if (!string.IsNullOrEmpty(book.SellerName))
+                     message.AppendLine($"👤 Продавец: {book.SellerName}");
+                 
+                 // Теги
+                 if (book.Tags?.Any() == true)
+                 {
+                     var displayTags = book.Tags.Take(3).ToList(); // Показываем только первые 3 тега
+                     var tagsText = string.Join(", ", displayTags);
+                     if (book.Tags.Count > 3)
+                         tagsText += $" (+{book.Tags.Count - 3})";
+                     message.AppendLine($"🏷️ Теги: {tagsText}");
+                 }
+                 
+                 // Описание
+                 if (!string.IsNullOrEmpty(book.Description))
+                 {
+                     var shortDescription = book.Description.Length > 150 
+                         ? book.Description.Substring(0, 150) + "..."
+                         : book.Description;
+                     message.AppendLine($"📝 {shortDescription}");
+                 }
+                 
+                 // Ссылка на meshok.net (ГЛАВНОЕ!)
+                 message.AppendLine($"🔗 <a href=\"https://meshok.net/item/{book.Id}\">Открыть лот на Meshok.net</a>");
+                 
+                 message.AppendLine(); // Пустая строка между лотами
+                 index++;
+             }
 
-            // Пагинация
-            if (totalPages > 1)
-            {
-                message.AppendLine("📖 <b>Навигация:</b>");
-                if (page > 1)
-                    message.AppendLine($"  <code>/lots {page - 1}</code> - предыдущая страница");
-                if (page < totalPages)
-                    message.AppendLine($"  <code>/lots {page + 1}</code> - следующая страница");
-                message.AppendLine($"  <code>/lots [номер страницы]</code> - перейти на страницу");
-                message.AppendLine();
-            }
+             // Пагинация
+             if (totalPages > 1)
+             {
+                 message.AppendLine("📖 <b>Навигация:</b>");
+                 if (page > 1)
+                     message.AppendLine($"  <code>/lots {page - 1}</code> - предыдущая страница");
+                 if (page < totalPages)
+                     message.AppendLine($"  <code>/lots {page + 1}</code> - следующая страница");
+                 message.AppendLine($"  <code>/lots [номер страницы]</code> - перейти на страницу");
+                 message.AppendLine();
+             }
 
-            message.AppendLine("⚙️ <code>/settings</code> - изменить критерии поиска");
+             message.AppendLine("⚙️ <code>/settings</code> - изменить критерии поиска");
 
-            return message.ToString();
-        }
+             return message.ToString();
+         }
 
         private async Task<DirectAuthResult> RegisterUserDirectlyAsync(string email, string password, string telegramId, CancellationToken cancellationToken)
         {
