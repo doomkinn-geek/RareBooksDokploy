@@ -3,9 +3,19 @@
 echo "🔧 Принудительное исправление nginx конфигурации"
 echo "=============================================="
 
+# Определяем формат Docker Compose
+if docker compose version &> /dev/null; then
+    DOCKER_CMD="docker compose"
+elif docker-compose --version &> /dev/null; then
+    DOCKER_CMD="docker-compose"
+else
+    echo "❌ Docker Compose не найден!"
+    exit 1
+fi
+
 # Остановка nginx
 echo "🛑 Остановка nginx контейнера..."
-sudo docker-compose stop nginx
+sudo $DOCKER_CMD stop nginx
 
 # Проверка, что конфигурация на месте
 echo ""
@@ -43,12 +53,12 @@ fi
 # Удаление контейнера для принудительного пересоздания
 echo ""
 echo "🗑️ Удаление nginx контейнера для пересоздания..."
-sudo docker-compose rm -f nginx
+sudo $DOCKER_CMD rm -f nginx
 
 # Пересоздание и запуск
 echo ""
 echo "🚀 Пересоздание nginx контейнера..."
-sudo docker-compose up -d --force-recreate nginx
+sudo $DOCKER_CMD up -d --force-recreate nginx
 
 # Ожидание запуска
 echo ""
@@ -58,12 +68,12 @@ sleep 15
 # Проверка статуса
 echo ""
 echo "📊 Статус контейнеров после перезапуска:"
-sudo docker-compose ps | grep -E "(nginx|backend|frontend)"
+sudo $DOCKER_CMD ps | grep -E "(nginx|backend|frontend)"
 
 # Проверка логов
 echo ""
 echo "📋 Логи nginx (последние 20 строк):"
-sudo docker-compose logs --tail=20 nginx
+sudo $DOCKER_CMD logs --tail=20 nginx
 
 # Тестирование
 echo ""
@@ -88,7 +98,7 @@ head -5 /tmp/setup_response.txt
 echo ""
 echo "🎯 Если проблема не решена:"
 echo "1. Запустите: ./debug-nginx.sh"
-echo "2. Проверьте логи: sudo docker-compose logs nginx"
-echo "3. Проверьте backend: sudo docker-compose logs backend"
+echo "2. Проверьте логи: sudo $DOCKER_CMD logs nginx"
+echo "3. Проверьте backend: sudo $DOCKER_CMD logs backend"
 
 rm -f /tmp/setup_response.txt

@@ -1,0 +1,53 @@
+СПИСОК ФАЙЛОВ ДЛЯ ЗАГРУЗКИ НА UBUNTU СЕРВЕР
+===========================================
+
+ОБЯЗАТЕЛЬНЫЕ ФАЙЛЫ (исправленные):
+✅ nginx/nginx_prod.conf                 # Универсальная nginx конфигурация
+✅ docker-compose.yml                    # Обновленный compose файл
+
+НОВЫЕ СКРИПТЫ:
+✅ apply-universal-config.sh             # Основной скрипт применения конфигурации
+✅ UNIVERSAL_SETUP_GUIDE.md              # Подробная документация
+✅ FINAL_SETUP_SOLUTION.md               # Итоговые инструкции
+
+ОБНОВЛЕННЫЕ СКРИПТЫ (поддержка docker compose):
+✅ setup-diagnostics.sh                  # Диагностический скрипт
+✅ debug-nginx.sh                        # Диагностика nginx
+✅ fix-nginx.sh                          # Исправление nginx
+✅ restore-https.sh                      # Восстановление HTTPS
+✅ quick-fix-http.sh                     # Быстрое исправление (уже обновлен пользователем)
+
+ДОПОЛНИТЕЛЬНЫЕ ФАЙЛЫ (опционально):
+- nginx/nginx_prod_http.conf             # HTTP-only версия (если понадобится)
+- UBUNTU_SETUP_FIX.md                    # Подробные инструкции
+- SETUP_TROUBLESHOOTING.md               # Руководство по устранению проблем
+
+КОМАНДЫ ПОСЛЕ ЗАГРУЗКИ:
+======================
+
+1. Сделать скрипты исполняемыми:
+   chmod +x apply-universal-config.sh
+   chmod +x setup-diagnostics.sh
+   chmod +x debug-nginx.sh
+   chmod +x fix-nginx.sh
+   chmod +x restore-https.sh
+
+2. Применить универсальную конфигурацию:
+   ./apply-universal-config.sh
+
+3. Проверить результат:
+   curl http://localhost/api/test/setup-status
+
+ОЖИДАЕМЫЙ РЕЗУЛЬТАТ:
+===================
+- nginx контейнер: healthy
+- Setup API доступен: http://localhost/api/setup
+- POST запросы работают корректно
+- Инициализация доступна постоянно
+
+БОЛЬШЕ НЕ НУЖНО:
+================
+❌ Переключать nginx конфигурации
+❌ Перезапускать контейнеры для setup
+❌ Отключать HTTPS
+❌ Использовать временные решения

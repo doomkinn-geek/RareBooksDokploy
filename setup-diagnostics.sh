@@ -114,13 +114,21 @@ print_header
 # 1. Проверка статуса Docker контейнеров
 print_section "📦 Проверка статуса Docker контейнеров..."
 if command -v docker &> /dev/null; then
-    if docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null; then
-        print_success "Docker контейнеры найдены"
+    # Сначала пробуем новый формат docker compose
+    if docker compose ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null; then
+        print_success "Docker контейнеры найдены (используем docker compose)"
+        DOCKER_CMD="docker compose"
+    # Если не работает, пробуем старый формат
+    elif docker-compose ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null; then
+        print_success "Docker контейнеры найдены (используем docker-compose)"
+        DOCKER_CMD="docker-compose"
     else
         print_error "Ошибка при проверке Docker контейнеров"
+        DOCKER_CMD="docker compose"  # По умолчанию новый формат
     fi
 else
     print_error "Docker не установлен или недоступен"
+    DOCKER_CMD="docker compose"
 fi
 
 # 2. Тест endpoint'а /api/test/setup-status
@@ -268,29 +276,25 @@ fi
 if [[ "$RESTART_SERVICES" == true ]]; then
     print_section "🔄 Перезапуск сервисов..."
     
-    if command -v docker-compose &> /dev/null; then
-        print_info "Перезапуск nginx и backend..."
-        if docker-compose restart nginx backend; then
-            print_success "Сервисы перезапущены"
-            
-            print_info "Ожидание 10 секунд для стабилизации..."
-            sleep 10
-            
-            # Повторный тест
-            print_info "Повторная проверка..."
-            retest_result=$(test_endpoint "$BASE_URL/api/test/setup-status")
-            retest_code=$(echo "$retest_result" | cut -d'|' -f1)
-            
-            if [[ "$retest_code" == "200" ]]; then
-                print_success "Сервисы восстановлены"
-            else
-                print_error "Проблема не решена (HTTP $retest_code)"
-            fi
+    print_info "Перезапуск nginx и backend..."
+    if sudo $DOCKER_CMD restart nginx backend; then
+        print_success "Сервисы перезапущены"
+        
+        print_info "Ожидание 10 секунд для стабилизации..."
+        sleep 10
+        
+        # Повторный тест
+        print_info "Повторная проверка..."
+        retest_result=$(test_endpoint "$BASE_URL/api/test/setup-status")
+        retest_code=$(echo "$retest_result" | cut -d'|' -f1)
+        
+        if [[ "$retest_code" == "200" ]]; then
+            print_success "Сервисы восстановлены"
         else
-            print_error "Ошибка при перезапуске сервисов"
+            print_error "Проблема не решена (HTTP $retest_code)"
         fi
     else
-        print_error "docker-compose не найден"
+        print_error "Ошибка при перезапуске сервисов"
     fi
 fi
 
@@ -301,7 +305,7 @@ if [[ "$http_code" == "200" ]] && [[ "$setup_get_code" == "200" ]] && [[ "$setup
     print_warning "1. Проблема с POST запросами к /api/setup/initialize"
     echo "   Решение: Обновите nginx конфигурацию и перезагрузите"
     echo "   Команды:"
-    echo "     sudo docker-compose restart nginx"
+    echo "     sudo $DOCKER_CMD restart nginx"
     echo "     или"
     echo "     sudo nginx -s reload"
 fi
@@ -309,15 +313,15 @@ fi
 if [[ "$http_code" != "200" ]]; then
     print_warning "1. Проблема с backend сервером"
     echo "   Решение: Перезапустите backend контейнер"
-    echo "   Команда: sudo docker-compose restart backend"
+    echo "   Команда: sudo $DOCKER_CMD restart backend"
 fi
 
 print_section "💡 Дополнительные команды для диагностики:"
 echo "   $0 --restart-services           # Перезапустить сервисы"
 echo "   $0 --force-setup-mode           # Принудительно включить режим setup"
 echo "   $0 --verbose                    # Подробный вывод"
-echo "   sudo docker-compose logs nginx  # Логи nginx"
-echo "   sudo docker-compose logs backend # Логи backend"
+echo "   sudo $DOCKER_CMD logs nginx     # Логи nginx"
+echo "   sudo $DOCKER_CMD logs backend   # Логи backend"
 echo "   sudo nginx -t                   # Проверка конфигурации nginx"
 echo "   sudo nginx -s reload            # Перезагрузка nginx"
 

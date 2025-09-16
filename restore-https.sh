@@ -3,6 +3,18 @@
 echo "🔒 Восстановление HTTPS конфигурации nginx"
 echo "========================================="
 
+# Определяем формат Docker Compose
+if docker compose version &> /dev/null; then
+    DOCKER_CMD="docker compose"
+    echo "ℹ️ Используем docker compose (новый формат)"
+elif docker-compose --version &> /dev/null; then
+    DOCKER_CMD="docker-compose"
+    echo "ℹ️ Используем docker-compose (старый формат)"
+else
+    echo "❌ Docker Compose не найден!"
+    exit 1
+fi
+
 # Проверка бэкапа
 if [ ! -f "docker-compose.yml.backup" ]; then
     echo "❌ Бэкап docker-compose.yml не найден!"
@@ -33,11 +45,11 @@ fi
 
 echo ""
 echo "🛑 Остановка nginx..."
-sudo docker-compose stop nginx
+sudo $DOCKER_CMD stop nginx
 
 echo ""
 echo "🚀 Запуск nginx с HTTPS конфигурацией..."
-sudo docker-compose up -d nginx
+sudo $DOCKER_CMD up -d nginx
 
 echo ""
 echo "⏳ Ожидание запуска (15 секунд)..."
@@ -45,7 +57,7 @@ sleep 15
 
 echo ""
 echo "📊 Статус контейнеров:"
-sudo docker-compose ps | grep nginx
+sudo $DOCKER_CMD ps | grep nginx
 
 echo ""
 echo "🔍 Тестирование HTTPS endpoints..."
@@ -84,7 +96,7 @@ fi
 
 echo ""
 echo "📋 Логи nginx (последние 10 строк):"
-sudo docker-compose logs --tail=10 nginx
+sudo $DOCKER_CMD logs --tail=10 nginx
 
 echo ""
 if [ "$https_test" = "200" ] && [ "$https_setup" != "405" ]; then
@@ -101,7 +113,7 @@ else
     echo "❌ HTTPS конфигурация работает с проблемами"
     echo ""
     echo "🔧 Для отладки запустите:"
-    echo "   sudo docker-compose logs nginx"
+    echo "   sudo $DOCKER_CMD logs nginx"
     echo "   sudo nginx -t  # внутри контейнера"
     echo ""
     echo "Или вернитесь к HTTP версии:"

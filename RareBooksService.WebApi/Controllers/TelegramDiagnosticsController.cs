@@ -322,7 +322,7 @@ namespace RareBooksService.WebApi.Controllers
         /// <summary>
         /// Получение логов ошибок
         /// </summary>
-        [HttpGet("logs")]
+        /*[HttpGet("logs")]
         public async Task<IActionResult> GetLogs([FromQuery] int hours = 1)
         {
             try
@@ -395,6 +395,6 @@ namespace RareBooksService.WebApi.Controllers
                     details = ex.ToString()
                 });
             }
-        }
+        }*/
     }
 }

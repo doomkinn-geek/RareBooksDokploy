@@ -88,9 +88,8 @@ services:
     volumes:
       #- ./nginx/nginx_dev.conf:/etc/nginx/nginx.conf
       - ./nginx/nginx_prod.conf:/etc/nginx/nginx.conf
-      - /etc/letsencrypt:/etc/letsencrypt:ro   # <---- добавляем
-      # - /home/docker/ssl/rare-books.ru:/etc/ssl/rare-books.ru:ro
-      - /var/www/certbot:/var/www/certbot  
+      - /etc/letsencrypt:/etc/letsencrypt:ro   # SSL сертификаты
+      - /var/www/certbot:/var/www/certbot      # Certbot challenge
     depends_on:
       frontend:
         condition: service_healthy
@@ -98,10 +97,12 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://localhost:80 > /dev/null 2>&1 || exit 1"]
+      # Проверяем Setup API через HTTP (всегда доступен)
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:80/api/test/setup-status > /dev/null 2>&1 || exit 1"]
       interval: 30s
-      timeout: 10s
-      retries: 3
+      timeout: 15s
+      retries: 5
+      start_period: 30s
 
 volumes:
   db_books_data:
