@@ -761,12 +761,15 @@ namespace RareBooksService.WebApi.Services
             var keywords = preferences.GetKeywordsList();
             if (keywords.Any())
             {
-                foreach (var keyword in keywords)
+                // Нормализуем ключевые слова к нижнему регистру заранее
+                var normalizedKeywords = keywords.Select(k => k.ToLower()).ToList();
+                
+                foreach (var keyword in normalizedKeywords)
                 {
                     query = query.Where(b => 
                         b.NormalizedTitle.Contains(keyword) || 
                         b.NormalizedDescription.Contains(keyword) ||
-                        b.Tags.Any(tag => tag.ToLower().Contains(keyword)));
+                        b.Tags.Any(tag => tag.Contains(keyword)));
                 }
             }
 
@@ -801,9 +804,13 @@ namespace RareBooksService.WebApi.Services
             var cities = preferences.GetCitiesList();
             if (cities.Any())
             {
-                foreach (var city in cities)
+                // Нормализуем названия городов к нижнему регистру заранее
+                var normalizedCities = cities.Select(c => c.ToLower()).ToList();
+                
+                foreach (var city in normalizedCities)
                 {
-                    query = query.Where(b => b.City.ToLower().Contains(city));
+                    // Предполагаем, что b.City уже нормализован или используем EF.Functions.Like
+                    query = query.Where(b => EF.Functions.Like(b.City.ToLower(), $"%{city}%"));
                 }
             }
 

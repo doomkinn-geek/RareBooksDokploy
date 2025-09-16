@@ -494,7 +494,6 @@ const SettingsPanel = () => {
                             <TextField
                                 fullWidth
                                 label="Токен бота"
-                                type="password"
                                 variant="outlined"
                                 size="small"
                                 value={telegramBot.token}
