@@ -15,7 +15,7 @@ if [ ! -f "docker-compose.yml" ]; then
 fi
 
 echo "📋 Текущий статус контейнеров:"
-sudo docker-compose ps | grep -E "(nginx|backend|frontend)" || echo "Контейнеры не запущены"
+sudo docker compose ps | grep -E "(nginx|backend|frontend)" || echo "Контейнеры не запущены"
 
 echo ""
 echo "🔄 Переключение на HTTP-версию nginx конфигурации..."
@@ -40,12 +40,12 @@ fi
 
 echo ""
 echo "🛑 Остановка и пересоздание nginx..."
-sudo docker-compose stop nginx
-sudo docker-compose rm -f nginx
+sudo docker compose stop nginx
+sudo docker compose rm -f nginx
 
 echo ""
 echo "🚀 Запуск nginx с новой конфигурацией..."
-sudo docker-compose up -d nginx
+sudo docker compose up -d nginx
 
 echo ""
 echo "⏳ Ожидание запуска (10 секунд)..."
@@ -53,7 +53,7 @@ sleep 10
 
 echo ""
 echo "📊 Статус контейнеров:"
-sudo docker-compose ps | grep -E "(nginx|backend|frontend)"
+sudo docker compose ps | grep -E "(nginx|backend|frontend)"
 
 echo ""
 echo "🔍 Тестирование HTTP endpoints..."
@@ -95,7 +95,7 @@ fi
 
 echo ""
 echo "📋 Проверка логов nginx:"
-sudo docker-compose logs --tail=10 nginx | grep -E "(error|warn|started|setup|test)" || echo "Нет релевантных логов"
+sudo docker compose logs --tail=10 nginx | grep -E "(error|warn|started|setup|test)" || echo "Нет релевантных логов"
 
 echo ""
 echo "🎯 Следующие шаги:"
