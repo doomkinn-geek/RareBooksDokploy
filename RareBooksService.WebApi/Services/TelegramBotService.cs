@@ -847,7 +847,7 @@ namespace RareBooksService.WebApi.Services
             for (int i = 0; i < randomActiveBooks.Count; i++)
             {
                 var book = randomActiveBooks[i];
-                _logger.LogInformation("ДИАГНОСТИКА: Лот {Index}: Id={Id}, Title='{Title}', NormalizedTitle='{NormTitle}', Tags=[{Tags}], BeginDate={BeginDate}, EndDate={EndDate}", 
+                _logger.LogInformation("ДИАГНОСТИКА: Лот {Index}: Id={Id}, Title='{Title}', Tags=[{Tags}], BeginDate={BeginDate}, EndDate={EndDate}", 
                     i + 1, book.Id, 
                     book.Title?.Substring(0, Math.Min(50, book.Title?.Length ?? 0)),
                     //book.NormalizedTitle?.Substring(0, Math.Min(50, book.NormalizedTitle?.Length ?? 0)),
