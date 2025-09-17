@@ -839,7 +839,7 @@ namespace RareBooksService.WebApi.Services
             
             // ДИАГНОСТИКА: Показываем несколько случайных активных лотов для понимания данных
             var randomActiveBooks = await query
-                .Take(50)
+                .Take(5)
                 .Select(b => new { b.Id, b.Title, b.NormalizedTitle, b.NormalizedDescription, b.Tags, b.BeginDate, b.EndDate })
                 .ToListAsync(cancellationToken);
                 
@@ -999,8 +999,8 @@ namespace RareBooksService.WebApi.Services
                 var countQuery = booksContext.BooksInfo.AsQueryable();
                 countQuery = countQuery.Where(b => b.EndDate > now);
                 
-                if (categoryIds.Any())
-                    countQuery = countQuery.Where(b => categoryIds.Contains(b.CategoryId));
+                //if (categoryIds.Any())
+                //    countQuery = countQuery.Where(b => categoryIds.Contains(b.CategoryId));
                 if (preferences.MinPrice > 0)
                     countQuery = countQuery.Where(b => (decimal)b.Price >= preferences.MinPrice);
                 if (preferences.MaxPrice > 0)
@@ -1009,12 +1009,12 @@ namespace RareBooksService.WebApi.Services
                     countQuery = countQuery.Where(b => b.YearPublished >= preferences.MinYear);
                 if (preferences.MaxYear > 0)
                     countQuery = countQuery.Where(b => b.YearPublished <= preferences.MaxYear);
-                if (cities.Any())
+                /*if (cities.Any())
                 {
                     var normalizedCities = cities.Select(c => c.ToLower()).ToList();
                     foreach (var city in normalizedCities)
                         countQuery = countQuery.Where(b => EF.Functions.ILike(b.City, $"%{city}%"));
-                }
+                }*/
                 
                 // Примерный подсчет (для производительности)
                 totalCount = Math.Min(await countQuery.CountAsync(cancellationToken), 1000);
