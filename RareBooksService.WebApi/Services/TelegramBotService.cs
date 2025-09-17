@@ -839,7 +839,7 @@ namespace RareBooksService.WebApi.Services
             
             // ДИАГНОСТИКА: Показываем несколько случайных активных лотов для понимания данных
             var randomActiveBooks = await query
-                .Take(5)
+                //.Take(5)
                 .Select(b => new { b.Id, b.Title, b.NormalizedTitle, b.NormalizedDescription, b.Tags, b.BeginDate, b.EndDate })
                 .ToListAsync(cancellationToken);
                 
