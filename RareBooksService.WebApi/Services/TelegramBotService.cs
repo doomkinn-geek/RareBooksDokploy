@@ -856,7 +856,7 @@ namespace RareBooksService.WebApi.Services
                     book.EndDate);
             }
 
-            // КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: берем ограниченное количество записей, а не все
+            // КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: для небольших объемов данных (менее 1000 записей) берем все записи
             var keywords = preferences.GetKeywordsList();
             List<RegularBaseBook> allBooks;
             
@@ -875,51 +875,79 @@ namespace RareBooksService.WebApi.Services
             }
             else if (keywords.Any())
             {
-                // Если есть ключевые слова, берем больше записей для фильтрации в памяти
-                // Но не все - это было причиной зависания!
-                var batchSize = Math.Max(pageSize * 10, 200); // Минимум 200, максимум в 10 раз больше pageSize
-                allBooks = await query
-                    .Take(batchSize)
-                    .AsNoTracking()
-                    .ToListAsync(cancellationToken);
-                
-                _logger.LogInformation("Загружено {Count} записей для фильтрации по ключевым словам", allBooks.Count);
+                // ИСПРАВЛЕНИЕ: для небольших объемов данных берем ВСЕ записи
+                // Это было причиной отсутствия результатов!
+                if (totalActiveCount <= 1000)
+                {
+                    allBooks = await query
+                        .AsNoTracking()
+                        .ToListAsync(cancellationToken);
+                    _logger.LogInformation("Загружено ВСЕ {Count} записей для фильтрации по ключевым словам (небольшой объем данных)", allBooks.Count);
+                }
+                else
+                {
+                    // Для больших объемов берем ограниченное количество
+                    var batchSize = Math.Max(pageSize * 20, 1000); // Увеличили лимит
+                    allBooks = await query
+                        .Take(batchSize)
+                        .AsNoTracking()
+                        .ToListAsync(cancellationToken);
+                    _logger.LogInformation("Загружено {Count} записей для фильтрации по ключевым словам (большой объем данных)", allBooks.Count);
+                }
 
                 // Обрабатываем ключевые слова через стемминг (как в RegularBaseBooksRepository)
                 _logger.LogInformation("ДИАГНОСТИКА: Исходные ключевые слова: {Keywords}", string.Join(", ", keywords));
                 
                 // Для каждого исходного ключевого слова создаем набор стеммированных слов для поиска
                 var keywordGroups = new List<List<string>>();
+                var originalKeywords = new List<string>(); // Для fallback-поиска
                 
                 foreach (var keyword in keywords)
                 {
                     var keywordSearchTerms = new List<string>();
+                    var lowerKeyword = keyword.ToLower();
+                    originalKeywords.Add(lowerKeyword);
                     
                     try
                     {
                         string detectedLanguage;
                         var processedKeyword = PreprocessText(keyword, out detectedLanguage);
                         var keywordParts = processedKeyword.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                        keywordSearchTerms.AddRange(keywordParts);
                         
                         _logger.LogInformation("ДИАГНОСТИКА: '{OriginalKeyword}' -> язык: {Language} -> стемминг: '{ProcessedKeyword}' -> части для поиска: [{Parts}]", 
                             keyword, detectedLanguage, processedKeyword, string.Join(", ", keywordParts));
+                        
+                        // Добавляем стеммированные части
+                        keywordSearchTerms.AddRange(keywordParts);
+                        
+                        // ИСПРАВЛЕНИЕ: всегда добавляем исходное слово для расширения поиска
+                        if (!keywordSearchTerms.Contains(lowerKeyword))
+                        {
+                            keywordSearchTerms.Add(lowerKeyword);
+                            _logger.LogInformation("ДИАГНОСТИКА: Добавляем исходное слово: '{OriginalKeyword}'", lowerKeyword);
+                        }
+                        
+                        // НОВОЕ: добавляем частичные совпадения для учета склонений (первые 4-6 символов)
+                        if (lowerKeyword.Length >= 4)
+                        {
+                            var partialWord = lowerKeyword.Substring(0, Math.Min(lowerKeyword.Length - 1, 6));
+                            if (!keywordSearchTerms.Contains(partialWord))
+                            {
+                                keywordSearchTerms.Add(partialWord);
+                                _logger.LogInformation("ДИАГНОСТИКА: Добавляем частичное слово для склонений: '{PartialWord}'", partialWord);
+                            }
+                        }
                     }
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "Ошибка при обработке ключевого слова '{Keyword}', используем простой поиск", keyword);
-                        keywordSearchTerms.Add(keyword.ToLower());
+                        keywordSearchTerms.Add(lowerKeyword);
                         _logger.LogInformation("ДИАГНОСТИКА: '{OriginalKeyword}' -> ОШИБКА -> простой поиск: '{SimpleKeyword}'", 
-                            keyword, keyword.ToLower());
+                            keyword, lowerKeyword);
                     }
                     
-                    // Если стемминг не дает результата, добавляем исходное слово для поиска по тегам
-                    if (!keywordSearchTerms.Any() || keywordSearchTerms.All(term => term == keyword.ToLower()))
-                    {
-                        keywordSearchTerms.Add(keyword.ToLower());
-                        _logger.LogInformation("ДИАГНОСТИКА: Добавляем исходное слово для поиска: '{OriginalKeyword}'", keyword.ToLower());
-                    }
-                    
+                    // Убираем дубликаты
+                    keywordSearchTerms = keywordSearchTerms.Distinct().ToList();
                     keywordGroups.Add(keywordSearchTerms);
                 }
 
@@ -959,34 +987,40 @@ namespace RareBooksService.WebApi.Services
                 int totalChecked = 0;
                 int matchedByText = 0;
                 int matchedByTags = 0;
+                int matchedByFallback = 0;
                 
                 allBooks = allBooks.Where(book =>
                 {
                     totalChecked++;
                     
-                    // НОВАЯ ЛОГИКА: проверяем как в RegularBaseBooksRepository - каждая группа должна найти совпадение
+                    // ОСНОВНОЙ ПОИСК: проверяем стеммированные слова в нормализованных полях
                     var matchesText = keywordGroups.All(group => 
                         group.Any(searchTerm =>
                             (book.NormalizedTitle?.Contains(searchTerm) == true) ||
                             (book.NormalizedDescription?.Contains(searchTerm) == true)));
 
-                    // Проверяем теги (используем исходные ключевые слова, так как теги не стеммированы)
-                    var matchesTags = keywords.All(originalKeyword =>
+                    // ПОИСК ПО ТЕГАМ: используем исходные ключевые слова, так как теги не стеммированы
+                    var matchesTags = originalKeywords.All(originalKeyword =>
                         book.Tags?.Any(tag =>
-                            tag.ToLower().Contains(originalKeyword.ToLower())) == true);
+                            tag.ToLower().Contains(originalKeyword)) == true);
 
-                    var finalMatch = matchesText || matchesTags;
+                    // FALLBACK ПОИСК: ищем исходные слова в исходных полях (Title, Description)
+                    var matchesFallback = originalKeywords.All(originalKeyword =>
+                        (book.Title?.ToLower().Contains(originalKeyword) == true) ||
+                        (book.Description?.ToLower().Contains(originalKeyword) == true));
+
+                    var finalMatch = matchesText || matchesTags || matchesFallback;
                     
                     if (matchesText) matchedByText++;
                     if (matchesTags) matchedByTags++;
+                    if (matchesFallback) matchedByFallback++;
                     
                     // ДИАГНОСТИКА: Логируем первые 3 проверки для понимания процесса
                     if (totalChecked <= 3)
                     {
-                        _logger.LogInformation("ДИАГНОСТИКА: Проверка книги {Index}: '{Title}' | NormalizedTitle: '{NormTitle}' | matchesText: {MatchText} | matchesTags: {MatchTags} | итог: {Final}", 
+                        _logger.LogInformation("ДИАГНОСТИКА: Проверка книги {Index}: '{Title}' | matchesText: {MatchText} | matchesTags: {MatchTags} | matchesFallback: {MatchFallback} | итог: {Final}", 
                             totalChecked, book.Title?.Substring(0, Math.Min(40, book.Title?.Length ?? 0)), 
-                            book.NormalizedTitle?.Substring(0, Math.Min(50, book.NormalizedTitle?.Length ?? 0)),
-                            matchesText, matchesTags, finalMatch);
+                            matchesText, matchesTags, matchesFallback, finalMatch);
                             
                         // Показываем детальную проверку каждой группы ключевых слов
                         for (int i = 0; i < keywordGroups.Count; i++)
@@ -1015,15 +1049,28 @@ namespace RareBooksService.WebApi.Services
                         if (book.Tags?.Any() == true)
                         {
                             _logger.LogInformation("ДИАГНОСТИКА: Теги книги: [{Tags}]", string.Join(", ", book.Tags));
-                            foreach (var originalKeyword in keywords)
+                            foreach (var originalKeyword in originalKeywords)
                             {
-                                var tagMatches = book.Tags.Any(tag => tag.ToLower().Contains(originalKeyword.ToLower()));
+                                var tagMatches = book.Tags.Any(tag => tag.ToLower().Contains(originalKeyword));
                                 if (tagMatches)
                                 {
-                                    var matchingTags = book.Tags.Where(tag => tag.ToLower().Contains(originalKeyword.ToLower())).ToList();
+                                    var matchingTags = book.Tags.Where(tag => tag.ToLower().Contains(originalKeyword)).ToList();
                                     _logger.LogInformation("ДИАГНОСТИКА: ✓ Найдено совпадение в тегах с '{Keyword}': {MatchingTags}", 
                                         originalKeyword, string.Join(", ", matchingTags));
                                 }
+                            }
+                        }
+                        
+                        // НОВОЕ: Проверяем fallback-поиск детально
+                        _logger.LogInformation("ДИАГНОСТИКА: Fallback-поиск по исходным полям:");
+                        foreach (var originalKeyword in originalKeywords)
+                        {
+                            var titleMatch = book.Title?.ToLower().Contains(originalKeyword) == true;
+                            var descMatch = book.Description?.ToLower().Contains(originalKeyword) == true;
+                            if (titleMatch || descMatch)
+                            {
+                                _logger.LogInformation("ДИАГНОСТИКА: ✓ Найдено fallback-совпадение с '{Keyword}': title={TitleMatch}, description={DescMatch}", 
+                                    originalKeyword, titleMatch, descMatch);
                             }
                         }
                     }
@@ -1031,8 +1078,8 @@ namespace RareBooksService.WebApi.Services
                     return finalMatch;
                 }).ToList();
                 
-                _logger.LogInformation("ДИАГНОСТИКА: Проверено книг: {TotalChecked}, найдено по тексту: {MatchedByText}, по тегам: {MatchedByTags}", 
-                    totalChecked, matchedByText, matchedByTags);
+                _logger.LogInformation("ДИАГНОСТИКА: Проверено книг: {TotalChecked}, найдено по тексту: {MatchedByText}, по тегам: {MatchedByTags}, fallback-поиск: {MatchedByFallback}", 
+                    totalChecked, matchedByText, matchedByTags, matchedByFallback);
 
                 _logger.LogInformation("После фильтрации по ключевым словам осталось {Count} записей", allBooks.Count);
             }
