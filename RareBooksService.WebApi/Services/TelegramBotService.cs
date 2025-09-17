@@ -9,6 +9,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using Iveonik.Stemmers;
+using LanguageDetection;
 
 namespace RareBooksService.WebApi.Services
 {
@@ -23,6 +26,15 @@ namespace RareBooksService.WebApi.Services
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<TelegramBotService> _logger;
         private readonly ITelegramLinkService _linkService;
+        private readonly Dictionary<string, IStemmer> _stemmers;
+        private static readonly LanguageDetector _languageDetector;
+
+        // Создаём статический экземпляр детектора языка один раз
+        static TelegramBotService()
+        {
+            _languageDetector = new LanguageDetector();
+            _languageDetector.AddAllLanguages();
+        }
 
         public TelegramBotService(
             ITelegramNotificationService telegramService,
@@ -34,6 +46,16 @@ namespace RareBooksService.WebApi.Services
             _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _linkService = linkService ?? throw new ArgumentNullException(nameof(linkService));
+            
+            _stemmers = new Dictionary<string, IStemmer>
+            {
+                { "rus", new RussianStemmer() },
+                { "eng", new EnglishStemmer() },
+                { "fra", new FrenchStemmer() },
+                { "deu", new GermanStemmer() },
+                { "ita", new ItalianStemmer() },
+                { "fin", new FinnishStemmer() }
+            };
         }
 
         public async Task ProcessUpdateAsync(TelegramUpdate update, CancellationToken cancellationToken = default)
@@ -827,17 +849,35 @@ namespace RareBooksService.WebApi.Services
                 
                 _logger.LogInformation("Загружено {Count} записей для фильтрации по ключевым словам", allBooks.Count);
 
-                var normalizedKeywords = keywords.Select(k => k.ToLower()).ToList();
-                _logger.LogInformation("Фильтруем по ключевым словам: {Keywords}", string.Join(", ", normalizedKeywords));
+                // Обрабатываем ключевые слова через стемминг (как в RegularBaseBooksRepository)
+                var processedKeywords = new List<string>();
+                foreach (var keyword in keywords)
+                {
+                    try
+                    {
+                        string detectedLanguage;
+                        var processedKeyword = PreprocessText(keyword, out detectedLanguage);
+                        var keywordParts = processedKeyword.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        processedKeywords.AddRange(keywordParts);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Ошибка при обработке ключевого слова '{Keyword}', используем простой поиск", keyword);
+                        processedKeywords.Add(keyword.ToLower());
+                    }
+                }
+
+                _logger.LogInformation("Фильтруем по обработанным ключевым словам: {Keywords}", string.Join(", ", processedKeywords));
                 
                 allBooks = allBooks.Where(book =>
                 {
-                    // Проверяем заголовок и описание
-                    var matchesText = normalizedKeywords.Any(keyword =>
+                    // Проверяем заголовок и описание через стемминг (используем NormalizedTitle и NormalizedDescription)
+                    var matchesText = processedKeywords.Any(keyword =>
                         (book.NormalizedTitle?.Contains(keyword) == true) ||
                         (book.NormalizedDescription?.Contains(keyword) == true));
 
-                    // Проверяем теги (теперь это безопасно, так как объекты уже загружены)
+                    // Проверяем теги (используем простой поиск с ToLower, так как теги не стеммированы)
+                    var normalizedKeywords = keywords.Select(k => k.ToLower()).ToList();
                     var matchesTags = book.Tags?.Any(tag =>
                         normalizedKeywords.Any(keyword =>
                             tag.ToLower().Contains(keyword))) == true;
@@ -1153,6 +1193,32 @@ namespace RareBooksService.WebApi.Services
         }
 
         // Методы реализованы в TelegramBotServiceExtended.cs
+        
+        // ------------------- ПОМОГАЮЩИЙ МЕТОД: детект языка + стемминг -----------        
+        private string PreprocessText(string text, out string detectedLanguage)
+        {
+            // Используем статический детектор
+            detectedLanguage = DetectLanguage(text);
+            if (detectedLanguage == "bul" || detectedLanguage == "ukr" || detectedLanguage == "mkd")
+                detectedLanguage = "rus";
+
+            if (!_stemmers.ContainsKey(detectedLanguage))
+            {
+                throw new NotSupportedException($"Language {detectedLanguage} is not supported.");
+            }
+
+            var stemmer = _stemmers[detectedLanguage];
+            // Приводим к нижнему регистру с помощью ToLowerInvariant для производительности и предсказуемости
+            var normalizedText = Regex.Replace(text.ToLowerInvariant(), @"\p{P}", " ");
+            var words = normalizedText.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                                      .Select(word => stemmer.Stem(word));
+            return string.Join(" ", words);
+        }
+
+        private string DetectLanguage(string text)
+        {
+            return _languageDetector.Detect(text);
+        }
     }
 
     public class DirectAuthResult
