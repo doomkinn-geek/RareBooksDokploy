@@ -1060,7 +1060,6 @@ namespace RareBooksService.WebApi.Services
                                 }
                             }
                         }
-                        
 
                         // НОВОЕ: Проверяем fallback-поиск детально
                         _logger.LogInformation("ДИАГНОСТИКА: Fallback-поиск по исходным полям:");
