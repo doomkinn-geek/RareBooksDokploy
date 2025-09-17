@@ -839,19 +839,21 @@ namespace RareBooksService.WebApi.Services
             
             // ДИАГНОСТИКА: Показываем несколько случайных активных лотов для понимания данных
             var randomActiveBooks = await query
-                .Take(5)
-                .Select(b => new { b.Id, b.Title, b.NormalizedTitle, b.NormalizedDescription, b.Tags })
+                .Take(50)
+                .Select(b => new { b.Id, b.Title, b.NormalizedTitle, b.NormalizedDescription, b.Tags, b.BeginDate, b.EndDate })
                 .ToListAsync(cancellationToken);
                 
             _logger.LogInformation("ДИАГНОСТИКА: Примеры активных лотов:");
             for (int i = 0; i < randomActiveBooks.Count; i++)
             {
                 var book = randomActiveBooks[i];
-                _logger.LogInformation("ДИАГНОСТИКА: Лот {Index}: Id={Id}, Title='{Title}', NormalizedTitle='{NormTitle}', Tags=[{Tags}]", 
+                _logger.LogInformation("ДИАГНОСТИКА: Лот {Index}: Id={Id}, Title='{Title}', NormalizedTitle='{NormTitle}', Tags=[{Tags}], BeginDate={BeginDate}, EndDate={EndDate}", 
                     i + 1, book.Id, 
                     book.Title?.Substring(0, Math.Min(50, book.Title?.Length ?? 0)),
                     book.NormalizedTitle?.Substring(0, Math.Min(50, book.NormalizedTitle?.Length ?? 0)),
-                    book.Tags != null ? string.Join(", ", book.Tags.Take(3)) : "нет");
+                    book.Tags != null ? string.Join(", ", book.Tags.Take(3)) : "нет",
+                    book.BeginDate,
+                    book.EndDate);
             }
 
             // КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: берем ограниченное количество записей, а не все
