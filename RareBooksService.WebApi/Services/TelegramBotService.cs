@@ -839,7 +839,7 @@ namespace RareBooksService.WebApi.Services
             
             // ДИАГНОСТИКА: Показываем несколько случайных активных лотов для понимания данных
             var randomActiveBooks = await query
-                //.Take(5)
+                .Take(5)
                 .Select(b => new { b.Id, b.Title, b.Tags, b.BeginDate, b.EndDate })
                 .ToListAsync(cancellationToken);
                 
@@ -886,31 +886,63 @@ namespace RareBooksService.WebApi.Services
                 _logger.LogInformation("Загружено {Count} записей для фильтрации по ключевым словам", allBooks.Count);
 
                 // Обрабатываем ключевые слова через стемминг (как в RegularBaseBooksRepository)
-                var processedKeywords = new List<string>();
                 _logger.LogInformation("ДИАГНОСТИКА: Исходные ключевые слова: {Keywords}", string.Join(", ", keywords));
+                
+                // Для каждого исходного ключевого слова создаем набор стеммированных слов для поиска
+                var keywordGroups = new List<List<string>>();
                 
                 foreach (var keyword in keywords)
                 {
+                    var keywordSearchTerms = new List<string>();
+                    
                     try
                     {
                         string detectedLanguage;
                         var processedKeyword = PreprocessText(keyword, out detectedLanguage);
                         var keywordParts = processedKeyword.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                        processedKeywords.AddRange(keywordParts);
+                        keywordSearchTerms.AddRange(keywordParts);
                         
-                        _logger.LogInformation("ДИАГНОСТИКА: '{OriginalKeyword}' -> язык: {Language} -> стемминг: '{ProcessedKeyword}' -> части: [{Parts}]", 
+                        _logger.LogInformation("ДИАГНОСТИКА: '{OriginalKeyword}' -> язык: {Language} -> стемминг: '{ProcessedKeyword}' -> части для поиска: [{Parts}]", 
                             keyword, detectedLanguage, processedKeyword, string.Join(", ", keywordParts));
                     }
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "Ошибка при обработке ключевого слова '{Keyword}', используем простой поиск", keyword);
-                        processedKeywords.Add(keyword.ToLower());
+                        keywordSearchTerms.Add(keyword.ToLower());
                         _logger.LogInformation("ДИАГНОСТИКА: '{OriginalKeyword}' -> ОШИБКА -> простой поиск: '{SimpleKeyword}'", 
                             keyword, keyword.ToLower());
                     }
+                    
+                    // Если стемминг не дает результата, добавляем исходное слово для поиска по тегам
+                    if (!keywordSearchTerms.Any() || keywordSearchTerms.All(term => term == keyword.ToLower()))
+                    {
+                        keywordSearchTerms.Add(keyword.ToLower());
+                        _logger.LogInformation("ДИАГНОСТИКА: Добавляем исходное слово для поиска: '{OriginalKeyword}'", keyword.ToLower());
+                    }
+                    
+                    keywordGroups.Add(keywordSearchTerms);
                 }
 
-                _logger.LogInformation("ДИАГНОСТИКА: Итоговые обработанные ключевые слова: {Keywords}", string.Join(", ", processedKeywords));
+                _logger.LogInformation("ДИАГНОСТИКА: Итоговые группы слов для поиска: [{Groups}]", 
+                    string.Join(" | ", keywordGroups.Select(g => "[" + string.Join(", ", g) + "]")));
+                    
+                // ДИАГНОСТИКА: Тестируем стемминг на известных русских словах
+                var testWords = new[] { "книга", "книги", "книг", "пушкин", "пушкина", "гельмольт", "гельмгольц" };
+                _logger.LogInformation("ДИАГНОСТИКА: Тестирование стемминга на русских словах:");
+                foreach (var testWord in testWords)
+                {
+                    try
+                    {
+                        string detectedLang;
+                        var stemmed = PreprocessText(testWord, out detectedLang);
+                        _logger.LogInformation("ДИАГНОСТИКА: ТЕСТ '{TestWord}' -> язык: {Lang} -> стемминг: '{Stemmed}'", 
+                            testWord, detectedLang, stemmed);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "ДИАГНОСТИКА: ОШИБКА стемминга для '{TestWord}'", testWord);
+                    }
+                }
                 
                 // ДИАГНОСТИКА: Показываем первые 3 книги для понимания данных
                 var sampleBooks = allBooks.Take(3).ToList();
@@ -932,39 +964,66 @@ namespace RareBooksService.WebApi.Services
                 {
                     totalChecked++;
                     
-                    // Проверяем заголовок и описание через стемминг (используем NormalizedTitle и NormalizedDescription)
-                    var matchesText = processedKeywords.Any(keyword =>
-                        (book.NormalizedTitle?.Contains(keyword) == true) ||
-                        (book.NormalizedDescription?.Contains(keyword) == true));
+                    // НОВАЯ ЛОГИКА: проверяем как в RegularBaseBooksRepository - каждая группа должна найти совпадение
+                    var matchesText = keywordGroups.All(group => 
+                        group.Any(searchTerm =>
+                            (book.NormalizedTitle?.Contains(searchTerm) == true) ||
+                            (book.NormalizedDescription?.Contains(searchTerm) == true)));
 
-                    // Проверяем теги (используем простой поиск с ToLower, так как теги не стеммированы)
-                    var normalizedKeywords = keywords.Select(k => k.ToLower()).ToList();
-                    var matchesTags = book.Tags?.Any(tag =>
-                        normalizedKeywords.Any(keyword =>
-                            tag.ToLower().Contains(keyword))) == true;
+                    // Проверяем теги (используем исходные ключевые слова, так как теги не стеммированы)
+                    var matchesTags = keywords.All(originalKeyword =>
+                        book.Tags?.Any(tag =>
+                            tag.ToLower().Contains(originalKeyword.ToLower())) == true);
 
                     var finalMatch = matchesText || matchesTags;
                     
                     if (matchesText) matchedByText++;
                     if (matchesTags) matchedByTags++;
                     
-                    // ДИАГНОСТИКА: Логируем первые 5 проверок для понимания процесса
-                    if (totalChecked <= 5)
+                    // ДИАГНОСТИКА: Логируем первые 3 проверки для понимания процесса
+                    if (totalChecked <= 3)
                     {
                         _logger.LogInformation("ДИАГНОСТИКА: Проверка книги {Index}: '{Title}' | NormalizedTitle: '{NormTitle}' | matchesText: {MatchText} | matchesTags: {MatchTags} | итог: {Final}", 
-                            totalChecked, book.Title?.Substring(0, Math.Min(30, book.Title?.Length ?? 0)), 
-                            book.NormalizedTitle?.Substring(0, Math.Min(40, book.NormalizedTitle?.Length ?? 0)),
+                            totalChecked, book.Title?.Substring(0, Math.Min(40, book.Title?.Length ?? 0)), 
+                            book.NormalizedTitle?.Substring(0, Math.Min(50, book.NormalizedTitle?.Length ?? 0)),
                             matchesText, matchesTags, finalMatch);
                             
-                        // Показываем по каким конкретно ключевым словам идет проверка
-                        foreach (var keyword in processedKeywords)
+                        // Показываем детальную проверку каждой группы ключевых слов
+                        for (int i = 0; i < keywordGroups.Count; i++)
                         {
-                            var titleMatch = book.NormalizedTitle?.Contains(keyword) == true;
-                            var descMatch = book.NormalizedDescription?.Contains(keyword) == true;
-                            if (titleMatch || descMatch)
+                            var group = keywordGroups[i];
+                            var groupMatches = group.Any(searchTerm =>
+                                (book.NormalizedTitle?.Contains(searchTerm) == true) ||
+                                (book.NormalizedDescription?.Contains(searchTerm) == true));
+                            _logger.LogInformation("ДИАГНОСТИКА: Группа {GroupIndex} [{Group}]: {GroupMatches}", 
+                                i + 1, string.Join(", ", group), groupMatches);
+                                
+                            // Показываем конкретные совпадения
+                            foreach (var searchTerm in group)
                             {
-                                _logger.LogInformation("ДИАГНОСТИКА: Найдено совпадение с '{Keyword}': title={TitleMatch}, desc={DescMatch}", 
-                                    keyword, titleMatch, descMatch);
+                                var titleMatch = book.NormalizedTitle?.Contains(searchTerm) == true;
+                                var descMatch = book.NormalizedDescription?.Contains(searchTerm) == true;
+                                if (titleMatch || descMatch)
+                                {
+                                    _logger.LogInformation("ДИАГНОСТИКА: ✓ Найдено совпадение с '{SearchTerm}': title={TitleMatch}, desc={DescMatch}", 
+                                        searchTerm, titleMatch, descMatch);
+                                }
+                            }
+                        }
+                        
+                        // Проверяем теги детально
+                        if (book.Tags?.Any() == true)
+                        {
+                            _logger.LogInformation("ДИАГНОСТИКА: Теги книги: [{Tags}]", string.Join(", ", book.Tags));
+                            foreach (var originalKeyword in keywords)
+                            {
+                                var tagMatches = book.Tags.Any(tag => tag.ToLower().Contains(originalKeyword.ToLower()));
+                                if (tagMatches)
+                                {
+                                    var matchingTags = book.Tags.Where(tag => tag.ToLower().Contains(originalKeyword.ToLower())).ToList();
+                                    _logger.LogInformation("ДИАГНОСТИКА: ✓ Найдено совпадение в тегах с '{Keyword}': {MatchingTags}", 
+                                        originalKeyword, string.Join(", ", matchingTags));
+                                }
                             }
                         }
                     }
