@@ -916,8 +916,8 @@ namespace RareBooksService.WebApi.Services
                 {
                     var book = sampleBooks[i];
                     _logger.LogInformation("ДИАГНОСТИКА: Книга {Index}: Id={Id}, Title='{Title}', NormalizedTitle='{NormalizedTitle}', NormalizedDescription='{NormalizedDesc}'", 
-                        i + 1, book.Id, book.Title?.Substring(0, Math.Min(50, book.Title.Length ?? 0)), 
-                        book.NormalizedTitle?.Substring(0, Math.Min(50, book.NormalizedTitle.Length ?? 0)),
+                        i + 1, book.Id, book.Title?.Substring(0, Math.Min(50, book.Title.Length)), 
+                        book.NormalizedTitle?.Substring(0, Math.Min(50, book.NormalizedTitle.Length)),
                         book.NormalizedDescription?.Substring(0, Math.Min(100, book.NormalizedDescription?.Length ?? 0)));
                 }
                 
