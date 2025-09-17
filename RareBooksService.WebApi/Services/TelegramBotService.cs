@@ -784,7 +784,7 @@ namespace RareBooksService.WebApi.Services
             _logger.LogInformation("Применен фильтр по активным торгам");
 
             // Фильтр по категориям (делаем в SQL)
-            var categoryIds = preferences.GetCategoryIdsList();
+            /*var categoryIds = preferences.GetCategoryIdsList();
             if (categoryIds.Any())
             {
                 query = query.Where(b => categoryIds.Contains(b.CategoryId));
@@ -826,7 +826,7 @@ namespace RareBooksService.WebApi.Services
                     query = query.Where(b => EF.Functions.ILike(b.City, $"%{city}%"));
                 }
                 _logger.LogInformation("Применен фильтр по городам: {Cities}", string.Join(", ", normalizedCities));
-            }
+            }*/
 
             // Сортировка по дате окончания (ближайшие к завершению - первыми)
             query = query.OrderBy(b => b.EndDate);
