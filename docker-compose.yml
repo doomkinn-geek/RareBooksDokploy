@@ -105,6 +105,7 @@ services:
       - ./nginx/nginx_prod.conf:/etc/nginx/nginx.conf
       - /etc/letsencrypt:/etc/letsencrypt:ro   # SSL сертификаты
       - /var/www/certbot:/var/www/certbot      # Certbot challenge
+      - /home/docker/ssl/rare-books.ru:/etc/ssl/rare-books.ru:ro
     depends_on:
       frontend:
         condition: service_healthy
