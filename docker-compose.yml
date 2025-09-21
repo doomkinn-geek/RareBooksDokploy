@@ -1,6 +1,11 @@
 ﻿version: '3.8'
 name: RareBooksDokploy
 
+# Создаём изолированную сеть для безопасности
+networks:
+  rarebooks_network:
+    driver: bridge
+
 services:
   db_books:
     image: postgres:15
@@ -10,10 +15,13 @@ services:
       - POSTGRES_DB=RareBooks_Books
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=123456
-    ports:
-      - "5433:5432"        # на хосте 5433, внутри контейнера 5432
+    # УБИРАЕМ ОТКРЫТЫЕ ПОРТЫ - база данных доступна только внутри Docker сети
+    # ports:
+    #   - "5433:5432"        # ЗАКРЫТО для безопасности!
     volumes:
       - db_books_data:/var/lib/postgresql/data
+    networks:
+      - rarebooks_network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 30s
@@ -28,10 +36,13 @@ services:
       - POSTGRES_DB=RareBooks_Users
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=123456
-    ports:
-      - "5434:5432"
+    # УБИРАЕМ ОТКРЫТЫЕ ПОРТЫ - база данных доступна только внутри Docker сети
+    # ports:
+    #   - "5434:5432"        # ЗАКРЫТО для безопасности!
     volumes:
       - db_users_data:/var/lib/postgresql/data
+    networks:
+      - rarebooks_network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 30s
@@ -53,6 +64,8 @@ services:
       - ConnectionStrings__UsersDb=Host=db_users;Port=5432;Database=RareBooks_Users;Username=postgres;Password=123456
       - ASPNETCORE_URLS=http://+:80
       - ASPNETCORE_ENVIRONMENT=Production
+    networks:
+      - rarebooks_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:80/health || exit 1"]
@@ -71,6 +84,8 @@ services:
         condition: service_healthy
     environment:
       - VITE_API_URL=http://backend:80/api
+    networks:
+      - rarebooks_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:80 || exit 1"]
@@ -83,8 +98,8 @@ services:
     image: nginx:stable-alpine
     container_name: nginx_container
     ports:
-      - 80:80
-      - 443:443
+      - 80:80      # Только nginx открыт наружу
+      - 443:443    # Только nginx открыт наружу
     volumes:
       #- ./nginx/nginx_dev.conf:/etc/nginx/nginx.conf
       - ./nginx/nginx_prod.conf:/etc/nginx/nginx.conf
@@ -95,6 +110,8 @@ services:
         condition: service_healthy
       backend:
         condition: service_healthy
+    networks:
+      - rarebooks_network
     restart: unless-stopped
     healthcheck:
       # Проверяем Setup API через HTTP (всегда доступен)
