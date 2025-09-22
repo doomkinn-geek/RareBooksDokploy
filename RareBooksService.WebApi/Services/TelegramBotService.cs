@@ -1208,64 +1208,19 @@ namespace RareBooksService.WebApi.Services
              int index = (page - 1) * pageSize + 1;
              foreach (var book in result.Books)
              {
-                 var timeLeft = book.EndDate - DateTime.UtcNow;
-                 var timeLeftStr = timeLeft.TotalDays >= 1 
-                     ? $"{(int)timeLeft.TotalDays} дн. {(int)timeLeft.Hours} ч."
-                     : timeLeft.TotalHours >= 1 
-                         ? $"{(int)timeLeft.TotalHours} ч. {(int)timeLeft.Minutes} мин."
-                         : $"{(int)timeLeft.TotalMinutes} мин.";
-
+                 // Упрощенный формат - только нужная информация
+                 
                  // Заголовок с номером и названием
                  message.AppendLine($"<b>{index}. {book.Title}</b>");
                  
-                 // Основная информация
-                 message.AppendLine($"💰 Текущая цена: <b>{book.Price:N0} ₽</b>");
+                 // Текущая цена
+                 message.AppendLine($"💰 <b>{book.Price:N0} ₽</b>");
                  
-                 // Показываем стартовую цену, если она отличается от текущей
-                 if (book.StartPrice > 0 && Math.Abs(book.StartPrice - book.Price) > 0.01)
-                 {
-                     message.AppendLine($"💸 Стартовая цена: {book.StartPrice:N0} ₽");
-                 }
+                 // Дата окончания торгов
+                 message.AppendLine($"⏰ Окончание: <b>{book.EndDate:dd.MM.yyyy HH:mm}</b>");
                  
-                 message.AppendLine($"⏰ До окончания: <b>{timeLeftStr}</b>");
-                 message.AppendLine($"🏙️ Город: {book.City}");
-                 
-                 if (book.YearPublished.HasValue)
-                     message.AppendLine($"📅 Год издания: {book.YearPublished}");
-                 
-                 message.AppendLine($"📂 Категория: {book.Category?.Name ?? "Не указана"}");
-                 
-                 // Информация о ставках
-                 if (book.BidsCount > 0)
-                     message.AppendLine($"👥 Ставок: <b>{book.BidsCount}</b>");
-                 else
-                     message.AppendLine($"👥 Ставок пока нет");
-                 
-                 // Продавец
-                 if (!string.IsNullOrEmpty(book.SellerName))
-                     message.AppendLine($"👤 Продавец: {book.SellerName}");
-                 
-                 // Теги
-                 if (book.Tags?.Any() == true)
-                 {
-                     var displayTags = book.Tags.Take(3).ToList(); // Показываем только первые 3 тега
-                     var tagsText = string.Join(", ", displayTags);
-                     if (book.Tags.Count > 3)
-                         tagsText += $" (+{book.Tags.Count - 3})";
-                     message.AppendLine($"🏷️ Теги: {tagsText}");
-                 }
-                 
-                 // Описание
-                 if (!string.IsNullOrEmpty(book.Description))
-                 {
-                     var shortDescription = book.Description.Length > 150 
-                         ? book.Description.Substring(0, 150) + "..."
-                         : book.Description;
-                     message.AppendLine($"📝 {shortDescription}");
-                 }
-                 
-                 // Ссылка на meshok.net (ГЛАВНОЕ!)
-                 message.AppendLine($"🔗 <a href=\"https://meshok.net/item/{book.Id}\">Открыть лот на Meshok.net</a>");
+                 // Ссылка на лот с правильным ID
+                 message.AppendLine($"🔗 <a href=\"https://meshok.net/item/{book.Id}\">Открыть лот №{book.Id}</a>");
                  
                  message.AppendLine(); // Пустая строка между лотами
                  index++;
@@ -1308,11 +1263,9 @@ namespace RareBooksService.WebApi.Services
                      var book = result.Books.First();
                      shortMessage.AppendLine("<b>Пример найденного лота:</b>");
                      shortMessage.AppendLine($"<b>1. {book.Title}</b>");
-                     shortMessage.AppendLine($"💰 Цена: <b>{book.Price:N0} ₽</b>");
-                     shortMessage.AppendLine($"🏙️ Город: {book.City}");
-                     if (book.YearPublished.HasValue)
-                         shortMessage.AppendLine($"📅 Год издания: {book.YearPublished}");
-                     shortMessage.AppendLine($"🔗 <a href=\"https://meshok.net/item/{book.Id}\">Открыть лот на Meshok.net</a>");
+                     shortMessage.AppendLine($"💰 <b>{book.Price:N0} ₽</b>");
+                     shortMessage.AppendLine($"⏰ Окончание: <b>{book.EndDate:dd.MM.yyyy HH:mm}</b>");
+                     shortMessage.AppendLine($"🔗 <a href=\"https://meshok.net/item/{book.Id}\">Открыть лот №{book.Id}</a>");
                      shortMessage.AppendLine();
                  }
                  
