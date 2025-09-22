@@ -55,11 +55,30 @@ const TelegramAdmin = () => {
         setLoading(true);
         setError('');
         try {
+            console.log('Запрос диагностики к:', `${API_URL}/telegramdiagnostics/full-check`);
             const response = await axios.get(`${API_URL}/telegramdiagnostics/full-check`);
+            console.log('Ответ диагностики:', response);
             setDiagnostics(response.data);
             showSnackbar('✅ Диагностика завершена', 'success');
         } catch (err) {
-            const errorMsg = err.response?.data?.error || err.message || 'Ошибка диагностики';
+            console.error('Ошибка диагностики:', err);
+            console.error('Response data:', err.response?.data);
+            console.error('Response status:', err.response?.status);
+            console.error('Response headers:', err.response?.headers);
+            
+            let errorMsg;
+            if (err.response?.status === 404) {
+                errorMsg = 'Endpoint диагностики не найден (404). Проверьте, что сервер запущен';
+            } else if (err.response?.status >= 500) {
+                errorMsg = `Внутренняя ошибка сервера (${err.response.status})`;
+            } else if (err.response?.data?.error) {
+                errorMsg = err.response.data.error;
+            } else if (err.message.includes('JSON')) {
+                errorMsg = 'Сервер вернул некорректный JSON. Возможно, endpoint возвращает HTML вместо JSON';
+            } else {
+                errorMsg = err.message || 'Неизвестная ошибка диагностики';
+            }
+            
             setError(errorMsg);
             showSnackbar(`❌ ${errorMsg}`, 'error');
         } finally {
@@ -71,18 +90,38 @@ const TelegramAdmin = () => {
         setWebhookLoading(true);
         setError('');
         try {
+            console.log('Настройка webhook:', `${API_URL}/telegramdiagnostics/setup-webhook`, { baseUrl: webhookUrl });
             const response = await axios.post(`${API_URL}/telegramdiagnostics/setup-webhook`, {
                 baseUrl: webhookUrl
             });
+            console.log('Ответ настройки webhook:', response);
             
             if (response.data.success) {
                 showSnackbar('✅ Webhook успешно настроен', 'success');
                 setTimeout(runDiagnostics, 1000); // Обновляем диагностику
             } else {
-                showSnackbar('❌ Не удалось настроить webhook', 'error');
+                const errorMsg = response.data.error || 'Не удалось настроить webhook';
+                showSnackbar(`❌ ${errorMsg}`, 'error');
+                setError(errorMsg);
             }
         } catch (err) {
-            const errorMsg = err.response?.data?.error || err.message || 'Ошибка настройки webhook';
+            console.error('Ошибка настройки webhook:', err);
+            console.error('Response data:', err.response?.data);
+            console.error('Response status:', err.response?.status);
+            
+            let errorMsg;
+            if (err.response?.status === 404) {
+                errorMsg = 'Endpoint настройки webhook не найден (404)';
+            } else if (err.response?.status >= 500) {
+                errorMsg = `Внутренняя ошибка сервера (${err.response.status})`;
+            } else if (err.response?.data?.error) {
+                errorMsg = err.response.data.error;
+            } else if (err.message.includes('JSON')) {
+                errorMsg = 'Сервер вернул некорректный JSON при настройке webhook';
+            } else {
+                errorMsg = err.message || 'Ошибка настройки webhook';
+            }
+            
             setError(errorMsg);
             showSnackbar(`❌ ${errorMsg}`, 'error');
         } finally {
@@ -120,18 +159,32 @@ const TelegramAdmin = () => {
         setTestLoading(true);
         setError('');
         try {
+            console.log('Отправка тестового сообщения:', { chatId: testChatId, message: testMessage });
             const response = await axios.post(`${API_URL}/telegramdiagnostics/test-send`, {
                 chatId: testChatId,
                 message: testMessage
             });
+            console.log('Ответ отправки сообщения:', response);
             
             if (response.data.success) {
                 showSnackbar('✅ Тестовое сообщение отправлено', 'success');
             } else {
-                showSnackbar('❌ Не удалось отправить сообщение', 'error');
+                const errorMsg = response.data.error || 'Не удалось отправить сообщение';
+                showSnackbar(`❌ ${errorMsg}`, 'error');
+                setError(errorMsg);
             }
         } catch (err) {
-            const errorMsg = err.response?.data?.error || err.message || 'Ошибка отправки сообщения';
+            console.error('Ошибка отправки сообщения:', err);
+            let errorMsg;
+            if (err.response?.status === 404) {
+                errorMsg = 'Endpoint отправки сообщения не найден (404)';
+            } else if (err.response?.data?.error) {
+                errorMsg = err.response.data.error;
+            } else if (err.message.includes('JSON')) {
+                errorMsg = 'Сервер вернул некорректный JSON при отправке сообщения';
+            } else {
+                errorMsg = err.message || 'Ошибка отправки сообщения';
+            }
             setError(errorMsg);
             showSnackbar(`❌ ${errorMsg}`, 'error');
         } finally {
@@ -141,11 +194,35 @@ const TelegramAdmin = () => {
 
     const loadStatistics = async () => {
         try {
-            const response = await axios.get(`${API_URL}/admin/telegram/statistics`);
+            console.log('Загрузка статистики:', `${API_URL}/admin/telegram/statistics`);
+            
+            // Добавляем токен авторизации, если он есть
+            const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+            const config = token ? {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            } : {};
+            
+            const response = await axios.get(`${API_URL}/admin/telegram/statistics`, config);
+            console.log('Ответ статистики:', response);
             setStatistics(response.data);
             setStatisticsDialog(true);
         } catch (err) {
-            showSnackbar('❌ Ошибка загрузки статистики', 'error');
+            console.error('Ошибка загрузки статистики:', err);
+            let errorMsg;
+            if (err.response?.status === 401) {
+                errorMsg = 'Нет доступа для просмотра статистики. Войдите как администратор';
+            } else if (err.response?.status === 404) {
+                errorMsg = 'Endpoint статистики не найден (404)';
+            } else if (err.response?.data?.error) {
+                errorMsg = err.response.data.error;
+            } else if (err.message.includes('JSON')) {
+                errorMsg = 'Сервер вернул некорректный JSON при загрузке статистики';
+            } else {
+                errorMsg = err.message || 'Ошибка загрузки статистики';
+            }
+            showSnackbar(`❌ ${errorMsg}`, 'error');
         }
     };
 
@@ -179,6 +256,16 @@ const TelegramAdmin = () => {
                     {error}
                 </Alert>
             )}
+
+            {/* Информационное сообщение для отладки */}
+            <Alert severity="info" sx={{ mb: 3 }}>
+                <Typography variant="body2">
+                    🔧 <strong>Диагностическая информация:</strong><br/>
+                    API URL: {API_URL}<br/>
+                    Полный URL диагностики: {`${API_URL}/telegramdiagnostics/full-check`}<br/>
+                    Откройте консоль браузера (F12) для просмотра подробных логов запросов.
+                </Typography>
+            </Alert>
 
             {/* Основная панель управления */}
             <Grid container spacing={3}>

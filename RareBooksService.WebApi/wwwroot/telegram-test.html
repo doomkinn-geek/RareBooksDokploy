@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест Telegram API Endpoints</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .result { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 15px; margin: 10px 0; max-height: 400px; overflow-y: auto; }
+        .error { background: #f8d7da; border-color: #f5c6cb; color: #721c24; }
+        .success { background: #d4edda; border-color: #c3e6cb; color: #155724; }
+        pre { white-space: pre-wrap; word-wrap: break-word; }
+        input[type="text"] { padding: 8px; margin: 5px; border: 1px solid #ccc; border-radius: 4px; width: 200px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Тест Telegram API Endpoints</h1>
+        
+        <h2>Базовая информация</h2>
+        <p><strong>API Base URL:</strong> <span id="api-url">определяется автоматически</span></p>
+        <p><strong>Время:</strong> <span id="current-time"></span></p>
+        
+        <h2>Тестирование endpoints</h2>
+        
+        <div>
+            <h3>1. Диагностика бота</h3>
+            <button onclick="testDiagnostics()">Тест /api/telegramdiagnostics/full-check</button>
+            <div id="diagnostics-result" class="result"></div>
+        </div>
+        
+        <div>
+            <h3>2. Настройка Webhook</h3>
+            <input type="text" id="webhook-url" placeholder="https://rare-books.ru" value="https://rare-books.ru">
+            <button onclick="testSetupWebhook()">Тест /api/telegramdiagnostics/setup-webhook</button>
+            <div id="webhook-result" class="result"></div>
+        </div>
+        
+        <div>
+            <h3>3. Отправка тестового сообщения</h3>
+            <input type="text" id="chat-id" placeholder="Chat ID">
+            <input type="text" id="test-message" placeholder="Тестовое сообщение" value="🔧 Тест">
+            <button onclick="testSendMessage()">Тест /api/telegramdiagnostics/test-send</button>
+            <div id="message-result" class="result"></div>
+        </div>
+        
+        <div>
+            <h3>4. Статистика (требует авторизации)</h3>
+            <button onclick="testStatistics()">Тест /api/admin/telegram/statistics</button>
+            <div id="statistics-result" class="result"></div>
+        </div>
+        
+        <div>
+            <h3>5. Проверка CORS</h3>
+            <button onclick="testCORS()">Тест CORS OPTIONS запроса</button>
+            <div id="cors-result" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        // Определяем базовый URL API
+        const getApiUrl = () => {
+            const protocol = window.location.protocol;
+            const hostname = window.location.hostname;
+            const port = window.location.port;
+            
+            if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                // Локальная разработка
+                return `${protocol}//${hostname}:${port || '80'}/api`;
+            } else {
+                // Продакшн
+                return `${protocol}//${hostname}${port ? ':' + port : ''}/api`;
+            }
+        };
+        
+        const API_URL = getApiUrl();
+        document.getElementById('api-url').textContent = API_URL;
+        
+        // Обновляем время каждую секунду
+        setInterval(() => {
+            document.getElementById('current-time').textContent = new Date().toLocaleString('ru-RU');
+        }, 1000);
+        
+        // Вспомогательная функция для отображения результатов
+        function showResult(elementId, data, isError = false) {
+            const element = document.getElementById(elementId);
+            element.className = `result ${isError ? 'error' : 'success'}`;
+            element.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        }
+        
+        // 1. Тест диагностики
+        async function testDiagnostics() {
+            const resultElement = document.getElementById('diagnostics-result');
+            resultElement.innerHTML = '⏳ Загрузка...';
+            resultElement.className = 'result';
+            
+            try {
+                console.log('Тестируем:', `${API_URL}/telegramdiagnostics/full-check`);
+                const response = await fetch(`${API_URL}/telegramdiagnostics/full-check`);
+                console.log('Ответ сервера:', response);
+                
+                const responseData = {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: Object.fromEntries(response.headers.entries()),
+                    url: response.url
+                };
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showResult('diagnostics-result', { response: responseData, data }, false);
+                } else {
+                    const text = await response.text();
+                    showResult('diagnostics-result', { response: responseData, error: text }, true);
+                }
+            } catch (error) {
+                console.error('Ошибка запроса:', error);
+                showResult('diagnostics-result', { 
+                    error: error.message,
+                    stack: error.stack,
+                    type: error.constructor.name 
+                }, true);
+            }
+        }
+        
+        // 2. Тест настройки webhook
+        async function testSetupWebhook() {
+            const resultElement = document.getElementById('webhook-result');
+            resultElement.innerHTML = '⏳ Настройка...';
+            resultElement.className = 'result';
+            
+            const baseUrl = document.getElementById('webhook-url').value;
+            
+            try {
+                const response = await fetch(`${API_URL}/telegramdiagnostics/setup-webhook`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ baseUrl })
+                });
+                
+                const responseData = {
+                    status: response.status,
+                    statusText: response.statusText,
+                    url: response.url
+                };
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showResult('webhook-result', { response: responseData, data }, false);
+                } else {
+                    const text = await response.text();
+                    showResult('webhook-result', { response: responseData, error: text }, true);
+                }
+            } catch (error) {
+                showResult('webhook-result', { error: error.message }, true);
+            }
+        }
+        
+        // 3. Тест отправки сообщения
+        async function testSendMessage() {
+            const resultElement = document.getElementById('message-result');
+            resultElement.innerHTML = '⏳ Отправка...';
+            resultElement.className = 'result';
+            
+            const chatId = document.getElementById('chat-id').value;
+            const message = document.getElementById('test-message').value;
+            
+            if (!chatId) {
+                showResult('message-result', { error: 'Введите Chat ID' }, true);
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/telegramdiagnostics/test-send`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ chatId, message })
+                });
+                
+                const responseData = {
+                    status: response.status,
+                    statusText: response.statusText
+                };
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showResult('message-result', { response: responseData, data }, false);
+                } else {
+                    const text = await response.text();
+                    showResult('message-result', { response: responseData, error: text }, true);
+                }
+            } catch (error) {
+                showResult('message-result', { error: error.message }, true);
+            }
+        }
+        
+        // 4. Тест статистики
+        async function testStatistics() {
+            const resultElement = document.getElementById('statistics-result');
+            resultElement.innerHTML = '⏳ Загрузка статистики...';
+            resultElement.className = 'result';
+            
+            try {
+                const response = await fetch(`${API_URL}/admin/telegram/statistics`);
+                
+                const responseData = {
+                    status: response.status,
+                    statusText: response.statusText
+                };
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showResult('statistics-result', { response: responseData, data }, false);
+                } else {
+                    const text = await response.text();
+                    showResult('statistics-result', { response: responseData, error: text }, true);
+                }
+            } catch (error) {
+                showResult('statistics-result', { error: error.message }, true);
+            }
+        }
+        
+        // 5. Тест CORS
+        async function testCORS() {
+            const resultElement = document.getElementById('cors-result');
+            resultElement.innerHTML = '⏳ Проверка CORS...';
+            resultElement.className = 'result';
+            
+            try {
+                const response = await fetch(`${API_URL}/telegramdiagnostics/full-check`, {
+                    method: 'OPTIONS'
+                });
+                
+                const responseData = {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: Object.fromEntries(response.headers.entries())
+                };
+                
+                showResult('cors-result', responseData, response.status >= 400);
+            } catch (error) {
+                showResult('cors-result', { error: error.message }, true);
+            }
+        }
+        
+        // Автоматически запускаем диагностику при загрузке
+        window.addEventListener('load', () => {
+            testDiagnostics();
+        });
+    </script>
+</body>
+</html>

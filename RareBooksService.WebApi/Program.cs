@@ -330,10 +330,11 @@ namespace RareBooksService.WebApi
                         return;
                     }
 
-                    // Пропускаем /api/setup/, /api/setupcheck/ и /api/test/
+                    // Пропускаем /api/setup/, /api/setupcheck/, /api/test/ и /api/telegramdiagnostics/
                     if (context.Request.Path.StartsWithSegments("/api/setup") ||
                         context.Request.Path.StartsWithSegments("/api/setupcheck") ||
-                        context.Request.Path.StartsWithSegments("/api/test"))
+                        context.Request.Path.StartsWithSegments("/api/test") ||
+                        context.Request.Path.StartsWithSegments("/api/telegramdiagnostics"))
                     {
                         await next.Invoke();
                         return;
