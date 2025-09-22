@@ -759,8 +759,24 @@ namespace RareBooksService.WebApi.Services
 
                 // Форматируем результаты для отображения
                 var message = await FormatLotsMessageAsync(activeLotsResult, page, pageSize, notificationPreferences, cancellationToken);
-
-                await _telegramService.SendNotificationAsync(chatId, message, cancellationToken);
+                
+                _logger.LogInformation("Отправляем пользователю {TelegramId} результат с {Count} лотами, размер сообщения: {MessageLength} символов", 
+                    telegramId, activeLotsResult.Books.Count, message.Length);
+                    
+                // Отправляем сообщение с результатами пользователю
+                bool sendResult = await _telegramService.SendNotificationAsync(chatId, message, cancellationToken);
+                
+                if (sendResult) {
+                    _logger.LogInformation("Сообщение с результатами поиска успешно отправлено пользователю {TelegramId}", telegramId);
+                } else {
+                    _logger.LogError("Ошибка при отправке сообщения пользователю {TelegramId}. Размер сообщения: {MessageLength}", 
+                        telegramId, message.Length);
+                        
+                    // Пробуем отправить только заголовок с ошибкой, если основное сообщение не отправилось
+                    await _telegramService.SendNotificationAsync(chatId, 
+                        "❌ <b>Ошибка при отправке результатов поиска</b>\n\nВозможно, сообщение слишком большое для Telegram API. Попробуйте уточнить поисковый запрос или перейти на другие страницы результатов.", 
+                        cancellationToken);
+                }
             }
             catch (Exception ex)
             {
@@ -1155,6 +1171,9 @@ namespace RareBooksService.WebApi.Services
 
          private async Task<string> FormatLotsMessageAsync(LotsSearchResult result, int page, int pageSize, UserNotificationPreference preferences, CancellationToken cancellationToken)
          {
+             _logger.LogInformation("Форматирование результатов поиска: {Count} книг из {TotalCount}, страница {Page}/{TotalPages}",
+                result.Books.Count, result.TotalCount, page, (int)Math.Ceiling((double)result.TotalCount / pageSize));
+                
              var message = new StringBuilder();
 
              var totalPages = (int)Math.Ceiling((double)result.TotalCount / pageSize);
@@ -1265,8 +1284,48 @@ namespace RareBooksService.WebApi.Services
              }
 
              message.AppendLine("⚙️ <code>/settings</code> - изменить критерии поиска");
+             
+             // Проверяем размер сообщения
+             string resultMessage = message.ToString();
+             _logger.LogInformation("Итоговый размер сообщения: {MessageLength} символов", resultMessage.Length);
+             
+             // Максимальная длина сообщения для Telegram - примерно 4096 символов
+             if (resultMessage.Length > 4000)
+             {
+                 _logger.LogWarning("Сформировано слишком длинное сообщение ({Length} символов). Ограничиваем результаты.", resultMessage.Length);
+                 
+                 // Создаем сокращенный вариант сообщения
+                 var shortMessage = new StringBuilder();
+                 shortMessage.AppendLine("📚 <b>Активные лоты по вашим критериям</b>");
+                 shortMessage.AppendLine();
+                 shortMessage.AppendLine($"📊 Найдено: {result.TotalCount} лотов");
+                 shortMessage.AppendLine($"📄 Страница: {page}/{totalPages}");
+                 shortMessage.AppendLine();
+                 
+                 // Добавляем первый лот как пример
+                 if (result.Books.Any())
+                 {
+                     var book = result.Books.First();
+                     shortMessage.AppendLine("<b>Пример найденного лота:</b>");
+                     shortMessage.AppendLine($"<b>1. {book.Title}</b>");
+                     shortMessage.AppendLine($"💰 Цена: <b>{book.Price:N0} ₽</b>");
+                     shortMessage.AppendLine($"🏙️ Город: {book.City}");
+                     if (book.YearPublished.HasValue)
+                         shortMessage.AppendLine($"📅 Год издания: {book.YearPublished}");
+                     shortMessage.AppendLine($"🔗 <a href=\"https://meshok.net/item/{book.Id}\">Открыть лот на Meshok.net</a>");
+                     shortMessage.AppendLine();
+                 }
+                 
+                 shortMessage.AppendLine("⚠️ <b>Предупреждение:</b> найдено слишком много информации для отображения в одном сообщении.");
+                 shortMessage.AppendLine("Для получения более точных результатов уточните критерии поиска.");
+                 shortMessage.AppendLine();
+                 shortMessage.AppendLine("⚙️ <code>/settings</code> - изменить критерии поиска");
+                 
+                 resultMessage = shortMessage.ToString();
+                 _logger.LogInformation("Сокращенный размер сообщения: {MessageLength} символов", resultMessage.Length);
+             }
 
-             return message.ToString();
+             return resultMessage;
          }
 
         private async Task<DirectAuthResult> RegisterUserDirectlyAsync(string email, string password, string telegramId, CancellationToken cancellationToken)

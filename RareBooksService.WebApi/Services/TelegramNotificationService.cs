@@ -122,10 +122,24 @@ namespace RareBooksService.WebApi.Services
             try
             {
                 // ДИАГНОСТИЧЕСКОЕ ЛОГИРОВАНИЕ
-                _logger.LogInformation("[TELEGRAM-SEND] Отправка сообщения в чат {ChatId}", chatId);
+                _logger.LogInformation("[TELEGRAM-SEND] Отправка сообщения в чат {ChatId}, длина: {MessageLength} символов", 
+                    chatId, message?.Length ?? 0);
                 _logger.LogInformation("[TELEGRAM-SEND] Base URL: {BaseUrl}", _httpClient.BaseAddress);
                 _logger.LogInformation("[TELEGRAM-SEND] Token length: {TokenLength}", _botToken?.Length ?? 0);
-                _logger.LogInformation("[TELEGRAM-SEND] Full URL будет: {FullUrl}", $"{_httpClient.BaseAddress}sendMessage");
+                _logger.LogInformation("[TELEGRAM-SEND] Full URL будет: {FullUrl}", $"{_baseUrl}/sendMessage");
+                
+                // Проверяем длину сообщения
+                if (string.IsNullOrEmpty(message))
+                {
+                    _logger.LogWarning("[TELEGRAM-SEND] Попытка отправить пустое сообщение в чат {ChatId}", chatId);
+                    return false;
+                }
+                
+                if (message.Length > 4096)
+                {
+                    _logger.LogError("[TELEGRAM-SEND] Сообщение слишком длинное: {Length} символов (максимум 4096)", message.Length);
+                    return false;
+                }
                 
                 var payload = new
                 {
@@ -149,13 +163,26 @@ namespace RareBooksService.WebApi.Services
                 }
                 
                 var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                _logger.LogWarning("Не удалось отправить уведомление в чат {ChatId}. Status: {StatusCode}, Response: {Response}", 
+                _logger.LogError("[TELEGRAM-SEND] Не удалось отправить уведомление в чат {ChatId}. Status: {StatusCode}, Response: {Response}", 
                     chatId, response.StatusCode, errorContent);
+                    
+                // Попробуем расшифровать JSON-ответ
+                try 
+                {
+                    var errorObj = JsonConvert.DeserializeObject<dynamic>(errorContent);
+                    _logger.LogError("[TELEGRAM-SEND] Детали ошибки: код {ErrorCode}, описание: {ErrorDescription}", 
+                        errorObj?.error_code, errorObj?.description);
+                }
+                catch (Exception jsonEx)
+                {
+                    _logger.LogWarning("Не удалось расшифровать ошибку: {Error}", jsonEx.Message);
+                }
+                
                 return false;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка при отправке уведомления в чат {ChatId}", chatId);
+                _logger.LogError(ex, "[TELEGRAM-SEND] Ошибка при отправке уведомления в чат {ChatId}", chatId);
                 return false;
             }
         }
