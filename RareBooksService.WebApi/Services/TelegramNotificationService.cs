@@ -212,30 +212,30 @@ namespace RareBooksService.WebApi.Services
             sb.AppendLine();
             sb.AppendLine($"<b>Название:</b> {EscapeHtml(book.Title)}");
             
-            if (!string.IsNullOrEmpty(book.Description))
+            /*if (!string.IsNullOrEmpty(book.Description))
             {
                 var description = book.Description.Length > 200 
                     ? book.Description.Substring(0, 200) + "..." 
                     : book.Description;
                 sb.AppendLine($"<b>Описание:</b> {EscapeHtml(description)}");
-            }
+            }*/
 
             sb.AppendLine($"<b>Текущая цена:</b> {book.Price:F0} ₽");
             
-            if (book.FinalPrice.HasValue && book.FinalPrice > 0)
+            /*if (book.FinalPrice.HasValue && book.FinalPrice > 0)
             {
                 sb.AppendLine($"<b>Финальная цена:</b> {book.FinalPrice.Value:F0} ₽");
-            }
+            }*/
 
             if (book.YearPublished.HasValue && book.YearPublished > 0)
             {
                 sb.AppendLine($"<b>Год издания:</b> {book.YearPublished}");
             }
 
-            if (!string.IsNullOrEmpty(book.City))
+            /*if (!string.IsNullOrEmpty(book.City))
             {
                 sb.AppendLine($"<b>Город:</b> {EscapeHtml(book.City)}");
-            }
+            }*/
 
             sb.AppendLine($"<b>Дата окончания торгов:</b> {book.EndDate:dd.MM.yyyy HH:mm}");
 
