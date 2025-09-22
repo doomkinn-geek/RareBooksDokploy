@@ -122,11 +122,19 @@ namespace RareBooksService.WebApi.Services
             try
             {
                 // ДИАГНОСТИЧЕСКОЕ ЛОГИРОВАНИЕ
+                _logger.LogInformation("[TELEGRAM-SEND] === НАЧАЛО ОТПРАВКИ СООБЩЕНИЯ ===");
                 _logger.LogInformation("[TELEGRAM-SEND] Отправка сообщения в чат {ChatId}, длина: {MessageLength} символов", 
                     chatId, message?.Length ?? 0);
-                _logger.LogInformation("[TELEGRAM-SEND] Base URL: {BaseUrl}", _httpClient.BaseAddress);
-                _logger.LogInformation("[TELEGRAM-SEND] Token length: {TokenLength}", _botToken?.Length ?? 0);
-                _logger.LogInformation("[TELEGRAM-SEND] Full URL будет: {FullUrl}", $"{_baseUrl}/sendMessage");
+                _logger.LogInformation("[TELEGRAM-SEND] Token настроен: {HasToken}, длина: {TokenLength}", 
+                    !string.IsNullOrEmpty(_botToken), _botToken?.Length ?? 0);
+                _logger.LogInformation("[TELEGRAM-SEND] Base URL: {BaseUrl}", _baseUrl);
+                
+                // Проверяем токен
+                if (string.IsNullOrEmpty(_botToken))
+                {
+                    _logger.LogError("[TELEGRAM-SEND] КРИТИЧЕСКАЯ ОШИБКА: токен бота не настроен!");
+                    return false;
+                }
                 
                 // Проверяем длину сообщения
                 if (string.IsNullOrEmpty(message))
@@ -141,6 +149,10 @@ namespace RareBooksService.WebApi.Services
                     return false;
                 }
                 
+                // Логируем первые 200 символов сообщения для диагностики
+                var messagePreview = message.Length > 200 ? message.Substring(0, 200) + "..." : message;
+                _logger.LogInformation("[TELEGRAM-SEND] Превью сообщения: {MessagePreview}", messagePreview);
+                
                 var payload = new
                 {
                     chat_id = chatId,
@@ -154,40 +166,118 @@ namespace RareBooksService.WebApi.Services
 
                 var url = $"{_baseUrl}/sendMessage";
                 _logger.LogInformation("[TELEGRAM-SEND] Отправляем POST запрос на {Url}", url);
-                var response = await _httpClient.PostAsync(url, content, cancellationToken);
+                _logger.LogInformation("[TELEGRAM-SEND] Content-Type: {ContentType}", content.Headers.ContentType);
+                _logger.LogInformation("[TELEGRAM-SEND] JSON payload размер: {PayloadSize} символов", json.Length);
                 
-                if (response.IsSuccessStatusCode)
+                try 
                 {
-                    _logger.LogInformation("Уведомление отправлено в чат {ChatId}", chatId);
-                    return true;
-                }
-                
-                var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                _logger.LogError("[TELEGRAM-SEND] Не удалось отправить уведомление в чат {ChatId}. Status: {StatusCode}, Response: {Response}", 
-                    chatId, response.StatusCode, errorContent);
+                    var response = await _httpClient.PostAsync(url, content, cancellationToken);
+                    _logger.LogInformation("[TELEGRAM-SEND] Получен ответ от Telegram API: {StatusCode}", response.StatusCode);
+                    
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var successContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                        _logger.LogInformation("[TELEGRAM-SEND] ✅ УСПЕХ! Уведомление отправлено в чат {ChatId}. Ответ: {Response}", 
+                            chatId, successContent);
+                        return true;
+                    }
+                    
+                    var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                    _logger.LogError("[TELEGRAM-SEND] ❌ ОШИБКА! Не удалось отправить уведомление в чат {ChatId}. Status: {StatusCode}, Response: {Response}", 
+                        chatId, response.StatusCode, errorContent);
 
-                // Попробуем расшифровать JSON-ответ
-                try
-                {
-                    var errorObj = JsonConvert.DeserializeObject<dynamic>(errorContent);
-                    string errorCode = errorObj?.error_code?.ToString();
-                    string description = errorObj?.description?.ToString();
+                    // Попробуем расшифровать JSON-ответ
+                    try
+                    {
+                        var errorObj = JsonConvert.DeserializeObject<dynamic>(errorContent);
+                        string errorCode = errorObj?.error_code?.ToString();
+                        string description = errorObj?.description?.ToString();
 
-                    _logger.LogError("[TELEGRAM-SEND] Детали ошибки: код {ErrorCode}, описание: {ErrorDescription}",
-                        errorCode, description);
+                        _logger.LogError("[TELEGRAM-SEND] Детализированная ошибка: код {ErrorCode}, описание: {ErrorDescription}",
+                            errorCode, description);
+                            
+                        // Если ошибка связана с HTML-парсингом, попробуем отправить без HTML
+                        if (description?.Contains("can't parse entities") == true || 
+                            description?.Contains("Bad Request") == true)
+                        {
+                            _logger.LogWarning("[TELEGRAM-SEND] Проблема с HTML-парсингом. Пробуем отправить без HTML форматирования");
+                            return await SendPlainTextMessageAsync(chatId, StripHtmlTags(message), cancellationToken);
+                        }
+                    }
+                    catch (Exception jsonEx)
+                    {
+                        _logger.LogWarning("[TELEGRAM-SEND] Не удалось расшифровать ошибку JSON: {Error}", jsonEx.Message);
+                    }
                 }
-                catch (Exception jsonEx)
+                catch (HttpRequestException httpEx)
                 {
-                    _logger.LogWarning("Не удалось расшифровать ошибку: {Error}", jsonEx.Message);
+                    _logger.LogError(httpEx, "[TELEGRAM-SEND] HTTP ошибка при обращении к Telegram API");
+                }
+                catch (TaskCanceledException timeoutEx)
+                {
+                    _logger.LogError(timeoutEx, "[TELEGRAM-SEND] Таймаут при обращении к Telegram API");
                 }
 
                 return false;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[TELEGRAM-SEND] Ошибка при отправке уведомления в чат {ChatId}", chatId);
+                _logger.LogError(ex, "[TELEGRAM-SEND] КРИТИЧЕСКАЯ ОШИБКА при отправке уведомления в чат {ChatId}", chatId);
                 return false;
             }
+        }
+        
+        // Вспомогательный метод для отправки простого текста без HTML
+        private async Task<bool> SendPlainTextMessageAsync(string chatId, string message, CancellationToken cancellationToken)
+        {
+            try
+            {
+                _logger.LogInformation("[TELEGRAM-SEND] Отправляем сообщение без HTML-форматирования");
+                
+                var payload = new
+                {
+                    chat_id = chatId,
+                    text = message,
+                    disable_web_page_preview = true
+                };
+
+                var json = JsonConvert.SerializeObject(payload);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var url = $"{_baseUrl}/sendMessage";
+                
+                var response = await _httpClient.PostAsync(url, content, cancellationToken);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    _logger.LogInformation("[TELEGRAM-SEND] ✅ Сообщение без HTML успешно отправлено");
+                    return true;
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                    _logger.LogError("[TELEGRAM-SEND] ❌ Не удалось отправить даже простое сообщение: {Error}", errorContent);
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[TELEGRAM-SEND] Ошибка при отправке простого сообщения");
+                return false;
+            }
+        }
+        
+        // Метод для очистки HTML-тегов
+        private string StripHtmlTags(string input)
+        {
+            if (string.IsNullOrEmpty(input)) return input;
+            
+            // Удаляем HTML-теги с помощью regex
+            return System.Text.RegularExpressions.Regex.Replace(input, "<.*?>", string.Empty)
+                .Replace("&quot;", "\"")
+                .Replace("&amp;", "&")
+                .Replace("&lt;", "<")
+                .Replace("&gt;", ">")
+                .Replace("&nbsp;", " ");
         }
 
         public async Task<bool> SendBookNotificationAsync(string chatId, RegularBaseBook book, List<string> matchedKeywords, CancellationToken cancellationToken = default)
