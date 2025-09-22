@@ -728,12 +728,12 @@ namespace RareBooksService.WebApi.Services
                 var usersContext = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
                 var booksContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
 
-                // Получаем настройки уведомлений пользователя
+                // Получаем все активные настройки уведомлений пользователя
                 var notificationPreferences = await usersContext.UserNotificationPreferences
                     .Where(np => np.UserId == user.Id && np.IsEnabled)
-                    .FirstOrDefaultAsync(cancellationToken);
+                    .ToListAsync(cancellationToken);
 
-                if (notificationPreferences == null)
+                if (!notificationPreferences.Any())
                 {
                     await _telegramService.SendNotificationAsync(chatId,
                         "📝 У вас нет активных настроек поиска.\n\n" +
@@ -742,8 +742,8 @@ namespace RareBooksService.WebApi.Services
                     return;
                 }
 
-                // Поиск активных лотов по критериям
-                var activeLotsResult = await SearchActiveLotsAsync(booksContext, notificationPreferences, page, pageSize, cancellationToken);
+                // Поиск активных лотов по всем критериям пользователя
+                var activeLotsResult = await SearchActiveLotsForAllPreferencesAsync(booksContext, notificationPreferences, page, pageSize, cancellationToken);
 
                 if (activeLotsResult.TotalCount == 0)
                 {
@@ -757,11 +757,11 @@ namespace RareBooksService.WebApi.Services
                     return;
                 }
 
-                // Форматируем результаты для отображения
-                var message = await FormatLotsMessageAsync(activeLotsResult, page, pageSize, notificationPreferences, cancellationToken);
+                // Форматируем результаты для отображения с группировкой по настройкам
+                var message = await FormatGroupedLotsMessageAsync(activeLotsResult, page, pageSize, cancellationToken);
                 
                 _logger.LogInformation("Отправляем пользователю {TelegramId} результат с {Count} лотами, размер сообщения: {MessageLength} символов", 
-                    telegramId, activeLotsResult.Books.Count, message.Length);
+                    telegramId, activeLotsResult.TotalCount, message.Length);
                     
                 // Отправляем сообщение с результатами пользователю
                 bool sendResult = await _telegramService.SendNotificationAsync(chatId, message, cancellationToken);
@@ -787,387 +787,201 @@ namespace RareBooksService.WebApi.Services
             }
         }
 
-        private async Task<LotsSearchResult> SearchActiveLotsAsync(BooksDbContext booksContext, UserNotificationPreference preferences, int page, int pageSize, CancellationToken cancellationToken)
+        private async Task<GroupedLotsSearchResult> SearchActiveLotsForAllPreferencesAsync(BooksDbContext booksContext, List<UserNotificationPreference> preferences, int page, int pageSize, CancellationToken cancellationToken)
         {
-            _logger.LogInformation("Начало поиска активных лотов...");
+            var baseQuery = booksContext.BooksInfo.Include(b => b.Category).AsQueryable();
             
-            var query = booksContext.BooksInfo.Include(b => b.Category).AsQueryable();
-
-            // Фильтр: только активные торги (торги еще не закончились)
+            // Фильтр: только активные торги
             var now = DateTime.UtcNow;
-            query = query.Where(b => b.EndDate > now);
-
-            _logger.LogInformation("Применен фильтр по активным торгам");
-
-            // Фильтр по категориям (делаем в SQL)
-            /*var categoryIds = preferences.GetCategoryIdsList();
-            if (categoryIds.Any())
-            {
-                query = query.Where(b => categoryIds.Contains(b.CategoryId));
-                _logger.LogInformation("Применен фильтр по категориям: {CategoryIds}", string.Join(", ", categoryIds));
-            }
-
-            // Фильтр по цене (делаем в SQL)
-            if (preferences.MinPrice > 0)
-            {
-                query = query.Where(b => (decimal)b.Price >= preferences.MinPrice);
-                _logger.LogInformation("Применен фильтр минимальной цены: {MinPrice}", preferences.MinPrice);
-            }
-            if (preferences.MaxPrice > 0)
-            {
-                query = query.Where(b => (decimal)b.Price <= preferences.MaxPrice);
-                _logger.LogInformation("Применен фильтр максимальной цены: {MaxPrice}", preferences.MaxPrice);
-            }
-
-            // Фильтр по году издания (делаем в SQL)
-            if (preferences.MinYear > 0)
-            {
-                query = query.Where(b => b.YearPublished >= preferences.MinYear);
-                _logger.LogInformation("Применен фильтр минимального года: {MinYear}", preferences.MinYear);
-            }
-            if (preferences.MaxYear > 0)
-            {
-                query = query.Where(b => b.YearPublished <= preferences.MaxYear);
-                _logger.LogInformation("Применен фильтр максимального года: {MaxYear}", preferences.MaxYear);
-            }
-
-            // Фильтр по городам (делаем в SQL)
-            var cities = preferences.GetCitiesList();
-            if (cities.Any())
-            {
-                var normalizedCities = cities.Select(c => c.ToLower()).ToList();
-                
-                foreach (var city in normalizedCities)
-                {
-                    query = query.Where(b => EF.Functions.ILike(b.City, $"%{city}%"));
-                }
-                _logger.LogInformation("Применен фильтр по городам: {Cities}", string.Join(", ", normalizedCities));
-            }*/
-
-            // Сортировка по дате окончания (ближайшие к завершению - первыми)
-            query = query.OrderBy(b => b.EndDate);
-
-            _logger.LogInformation("Начинаем выполнение SQL запроса...");
+            baseQuery = baseQuery.Where(b => b.EndDate > now);
             
-            // ДИАГНОСТИКА: Сначала проверим общее количество активных лотов
-            var totalActiveCount = await query.CountAsync(cancellationToken);
-            _logger.LogInformation("ДИАГНОСТИКА: Всего активных лотов в базе: {TotalActive}", totalActiveCount);
-            
-            // ДИАГНОСТИКА: Показываем несколько случайных активных лотов для понимания данных
-            var randomActiveBooks = await query
-                .Take(5)
-                .Select(b => new { b.Id, b.Title, b.Tags, b.BeginDate, b.EndDate })
-                .ToListAsync(cancellationToken);
-                
-            _logger.LogInformation("ДИАГНОСТИКА: Примеры активных лотов:");
-            for (int i = 0; i < randomActiveBooks.Count; i++)
+            var result = new GroupedLotsSearchResult
             {
-                var book = randomActiveBooks[i];
-                _logger.LogInformation("ДИАГНОСТИКА: Лот {Index}: Id={Id}, Title='{Title}', Tags=[{Tags}], BeginDate={BeginDate}, EndDate={EndDate}", 
-                    i + 1, book.Id, 
-                    book.Title?.Substring(0, Math.Min(50, book.Title?.Length ?? 0)),
-                    //book.NormalizedTitle?.Substring(0, Math.Min(50, book.NormalizedTitle?.Length ?? 0)),
-                    book.Tags != null ? string.Join(", ", book.Tags.Take(3)) : "нет",
-                    book.BeginDate,
-                    book.EndDate);
-            }
-
-            // КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: для небольших объемов данных (менее 1000 записей) берем все записи
-            var keywords = preferences.GetKeywordsList();
-            List<RegularBaseBook> allBooks;
-            
-            // ДИАГНОСТИКА: Специальный режим для отладки - если ключевое слово содержит "DEBUG", показываем все без фильтрации
-            var isDebugMode = keywords.Any(k => k.ToUpper().Contains("DEBUG"));
-            if (isDebugMode)
-            {
-                _logger.LogInformation("ДИАГНОСТИКА: Включен DEBUG режим - показываем лоты без фильтрации по ключевым словам");
-                allBooks = await query
-                    .Skip((page - 1) * pageSize)
-                    .Take(pageSize)
-                    .AsNoTracking()
-                    .ToListAsync(cancellationToken);
-                    
-                _logger.LogInformation("ДИАГНОСТИКА: Загружено {Count} записей в DEBUG режиме", allBooks.Count);
-            }
-            else if (keywords.Any())
-            {
-                // ИСПРАВЛЕНИЕ: для небольших объемов данных берем ВСЕ записи
-                // Это было причиной отсутствия результатов!
-                if (totalActiveCount <= 1000)
-                {
-                    allBooks = await query
-                        .AsNoTracking()
-                        .ToListAsync(cancellationToken);
-                    _logger.LogInformation("Загружено ВСЕ {Count} записей для фильтрации по ключевым словам (небольшой объем данных)", allBooks.Count);
-                }
-                else
-                {
-                    // Для больших объемов берем ограниченное количество
-                    var batchSize = Math.Max(pageSize * 20, 1000); // Увеличили лимит
-                    allBooks = await query
-                        .Take(batchSize)
-                        .AsNoTracking()
-                        .ToListAsync(cancellationToken);
-                    _logger.LogInformation("Загружено {Count} записей для фильтрации по ключевым словам (большой объем данных)", allBooks.Count);
-                }
-
-                // Обрабатываем ключевые слова через стемминг (как в RegularBaseBooksRepository)
-                _logger.LogInformation("ДИАГНОСТИКА: Исходные ключевые слова: {Keywords}", string.Join(", ", keywords));
-                
-                // Для каждого исходного ключевого слова создаем набор стеммированных слов для поиска
-                var keywordGroups = new List<List<string>>();
-                var originalKeywords = new List<string>(); // Для fallback-поиска
-                
-                foreach (var keyword in keywords)
-                {
-                    var keywordSearchTerms = new List<string>();
-                    var lowerKeyword = keyword.ToLower();
-                    originalKeywords.Add(lowerKeyword);
-                    
-                    try
-                    {
-                        string detectedLanguage;
-                        var processedKeyword = PreprocessText(keyword, out detectedLanguage);
-                        var keywordParts = processedKeyword.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                        
-                        _logger.LogInformation("ДИАГНОСТИКА: '{OriginalKeyword}' -> язык: {Language} -> стемминг: '{ProcessedKeyword}' -> части для поиска: [{Parts}]", 
-                            keyword, detectedLanguage, processedKeyword, string.Join(", ", keywordParts));
-                        
-                        // Добавляем стеммированные части
-                        keywordSearchTerms.AddRange(keywordParts);
-                        
-                        // ИСПРАВЛЕНИЕ: всегда добавляем исходное слово для расширения поиска
-                        if (!keywordSearchTerms.Contains(lowerKeyword))
-                        {
-                            keywordSearchTerms.Add(lowerKeyword);
-                            _logger.LogInformation("ДИАГНОСТИКА: Добавляем исходное слово: '{OriginalKeyword}'", lowerKeyword);
-                        }
-                        
-                        // НОВОЕ: добавляем частичные совпадения для учета склонений (первые 4-6 символов)
-                        if (lowerKeyword.Length >= 4)
-                        {
-                            var partialWord = lowerKeyword.Substring(0, Math.Min(lowerKeyword.Length - 1, 6));
-                            if (!keywordSearchTerms.Contains(partialWord))
-                            {
-                                keywordSearchTerms.Add(partialWord);
-                                _logger.LogInformation("ДИАГНОСТИКА: Добавляем частичное слово для склонений: '{PartialWord}'", partialWord);
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Ошибка при обработке ключевого слова '{Keyword}', используем простой поиск", keyword);
-                        keywordSearchTerms.Add(lowerKeyword);
-                        _logger.LogInformation("ДИАГНОСТИКА: '{OriginalKeyword}' -> ОШИБКА -> простой поиск: '{SimpleKeyword}'", 
-                            keyword, lowerKeyword);
-                    }
-                    
-                    // Убираем дубликаты
-                    keywordSearchTerms = keywordSearchTerms.Distinct().ToList();
-                    keywordGroups.Add(keywordSearchTerms);
-                }
-
-                _logger.LogInformation("ДИАГНОСТИКА: Итоговые группы слов для поиска: [{Groups}]", 
-                    string.Join(" | ", keywordGroups.Select(g => "[" + string.Join(", ", g) + "]")));
-                    
-                // ДИАГНОСТИКА: Тестируем стемминг на известных русских словах
-                var testWords = new[] { "книга", "книги", "книг", "пушкин", "пушкина", "гельмольт", "гельмгольц" };
-                _logger.LogInformation("ДИАГНОСТИКА: Тестирование стемминга на русских словах:");
-                foreach (var testWord in testWords)
-                {
-                    try
-                    {
-                        string detectedLang;
-                        var stemmed = PreprocessText(testWord, out detectedLang);
-                        _logger.LogInformation("ДИАГНОСТИКА: ТЕСТ '{TestWord}' -> язык: {Lang} -> стемминг: '{Stemmed}'", 
-                            testWord, detectedLang, stemmed);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "ДИАГНОСТИКА: ОШИБКА стемминга для '{TestWord}'", testWord);
-                    }
-                }
-                
-                // ДИАГНОСТИКА: Показываем первые 3 книги для понимания данных
-                var sampleBooks = allBooks.Take(3).ToList();
-                for (int i = 0; i < sampleBooks.Count; i++)
-                {
-                    var book = sampleBooks[i];
-                    _logger.LogInformation("ДИАГНОСТИКА: Книга {Index}: Id={Id}, Title='{Title}', NormalizedTitle='{NormalizedTitle}', NormalizedDescription='{NormalizedDesc}'", 
-                        i + 1, book.Id, book.Title?.Substring(0, Math.Min(50, book.Title.Length)), 
-                        book.NormalizedTitle?.Substring(0, Math.Min(50, book.NormalizedTitle.Length)),
-                        book.NormalizedDescription?.Substring(0, Math.Min(100, book.NormalizedDescription?.Length ?? 0)));
-                }
-                
-                // ДИАГНОСТИКА: Добавляем подсчетчик для понимания фильтрации
-                int totalChecked = 0;
-                int matchedByText = 0;
-                int matchedByTags = 0;
-                int matchedByFallback = 0;
-                
-                allBooks = allBooks.Where(book =>
-                {
-                    totalChecked++;
-                    
-                    // ОСНОВНОЙ ПОИСК: проверяем стеммированные слова в нормализованных полях
-                    var matchesText = keywordGroups.All(group => 
-                        group.Any(searchTerm =>
-                            (book.NormalizedTitle?.Contains(searchTerm) == true) ||
-                            (book.NormalizedDescription?.Contains(searchTerm) == true)));
-
-                    // ПОИСК ПО ТЕГАМ: используем исходные ключевые слова, так как теги не стеммированы
-                    var matchesTags = originalKeywords.All(originalKeyword =>
-                        book.Tags?.Any(tag =>
-                            tag.ToLower().Contains(originalKeyword)) == true);
-
-                    // FALLBACK ПОИСК: ищем исходные слова в исходных полях (Title, Description)
-                    var matchesFallback = originalKeywords.All(originalKeyword =>
-                        (book.Title?.ToLower().Contains(originalKeyword) == true) ||
-                        (book.Description?.ToLower().Contains(originalKeyword) == true));
-
-                    var finalMatch = matchesText || matchesTags || matchesFallback;
-                    
-                    if (matchesText) matchedByText++;
-                    if (matchesTags) matchedByTags++;
-                    if (matchesFallback) matchedByFallback++;
-                    
-                    // ДИАГНОСТИКА: Логируем первые 3 проверки для понимания процесса
-                    if (totalChecked <= 3)
-                    {
-                        _logger.LogInformation("ДИАГНОСТИКА: Проверка книги {Index}: '{Title}' | matchesText: {MatchText} | matchesTags: {MatchTags} | matchesFallback: {MatchFallback} | итог: {Final}", 
-                            totalChecked, book.Title?.Substring(0, Math.Min(40, book.Title?.Length ?? 0)), 
-                            matchesText, matchesTags, matchesFallback, finalMatch);
-                            
-                        // Показываем детальную проверку каждой группы ключевых слов
-                        for (int i = 0; i < keywordGroups.Count; i++)
-                        {
-                            var group = keywordGroups[i];
-                            var groupMatches = group.Any(searchTerm =>
-                                (book.NormalizedTitle?.Contains(searchTerm) == true) ||
-                                (book.NormalizedDescription?.Contains(searchTerm) == true));
-                            _logger.LogInformation("ДИАГНОСТИКА: Группа {GroupIndex} [{Group}]: {GroupMatches}", 
-                                i + 1, string.Join(", ", group), groupMatches);
-                                
-                            // Показываем конкретные совпадения
-                            foreach (var searchTerm in group)
-                            {
-                                var titleMatch = book.NormalizedTitle?.Contains(searchTerm) == true;
-                                var descMatch = book.NormalizedDescription?.Contains(searchTerm) == true;
-                                if (titleMatch || descMatch)
-                                {
-                                    _logger.LogInformation("ДИАГНОСТИКА: ✓ Найдено совпадение с '{SearchTerm}': title={TitleMatch}, desc={DescMatch}", 
-                                        searchTerm, titleMatch, descMatch);
-                                }
-                            }
-                        }
-                        
-                        // Проверяем теги детально
-                        if (book.Tags?.Any() == true)
-                        {
-                            _logger.LogInformation("ДИАГНОСТИКА: Теги книги: [{Tags}]", string.Join(", ", book.Tags));
-                            foreach (var originalKeyword in originalKeywords)
-                            {
-                                var tagMatches = book.Tags.Any(tag => tag.ToLower().Contains(originalKeyword));
-                                if (tagMatches)
-                                {
-                                    var matchingTags = book.Tags.Where(tag => tag.ToLower().Contains(originalKeyword)).ToList();
-                                    _logger.LogInformation("ДИАГНОСТИКА: ✓ Найдено совпадение в тегах с '{Keyword}': {MatchingTags}", 
-                                        originalKeyword, string.Join(", ", matchingTags));
-                                }
-                            }
-                        }
-
-                        // НОВОЕ: Проверяем fallback-поиск детально
-                        _logger.LogInformation("ДИАГНОСТИКА: Fallback-поиск по исходным полям:");
-                        foreach (var originalKeyword in originalKeywords)
-                        {
-                            var titleMatch = book.Title?.ToLower().Contains(originalKeyword) == true;
-                            var descMatch = book.Description?.ToLower().Contains(originalKeyword) == true;
-                            if (titleMatch || descMatch)
-                            {
-                                _logger.LogInformation("ДИАГНОСТИКА: ✓ Найдено fallback-совпадение с '{Keyword}': title={TitleMatch}, description={DescMatch}", 
-                                    originalKeyword, titleMatch, descMatch);
-                            }
-                        }
-                    }
-
-                    return finalMatch;
-                }).ToList();
-                
-                _logger.LogInformation("ДИАГНОСТИКА: Проверено книг: {TotalChecked}, найдено по тексту: {MatchedByText}, по тегам: {MatchedByTags}, fallback-поиск: {MatchedByFallback}", 
-                    totalChecked, matchedByText, matchedByTags, matchedByFallback);
-
-                _logger.LogInformation("После фильтрации по ключевым словам осталось {Count} записей", allBooks.Count);
-            }
-            else
-            {
-                // Если нет ключевых слов, используем обычную пагинацию в SQL
-                allBooks = await query
-                    .Skip((page - 1) * pageSize)
-                    .Take(pageSize)
-                    .AsNoTracking()
-                    .ToListAsync(cancellationToken);
-
-                _logger.LogInformation("Загружено {Count} записей с пагинацией в SQL", allBooks.Count);
-            }
-
-            // Применяем пагинацию в памяти только если фильтровали по ключевым словам (но не в DEBUG режиме)
-            var totalCount = allBooks.Count;
-            List<RegularBaseBook> books;
-            
-            if (keywords.Any() && !isDebugMode)
-            {
-                // Для точного подсчета нужен отдельный запрос
-                var countQuery = booksContext.BooksInfo.AsQueryable();
-                countQuery = countQuery.Where(b => b.EndDate > now);
-                
-                //if (categoryIds.Any())
-                //    countQuery = countQuery.Where(b => categoryIds.Contains(b.CategoryId));
-                if (preferences.MinPrice > 0)
-                    countQuery = countQuery.Where(b => (decimal)b.Price >= preferences.MinPrice);
-                if (preferences.MaxPrice > 0)
-                    countQuery = countQuery.Where(b => (decimal)b.Price <= preferences.MaxPrice);
-                if (preferences.MinYear > 0)
-                    countQuery = countQuery.Where(b => b.YearPublished >= preferences.MinYear);
-                if (preferences.MaxYear > 0)
-                    countQuery = countQuery.Where(b => b.YearPublished <= preferences.MaxYear);
-                /*if (cities.Any())
-                {
-                    var normalizedCities = cities.Select(c => c.ToLower()).ToList();
-                    foreach (var city in normalizedCities)
-                        countQuery = countQuery.Where(b => EF.Functions.ILike(b.City, $"%{city}%"));
-                }*/
-                
-                // Примерный подсчет (для производительности)
-                totalCount = Math.Min(await countQuery.CountAsync(cancellationToken), 1000);
-                
-                books = allBooks
-                    .Skip((page - 1) * pageSize)
-                    .Take(pageSize)
-                    .ToList();
-            }
-            else
-            {
-                books = allBooks;
-                
-                // ДИАГНОСТИКА: В DEBUG режиме или без ключевых слов показываем реальный count
-                if (isDebugMode)
-                {
-                    _logger.LogInformation("ДИАГНОСТИКА: DEBUG режим - показаны {Count} лотов без фильтрации", books.Count);
-                    totalCount = totalActiveCount; // Показываем общее количество активных лотов
-                }
-            }
-
-            _logger.LogInformation("Итоговый результат: {BooksCount} книг из {TotalCount} найденных", books.Count, totalCount);
-
-            return new LotsSearchResult
-            {
-                Books = books,
-                TotalCount = totalCount,
+                Groups = new List<PreferenceLotsGroup>(),
                 Page = page,
                 PageSize = pageSize
             };
+
+            var allBooks = await baseQuery.AsNoTracking().ToListAsync(cancellationToken);
+            
+            foreach (var preference in preferences)
+            {
+                var matchingBooks = FilterBooksByPreference(allBooks, preference);
+                
+                if (matchingBooks.Any())
+                {
+                    var group = new PreferenceLotsGroup
+                    {
+                        PreferenceName = !string.IsNullOrEmpty(preference.Keywords) ? preference.Keywords : "Настройка без названия",
+                        Books = matchingBooks.Take(pageSize).ToList(),
+                        TotalCount = matchingBooks.Count
+                    };
+                    
+                    result.Groups.Add(group);
+                }
+            }
+            
+            result.TotalCount = result.Groups.Sum(g => g.TotalCount);
+            
+            return result;
         }
+        
+        private List<RegularBaseBook> FilterBooksByPreference(List<RegularBaseBook> allBooks, UserNotificationPreference preference)
+        {
+            var filteredBooks = allBooks.Where(book => {
+                // Фильтр по цене
+                if (preference.MinPrice > 0 && book.Price < (double)preference.MinPrice) return false;
+                if (preference.MaxPrice > 0 && book.Price > (double)preference.MaxPrice) return false;
+                
+                // Фильтр по году издания
+                if (preference.MinYear > 0 && (!book.YearPublished.HasValue || book.YearPublished < preference.MinYear)) return false;
+                if (preference.MaxYear > 0 && (!book.YearPublished.HasValue || book.YearPublished > preference.MaxYear)) return false;
+                
+                // Фильтр по категориям
+                var categoryIds = preference.GetCategoryIdsList();
+                if (categoryIds.Any() && !categoryIds.Contains(book.CategoryId)) return false;
+                
+                // Фильтр по городам
+                var cities = preference.GetCitiesList();
+                if (cities.Any())
+                {
+                    var normalizedCities = cities.Select(c => c.ToLower()).ToList();
+                    if (!normalizedCities.Any(city => book.City?.ToLower().Contains(city) == true)) return false;
+                }
+                
+                return true;
+            }).ToList();
+            
+            // Фильтр по ключевым словам
+            var keywords = preference.GetKeywordsList();
+            if (keywords.Any())
+            {
+                filteredBooks = filteredBooks.Where(book => {
+                    return keywords.All(keyword => {
+                        var lowerKeyword = keyword.ToLower();
+                        
+                        // Поиск в названии
+                        if (book.Title?.ToLower().Contains(lowerKeyword) == true) return true;
+                        if (book.NormalizedTitle?.Contains(lowerKeyword) == true) return true;
+                        
+                        // Поиск в описании
+                        if (book.Description?.ToLower().Contains(lowerKeyword) == true) return true;
+                        if (book.NormalizedDescription?.Contains(lowerKeyword) == true) return true;
+                        
+                        // Поиск в тегах
+                        if (book.Tags?.Any(tag => tag.ToLower().Contains(lowerKeyword)) == true) return true;
+                        
+                        // Стемминг для более точного поиска
+                        try
+                        {
+                            string detectedLanguage;
+                            var processedKeyword = PreprocessText(keyword, out detectedLanguage);
+                            var keywordParts = processedKeyword.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                            
+                            return keywordParts.All(part =>
+                                (book.NormalizedTitle?.Contains(part) == true) ||
+                                (book.NormalizedDescription?.Contains(part) == true));
+                        }
+                        catch
+                        {
+                            return false;
+                        }
+                    });
+                }).ToList();
+            }
+            
+            return filteredBooks.OrderBy(b => b.EndDate).ToList();
+        }
+        
+         private async Task<string> FormatGroupedLotsMessageAsync(GroupedLotsSearchResult result, int page, int pageSize, CancellationToken cancellationToken)
+         {
+             var message = new StringBuilder();
+             var totalPages = (int)Math.Ceiling((double)result.TotalCount / pageSize);
+
+             message.AppendLine("📚 <b>Активные лоты по вашим критериям</b>");
+             message.AppendLine();
+             message.AppendLine($"📊 Найдено: {result.TotalCount} лотов");
+             message.AppendLine($"📄 Страница: {page}/{totalPages}");
+             message.AppendLine();
+
+             foreach (var group in result.Groups)
+             {
+                 if (group.Books.Any())
+                 {
+                     message.AppendLine($"🔍 <b>{group.PreferenceName}</b> ({group.TotalCount} лотов):");
+                     message.AppendLine();
+
+                     int index = 1;
+                     foreach (var book in group.Books.Take(5)) // Показываем до 5 лотов на группу
+                     {
+                         message.AppendLine($"<b>{index}. {book.Title}</b>");
+                         message.AppendLine($"💰 <b>{book.Price:N0} ₽</b>");
+                         message.AppendLine($"⏰ Окончание: <b>{book.EndDate:dd.MM.yyyy HH:mm}</b>");
+                         message.AppendLine($"🔗 <a href=\"https://meshok.net/item/{book.Id}\">Открыть лот №{book.Id}</a>");
+                         message.AppendLine();
+                         index++;
+                     }
+
+                     if (group.TotalCount > 5)
+                     {
+                         message.AppendLine($"... и еще {group.TotalCount - 5} лотов по этому критерию");
+                         message.AppendLine();
+                     }
+                 }
+             }
+
+             // Пагинация
+             if (totalPages > 1)
+             {
+                 message.AppendLine("📖 <b>Навигация:</b>");
+                 if (page > 1)
+                     message.AppendLine($"  <code>/lots {page - 1}</code> - предыдущая страница");
+                 if (page < totalPages)
+                     message.AppendLine($"  <code>/lots {page + 1}</code> - следующая страница");
+                 message.AppendLine($"  <code>/lots [номер страницы]</code> - перейти на страницу");
+                 message.AppendLine();
+             }
+
+             message.AppendLine("⚙️ <code>/settings</code> - изменить критерии поиска");
+             
+             // Проверяем размер сообщения
+             string resultMessage = message.ToString();
+             
+             // Максимальная длина сообщения для Telegram - примерно 4096 символов
+             if (resultMessage.Length > 4000)
+             {
+                 // Создаем сокращенный вариант сообщения
+                 var shortMessage = new StringBuilder();
+                 shortMessage.AppendLine("📚 <b>Активные лоты по вашим критериям</b>");
+                 shortMessage.AppendLine();
+                 shortMessage.AppendLine($"📊 Найдено: {result.TotalCount} лотов");
+                 shortMessage.AppendLine($"📄 Страница: {page}/{totalPages}");
+                 shortMessage.AppendLine();
+                 
+                 // Добавляем только первую группу с одним лотом
+                 if (result.Groups.Any() && result.Groups.First().Books.Any())
+                 {
+                     var firstGroup = result.Groups.First();
+                     var book = firstGroup.Books.First();
+                     shortMessage.AppendLine($"🔍 <b>{firstGroup.PreferenceName}</b> (пример из {firstGroup.TotalCount} лотов):");
+                     shortMessage.AppendLine();
+                     shortMessage.AppendLine($"<b>1. {book.Title}</b>");
+                     shortMessage.AppendLine($"💰 <b>{book.Price:N0} ₽</b>");
+                     shortMessage.AppendLine($"⏰ Окончание: <b>{book.EndDate:dd.MM.yyyy HH:mm}</b>");
+                     shortMessage.AppendLine($"🔗 <a href=\"https://meshok.net/item/{book.Id}\">Открыть лот №{book.Id}</a>");
+                     shortMessage.AppendLine();
+                 }
+                 
+                 shortMessage.AppendLine("⚠️ <b>Предупреждение:</b> найдено слишком много лотов для отображения.");
+                 shortMessage.AppendLine("Для получения полных результатов уточните критерии поиска.");
+                 shortMessage.AppendLine();
+                 shortMessage.AppendLine("⚙️ <code>/settings</code> - изменить критерии поиска");
+                 
+                 resultMessage = shortMessage.ToString();
+             }
+
+             return resultMessage;
+         }
 
          private async Task<string> FormatLotsMessageAsync(LotsSearchResult result, int page, int pageSize, UserNotificationPreference preferences, CancellationToken cancellationToken)
          {
@@ -1466,6 +1280,21 @@ namespace RareBooksService.WebApi.Services
         public int TotalCount { get; set; }
         public int Page { get; set; }
         public int PageSize { get; set; }
+    }
+    
+    public class GroupedLotsSearchResult
+    {
+        public List<PreferenceLotsGroup> Groups { get; set; } = new();
+        public int TotalCount { get; set; }
+        public int Page { get; set; }
+        public int PageSize { get; set; }
+    }
+    
+    public class PreferenceLotsGroup
+    {
+        public string PreferenceName { get; set; } = string.Empty;
+        public List<RegularBaseBook> Books { get; set; } = new();
+        public int TotalCount { get; set; }
     }
 }
 

@@ -68,7 +68,7 @@ namespace RareBooksService.Common.Models
         /// <summary>
         /// Способ доставки уведомлений (Email, SMS, Push и т.д.)
         /// </summary>
-        public NotificationDeliveryMethod DeliveryMethod { get; set; } = NotificationDeliveryMethod.Email;
+        public NotificationDeliveryMethod DeliveryMethod { get; set; } = NotificationDeliveryMethod.Telegram;
 
         /// <summary>
         /// Время последней отправки уведомления
