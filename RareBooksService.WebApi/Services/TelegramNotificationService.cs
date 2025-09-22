@@ -165,19 +165,22 @@ namespace RareBooksService.WebApi.Services
                 var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
                 _logger.LogError("[TELEGRAM-SEND] Не удалось отправить уведомление в чат {ChatId}. Status: {StatusCode}, Response: {Response}", 
                     chatId, response.StatusCode, errorContent);
-                    
+
                 // Попробуем расшифровать JSON-ответ
-                try 
+                try
                 {
                     var errorObj = JsonConvert.DeserializeObject<dynamic>(errorContent);
-                    _logger.LogError("[TELEGRAM-SEND] Детали ошибки: код {ErrorCode}, описание: {ErrorDescription}", 
-                        errorObj?.error_code, errorObj?.description);
+                    string errorCode = errorObj?.error_code?.ToString();
+                    string description = errorObj?.description?.ToString();
+
+                    _logger.LogError("[TELEGRAM-SEND] Детали ошибки: код {ErrorCode}, описание: {ErrorDescription}",
+                        errorCode, description);
                 }
                 catch (Exception jsonEx)
                 {
                     _logger.LogWarning("Не удалось расшифровать ошибку: {Error}", jsonEx.Message);
                 }
-                
+
                 return false;
             }
             catch (Exception ex)
