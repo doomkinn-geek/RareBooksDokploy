@@ -1794,7 +1794,7 @@ namespace RareBooksService.WebApi.Services
             message.AppendLine($"📊 Найдено: {totalBooks} новых лотов");
             message.AppendLine();
 
-            foreach (var item in preferencesWithBooks.Take(3)) // Максимум 3 группы
+            foreach (var item in preferencesWithBooks/*.Take(3)*/) // Максимум 3 группы
             {
                 var preference = item.preference;
                 var books = item.books;
@@ -1804,7 +1804,7 @@ namespace RareBooksService.WebApi.Services
                     message.AppendLine($"🔍 <b>По запросу:</b> {preference.Keywords}");
                 }
 
-                foreach (var book in books.Take(2)) // Максимум 2 книги на группу
+                foreach (var book in books/*.Take(2)*/) // Максимум 2 книги на группу
                 {
                     var timeLeft = book.EndDate - DateTime.UtcNow;
                     var timeLeftStr = timeLeft.TotalDays >= 1 
@@ -1812,8 +1812,8 @@ namespace RareBooksService.WebApi.Services
                         : $"{(int)timeLeft.TotalHours} ч.";
 
                     message.AppendLine($"📚 <b>{book.Title}</b>");
-                    message.AppendLine($"💰 {book.Price:N0} ₽");
-                    message.AppendLine($"⏰ До окончания: {timeLeftStr}");
+                    //message.AppendLine($"💰 {book.Price:N0} ₽");
+                    //message.AppendLine($"⏰ До окончания: {timeLeftStr}");
                     message.AppendLine($"🔗 <a href=\"https://meshok.net/item/{book.Id}\">Открыть лот №{book.Id}</a>");
                     message.AppendLine();
                 }
