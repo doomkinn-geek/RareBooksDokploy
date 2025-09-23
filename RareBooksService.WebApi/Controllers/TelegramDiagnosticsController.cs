@@ -441,10 +441,18 @@ namespace RareBooksService.WebApi.Controllers
 
                 _logger.LogInformation("Создано {Count} тестовых уведомлений", notificationsCreated);
 
+                // Сразу обрабатываем созданные уведомления (отправляем их)
+                if (notificationsCreated > 0)
+                {
+                    _logger.LogInformation("Отправляем созданные уведомления...");
+                    await bookNotificationService.ProcessNotificationsAsync(HttpContext.RequestAborted);
+                    _logger.LogInformation("Уведомления отправлены");
+                }
+
                 return Ok(new
                 {
                     success = true,
-                    message = $"Тестирование завершено. Обработано {activeBookIds.Count} активных лотов, создано {notificationsCreated} уведомлений",
+                    message = $"Тестирование завершено. Обработано {activeBookIds.Count} активных лотов, создано и отправлено {notificationsCreated} уведомлений",
                     activeBooks = activeBookIds.Count,
                     notificationsCreated = notificationsCreated,
                     testBookIds = request.ShowBookIds ? activeBookIds.Take(10).ToList() : null

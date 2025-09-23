@@ -81,11 +81,6 @@ const NotificationSettings = () => {
         isEnabled: true,
         keywords: '',
         categoryIds: '',
-        minPrice: 0,
-        maxPrice: 0,
-        minYear: 0,
-        maxYear: 0,
-        cities: '',
         notificationFrequencyMinutes: 60,
         deliveryMethod: 1 // 1 = Email, 4 = Telegram
     });
@@ -151,11 +146,6 @@ const NotificationSettings = () => {
                 isEnabled: preference.isEnabled,
                 keywords: preference.keywords || '',
                 categoryIds: preference.categoryIds || '',
-                minPrice: preference.minPrice || 0,
-                maxPrice: preference.maxPrice || 0,
-                minYear: preference.minYear || 0,
-                maxYear: preference.maxYear || 0,
-                cities: preference.cities || '',
                 notificationFrequencyMinutes: preference.notificationFrequencyMinutes || 60,
                 deliveryMethod: preference.deliveryMethod
             });
@@ -165,11 +155,6 @@ const NotificationSettings = () => {
                 isEnabled: true,
                 keywords: '',
                 categoryIds: '',
-                minPrice: 0,
-                maxPrice: 0,
-                minYear: 0,
-                maxYear: 0,
-                cities: '',
                 notificationFrequencyMinutes: 60,
                 deliveryMethod: telegramStatus?.isConnected ? 4 : 1
             });
@@ -351,11 +336,6 @@ const NotificationSettings = () => {
                                                     {t.frequency}: {preference.notificationFrequencyMinutes} {t.frequencyMinutes}
                                                 </Typography>
 
-                                                {preference.minPrice > 0 || preference.maxPrice > 0 ? (
-                                                    <Typography variant="body2" color="text.secondary" gutterBottom>
-                                                        {t.priceRange}: {preference.minPrice}₽ - {preference.maxPrice}₽
-                                                    </Typography>
-                                                ) : null}
 
                                                 {preference.lastNotificationSent && (
                                                     <Typography variant="body2" color="text.secondary">
@@ -578,55 +558,6 @@ const NotificationSettings = () => {
                             />
                         </Grid>
 
-                        <Grid item xs={12} sm={6}>
-                            <TextField
-                                fullWidth
-                                label={t.cities}
-                                value={formData.cities}
-                                onChange={(e) => setFormData({ ...formData, cities: e.target.value })}
-                                helperText={t.citiesHint}
-                            />
-                        </Grid>
-
-                        <Grid item xs={6}>
-                            <TextField
-                                fullWidth
-                                label={t.minPrice}
-                                type="number"
-                                value={formData.minPrice}
-                                onChange={(e) => setFormData({ ...formData, minPrice: Number(e.target.value) })}
-                            />
-                        </Grid>
-
-                        <Grid item xs={6}>
-                            <TextField
-                                fullWidth
-                                label={t.maxPrice}
-                                type="number"
-                                value={formData.maxPrice}
-                                onChange={(e) => setFormData({ ...formData, maxPrice: Number(e.target.value) })}
-                            />
-                        </Grid>
-
-                        <Grid item xs={6}>
-                            <TextField
-                                fullWidth
-                                label={t.minYear}
-                                type="number"
-                                value={formData.minYear}
-                                onChange={(e) => setFormData({ ...formData, minYear: Number(e.target.value) })}
-                            />
-                        </Grid>
-
-                        <Grid item xs={6}>
-                            <TextField
-                                fullWidth
-                                label={t.maxYear}
-                                type="number"
-                                value={formData.maxYear}
-                                onChange={(e) => setFormData({ ...formData, maxYear: Number(e.target.value) })}
-                            />
-                        </Grid>
 
                         <Grid item xs={6}>
                             <TextField

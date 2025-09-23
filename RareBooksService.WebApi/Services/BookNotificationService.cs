@@ -92,40 +92,13 @@ namespace RareBooksService.WebApi.Services
                 .Where(b => b.BeginDate >= sinceDate); // Только новые книги
 
             // Фильтр по статусу (активные торги)
-            query = query.Where(b => b.Status == 1); // Предполагаем, что 1 = активные торги
-
-            // Фильтр по цене
-            if (preference.MinPrice > 0)
-            {
-                query = query.Where(b => b.Price >= (double)preference.MinPrice);
-            }
-            if (preference.MaxPrice > 0)
-            {
-                query = query.Where(b => b.Price <= (double)preference.MaxPrice);
-            }
-
-            // Фильтр по году издания
-            if (preference.MinYear > 0)
-            {
-                query = query.Where(b => b.YearPublished >= preference.MinYear);
-            }
-            if (preference.MaxYear > 0)
-            {
-                query = query.Where(b => b.YearPublished <= preference.MaxYear);
-            }
+            //query = query.Where(b => b.Status == 1); // Предполагаем, что 1 = активные торги
 
             // Фильтр по категориям
             var categoryIds = preference.GetCategoryIdsList();
             if (categoryIds.Any())
             {
                 query = query.Where(b => categoryIds.Contains(b.CategoryId));
-            }
-
-            // Фильтр по городам
-            var cities = preference.GetCitiesList();
-            if (cities.Any())
-            {
-                query = query.Where(b => cities.Contains(b.City.ToLower()));
             }
 
             var books = await query.ToListAsync(cancellationToken);
@@ -475,22 +448,9 @@ namespace RareBooksService.WebApi.Services
 
         private bool DoesBookMatchPreference(RegularBaseBook book, UserNotificationPreference preference)
         {
-            // Проверка цены
-            //минимальную цену проверять не нужно, т.к. есть книги, на которые еще не сделано ни одной ставки
-            //if (preference.MinPrice > 0 && book.Price < (double)preference.MinPrice) return false;
-            if (preference.MaxPrice > 0 && book.Price > (double)preference.MaxPrice) return false;
-
-            // Проверка года издания
-            if (preference.MinYear > 0 && (!book.YearPublished.HasValue || book.YearPublished < preference.MinYear)) return false;
-            if (preference.MaxYear > 0 && (!book.YearPublished.HasValue || book.YearPublished > preference.MaxYear)) return false;
-
             // Проверка категорий
             var categoryIds = preference.GetCategoryIdsList();
             if (categoryIds.Any() && !categoryIds.Contains(book.CategoryId)) return false;
-
-            // Проверка городов
-            var cities = preference.GetCitiesList();
-            if (cities.Any() && !cities.Contains(book.City?.ToLower() ?? "")) return false;
 
             // Проверка статуса (только активные торги)
             if (book.Status != 1) return false;
