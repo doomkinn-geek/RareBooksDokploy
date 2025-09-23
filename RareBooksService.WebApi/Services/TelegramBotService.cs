@@ -1172,105 +1172,39 @@ namespace RareBooksService.WebApi.Services
             };
         }
 
-         private async Task<string> FormatLotsMessageAsync(LotsSearchResult result, int page, int pageSize, UserNotificationPreference preferences, CancellationToken cancellationToken)
-         {
-             _logger.LogInformation("Форматирование результатов поиска: {Count} книг из {TotalCount}, страница {Page}/{TotalPages}",
-                result.Books.Count, result.TotalCount, page, (int)Math.Ceiling((double)result.TotalCount / pageSize));
-                
-             var message = new StringBuilder();
+        private async Task<string> FormatLotsMessageAsync(LotsSearchResult result, int page, int pageSize, UserNotificationPreference preferences, CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("Форматирование результатов поиска для команды /lots: {Count} книг из {TotalCount}, страница {Page}/{TotalPages}",
+               result.Books.Count, result.TotalCount, page, (int)Math.Ceiling((double)result.TotalCount / pageSize));
+               
+            var message = new StringBuilder();
 
-             var totalPages = (int)Math.Ceiling((double)result.TotalCount / pageSize);
+            var totalPages = (int)Math.Ceiling((double)result.TotalCount / pageSize);
 
-             message.AppendLine("📚 <b>Активные лоты по вашим критериям</b>");
-             message.AppendLine();
-             message.AppendLine($"📊 Найдено: {result.TotalCount} лотов");
-             message.AppendLine($"📄 Страница: {page}/{totalPages}");
-             message.AppendLine();
+            message.AppendLine("📚 <b>Активные лоты по вашим критериям</b>");
+            message.AppendLine();
+            message.AppendLine($"📊 Найдено: {result.TotalCount} лотов");
+            message.AppendLine($"📄 Страница: {page}/{totalPages}");
+            message.AppendLine();
 
-             // Показываем активные критерии
-             var criteriaLines = new List<string>();
-             if (!string.IsNullOrEmpty(preferences.Keywords))
-                 criteriaLines.Add($"🔍 Ключевые слова: {preferences.Keywords}");
-             if (preferences.MinPrice > 0 || preferences.MaxPrice > 0)
-                 criteriaLines.Add($"💰 Цена: {(preferences.MinPrice > 0 ? $"от {preferences.MinPrice:N0} ₽" : "")} {(preferences.MaxPrice > 0 ? $"до {preferences.MaxPrice:N0} ₽" : "")}".Trim());
-             if (preferences.MinYear > 0 || preferences.MaxYear > 0)
-                 criteriaLines.Add($"📅 Год: {(preferences.MinYear > 0 ? $"от {preferences.MinYear}" : "")} {(preferences.MaxYear > 0 ? $"до {preferences.MaxYear}" : "")}".Trim());
-             if (!string.IsNullOrEmpty(preferences.Cities))
-                 criteriaLines.Add($"🏙️ Города: {preferences.Cities}");
+            // Показываем только ключевые слова для упрощения
+            if (!string.IsNullOrEmpty(preferences.Keywords))
+            {
+                message.AppendLine($"🔍 <b>По критерию:</b> {preferences.Keywords}");
+                message.AppendLine();
+            }
 
-             if (criteriaLines.Any())
-             {
-                 message.AppendLine("<b>Активные критерии:</b>");
-                 foreach (var criteria in criteriaLines)
-                 {
-                     message.AppendLine($"  {criteria}");
-                 }
-                 message.AppendLine();
-             }
+            int index = (page - 1) * pageSize + 1;
+            foreach (var book in result.Books)
+            {
+                var timeLeft = book.EndDate - DateTime.UtcNow;
+                var endDateStr = book.EndDate.ToString("dd.MM.yyyy HH:mm");
 
-             int index = (page - 1) * pageSize + 1;
-             foreach (var book in result.Books)
-             {
-                 var timeLeft = book.EndDate - DateTime.UtcNow;
-                 var timeLeftStr = timeLeft.TotalDays >= 1 
-                     ? $"{(int)timeLeft.TotalDays} дн. {(int)timeLeft.Hours} ч."
-                     : timeLeft.TotalHours >= 1 
-                         ? $"{(int)timeLeft.TotalHours} ч. {(int)timeLeft.Minutes} мин."
-                         : $"{(int)timeLeft.TotalMinutes} мин.";
-
-                 // Заголовок с номером и названием
-                 message.AppendLine($"<b>{index}. {book.Title}</b>");
+                // УПРОЩЕННЫЙ ФОРМАТ: название лота, дата окончания, ссылка
+                message.AppendLine($"<b>{index}. {book.Title}</b>");
+                message.AppendLine($"⏰ Окончание: {endDateStr}");
+                message.AppendLine($"🔗 <a href=\"https://meshok.net/item/{book.Id}\">Открыть лот №{book.Id}</a>");
                  
-                 // Основная информация
-                 message.AppendLine($"💰 Текущая цена: <b>{book.Price:N0} ₽</b>");
-                 
-                 // Показываем стартовую цену, если она отличается от текущей
-                 if (book.StartPrice > 0 && Math.Abs(book.StartPrice - book.Price) > 0.01)
-                 {
-                     message.AppendLine($"💸 Стартовая цена: {book.StartPrice:N0} ₽");
-                 }
-                 
-                 message.AppendLine($"⏰ До окончания: <b>{timeLeftStr}</b>");
-                 message.AppendLine($"🏙️ Город: {book.City}");
-                 
-                 if (book.YearPublished.HasValue)
-                     message.AppendLine($"📅 Год издания: {book.YearPublished}");
-                 
-                 message.AppendLine($"📂 Категория: {book.Category?.Name ?? "Не указана"}");
-                 
-                 // Информация о ставках
-                 if (book.BidsCount > 0)
-                     message.AppendLine($"👥 Ставок: <b>{book.BidsCount}</b>");
-                 else
-                     message.AppendLine($"👥 Ставок пока нет");
-                 
-                 // Продавец
-                 if (!string.IsNullOrEmpty(book.SellerName))
-                     message.AppendLine($"👤 Продавец: {book.SellerName}");
-                 
-                 // Теги
-                 if (book.Tags?.Any() == true)
-                 {
-                     var displayTags = book.Tags.Take(3).ToList(); // Показываем только первые 3 тега
-                     var tagsText = string.Join(", ", displayTags);
-                     if (book.Tags.Count > 3)
-                         tagsText += $" (+{book.Tags.Count - 3})";
-                     message.AppendLine($"🏷️ Теги: {tagsText}");
-                 }
-                 
-                 // Описание
-                 if (!string.IsNullOrEmpty(book.Description))
-                 {
-                     var shortDescription = book.Description.Length > 150 
-                         ? book.Description.Substring(0, 150) + "..."
-                         : book.Description;
-                     message.AppendLine($"📝 {shortDescription}");
-                 }
-                 
-                 // Ссылка на meshok.net (ГЛАВНОЕ!)
-                 message.AppendLine($"🔗 <a href=\"https://meshok.net/item/{book.Id}\">Открыть лот на Meshok.net</a>");
-                 
-                 message.AppendLine(); // Пустая строка между лотами
                  index++;
              }
 
@@ -1782,74 +1716,199 @@ namespace RareBooksService.WebApi.Services
         }
 
         /// <summary>
-        /// Отправка уведомления о новых книгах пользователю
+        /// Отправка уведомления о новых книгах пользователю (ПОЛНЫЙ ФОРМАТ с разбивкой по сообщениям)
         /// </summary>
         private async Task SendNewBooksNotificationAsync(string telegramId, List<(UserNotificationPreference preference, List<RegularBaseBook> books)> preferencesWithBooks, CancellationToken cancellationToken)
         {
-            var message = new StringBuilder();
-            message.AppendLine("🔔 <b>Новые лоты по вашим критериям!</b>");
-            message.AppendLine();
-
             int totalBooks = preferencesWithBooks.Sum(p => p.books.Count);
-            message.AppendLine($"📊 Найдено: {totalBooks} новых лотов");
-            message.AppendLine();
+            
+            _logger.LogInformation("Отправляем ПОЛНЫЕ уведомления пользователю {TelegramId}: {PreferencesCount} критериев, {TotalBooks} книг", 
+                telegramId, preferencesWithBooks.Count, totalBooks);
 
-            foreach (var item in preferencesWithBooks/*.Take(3)*/) // Максимум 3 группы
+            // Отправляем общий заголовок
+            var headerMessage = new StringBuilder();
+            headerMessage.AppendLine("🔔 <b>Новые лоты по вашим критериям!</b>");
+            headerMessage.AppendLine();
+            headerMessage.AppendLine($"📊 Найдено: {totalBooks} новых лотов по {preferencesWithBooks.Count} критериям");
+            headerMessage.AppendLine($"📤 Отправляем {preferencesWithBooks.Count} детальных сообщения...");
+            headerMessage.AppendLine();
+            headerMessage.AppendLine("⚙️ <code>/settings</code> - управление настройками");
+            
+            await _telegramService.SendNotificationAsync(telegramId, headerMessage.ToString(), cancellationToken);
+
+            // Отправляем отдельное сообщение для каждого критерия
+            for (int i = 0; i < preferencesWithBooks.Count; i++)
             {
+                var item = preferencesWithBooks[i];
                 var preference = item.preference;
                 var books = item.books;
+
+                await SendPreferenceBooksNotificationAsync(telegramId, preference, books, i + 1, preferencesWithBooks.Count, cancellationToken);
                 
-                if (!string.IsNullOrEmpty(preference.Keywords))
+                // Небольшая задержка между сообщениями, чтобы не перегружать Telegram API
+                if (i < preferencesWithBooks.Count - 1)
                 {
-                    message.AppendLine($"🔍 <b>По запросу:</b> {preference.Keywords}");
-                }
-
-                foreach (var book in books/*.Take(2)*/) // Максимум 2 книги на группу
-                {
-                    var timeLeft = book.EndDate - DateTime.UtcNow;
-                    var timeLeftStr = timeLeft.TotalDays >= 1 
-                        ? $"{(int)timeLeft.TotalDays} дн."
-                        : $"{(int)timeLeft.TotalHours} ч.";
-
-                    message.AppendLine($"📚 <b>{book.Title}</b>");
-                    //message.AppendLine($"💰 {book.Price:N0} ₽");
-                    //message.AppendLine($"⏰ До окончания: {timeLeftStr}");
-                    message.AppendLine($"🔗 <a href=\"https://meshok.net/item/{book.Id}\">Открыть лот №{book.Id}</a>");
-                    message.AppendLine();
-                }
-
-                if (books.Count > 2)
-                {
-                    message.AppendLine($"... и еще {books.Count - 2} лотов");
-                    message.AppendLine();
+                    await Task.Delay(500, cancellationToken);
                 }
             }
+        }
 
-            if (totalBooks > 6)
+        /// <summary>
+        /// Отправка уведомления по одному критерию с разбивкой на части при превышении лимита
+        /// </summary>
+        private async Task SendPreferenceBooksNotificationAsync(string telegramId, UserNotificationPreference preference, List<RegularBaseBook> books, int currentIndex, int totalPreferences, CancellationToken cancellationToken)
+        {
+            const int maxMessageLength = 4000; // Оставляем запас от лимита Telegram в 4096 символов
+            
+            var headerBuilder = new StringBuilder();
+            headerBuilder.AppendLine($"📋 <b>Критерий {currentIndex}/{totalPreferences}</b>");
+            
+            if (!string.IsNullOrEmpty(preference.Keywords))
             {
-                message.AppendLine($"📈 И еще {totalBooks - 6} лотов по вашим критериям!");
-                message.AppendLine();
+                headerBuilder.AppendLine($"🔍 <b>По запросу:</b> {preference.Keywords}");
             }
-
-            message.AppendLine("⚙️ <code>/settings</code> - управление настройками");
-            message.AppendLine("📋 <code>/lots</code> - посмотреть все лоты");
-
-            // Проверяем размер сообщения
-            string messageText = message.ToString();
-            if (messageText.Length > 4000)
+            
+            var categories = preference.GetCategoryIdsList();
+            if (categories.Any())
             {
-                // Создаем краткую версию
-                var shortMessage = new StringBuilder();
-                shortMessage.AppendLine("🔔 <b>Новые лоты по вашим критериям!</b>");
-                shortMessage.AppendLine();
-                shortMessage.AppendLine($"📊 Найдено: {totalBooks} новых лотов");
-                shortMessage.AppendLine();
-                shortMessage.AppendLine("📋 Используйте <code>/lots</code> для просмотра всех лотов");
-                messageText = shortMessage.ToString();
-                _logger.LogWarning("Сообщение уведомления слишком длинное, отправляем краткую версию");
+                // Здесь можно добавить названия категорий, если нужно
+                headerBuilder.AppendLine($"📂 <b>Категории:</b> {categories.Count} выбрано");
+            }
+            
+            headerBuilder.AppendLine($"📚 <b>Найдено книг:</b> {books.Count}");
+            headerBuilder.AppendLine();
+
+            string header = headerBuilder.ToString();
+            
+            // Если книг немного, отправляем одним сообщением
+            if (books.Count <= 3)
+            {
+                var message = new StringBuilder(header);
+                
+                foreach (var book in books)
+                {
+                    AppendBookFullInfo(message, book);
+                }
+                
+                message.AppendLine("━━━━━━━━━━━━━━━━━━━━");
+                
+                await _telegramService.SendNotificationAsync(telegramId, message.ToString(), cancellationToken);
+                return;
             }
 
-            await _telegramService.SendNotificationAsync(telegramId, messageText, cancellationToken);
+            // Если книг много, разбиваем на части
+            var currentMessage = new StringBuilder(header);
+            int booksInCurrentMessage = 0;
+            int messageNumber = 1;
+            int totalMessages = (int)Math.Ceiling((double)books.Count / 2); // Примерно 2 книги на сообщение
+
+            foreach (var book in books)
+            {
+                var bookInfo = new StringBuilder();
+                AppendBookFullInfo(bookInfo, book);
+                
+                // Проверяем, поместится ли еще одна книга
+                if (currentMessage.Length + bookInfo.Length > maxMessageLength && booksInCurrentMessage > 0)
+                {
+                    // Отправляем текущее сообщение
+                    currentMessage.AppendLine($"📄 <i>Часть {messageNumber}/{totalMessages}</i>");
+                    currentMessage.AppendLine("━━━━━━━━━━━━━━━━━━━━");
+                    
+                    await _telegramService.SendNotificationAsync(telegramId, currentMessage.ToString(), cancellationToken);
+                    
+                    // Начинаем новое сообщение
+                    messageNumber++;
+                    currentMessage = new StringBuilder(header);
+                    booksInCurrentMessage = 0;
+                    
+                    await Task.Delay(300, cancellationToken); // Задержка между сообщениями
+                }
+                
+                currentMessage.Append(bookInfo);
+                booksInCurrentMessage++;
+            }
+
+            // Отправляем последнее сообщение
+            if (booksInCurrentMessage > 0)
+            {
+                if (totalMessages > 1)
+                {
+                    currentMessage.AppendLine($"📄 <i>Часть {messageNumber}/{totalMessages} (последняя)</i>");
+                }
+                currentMessage.AppendLine("━━━━━━━━━━━━━━━━━━━━");
+                
+                await _telegramService.SendNotificationAsync(telegramId, currentMessage.ToString(), cancellationToken);
+            }
+        }
+
+        /// <summary>
+        /// Добавляет ПОЛНУЮ информацию о книге в StringBuilder
+        /// </summary>
+        private void AppendBookFullInfo(StringBuilder message, RegularBaseBook book)
+        {
+            var timeLeft = book.EndDate - DateTime.UtcNow;
+            var timeLeftStr = timeLeft.TotalDays >= 1 
+                ? $"{(int)timeLeft.TotalDays} дн. {(int)timeLeft.Hours} ч."
+                : timeLeft.TotalHours >= 1 
+                    ? $"{(int)timeLeft.TotalHours} ч. {(int)timeLeft.Minutes} мин."
+                    : $"{(int)timeLeft.TotalMinutes} мин.";
+
+            var endDateStr = book.EndDate.ToString("dd.MM.yyyy HH:mm");
+
+            message.AppendLine($"📚 <b>{book.Title}</b>");
+            
+            // Основная информация
+            message.AppendLine($"💰 Цена: <b>{book.Price:N0} ₽</b>");
+            
+            if (book.StartPrice > 0 && Math.Abs(book.StartPrice - book.Price) > 0.01)
+            {
+                message.AppendLine($"💸 Стартовая: {book.StartPrice:N0} ₽");
+            }
+            
+            message.AppendLine($"⏰ До окончания: <b>{timeLeftStr}</b>");
+            message.AppendLine($"📅 Окончание: {endDateStr}");
+            message.AppendLine($"🏙️ Город: {book.City}");
+            
+            if (book.YearPublished.HasValue)
+            {
+                message.AppendLine($"📖 Год издания: {book.YearPublished}");
+            }
+            
+            if (book.BidsCount > 0)
+            {
+                message.AppendLine($"👥 Ставок: <b>{book.BidsCount}</b>");
+            }
+            else
+            {
+                message.AppendLine($"👥 Ставок пока нет");
+            }
+            
+            if (!string.IsNullOrEmpty(book.SellerName))
+            {
+                message.AppendLine($"👤 Продавец: {book.SellerName}");
+            }
+            
+            // Описание (сокращенное)
+            if (!string.IsNullOrEmpty(book.Description))
+            {
+                var shortDescription = book.Description.Length > 200 
+                    ? book.Description.Substring(0, 200) + "..."
+                    : book.Description;
+                message.AppendLine($"📝 {shortDescription}");
+            }
+            
+            // Теги
+            if (book.Tags?.Any() == true)
+            {
+                var displayTags = book.Tags.Take(5).ToList();
+                var tagsText = string.Join(", ", displayTags);
+                if (book.Tags.Count > 5)
+                    tagsText += $" (+{book.Tags.Count - 5})";
+                message.AppendLine($"🏷️ Теги: {tagsText}");
+            }
+            
+            message.AppendLine($"🔗 <a href=\"https://meshok.net/item/{book.Id}\">Открыть лот №{book.Id}</a>");
+            message.AppendLine();
         }
     }
 
