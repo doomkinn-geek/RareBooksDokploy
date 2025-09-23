@@ -329,7 +329,7 @@ namespace RareBooksService.WebApi.Services
 
                     try
                     {
-                        await notificationService.ProcessNotificationsAsync(ct);
+                        await notificationService.ProcessPendingNotificationsAsync(ct);
                         _logger.LogInformation("Обработка уведомлений завершена");
                     }
                     catch (Exception ex)
@@ -573,7 +573,7 @@ namespace RareBooksService.WebApi.Services
         }
 
         /// <summary>
-        /// Обрабатывает уведомления о новых книгах после обновления базы данных
+        /// Обрабатывает уведомления о новых книгах после обновления базы данных (упрощенная версия)
         /// </summary>
         private async Task ProcessNewBookNotificationsAsync(List<int> newBookIds, CancellationToken cancellationToken)
         {
@@ -582,16 +582,17 @@ namespace RareBooksService.WebApi.Services
                 _logger.LogInformation("Начинаю обработку уведомлений для {Count} новых книг", newBookIds.Count);
                 
                 using var scope = _serviceProvider.CreateScope();
-                var bookNotificationService = scope.ServiceProvider.GetRequiredService<IBookNotificationService>();
+                var telegramBotService = scope.ServiceProvider.GetRequiredService<ITelegramBotService>();
                 
-                var notificationsCreated = await bookNotificationService.ProcessNotificationsForNewBooksAsync(newBookIds, cancellationToken);
+                // Используем центральный метод из TelegramBotService
+                var notificationsSent = await telegramBotService.ProcessNewBookNotificationsAsync(newBookIds, cancellationToken);
                 
-                _logger.LogInformation("Создано {Count} уведомлений для новых книг", notificationsCreated);
+                _logger.LogInformation("Отправлено {Count} уведомлений для новых книг", notificationsSent);
                 
                 AddLogEntry(new LogEntry
                 {
                     Timestamp = DateTime.UtcNow,
-                    Message = $"Создано {notificationsCreated} уведомлений для {newBookIds.Count} новых книг",
+                    Message = $"Отправлено {notificationsSent} уведомлений для {newBookIds.Count} новых книг",
                     IsError = false
                 });
             }
@@ -606,31 +607,6 @@ namespace RareBooksService.WebApi.Services
                     IsError = true,
                     ExceptionMessage = ex.ToString()
                 });
-            }
-        }
-
-        /// <summary>
-        /// Публичный метод для тестирования уведомлений о новых книгах (без проверки частоты)
-        /// </summary>
-        public async Task<int> ProcessNewBookNotificationsTestAsync(List<int> newBookIds, CancellationToken cancellationToken)
-        {
-            try
-            {
-                _logger.LogInformation("ТЕСТ: Начинаю обработку уведомлений для {Count} новых книг", newBookIds.Count);
-                
-                using var scope = _serviceProvider.CreateScope();
-                var bookNotificationService = scope.ServiceProvider.GetRequiredService<IBookNotificationService>();
-                
-                var notificationsCreated = await bookNotificationService.ProcessNotificationsForNewBooksTestAsync(newBookIds, cancellationToken);
-                
-                _logger.LogInformation("ТЕСТ: Создано {Count} уведомлений для новых книг", notificationsCreated);
-                
-                return notificationsCreated;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "ТЕСТ: Ошибка при обработке уведомлений о новых книгах");
-                return 0;
             }
         }
     }

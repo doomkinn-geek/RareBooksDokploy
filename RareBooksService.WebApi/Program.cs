@@ -251,7 +251,6 @@ namespace RareBooksService.WebApi
 
                 builder.Services.AddHostedService(sp => (BookUpdateService)sp.GetRequiredService<IBookUpdateService>());
                 builder.Services.AddHostedService<SubscriptionRenewalBackgroundService>();
-                builder.Services.AddHostedService<NotificationBackgroundService>();
 
 
 

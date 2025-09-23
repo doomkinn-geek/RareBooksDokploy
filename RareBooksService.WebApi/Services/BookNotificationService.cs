@@ -3,39 +3,27 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RareBooksService.Common.Models;
 using RareBooksService.Data;
-using System.Text.RegularExpressions;
-using Iveonik.Stemmers;
-using LanguageDetection;
 
 namespace RareBooksService.WebApi.Services
 {
     public interface IBookNotificationService
     {
         Task<List<UserNotificationPreference>> GetActiveNotificationPreferencesAsync(CancellationToken cancellationToken = default);
-        Task<List<RegularBaseBook>> FindMatchingBooksForUserAsync(UserNotificationPreference preference, DateTime sinceDate, CancellationToken cancellationToken = default);
-        Task<bool> ShouldSendNotificationAsync(UserNotificationPreference preference, CancellationToken cancellationToken = default);
         Task<BookNotification> CreateNotificationAsync(UserNotificationPreference preference, RegularBaseBook book, List<string> matchedKeywords, CancellationToken cancellationToken = default);
         Task<bool> SendNotificationAsync(BookNotification notification, CancellationToken cancellationToken = default);
         Task MarkNotificationAsSentAsync(int notificationId, bool success, string errorMessage = null, CancellationToken cancellationToken = default);
-        Task ProcessNotificationsAsync(CancellationToken cancellationToken = default);
-        Task<int> ProcessNotificationsForNewBooksAsync(List<int> newBookIds, CancellationToken cancellationToken = default);
-        Task<int> ProcessNotificationsForNewBooksTestAsync(List<int> newBookIds, CancellationToken cancellationToken = default);
+        Task ProcessPendingNotificationsAsync(CancellationToken cancellationToken = default);
     }
 
+    /// <summary>
+    /// Упрощенный сервис уведомлений - только работа с БД
+    /// Вся логика поиска и отправки перенесена в TelegramBotService
+    /// </summary>
     public class BookNotificationService : IBookNotificationService
     {
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<BookNotificationService> _logger;
         private readonly ITelegramNotificationService _telegramService;
-        private readonly Dictionary<string, IStemmer> _stemmers;
-        private static readonly LanguageDetector _languageDetector;
-
-        // Создаём статический экземпляр детектора языка один раз
-        static BookNotificationService()
-        {
-            _languageDetector = new LanguageDetector();
-            _languageDetector.AddAllLanguages();
-        }
 
         public BookNotificationService(
             IServiceScopeFactory scopeFactory,
@@ -45,14 +33,6 @@ namespace RareBooksService.WebApi.Services
             _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _telegramService = telegramService ?? throw new ArgumentNullException(nameof(telegramService));
-            
-            _stemmers = new Dictionary<string, IStemmer>
-            {
-                { "rus", new RussianStemmer() },
-                { "eng", new EnglishStemmer() },
-                { "fra", new FrenchStemmer() },
-                { "deu", new GermanStemmer() },
-            };
         }
 
         public async Task<List<UserNotificationPreference>> GetActiveNotificationPreferencesAsync(CancellationToken cancellationToken = default)
@@ -66,165 +46,6 @@ namespace RareBooksService.WebApi.Services
                 .ToListAsync(cancellationToken);
         }
 
-        public async Task<bool> ShouldSendNotificationAsync(UserNotificationPreference preference, CancellationToken cancellationToken = default)
-        {
-            if (!preference.IsEnabled) return false;
-
-            // Проверяем частоту уведомлений
-            if (preference.LastNotificationSent.HasValue)
-            {
-                var nextNotificationTime = preference.LastNotificationSent.Value.AddMinutes(preference.NotificationFrequencyMinutes);
-                if (DateTime.UtcNow < nextNotificationTime)
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        public async Task<List<RegularBaseBook>> FindMatchingBooksForUserAsync(UserNotificationPreference preference, DateTime sinceDate, CancellationToken cancellationToken = default)
-        {
-            using var scope = _scopeFactory.CreateScope();
-            var context = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
-
-            var query = context.BooksInfo
-                .Include(b => b.Category)
-                .Where(b => b.BeginDate >= sinceDate); // Только новые книги
-
-            // Фильтр по статусу (активные торги)
-            //query = query.Where(b => b.Status == 1); // Предполагаем, что 1 = активные торги
-
-            // Фильтр по категориям
-            var categoryIds = preference.GetCategoryIdsList();
-            if (categoryIds.Any())
-            {
-                query = query.Where(b => categoryIds.Contains(b.CategoryId));
-            }
-
-            var books = await query.ToListAsync(cancellationToken);
-
-            // Фильтр по ключевым словам (в памяти, т.к. требует более сложной логики)
-            var keywords = preference.GetKeywordsList();
-            if (keywords.Any())
-            {
-                books = books.Where(book => ContainsKeywords(book, keywords)).ToList();
-            }
-
-            return books;
-        }
-
-        private bool ContainsKeywords(RegularBaseBook book, List<string> keywords)
-        {
-            if (!keywords.Any()) return true;
-
-            // Используем ту же логику поиска, что и в TelegramBotService
-            return keywords.All(keyword => {
-                var lowerKeyword = keyword.ToLower();
-                
-                // Поиск в названии
-                if (book.Title?.ToLower().Contains(lowerKeyword) == true) return true;
-                if (book.NormalizedTitle?.Contains(lowerKeyword) == true) return true;
-                
-                // Поиск в описании
-                if (book.Description?.ToLower().Contains(lowerKeyword) == true) return true;
-                if (book.NormalizedDescription?.Contains(lowerKeyword) == true) return true;
-                
-                // Поиск в тегах
-                if (book.Tags?.Any(tag => tag.ToLower().Contains(lowerKeyword)) == true) return true;
-                
-                // Стемминг для более точного поиска
-                try
-                {
-                    string detectedLanguage;
-                    var processedKeyword = PreprocessText(keyword, out detectedLanguage);
-                    var keywordParts = processedKeyword.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    
-                    return keywordParts.All(part =>
-                        (book.NormalizedTitle?.Contains(part) == true) ||
-                        (book.NormalizedDescription?.Contains(part) == true));
-                }
-                catch
-                {
-                    return false;
-                }
-            });
-        }
-
-        private List<string> GetMatchedKeywords(RegularBaseBook book, List<string> keywords)
-        {
-            var matched = new List<string>();
-
-            foreach (var keyword in keywords)
-            {
-                var lowerKeyword = keyword.ToLower();
-                bool isMatched = false;
-                
-                // Поиск в названии
-                if (book.Title?.ToLower().Contains(lowerKeyword) == true) isMatched = true;
-                if (book.NormalizedTitle?.Contains(lowerKeyword) == true) isMatched = true;
-                
-                // Поиск в описании
-                if (book.Description?.ToLower().Contains(lowerKeyword) == true) isMatched = true;
-                if (book.NormalizedDescription?.Contains(lowerKeyword) == true) isMatched = true;
-                
-                // Поиск в тегах
-                if (book.Tags?.Any(tag => tag.ToLower().Contains(lowerKeyword)) == true) isMatched = true;
-                
-                // Стемминг для более точного поиска
-                if (!isMatched)
-                {
-                    try
-                    {
-                        string detectedLanguage;
-                        var processedKeyword = PreprocessText(keyword, out detectedLanguage);
-                        var keywordParts = processedKeyword.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                        
-                        isMatched = keywordParts.Any(part =>
-                            (book.NormalizedTitle?.Contains(part) == true) ||
-                            (book.NormalizedDescription?.Contains(part) == true));
-                    }
-                    catch
-                    {
-                        // Игнорируем ошибки стемминга
-                    }
-                }
-                
-                if (isMatched)
-                {
-                    matched.Add(keyword);
-                }
-            }
-
-            return matched;
-        }
-        
-        // ------------------- ПОМОГАЮЩИЙ МЕТОД: детект языка + стемминг -----------        
-        private string PreprocessText(string text, out string detectedLanguage)
-        {
-            // Используем статический детектор
-            detectedLanguage = DetectLanguage(text);
-            if (detectedLanguage == "bul" || detectedLanguage == "ukr" || detectedLanguage == "mkd")
-                detectedLanguage = "rus";
-
-            if (!_stemmers.ContainsKey(detectedLanguage))
-            {
-                throw new NotSupportedException($"Language {detectedLanguage} is not supported.");
-            }
-
-            var stemmer = _stemmers[detectedLanguage];
-            // Приводим к нижнему регистру с помощью ToLowerInvariant для производительности и предсказуемости
-            var normalizedText = Regex.Replace(text.ToLowerInvariant(), @"\p{P}", " ");
-            var words = normalizedText.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-                                      .Select(word => stemmer.Stem(word));
-            return string.Join(" ", words);
-        }
-
-        private string DetectLanguage(string text)
-        {
-            return _languageDetector.Detect(text);
-        }
-
         public async Task<BookNotification> CreateNotificationAsync(UserNotificationPreference preference, RegularBaseBook book, List<string> matchedKeywords, CancellationToken cancellationToken = default)
         {
             using var scope = _scopeFactory.CreateScope();
@@ -233,39 +54,22 @@ namespace RareBooksService.WebApi.Services
             var notification = new BookNotification
             {
                 UserId = preference.UserId,
+                UserNotificationPreferenceId = preference.Id,
                 BookId = book.Id,
                 BookTitle = book.Title,
-                BookDescription = book.Description,
                 BookPrice = (decimal)book.Price,
-                BookFinalPrice = book.FinalPrice.HasValue ? (decimal)book.FinalPrice.Value : null,
-                BookCity = book.City,
-                BookBeginDate = book.BeginDate,
                 BookEndDate = book.EndDate,
-                BookStatus = book.Status,
-                DeliveryMethod = preference.DeliveryMethod,
-                Status = NotificationStatus.Pending,
-                Subject = $"Найдена интересная книга: {book.Title}",
                 MatchedKeywords = string.Join(", ", matchedKeywords),
-                UserNotificationPreferenceId = preference.Id,
-                CreatedAt = DateTime.UtcNow
+                Status = NotificationStatus.Pending,
+                CreatedAt = DateTime.UtcNow,
+                DeliveryMethod = preference.DeliveryMethod
             };
-
-            // Определяем адрес получателя в зависимости от способа доставки
-            switch (preference.DeliveryMethod)
-            {
-                case NotificationDeliveryMethod.Email:
-                    notification.RecipientAddress = preference.User.Email;
-                    break;
-                case NotificationDeliveryMethod.Telegram:
-                    notification.RecipientAddress = preference.User.TelegramId;
-                    break;
-                default:
-                    notification.RecipientAddress = preference.User.Email;
-                    break;
-            }
 
             context.BookNotifications.Add(notification);
             await context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("Создано уведомление {NotificationId} для пользователя {UserId} о книге {BookId}", 
+                notification.Id, preference.UserId, book.Id);
 
             return notification;
         }
@@ -274,55 +78,30 @@ namespace RareBooksService.WebApi.Services
         {
             try
             {
-                notification.Status = NotificationStatus.Sending;
-                notification.AttemptsCount++;
-
-                using var scope = _scopeFactory.CreateScope();
-                var context = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
-                var booksContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
-
-                // Получаем актуальную информацию о книге
-                var book = await booksContext.BooksInfo
-                    .Include(b => b.Category)
-                    .FirstOrDefaultAsync(b => b.Id == notification.BookId, cancellationToken);
-
-                if (book == null)
+                // Для Telegram уведомлений используем TelegramNotificationService
+                if (notification.DeliveryMethod == NotificationDeliveryMethod.Telegram)
                 {
-                    await MarkNotificationAsSentAsync(notification.Id, false, "Книга не найдена", cancellationToken);
-                    return false;
+                    using var scope = _scopeFactory.CreateScope();
+                    var context = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
+                    
+                    var user = await context.Users.FirstOrDefaultAsync(u => u.Id == notification.UserId, cancellationToken);
+                    
+                    if (user?.TelegramId == null)
+                    {
+                        await MarkNotificationAsSentAsync(notification.Id, false, "Пользователь не имеет привязанного Telegram ID", cancellationToken);
+                        return false;
+                    }
+
+                    var message = FormatNotificationMessage(notification);
+                    var success = await _telegramService.SendNotificationAsync(user.TelegramId, message, cancellationToken);
+                    
+                    await MarkNotificationAsSentAsync(notification.Id, success, success ? null : "Ошибка отправки в Telegram", cancellationToken);
+                    return success;
                 }
-
-                var matchedKeywords = string.IsNullOrEmpty(notification.MatchedKeywords) 
-                    ? new List<string>() 
-                    : notification.MatchedKeywords.Split(", ").ToList();
-
-                bool success = false;
-
-                switch (notification.DeliveryMethod)
-                {
-                    case NotificationDeliveryMethod.Telegram:
-                        success = await _telegramService.SendBookNotificationAsync(
-                            notification.RecipientAddress, 
-                            book, 
-                            matchedKeywords, 
-                            cancellationToken);
-                        break;
-
-                    case NotificationDeliveryMethod.Email:
-                        // TODO: Реализовать отправку email
-                        _logger.LogWarning("Email уведомления пока не реализованы");
-                        success = false;
-                        break;
-
-                    default:
-                        _logger.LogWarning("Неподдерживаемый способ доставки: {DeliveryMethod}", notification.DeliveryMethod);
-                        success = false;
-                        break;
-                }
-
-                await MarkNotificationAsSentAsync(notification.Id, success, success ? null : "Ошибка отправки", cancellationToken);
-
-                return success;
+                
+                // Для других типов уведомлений (Email, etc.) - заглушка
+                await MarkNotificationAsSentAsync(notification.Id, false, "Тип уведомления не поддерживается", cancellationToken);
+                return false;
             }
             catch (Exception ex)
             {
@@ -338,252 +117,17 @@ namespace RareBooksService.WebApi.Services
             var context = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
 
             var notification = await context.BookNotifications.FindAsync(notificationId);
-            if (notification == null) return;
-
-            if (success)
+            if (notification != null)
             {
-                notification.Status = NotificationStatus.Sent;
+                notification.Status = success ? NotificationStatus.Sent : NotificationStatus.Failed;
                 notification.SentAt = DateTime.UtcNow;
-                notification.ErrorMessage = null;
-            }
-            else
-            {
-                notification.Status = NotificationStatus.Failed;
                 notification.ErrorMessage = errorMessage;
-                
-                // Планируем повторную попытку через 30 минут для первых 3 попыток
-                if (notification.AttemptsCount < 3)
-                {
-                    notification.NextAttemptAt = DateTime.UtcNow.AddMinutes(30);
-                }
-            }
 
-            // Обновляем время последнего уведомления для пользователя
-            if (success)
-            {
-                var preference = await context.UserNotificationPreferences
-                    .FirstOrDefaultAsync(p => p.Id == notification.UserNotificationPreferenceId, cancellationToken);
-                
-                if (preference != null)
-                {
-                    preference.LastNotificationSent = DateTime.UtcNow;
-                }
-            }
-
-            await context.SaveChangesAsync(cancellationToken);
-        }
-
-        public async Task ProcessNotificationsAsync(CancellationToken cancellationToken = default)
-        {
-            try
-            {
-                _logger.LogInformation("Начинаю обработку уведомлений...");
-
-                // Обрабатываем неотправленные уведомления
-                await ProcessPendingNotificationsAsync(cancellationToken);
-
-                // Обрабатываем повторные попытки
-                await ProcessRetryNotificationsAsync(cancellationToken);
-
-                // Создаем новые уведомления для активных настроек
-                await ProcessNewNotificationsAsync(cancellationToken);
-
-                _logger.LogInformation("Обработка уведомлений завершена");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Ошибка при обработке уведомлений");
+                await context.SaveChangesAsync(cancellationToken);
             }
         }
 
-        public async Task<int> ProcessNotificationsForNewBooksAsync(List<int> newBookIds, CancellationToken cancellationToken = default)
-        {
-            if (!newBookIds?.Any() == true) return 0;
-
-            int notificationsCreated = 0;
-
-            try
-            {
-                var preferences = await GetActiveNotificationPreferencesAsync(cancellationToken);
-                
-                using var scope = _scopeFactory.CreateScope();
-                var booksContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
-
-                var newBooks = await booksContext.BooksInfo
-                    .Include(b => b.Category)
-                    .Where(b => newBookIds.Contains(b.Id))
-                    .ToListAsync(cancellationToken);
-
-                foreach (var preference in preferences)
-                {
-                    if (!await ShouldSendNotificationAsync(preference, cancellationToken))
-                        continue;
-
-                    foreach (var book in newBooks)
-                    {
-                        // Проверяем соответствие книги критериям пользователя
-                        if (DoesBookMatchPreference(book, preference))
-                        {
-                            var keywords = preference.GetKeywordsList();
-                            var matchedKeywords = GetMatchedKeywords(book, keywords);
-
-                            if (!keywords.Any() || matchedKeywords.Any())
-                            {
-                                var notification = await CreateNotificationAsync(preference, book, matchedKeywords, cancellationToken);
-                                notificationsCreated++;
-
-                                _logger.LogInformation("Создано уведомление {NotificationId} для пользователя {UserId} о книге {BookId}", 
-                                    notification.Id, preference.UserId, book.Id);
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Ошибка при обработке уведомлений для новых книг");
-            }
-
-            return notificationsCreated;
-        }
-
-        public async Task<int> ProcessNotificationsForNewBooksTestAsync(List<int> newBookIds, CancellationToken cancellationToken = default)
-        {
-            if (!newBookIds?.Any() == true) 
-            {
-                _logger.LogWarning("ProcessNotificationsForNewBooksTestAsync: Список ID книг пуст");
-                return 0;
-            }
-
-            int notificationsCreated = 0;
-
-            try
-            {
-                _logger.LogInformation("ТЕСТ: Начинаем обработку {Count} книг для тестирования уведомлений", newBookIds.Count);
-                
-                var preferences = await GetActiveNotificationPreferencesAsync(cancellationToken);
-                _logger.LogInformation("ТЕСТ: Найдено {Count} активных настроек уведомлений", preferences.Count);
-                
-                using var scope = _scopeFactory.CreateScope();
-                var booksContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
-
-                var newBooks = await booksContext.BooksInfo
-                    .Include(b => b.Category)
-                    .Where(b => newBookIds.Contains(b.Id))
-                    .ToListAsync(cancellationToken);
-
-                _logger.LogInformation("ТЕСТ: Загружено {Count} книг из базы данных", newBooks.Count);
-
-                foreach (var preference in preferences)
-                {
-                    _logger.LogInformation("ТЕСТ: Проверяем настройку ID {PreferenceId} пользователя {UserId}, ключевые слова: '{Keywords}'", 
-                        preference.Id, preference.UserId, preference.Keywords);
-
-                    // ТЕСТ: Пропускаем проверку частоты для тестирования
-                    // if (!await ShouldSendNotificationAsync(preference, cancellationToken))
-                    //     continue;
-
-                    int booksCheckedForPreference = 0;
-                    int booksMatchedForPreference = 0;
-
-                    foreach (var book in newBooks)
-                    {
-                        booksCheckedForPreference++;
-                        
-                        // Проверяем соответствие книги критериям пользователя
-                        bool matchesPreference = DoesBookMatchPreferenceAdvanced(book, preference);
-                        
-                        if (matchesPreference)
-                        {
-                            booksMatchedForPreference++;
-                            var keywords = preference.GetKeywordsList();
-                            var matchedKeywords = GetMatchedKeywords(book, keywords);
-
-                            _logger.LogInformation("ТЕСТ: Книга '{Title}' соответствует настройке {PreferenceId}. Ключевые слова: {Keywords}, найденные: {MatchedKeywords}", 
-                                book.Title?.Substring(0, Math.Min(50, book.Title.Length)), 
-                                preference.Id, 
-                                string.Join(", ", keywords), 
-                                string.Join(", ", matchedKeywords));
-
-                            if (!keywords.Any() || matchedKeywords.Any())
-                            {
-                                var notification = await CreateNotificationAsync(preference, book, matchedKeywords, cancellationToken);
-                                notificationsCreated++;
-
-                                _logger.LogInformation("ТЕСТ: Создано уведомление {NotificationId} для пользователя {UserId} о книге {BookId}", 
-                                    notification.Id, preference.UserId, book.Id);
-                            }
-                            else
-                            {
-                                _logger.LogWarning("ТЕСТ: Книга '{Title}' подошла по критериям, но не найдены ключевые слова", 
-                                    book.Title?.Substring(0, Math.Min(50, book.Title.Length)));
-                            }
-                        }
-                    }
-                    
-                    _logger.LogInformation("ТЕСТ: Для настройки {PreferenceId} проверено {Checked} книг, подошло {Matched}", 
-                        preference.Id, booksCheckedForPreference, booksMatchedForPreference);
-                }
-
-                _logger.LogInformation("ТЕСТ: Итого создано {Count} уведомлений", notificationsCreated);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "ТЕСТ: Ошибка при обработке уведомлений для новых книг");
-            }
-
-            return notificationsCreated;
-        }
-
-        private bool DoesBookMatchPreferenceAdvanced(RegularBaseBook book, UserNotificationPreference preference)
-        {
-            _logger.LogDebug("ТЕСТ: Проверяем книгу '{Title}' для настройки {PreferenceId}", 
-                book.Title?.Substring(0, Math.Min(40, book.Title?.Length ?? 0)), preference.Id);
-
-            // Проверка категорий
-            var categoryIds = preference.GetCategoryIdsList();
-            if (categoryIds.Any() && !categoryIds.Contains(book.CategoryId)) 
-            {
-                _logger.LogDebug("ТЕСТ: Книга не подходит по категории. Нужные: [{Categories}], у книги: {BookCategory}", 
-                    string.Join(", ", categoryIds), book.CategoryId);
-                return false;
-            }
-
-            // Проверка ключевых слов с использованием той же логики, что в TelegramBotService
-            var keywords = preference.GetKeywordsList();
-            if (keywords.Any())
-            {
-                var matchedKeywords = GetMatchedKeywords(book, keywords);
-                bool hasKeywordMatch = matchedKeywords.Any();
-                
-                _logger.LogDebug("ТЕСТ: Проверка ключевых слов. Искомые: [{Keywords}], найденные: [{MatchedKeywords}], результат: {Result}", 
-                    string.Join(", ", keywords), string.Join(", ", matchedKeywords), hasKeywordMatch);
-                
-                if (!hasKeywordMatch)
-                {
-                    return false;
-                }
-            }
-
-            _logger.LogDebug("ТЕСТ: Книга '{Title}' подходит под критерии настройки {PreferenceId}", 
-                book.Title?.Substring(0, Math.Min(40, book.Title?.Length ?? 0)), preference.Id);
-
-            return true;
-        }
-
-        private bool DoesBookMatchPreference(RegularBaseBook book, UserNotificationPreference preference)
-        {
-            // Проверка категорий
-            var categoryIds = preference.GetCategoryIdsList();
-            if (categoryIds.Any() && !categoryIds.Contains(book.CategoryId)) return false;
-
-            // Статус не проверяем - будем уведомлять о всех лотах независимо от статуса
-            // (активность проверяется по дате окончания в вызывающем коде)
-
-            return true;
-        }
-
-        private async Task ProcessPendingNotificationsAsync(CancellationToken cancellationToken)
+        public async Task ProcessPendingNotificationsAsync(CancellationToken cancellationToken = default)
         {
             using var scope = _scopeFactory.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
@@ -594,57 +138,28 @@ namespace RareBooksService.WebApi.Services
                 .Take(50) // Обрабатываем по 50 уведомлений за раз
                 .ToListAsync(cancellationToken);
 
+            _logger.LogInformation("Обрабатываем {Count} отложенных уведомлений", pendingNotifications.Count);
+
             foreach (var notification in pendingNotifications)
             {
                 await SendNotificationAsync(notification, cancellationToken);
-                
-                // Небольшая задержка между отправками
-                await Task.Delay(100, cancellationToken);
             }
         }
 
-        private async Task ProcessRetryNotificationsAsync(CancellationToken cancellationToken)
+        private string FormatNotificationMessage(BookNotification notification)
         {
-            using var scope = _scopeFactory.CreateScope();
-            var context = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
+            var timeLeft = notification.BookEndDate - DateTime.UtcNow;
+            var timeLeftStr = timeLeft.TotalDays >= 1 
+                ? $"{(int)timeLeft.TotalDays} дн."
+                : $"{(int)timeLeft.TotalHours} ч.";
 
-            var retryNotifications = await context.BookNotifications
-                .Where(n => n.Status == NotificationStatus.Failed && 
-                           n.NextAttemptAt.HasValue && 
-                           n.NextAttemptAt <= DateTime.UtcNow &&
-                           n.AttemptsCount < 3)
-                .OrderBy(n => n.NextAttemptAt)
-                .Take(20)
-                .ToListAsync(cancellationToken);
-
-            foreach (var notification in retryNotifications)
-            {
-                await SendNotificationAsync(notification, cancellationToken);
-                await Task.Delay(100, cancellationToken);
-            }
-        }
-
-        private async Task ProcessNewNotificationsAsync(CancellationToken cancellationToken)
-        {
-            var preferences = await GetActiveNotificationPreferencesAsync(cancellationToken);
-            var cutoffTime = DateTime.UtcNow.AddHours(-24); // Ищем книги за последние 24 часа
-
-            foreach (var preference in preferences)
-            {
-                if (!await ShouldSendNotificationAsync(preference, cancellationToken))
-                    continue;
-
-                var sinceDate = preference.LastNotificationSent?.AddMinutes(-preference.NotificationFrequencyMinutes) ?? cutoffTime;
-                var matchingBooks = await FindMatchingBooksForUserAsync(preference, sinceDate, cancellationToken);
-
-                foreach (var book in matchingBooks.Take(5)) // Максимум 5 уведомлений за раз на пользователя
-                {
-                    var keywords = preference.GetKeywordsList();
-                    var matchedKeywords = GetMatchedKeywords(book, keywords);
-
-                    await CreateNotificationAsync(preference, book, matchedKeywords, cancellationToken);
-                }
-            }
+            return $"🔔 <b>Новый лот по вашим критериям!</b>\n\n" +
+                   $"📚 <b>{notification.BookTitle}</b>\n" +
+                   $"💰 {notification.BookPrice:N0} ₽\n" +
+                   $"⏰ До окончания: {timeLeftStr}\n" +
+                   $"🔗 <a href=\"https://meshok.net/item/{notification.BookId}\">Открыть лот №{notification.BookId}</a>\n\n" +
+                   $"🔍 Найден по: {notification.MatchedKeywords}\n\n" +
+                   $"⚙️ <code>/settings</code> - управление настройками";
         }
     }
 }

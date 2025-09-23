@@ -8,6 +8,7 @@ using System.Text;
 using System.IO;
 using RareBooksService.WebApi.Services;
 using RareBooksService.Common.Models.Telegram;
+using RareBooksService.Common.Models;
 using RareBooksService.Data;
 using SystemFile = System.IO.File;
 
@@ -404,75 +405,40 @@ namespace RareBooksService.WebApi.Controllers
         }*/
 
         /// <summary>
-        /// Тестирование уведомлений о лотах для всех пользователей
+        /// Тестирование уведомлений о лотах для всех пользователей (упрощенная версия)
         /// </summary>
         [HttpPost("test-notifications")]
         public async Task<IActionResult> TestNotifications([FromBody] TestNotificationsRequest request)
         {
             try
             {
-                _logger.LogInformation("Запуск тестирования уведомлений");
+                _logger.LogInformation("Запуск упрощенного тестирования уведомлений");
 
                 using var scope = _serviceProvider.CreateScope();
-                var booksContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+                var telegramBotService = scope.ServiceProvider.GetRequiredService<ITelegramBotService>();
                 var bookNotificationService = scope.ServiceProvider.GetRequiredService<IBookNotificationService>();
 
-                // Получаем все активные лоты
-                var activeBookIds = await GetActiveBookIdsAsync(booksContext, request.LimitBooks);
-                
-                if (!activeBookIds.Any())
-                {
-                    return Ok(new
-                    {
-                        success = false,
-                        error = "Нет активных лотов для тестирования",
-                        activeBooks = 0,
-                        notificationsCreated = 0
-                    });
-                }
-
-                _logger.LogInformation("Найдено {Count} активных лотов для тестирования", activeBookIds.Count);
-
-                // Получаем активные настройки пользователей для диагностики
-                var activePreferences = await bookNotificationService.GetActiveNotificationPreferencesAsync(HttpContext.RequestAborted);
-                _logger.LogInformation("Найдено {Count} активных настроек уведомлений", activePreferences.Count);
-
-                if (activePreferences.Count == 0)
-                {
-                    return Ok(new
-                    {
-                        success = false,
-                        error = "Нет активных настроек уведомлений у пользователей",
-                        activeBooks = activeBookIds.Count,
-                        notificationsCreated = 0,
-                        activePreferences = 0
-                    });
-                }
-
-                // Отправляем уведомления используя специальный тестовый метод (без проверки частоты)
-                var notificationsCreated = await bookNotificationService.ProcessNotificationsForNewBooksTestAsync(
-                    activeBookIds, 
+                // Используем унифицированный метод тестирования из TelegramBotService
+                var notificationsCreated = await telegramBotService.TestNotificationsAsync(
+                    request.LimitBooks,
+                    request.ShowBookIds,
                     HttpContext.RequestAborted
                 );
 
-                _logger.LogInformation("Создано {Count} тестовых уведомлений", notificationsCreated);
+                _logger.LogInformation("Создано и отправлено {Count} уведомлений", notificationsCreated);
 
-                // Сразу обрабатываем созданные уведомления (отправляем их)
-                if (notificationsCreated > 0)
-                {
-                    _logger.LogInformation("Отправляем созданные уведомления...");
-                    await bookNotificationService.ProcessNotificationsAsync(HttpContext.RequestAborted);
-                    _logger.LogInformation("Уведомления отправлены");
-                }
+                // Получаем статистику для отчета
+                var activePreferences = await bookNotificationService.GetActiveNotificationPreferencesAsync(HttpContext.RequestAborted);
+                var telegramPreferences = activePreferences.Where(p => p.DeliveryMethod == NotificationDeliveryMethod.Telegram).ToList();
 
                 return Ok(new
                 {
                     success = true,
-                    message = $"Тестирование завершено. Обработано {activeBookIds.Count} активных лотов, найдено {activePreferences.Count} настроек уведомлений, создано и отправлено {notificationsCreated} уведомлений",
-                    activeBooks = activeBookIds.Count,
-                    activePreferences = activePreferences.Count,
+                    message = $"Тестирование завершено. Найдено {telegramPreferences.Count} настроек Telegram уведомлений, создано и отправлено {notificationsCreated} уведомлений",
+                    activeBooks = request.LimitBooks,
+                    activePreferences = telegramPreferences.Count,
                     notificationsCreated = notificationsCreated,
-                    testBookIds = request.ShowBookIds ? activeBookIds.Take(10).ToList() : null
+                    testBookIds = request.ShowBookIds ? new List<int>() : (List<int>?)null // Упрощаем для чистоты
                 });
             }
             catch (Exception ex)

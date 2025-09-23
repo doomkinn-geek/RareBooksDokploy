@@ -18,6 +18,9 @@ namespace RareBooksService.WebApi.Services
     public interface ITelegramBotService
     {
         Task ProcessUpdateAsync(TelegramUpdate update, CancellationToken cancellationToken = default);
+        Task<List<RegularBaseBook>> FindMatchingBooksAsync(List<UserNotificationPreference> preferences, List<int> bookIds = null, CancellationToken cancellationToken = default);
+        Task<int> ProcessNewBookNotificationsAsync(List<int> newBookIds, CancellationToken cancellationToken = default);
+        Task<int> TestNotificationsAsync(int limitBooks, bool showBookIds = false, CancellationToken cancellationToken = default);
     }
 
     public partial class TelegramBotService : ITelegramBotService
@@ -1480,6 +1483,373 @@ namespace RareBooksService.WebApi.Services
         private string DetectLanguage(string text)
         {
             return _languageDetector.Detect(text);
+        }
+
+        // ================= ЦЕНТРАЛИЗОВАННЫЕ МЕТОДЫ ПОИСКА И УВЕДОМЛЕНИЙ =================
+
+        /// <summary>
+        /// Фильтрация книг по настройкам пользователя (унифицированная логика)
+        /// </summary>
+        private List<RegularBaseBook> FilterBooksByPreference(List<RegularBaseBook> books, UserNotificationPreference preference)
+        {
+            var filteredBooks = books.AsEnumerable();
+
+            // Фильтр по категориям
+            var categoryIds = preference.GetCategoryIdsList();
+            if (categoryIds.Any())
+            {
+                filteredBooks = filteredBooks.Where(b => categoryIds.Contains(b.CategoryId));
+            }
+
+            // Фильтр по ключевым словам (основная логика поиска)
+            var keywords = preference.GetKeywordsList();
+            if (keywords.Any())
+            {
+                // Создаем группы поисковых терминов для каждого ключевого слова
+                var keywordGroups = new List<List<string>>();
+                var originalKeywords = new List<string>();
+
+                foreach (var keyword in keywords)
+                {
+                    var keywordSearchTerms = new List<string>();
+                    var lowerKeyword = keyword.ToLower();
+                    originalKeywords.Add(lowerKeyword);
+                    
+                    try
+                    {
+                        // Стемминг
+                        string detectedLanguage;
+                        var processedKeyword = PreprocessText(keyword, out detectedLanguage);
+                        var keywordParts = processedKeyword.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        
+                        keywordSearchTerms.AddRange(keywordParts);
+                        
+                        // Добавляем исходное слово
+                        if (!keywordSearchTerms.Contains(lowerKeyword))
+                        {
+                            keywordSearchTerms.Add(lowerKeyword);
+                        }
+                        
+                        // Частичные совпадения для склонений
+                        if (lowerKeyword.Length >= 4)
+                        {
+                            var partialWord = lowerKeyword.Substring(0, Math.Min(lowerKeyword.Length - 1, 6));
+                            if (!keywordSearchTerms.Contains(partialWord))
+                            {
+                                keywordSearchTerms.Add(partialWord);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Ошибка при обработке ключевого слова '{Keyword}', используем простой поиск", keyword);
+                        keywordSearchTerms.Add(lowerKeyword);
+                    }
+                    
+                    keywordGroups.Add(keywordSearchTerms.Distinct().ToList());
+                }
+
+                // Фильтруем книги по ключевым словам
+                filteredBooks = filteredBooks.Where(book =>
+                {
+                    // Основной поиск: стеммированные слова в нормализованных полях
+                    var matchesText = keywordGroups.All(group => 
+                        group.Any(searchTerm =>
+                            (book.NormalizedTitle?.Contains(searchTerm) == true) ||
+                            (book.NormalizedDescription?.Contains(searchTerm) == true)));
+
+                    // Поиск по тегам: исходные ключевые слова
+                    var matchesTags = originalKeywords.All(originalKeyword =>
+                        book.Tags?.Any(tag =>
+                            tag.ToLower().Contains(originalKeyword)) == true);
+
+                    // Fallback поиск: исходные слова в исходных полях
+                    var matchesFallback = originalKeywords.All(originalKeyword =>
+                        (book.Title?.ToLower().Contains(originalKeyword) == true) ||
+                        (book.Description?.ToLower().Contains(originalKeyword) == true));
+
+                    return matchesText || matchesTags || matchesFallback;
+                });
+            }
+
+            return filteredBooks.OrderBy(b => b.EndDate).ToList();
+        }
+
+        /// <summary>
+        /// Унифицированный поиск книг по настройкам пользователей
+        /// </summary>
+        public async Task<List<RegularBaseBook>> FindMatchingBooksAsync(List<UserNotificationPreference> preferences, List<int> bookIds = null, CancellationToken cancellationToken = default)
+        {
+            if (!preferences?.Any() == true)
+            {
+                _logger.LogWarning("FindMatchingBooksAsync: Нет настроек для поиска");
+                return new List<RegularBaseBook>();
+            }
+
+            using var scope = _scopeFactory.CreateScope();
+            var booksContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+
+            _logger.LogInformation("Начинаем унифицированный поиск книг для {PreferencesCount} настроек", preferences.Count);
+
+            // Базовый запрос
+            var query = booksContext.BooksInfo.Include(b => b.Category).AsQueryable();
+
+            // Если указаны конкретные ID книг
+            if (bookIds?.Any() == true)
+            {
+                query = query.Where(b => bookIds.Contains(b.Id));
+                _logger.LogInformation("Ограничиваем поиск {BookCount} конкретными книгами", bookIds.Count);
+            }
+            else
+            {
+                // Только активные торги
+                var now = DateTime.UtcNow;
+                query = query.Where(b => b.EndDate > now);
+                _logger.LogInformation("Поиск только среди активных лотов (EndDate > {Now})", now);
+            }
+
+            // Загружаем все подходящие книги
+            var allBooks = await query.AsNoTracking().ToListAsync(cancellationToken);
+            _logger.LogInformation("Загружено {BookCount} книг для фильтрации", allBooks.Count);
+
+            var matchingBooks = new List<RegularBaseBook>();
+
+            // Фильтруем по каждой настройке
+            foreach (var preference in preferences)
+            {
+                _logger.LogInformation("Обрабатываем настройку ID {PreferenceId} пользователя {UserId}, ключевые слова: '{Keywords}'", 
+                    preference.Id, preference.UserId, preference.Keywords);
+
+                var booksForPreference = FilterBooksByPreference(allBooks, preference);
+                _logger.LogInformation("Для настройки {PreferenceId} найдено {Count} подходящих книг", 
+                    preference.Id, booksForPreference.Count);
+
+                // Добавляем книги, избегая дубликатов
+                foreach (var book in booksForPreference)
+                {
+                    if (!matchingBooks.Any(mb => mb.Id == book.Id))
+                    {
+                        matchingBooks.Add(book);
+                    }
+                }
+            }
+
+            _logger.LogInformation("Итого найдено {Count} уникальных книг по всем настройкам", matchingBooks.Count);
+            return matchingBooks.OrderBy(b => b.EndDate).ToList();
+        }
+
+        /// <summary>
+        /// Обработка уведомлений о новых книгах (единая точка входа)
+        /// </summary>
+        public async Task<int> ProcessNewBookNotificationsAsync(List<int> newBookIds, CancellationToken cancellationToken = default)
+        {
+            if (!newBookIds?.Any() == true)
+            {
+                _logger.LogWarning("ProcessNewBookNotificationsAsync: Список ID книг пуст");
+                return 0;
+            }
+
+            _logger.LogInformation("Начинаем обработку уведомлений для {Count} новых книг", newBookIds.Count);
+
+            using var scope = _scopeFactory.CreateScope();
+            var usersContext = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
+
+            // Получаем активные настройки уведомлений
+            var preferences = await usersContext.UserNotificationPreferences
+                .Where(np => np.IsEnabled && np.DeliveryMethod == NotificationDeliveryMethod.Telegram) // 4 = Telegram
+                .ToListAsync(cancellationToken);
+
+            if (!preferences.Any())
+            {
+                _logger.LogInformation("Нет активных настроек Telegram уведомлений");
+                return 0;
+            }
+
+            _logger.LogInformation("Найдено {Count} активных настроек Telegram уведомлений", preferences.Count);
+
+            // Ищем подходящие книги
+            var matchingBooks = await FindMatchingBooksAsync(preferences, newBookIds, cancellationToken);
+
+            if (!matchingBooks.Any())
+            {
+                _logger.LogInformation("Среди новых книг не найдено подходящих по критериям");
+                return 0;
+            }
+
+            _logger.LogInformation("Найдено {Count} подходящих книг для уведомлений", matchingBooks.Count);
+
+            int notificationsSent = 0;
+
+            // Группируем уведомления по пользователям
+            var userNotifications = new Dictionary<string, List<(UserNotificationPreference preference, List<RegularBaseBook> books)>>();
+
+            foreach (var preference in preferences)
+            {
+                var booksForPreference = FilterBooksByPreference(matchingBooks, preference);
+                if (booksForPreference.Any())
+                {
+                    var userId = preference.UserId;
+                    if (!userNotifications.ContainsKey(userId))
+                    {
+                        userNotifications[userId] = new List<(UserNotificationPreference, List<RegularBaseBook>)>();
+                    }
+                    userNotifications[userId].Add((preference, booksForPreference));
+                }
+            }
+
+            _logger.LogInformation("Создано уведомлений для {UserCount} пользователей", userNotifications.Count);
+
+            // Отправляем уведомления каждому пользователю
+            foreach (var userNotification in userNotifications)
+            {
+                var userId = userNotification.Key;
+                var preferencesWithBooks = userNotification.Value;
+                
+                try
+                {
+                    var user = await usersContext.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+                    if (user?.TelegramId == null)
+                    {
+                        _logger.LogWarning("Пользователь {UserId} не имеет привязанного Telegram ID", userId);
+                        continue;
+                    }
+
+                    await SendNewBooksNotificationAsync(user.TelegramId, preferencesWithBooks, cancellationToken);
+                    notificationsSent++;
+
+                    // Обновляем время последнего уведомления
+                    foreach (var item in preferencesWithBooks)
+                    {
+                        item.preference.LastNotificationSent = DateTime.UtcNow;
+                    }
+                    await usersContext.SaveChangesAsync(cancellationToken);
+
+                    _logger.LogInformation("Отправлено уведомление пользователю {TelegramId} ({UserId})", user.TelegramId, userId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Ошибка при отправке уведомления пользователю {UserId}", userId);
+                }
+            }
+
+            _logger.LogInformation("Обработка завершена. Отправлено {Count} уведомлений", notificationsSent);
+            return notificationsSent;
+        }
+
+        /// <summary>
+        /// Тестирование уведомлений (для админ панели)
+        /// </summary>
+        public async Task<int> TestNotificationsAsync(int limitBooks, bool showBookIds = false, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation("ТЕСТ: Начинаем тестирование уведомлений с лимитом {Limit} книг", limitBooks);
+
+            using var scope = _scopeFactory.CreateScope();
+            var booksContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+            var usersContext = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
+
+            // Получаем активные лоты
+            var now = DateTime.UtcNow;
+            var activeBookIds = await booksContext.BooksInfo
+                .Where(b => b.EndDate > now)
+                .OrderBy(b => b.EndDate)
+                .Take(limitBooks)
+                .Select(b => b.Id)
+                .ToListAsync(cancellationToken);
+
+            _logger.LogInformation("ТЕСТ: Найдено {Count} активных лотов для тестирования", activeBookIds.Count);
+
+            if (!activeBookIds.Any())
+            {
+                _logger.LogWarning("ТЕСТ: Нет активных лотов для тестирования");
+                return 0;
+            }
+
+            // Получаем активные настройки уведомлений
+            var preferences = await usersContext.UserNotificationPreferences
+                .Where(np => np.IsEnabled && np.DeliveryMethod == NotificationDeliveryMethod.Telegram) // 4 = Telegram
+                .ToListAsync(cancellationToken);
+
+            _logger.LogInformation("ТЕСТ: Найдено {Count} активных настроек уведомлений", preferences.Count);
+
+            if (!preferences.Any())
+            {
+                _logger.LogWarning("ТЕСТ: Нет активных настроек для тестирования");
+                return 0;
+            }
+
+            // ВАЖНО: Для теста пропускаем проверку частоты уведомлений
+            return await ProcessNewBookNotificationsAsync(activeBookIds, cancellationToken);
+        }
+
+        /// <summary>
+        /// Отправка уведомления о новых книгах пользователю
+        /// </summary>
+        private async Task SendNewBooksNotificationAsync(string telegramId, List<(UserNotificationPreference preference, List<RegularBaseBook> books)> preferencesWithBooks, CancellationToken cancellationToken)
+        {
+            var message = new StringBuilder();
+            message.AppendLine("🔔 <b>Новые лоты по вашим критериям!</b>");
+            message.AppendLine();
+
+            int totalBooks = preferencesWithBooks.Sum(p => p.books.Count);
+            message.AppendLine($"📊 Найдено: {totalBooks} новых лотов");
+            message.AppendLine();
+
+            foreach (var item in preferencesWithBooks.Take(3)) // Максимум 3 группы
+            {
+                var preference = item.preference;
+                var books = item.books;
+                
+                if (!string.IsNullOrEmpty(preference.Keywords))
+                {
+                    message.AppendLine($"🔍 <b>По запросу:</b> {preference.Keywords}");
+                }
+
+                foreach (var book in books.Take(2)) // Максимум 2 книги на группу
+                {
+                    var timeLeft = book.EndDate - DateTime.UtcNow;
+                    var timeLeftStr = timeLeft.TotalDays >= 1 
+                        ? $"{(int)timeLeft.TotalDays} дн."
+                        : $"{(int)timeLeft.TotalHours} ч.";
+
+                    message.AppendLine($"📚 <b>{book.Title}</b>");
+                    message.AppendLine($"💰 {book.Price:N0} ₽");
+                    message.AppendLine($"⏰ До окончания: {timeLeftStr}");
+                    message.AppendLine($"🔗 <a href=\"https://meshok.net/item/{book.Id}\">Открыть лот №{book.Id}</a>");
+                    message.AppendLine();
+                }
+
+                if (books.Count > 2)
+                {
+                    message.AppendLine($"... и еще {books.Count - 2} лотов");
+                    message.AppendLine();
+                }
+            }
+
+            if (totalBooks > 6)
+            {
+                message.AppendLine($"📈 И еще {totalBooks - 6} лотов по вашим критериям!");
+                message.AppendLine();
+            }
+
+            message.AppendLine("⚙️ <code>/settings</code> - управление настройками");
+            message.AppendLine("📋 <code>/lots</code> - посмотреть все лоты");
+
+            // Проверяем размер сообщения
+            string messageText = message.ToString();
+            if (messageText.Length > 4000)
+            {
+                // Создаем краткую версию
+                var shortMessage = new StringBuilder();
+                shortMessage.AppendLine("🔔 <b>Новые лоты по вашим критериям!</b>");
+                shortMessage.AppendLine();
+                shortMessage.AppendLine($"📊 Найдено: {totalBooks} новых лотов");
+                shortMessage.AppendLine();
+                shortMessage.AppendLine("📋 Используйте <code>/lots</code> для просмотра всех лотов");
+                messageText = shortMessage.ToString();
+                _logger.LogWarning("Сообщение уведомления слишком длинное, отправляем краткую версию");
+            }
+
+            await _telegramService.SendNotificationAsync(telegramId, messageText, cancellationToken);
         }
     }
 
