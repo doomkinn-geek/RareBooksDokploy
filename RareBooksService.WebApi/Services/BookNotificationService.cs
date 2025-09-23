@@ -476,7 +476,8 @@ namespace RareBooksService.WebApi.Services
         private bool DoesBookMatchPreference(RegularBaseBook book, UserNotificationPreference preference)
         {
             // Проверка цены
-            if (preference.MinPrice > 0 && book.Price < (double)preference.MinPrice) return false;
+            //минимальную цену проверять не нужно, т.к. есть книги, на которые еще не сделано ни одной ставки
+            //if (preference.MinPrice > 0 && book.Price < (double)preference.MinPrice) return false;
             if (preference.MaxPrice > 0 && book.Price > (double)preference.MaxPrice) return false;
 
             // Проверка года издания
