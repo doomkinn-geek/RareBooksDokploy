@@ -608,5 +608,30 @@ namespace RareBooksService.WebApi.Services
                 });
             }
         }
+
+        /// <summary>
+        /// Публичный метод для тестирования уведомлений о новых книгах (без проверки частоты)
+        /// </summary>
+        public async Task<int> ProcessNewBookNotificationsTestAsync(List<int> newBookIds, CancellationToken cancellationToken)
+        {
+            try
+            {
+                _logger.LogInformation("ТЕСТ: Начинаю обработку уведомлений для {Count} новых книг", newBookIds.Count);
+                
+                using var scope = _serviceProvider.CreateScope();
+                var bookNotificationService = scope.ServiceProvider.GetRequiredService<IBookNotificationService>();
+                
+                var notificationsCreated = await bookNotificationService.ProcessNotificationsForNewBooksTestAsync(newBookIds, cancellationToken);
+                
+                _logger.LogInformation("ТЕСТ: Создано {Count} уведомлений для новых книг", notificationsCreated);
+                
+                return notificationsCreated;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "ТЕСТ: Ошибка при обработке уведомлений о новых книгах");
+                return 0;
+            }
+        }
     }
 }

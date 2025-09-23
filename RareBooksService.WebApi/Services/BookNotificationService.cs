@@ -19,6 +19,7 @@ namespace RareBooksService.WebApi.Services
         Task MarkNotificationAsSentAsync(int notificationId, bool success, string errorMessage = null, CancellationToken cancellationToken = default);
         Task ProcessNotificationsAsync(CancellationToken cancellationToken = default);
         Task<int> ProcessNotificationsForNewBooksAsync(List<int> newBookIds, CancellationToken cancellationToken = default);
+        Task<int> ProcessNotificationsForNewBooksTestAsync(List<int> newBookIds, CancellationToken cancellationToken = default);
     }
 
     public class BookNotificationService : IBookNotificationService
@@ -444,6 +445,130 @@ namespace RareBooksService.WebApi.Services
             }
 
             return notificationsCreated;
+        }
+
+        public async Task<int> ProcessNotificationsForNewBooksTestAsync(List<int> newBookIds, CancellationToken cancellationToken = default)
+        {
+            if (!newBookIds?.Any() == true) 
+            {
+                _logger.LogWarning("ProcessNotificationsForNewBooksTestAsync: Список ID книг пуст");
+                return 0;
+            }
+
+            int notificationsCreated = 0;
+
+            try
+            {
+                _logger.LogInformation("ТЕСТ: Начинаем обработку {Count} книг для тестирования уведомлений", newBookIds.Count);
+                
+                var preferences = await GetActiveNotificationPreferencesAsync(cancellationToken);
+                _logger.LogInformation("ТЕСТ: Найдено {Count} активных настроек уведомлений", preferences.Count);
+                
+                using var scope = _scopeFactory.CreateScope();
+                var booksContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+
+                var newBooks = await booksContext.BooksInfo
+                    .Include(b => b.Category)
+                    .Where(b => newBookIds.Contains(b.Id))
+                    .ToListAsync(cancellationToken);
+
+                _logger.LogInformation("ТЕСТ: Загружено {Count} книг из базы данных", newBooks.Count);
+
+                foreach (var preference in preferences)
+                {
+                    _logger.LogInformation("ТЕСТ: Проверяем настройку ID {PreferenceId} пользователя {UserId}, ключевые слова: '{Keywords}'", 
+                        preference.Id, preference.UserId, preference.Keywords);
+
+                    // ТЕСТ: Пропускаем проверку частоты для тестирования
+                    // if (!await ShouldSendNotificationAsync(preference, cancellationToken))
+                    //     continue;
+
+                    int booksCheckedForPreference = 0;
+                    int booksMatchedForPreference = 0;
+
+                    foreach (var book in newBooks)
+                    {
+                        booksCheckedForPreference++;
+                        
+                        // Проверяем соответствие книги критериям пользователя
+                        bool matchesPreference = DoesBookMatchPreferenceAdvanced(book, preference);
+                        
+                        if (matchesPreference)
+                        {
+                            booksMatchedForPreference++;
+                            var keywords = preference.GetKeywordsList();
+                            var matchedKeywords = GetMatchedKeywords(book, keywords);
+
+                            _logger.LogInformation("ТЕСТ: Книга '{Title}' соответствует настройке {PreferenceId}. Ключевые слова: {Keywords}, найденные: {MatchedKeywords}", 
+                                book.Title?.Substring(0, Math.Min(50, book.Title.Length)), 
+                                preference.Id, 
+                                string.Join(", ", keywords), 
+                                string.Join(", ", matchedKeywords));
+
+                            if (!keywords.Any() || matchedKeywords.Any())
+                            {
+                                var notification = await CreateNotificationAsync(preference, book, matchedKeywords, cancellationToken);
+                                notificationsCreated++;
+
+                                _logger.LogInformation("ТЕСТ: Создано уведомление {NotificationId} для пользователя {UserId} о книге {BookId}", 
+                                    notification.Id, preference.UserId, book.Id);
+                            }
+                            else
+                            {
+                                _logger.LogWarning("ТЕСТ: Книга '{Title}' подошла по критериям, но не найдены ключевые слова", 
+                                    book.Title?.Substring(0, Math.Min(50, book.Title.Length)));
+                            }
+                        }
+                    }
+                    
+                    _logger.LogInformation("ТЕСТ: Для настройки {PreferenceId} проверено {Checked} книг, подошло {Matched}", 
+                        preference.Id, booksCheckedForPreference, booksMatchedForPreference);
+                }
+
+                _logger.LogInformation("ТЕСТ: Итого создано {Count} уведомлений", notificationsCreated);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "ТЕСТ: Ошибка при обработке уведомлений для новых книг");
+            }
+
+            return notificationsCreated;
+        }
+
+        private bool DoesBookMatchPreferenceAdvanced(RegularBaseBook book, UserNotificationPreference preference)
+        {
+            _logger.LogDebug("ТЕСТ: Проверяем книгу '{Title}' для настройки {PreferenceId}", 
+                book.Title?.Substring(0, Math.Min(40, book.Title?.Length ?? 0)), preference.Id);
+
+            // Проверка категорий
+            var categoryIds = preference.GetCategoryIdsList();
+            if (categoryIds.Any() && !categoryIds.Contains(book.CategoryId)) 
+            {
+                _logger.LogDebug("ТЕСТ: Книга не подходит по категории. Нужные: [{Categories}], у книги: {BookCategory}", 
+                    string.Join(", ", categoryIds), book.CategoryId);
+                return false;
+            }
+
+            // Проверка ключевых слов с использованием той же логики, что в TelegramBotService
+            var keywords = preference.GetKeywordsList();
+            if (keywords.Any())
+            {
+                var matchedKeywords = GetMatchedKeywords(book, keywords);
+                bool hasKeywordMatch = matchedKeywords.Any();
+                
+                _logger.LogDebug("ТЕСТ: Проверка ключевых слов. Искомые: [{Keywords}], найденные: [{MatchedKeywords}], результат: {Result}", 
+                    string.Join(", ", keywords), string.Join(", ", matchedKeywords), hasKeywordMatch);
+                
+                if (!hasKeywordMatch)
+                {
+                    return false;
+                }
+            }
+
+            _logger.LogDebug("ТЕСТ: Книга '{Title}' подходит под критерии настройки {PreferenceId}", 
+                book.Title?.Substring(0, Math.Min(40, book.Title?.Length ?? 0)), preference.Id);
+
+            return true;
         }
 
         private bool DoesBookMatchPreference(RegularBaseBook book, UserNotificationPreference preference)

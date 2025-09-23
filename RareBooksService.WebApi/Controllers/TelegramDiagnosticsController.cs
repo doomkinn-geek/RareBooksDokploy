@@ -449,8 +449,8 @@ namespace RareBooksService.WebApi.Controllers
                     });
                 }
 
-                // Отправляем уведомления используя тот же метод что и в BookUpdateService
-                var notificationsCreated = await bookNotificationService.ProcessNotificationsForNewBooksAsync(
+                // Отправляем уведомления используя специальный тестовый метод (без проверки частоты)
+                var notificationsCreated = await bookNotificationService.ProcessNotificationsForNewBooksTestAsync(
                     activeBookIds, 
                     HttpContext.RequestAborted
                 );
