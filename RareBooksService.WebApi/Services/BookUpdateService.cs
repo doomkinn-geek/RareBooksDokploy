@@ -226,9 +226,17 @@ namespace RareBooksService.WebApi.Services
                         realLotFetchingService.SetCancellationCheckFunc(() => _cancellationRequested || ct.IsCancellationRequested);
                     }
 
+                    List<int> newBookIds = new();
                     try
                     {
-                        await lotFetchingService.FetchAllNewData(ct);
+                        newBookIds = await lotFetchingService.FetchAllNewData(ct);
+                        _logger.LogInformation("FetchAllNewData completed. Found {NewBookCount} new books.", newBookIds.Count);
+                        
+                        // Отправляем уведомления о новых книгах
+                        if (newBookIds.Any())
+                        {
+                            await ProcessNewBookNotificationsAsync(newBookIds, ct);
+                        }
                     }
                     finally
                     {
@@ -562,6 +570,43 @@ namespace RareBooksService.WebApi.Services
                 IsError = true,
                 ExceptionMessage = ex.ToString()
             });
+        }
+
+        /// <summary>
+        /// Обрабатывает уведомления о новых книгах после обновления базы данных
+        /// </summary>
+        private async Task ProcessNewBookNotificationsAsync(List<int> newBookIds, CancellationToken cancellationToken)
+        {
+            try
+            {
+                _logger.LogInformation("Начинаю обработку уведомлений для {Count} новых книг", newBookIds.Count);
+                
+                using var scope = _serviceProvider.CreateScope();
+                var bookNotificationService = scope.ServiceProvider.GetRequiredService<IBookNotificationService>();
+                
+                var notificationsCreated = await bookNotificationService.ProcessNotificationsForNewBooksAsync(newBookIds, cancellationToken);
+                
+                _logger.LogInformation("Создано {Count} уведомлений для новых книг", notificationsCreated);
+                
+                AddLogEntry(new LogEntry
+                {
+                    Timestamp = DateTime.UtcNow,
+                    Message = $"Создано {notificationsCreated} уведомлений для {newBookIds.Count} новых книг",
+                    IsError = false
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при обработке уведомлений о новых книгах");
+                
+                AddLogEntry(new LogEntry
+                {
+                    Timestamp = DateTime.UtcNow,
+                    Message = $"Ошибка при обработке уведомлений о новых книгах: {ex.Message}",
+                    IsError = true,
+                    ExceptionMessage = ex.ToString()
+                });
+            }
         }
     }
 }

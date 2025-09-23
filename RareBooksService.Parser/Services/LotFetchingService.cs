@@ -12,7 +12,7 @@ namespace RareBooksService.Parser.Services
     public interface ILotFetchingService
     {
         Task FetchFreeListData(List<int> ids);
-        Task FetchAllNewData(CancellationToken token);
+        Task<List<int>> FetchAllNewData(CancellationToken token);
         Task FetchAllOldDataExtended(int groupNumber);
         Task FetchAllOldDataWithLetterGroup(char groupLetter);
         Task FetchSoldFixedPriceLotsAsync(CancellationToken token);
@@ -270,9 +270,11 @@ namespace RareBooksService.Parser.Services
         }
 
 
-        public async Task FetchAllNewData(CancellationToken token)
+        public async Task<List<int>> FetchAllNewData(CancellationToken token)
         {
             _logger.LogInformation("Starting FetchAllNewData.");
+
+            var allNewBookIds = new List<int>();
 
             // Собираем все категории в один список:
             var allCategories = InterestedCategories.Concat(SovietCategories).ToList();
@@ -304,10 +306,12 @@ namespace RareBooksService.Parser.Services
                     lotIds.Count, categoryName, categoryId);
 
                 // Далее обрабатываем лоты (с передачей общего числа лотов и т.д.)
-                await FetchAndSaveLotsDataAsync(lotIds, token, categoryName);
+                var newBooksInCategory = await FetchAndSaveLotsDataAsync(lotIds, token, categoryName);
+                allNewBookIds.AddRange(newBooksInCategory);
             }
 
-            _logger.LogInformation("Completed FetchAllNewData.");
+            _logger.LogInformation("Completed FetchAllNewData. Total new books found: {NewBookCount}", allNewBookIds.Count);
+            return allNewBookIds;
         }
 
         public async Task RefreshLotsWithEmptyImageUrlsAsync(CancellationToken token)
@@ -645,13 +649,14 @@ namespace RareBooksService.Parser.Services
             _logger.LogInformation("Completed FetchAllOldDataWithLetterGroup for groupLetter = {GroupLetter}", groupLetter);
         }
 
-        private async Task FetchAndSaveLotsDataAsync(List<int> lotIds, CancellationToken token, string categoryName = "unknown")
+        private async Task<List<int>> FetchAndSaveLotsDataAsync(List<int> lotIds, CancellationToken token, string categoryName = "unknown")
         {
             _logger.LogInformation("Fetching and saving data for {LotCount} lots in category '{CategoryName}'",
                 lotIds.Count, categoryName);
 
             int totalLots = lotIds.Count;
             int processedCount = 0;
+            var newBookIds = new List<int>();
 
             foreach (var lotId in lotIds)
             {
@@ -671,7 +676,8 @@ namespace RareBooksService.Parser.Services
                     var currentLotInDb = _context.BooksInfo
                         .Where(b => b.Id == lotId)
                         .FirstOrDefault();
-                    if (currentLotInDb != null) continue;
+                    if (currentLotInDb != null) continue; // Книга уже есть в базе
+                    
                     var queryResult = await _lotDataService.GetLotDataAsync(lotId);
                     if (queryResult != null)
                     {
@@ -682,6 +688,10 @@ namespace RareBooksService.Parser.Services
                             queryResult.result.categoryId,
                             categoryName
                         );
+
+                        // Добавляем ID новой книги в список для уведомлений
+                        newBookIds.Add(lotId);
+                        _logger.LogDebug("Added new book with ID {LotId} to notification list", lotId);
                     }
                     else
                     {
@@ -700,7 +710,10 @@ namespace RareBooksService.Parser.Services
                 }
             }
 
-            _logger.LogInformation("Completed fetching and saving data for category '{CategoryName}'", categoryName);
+            _logger.LogInformation("Completed fetching and saving data for category '{CategoryName}'. New books: {NewBookCount}", 
+                categoryName, newBookIds.Count);
+            
+            return newBookIds;
         }
 
         public async Task VerifyLotCategoriesAsync(CancellationToken token)
