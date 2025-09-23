@@ -33,7 +33,7 @@ const TelegramAdmin = () => {
     const [testLoading, setTestLoading] = useState(false);
     
     // Состояния для тестирования уведомлений
-    const [notificationTestLimit, setNotificationTestLimit] = useState(50);
+    const [notificationTestLimit, setNotificationTestLimit] = useState(500);
     const [notificationShowBookIds, setNotificationShowBookIds] = useState(false);
     const [notificationTestLoading, setNotificationTestLoading] = useState(false);
     const [notificationTestResult, setNotificationTestResult] = useState(null);
