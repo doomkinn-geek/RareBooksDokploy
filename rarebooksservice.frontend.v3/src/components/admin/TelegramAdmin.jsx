@@ -33,9 +33,10 @@ const TelegramAdmin = () => {
     const [testLoading, setTestLoading] = useState(false);
     
     // Состояния для тестирования уведомлений
+    const [notificationTestLimit, setNotificationTestLimit] = useState(50);
+    const [notificationShowBookIds, setNotificationShowBookIds] = useState(false);
     const [notificationTestLoading, setNotificationTestLoading] = useState(false);
-    const [notificationTestResults, setNotificationTestResults] = useState(null);
-    const [maxBooks, setMaxBooks] = useState(5);
+    const [notificationTestResult, setNotificationTestResult] = useState(null);
     
     // Состояния для диалогов
     const [diagnosticsDialog, setDiagnosticsDialog] = useState(false);
@@ -232,23 +233,35 @@ const TelegramAdmin = () => {
     };
 
     const testNotifications = async () => {
+        if (notificationTestLimit < 1 || notificationTestLimit > 1000) {
+            showSnackbar('❌ Количество лотов должно быть от 1 до 1000', 'warning');
+            return;
+        }
+
         setNotificationTestLoading(true);
+        setNotificationTestResult(null);
         setError('');
-        setNotificationTestResults(null);
         
         try {
-            console.log('Тестирование уведомлений:', { maxBooks });
-            const response = await axios.post(`${API_URL}/telegramdiagnostics/test-notifications`, {
-                maxBooks: maxBooks
+            console.log('Тестирование уведомлений:', { 
+                limitBooks: notificationTestLimit, 
+                showBookIds: notificationShowBookIds 
             });
+            
+            const response = await axios.post(`${API_URL}/telegramdiagnostics/test-notifications`, {
+                limitBooks: notificationTestLimit,
+                showBookIds: notificationShowBookIds
+            });
+            
             console.log('Ответ тестирования уведомлений:', response);
             
-            setNotificationTestResults(response.data);
-            
             if (response.data.success) {
-                showSnackbar(`✅ ${response.data.message}`, 'success');
+                setNotificationTestResult(response.data);
+                showSnackbar('✅ Тестирование уведомлений завершено', 'success');
             } else {
-                showSnackbar(`⚠️ ${response.data.message}`, 'warning');
+                const errorMsg = response.data.error || 'Ошибка тестирования уведомлений';
+                setError(errorMsg);
+                showSnackbar(`❌ ${errorMsg}`, 'error');
             }
         } catch (err) {
             console.error('Ошибка тестирования уведомлений:', err);
@@ -264,6 +277,7 @@ const TelegramAdmin = () => {
             } else {
                 errorMsg = err.message || 'Ошибка тестирования уведомлений';
             }
+            
             setError(errorMsg);
             showSnackbar(`❌ ${errorMsg}`, 'error');
         } finally {
@@ -446,6 +460,16 @@ const TelegramAdmin = () => {
                                 
                                 <Button
                                     variant="outlined"
+                                    startIcon={<NotificationsActive />}
+                                    onClick={testNotifications}
+                                    disabled={notificationTestLoading}
+                                    fullWidth
+                                >
+                                    {notificationTestLoading ? 'Тестирование...' : 'Тест уведомлений'}
+                                </Button>
+                                
+                                <Button
+                                    variant="outlined"
                                     startIcon={<Launch />}
                                     href={`https://t.me/${diagnostics?.checks?.telegram_api?.botInfo?.username || 'RareBooksReminderBot'}`}
                                     target="_blank"
@@ -558,147 +582,104 @@ const TelegramAdmin = () => {
                         <AccordionSummary expandIcon={<ExpandMore />}>
                             <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <NotificationsActive />
-                                Тестирование системы уведомлений
+                                Тестирование уведомлений о лотах
                             </Typography>
                         </AccordionSummary>
                         <AccordionDetails>
-                            <Box sx={{ mb: 3 }}>
-                                <Alert severity="info" sx={{ mb: 2 }}>
-                                    <Typography variant="body2">
-                                        🧪 <strong>Как работает тестирование:</strong><br/>
-                                        1. Система найдет все активные лоты на торгах<br/>
-                                        2. Отфильтрует их по критериям пользователей с Telegram ID<br/>
-                                        3. Вызовет ProcessNotificationsForNewBooksAsync (как в BookUpdateService)<br/>
-                                        4. Отправит реальные уведомления пользователям через бота
-                                    </Typography>
-                                </Alert>
-                                
-                                <Grid container spacing={2} alignItems="center">
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            label="Максимально книг"
-                                            type="number"
-                                            value={maxBooks}
-                                            onChange={(e) => setMaxBooks(Math.max(1, Math.min(50, parseInt(e.target.value) || 5)))}
-                                            inputProps={{ min: 1, max: 50 }}
-                                            fullWidth
-                                            helperText="Ограничение для предотвращения спама"
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <Button
-                                            variant="contained"
-                                            onClick={testNotifications}
-                                            disabled={notificationTestLoading}
-                                            fullWidth
-                                            sx={{ height: '56px' }}
-                                            startIcon={notificationTestLoading ? <CircularProgress size={20} /> : <NotificationsActive />}
-                                            color="warning"
-                                        >
-                                            {notificationTestLoading ? 'Тестирование...' : 'Запустить тест'}
-                                        </Button>
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        {notificationTestResults && (
-                                            <Chip
-                                                label={notificationTestResults.success ? `✅ ${notificationTestResults.details?.notificationsCreated || 0} уведомлений` : '❌ Нет результатов'}
-                                                color={notificationTestResults.success ? 'success' : 'error'}
-                                                variant="outlined"
-                                            />
-                                        )}
-                                    </Grid>
+                            <Grid container spacing={2}>
+                                <Grid item xs={12} md={4}>
+                                    <TextField
+                                        label="Количество лотов"
+                                        type="number"
+                                        value={notificationTestLimit}
+                                        onChange={(e) => setNotificationTestLimit(parseInt(e.target.value) || 50)}
+                                        inputProps={{ min: 1, max: 1000 }}
+                                        fullWidth
+                                        helperText="От 1 до 1000 активных лотов"
+                                    />
                                 </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <FormControlLabel
+                                        control={
+                                            <Switch
+                                                checked={notificationShowBookIds}
+                                                onChange={(e) => setNotificationShowBookIds(e.target.checked)}
+                                            />
+                                        }
+                                        label="Показать ID книг"
+                                        sx={{ mt: 1 }}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <Button
+                                        variant="contained"
+                                        onClick={testNotifications}
+                                        disabled={notificationTestLoading}
+                                        fullWidth
+                                        sx={{ height: '56px' }}
+                                        startIcon={notificationTestLoading ? <CircularProgress size={20} /> : <NotificationsActive />}
+                                    >
+                                        {notificationTestLoading ? 'Выполняется тест...' : 'Запустить тест'}
+                                    </Button>
+                                </Grid>
+                            </Grid>
 
-                                {notificationTestResults && (
-                                    <Box sx={{ mt: 3 }}>
-                                        <Typography variant="h6" gutterBottom>
-                                            📊 Результаты тестирования:
+                            {/* Результаты тестирования */}
+                            {notificationTestResult && (
+                                <Box sx={{ mt: 3 }}>
+                                    <Alert severity="success" sx={{ mb: 2 }}>
+                                        <Typography variant="body2">
+                                            <strong>✅ Тестирование завершено!</strong><br/>
+                                            {notificationTestResult.message}
                                         </Typography>
-                                        
-                                        <Grid container spacing={2} sx={{ mb: 2 }}>
-                                            <Grid item xs={6} md={3}>
-                                                <Paper sx={{ p: 2, textAlign: 'center' }}>
-                                                    <Typography variant="h4" color="info.main">
-                                                        {notificationTestResults.details?.totalActivePreferences || 0}
-                                                    </Typography>
-                                                    <Typography variant="caption" color="text.secondary">
-                                                        Пользователей с Telegram
-                                                    </Typography>
-                                                </Paper>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                                <Paper sx={{ p: 2, textAlign: 'center' }}>
-                                                    <Typography variant="h4" color="primary.main">
-                                                        {notificationTestResults.details?.activeLotsFound || 0}
-                                                    </Typography>
-                                                    <Typography variant="caption" color="text.secondary">
-                                                        Активных лотов
-                                                    </Typography>
-                                                </Paper>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                                <Paper sx={{ p: 2, textAlign: 'center' }}>
-                                                    <Typography variant="h4" color="warning.main">
-                                                        {notificationTestResults.details?.uniqueMatchingLots || 0}
-                                                    </Typography>
-                                                    <Typography variant="caption" color="text.secondary">
-                                                        Подходящих лотов
-                                                    </Typography>
-                                                </Paper>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                                <Paper sx={{ p: 2, textAlign: 'center' }}>
-                                                    <Typography variant="h4" color="success.main">
-                                                        {notificationTestResults.details?.notificationsCreated || 0}
-                                                    </Typography>
-                                                    <Typography variant="caption" color="text.secondary">
-                                                        Уведомлений создано
-                                                    </Typography>
-                                                </Paper>
-                                            </Grid>
-                                        </Grid>
-
-                                        {notificationTestResults.details?.userMatches && (
-                                            <Box>
-                                                <Typography variant="subtitle2" gutterBottom>
-                                                    👥 Совпадения по пользователям:
+                                    </Alert>
+                                    
+                                    <Grid container spacing={2}>
+                                        <Grid item xs={6} md={3}>
+                                            <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'info.light', color: 'info.contrastText' }}>
+                                                <Typography variant="h5">
+                                                    {notificationTestResult.activeBooks}
                                                 </Typography>
-                                                <TableContainer component={Paper} sx={{ maxHeight: 200 }}>
-                                                    <Table size="small">
-                                                        <TableHead>
-                                                            <TableRow>
-                                                                <TableCell>Пользователь</TableCell>
-                                                                <TableCell align="right">Найдено лотов</TableCell>
-                                                            </TableRow>
-                                                        </TableHead>
-                                                        <TableBody>
-                                                            {Object.entries(notificationTestResults.details.userMatches).map(([user, count]) => (
-                                                                <TableRow key={user}>
-                                                                    <TableCell>{user}</TableCell>
-                                                                    <TableCell align="right">
-                                                                        <Chip 
-                                                                            label={count} 
-                                                                            color={count > 0 ? 'success' : 'default'} 
-                                                                            size="small" 
-                                                                        />
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            ))}
-                                                        </TableBody>
-                                                    </Table>
-                                                </TableContainer>
-                                            </Box>
+                                                <Typography variant="body2">
+                                                    Активных лотов
+                                                </Typography>
+                                            </Paper>
+                                        </Grid>
+                                        <Grid item xs={6} md={3}>
+                                            <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'success.light', color: 'success.contrastText' }}>
+                                                <Typography variant="h5">
+                                                    {notificationTestResult.notificationsCreated}
+                                                </Typography>
+                                                <Typography variant="body2">
+                                                    Уведомлений создано
+                                                </Typography>
+                                            </Paper>
+                                        </Grid>
+                                        {notificationTestResult.testBookIds && (
+                                            <Grid item xs={12} md={6}>
+                                                <Paper sx={{ p: 2, bgcolor: 'grey.100' }}>
+                                                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                                                        <strong>Примеры ID книг:</strong>
+                                                    </Typography>
+                                                    <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                                                        {notificationTestResult.testBookIds.join(', ')}
+                                                    </Typography>
+                                                </Paper>
+                                            </Grid>
                                         )}
-                                    </Box>
-                                )}
-                                
-                                <Alert severity="warning" sx={{ mt: 2 }}>
-                                    <Typography variant="body2">
-                                        ⚠️ <strong>Внимание:</strong> Тестирование отправляет реальные уведомления пользователям! 
-                                        Используйте небольшие значения "Максимально книг" для предотвращения спама.
-                                    </Typography>
-                                </Alert>
-                            </Box>
+                                    </Grid>
+                                </Box>
+                            )}
+
+                            <Alert severity="info" sx={{ mt: 2 }}>
+                                <Typography variant="body2">
+                                    💡 <strong>Что делает тест:</strong><br/>
+                                    1. Находит указанное количество активных лотов (где EndDate > сейчас)<br/>
+                                    2. Запускает процесс создания уведомлений для всех пользователей с подходящими критериями<br/>
+                                    3. Использует тот же алгоритм, что и автоматическое обновление в BookUpdateService<br/>
+                                    4. Отправляет реальные уведомления в Telegram пользователям
+                                </Typography>
+                            </Alert>
                         </AccordionDetails>
                     </Accordion>
                 </Grid>

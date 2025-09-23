@@ -1,15 +1,14 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using System.Text;
 using System.IO;
 using RareBooksService.WebApi.Services;
 using RareBooksService.Common.Models.Telegram;
 using RareBooksService.Data;
-using RareBooksService.Common.Models;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using SystemFile = System.IO.File;
 
 namespace RareBooksService.WebApi.Controllers
@@ -405,225 +404,101 @@ namespace RareBooksService.WebApi.Controllers
         }*/
 
         /// <summary>
-        /// Тестирование системы уведомлений с реальными активными лотами
+        /// Тестирование уведомлений о лотах для всех пользователей
         /// </summary>
         [HttpPost("test-notifications")]
         public async Task<IActionResult> TestNotifications([FromBody] TestNotificationsRequest request)
         {
             try
             {
-                _logger.LogInformation("Начинаем тестирование системы уведомлений...");
+                _logger.LogInformation("Запуск тестирования уведомлений");
 
                 using var scope = _serviceProvider.CreateScope();
-                var usersContext = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
                 var booksContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
                 var bookNotificationService = scope.ServiceProvider.GetRequiredService<IBookNotificationService>();
 
-                // Получаем все активные настройки уведомлений
-                var activePreferences = await usersContext.UserNotificationPreferences
-                    .Include(np => np.User)
-                    .Where(np => np.IsEnabled && !string.IsNullOrEmpty(np.User.TelegramId))
-                    .ToListAsync();
-
-                if (!activePreferences.Any())
-                {
-                    return Ok(new 
-                    { 
-                        success = false, 
-                        message = "Нет пользователей с активными настройками уведомлений и Telegram ID",
-                        details = new 
-                        {
-                            totalActivePreferences = 0,
-                            usersWithTelegram = 0,
-                            activeLotsFound = 0,
-                            notificationsCreated = 0
-                        }
-                    });
-                }
-
-                _logger.LogInformation("Найдено {Count} активных настроек уведомлений", activePreferences.Count);
-
                 // Получаем все активные лоты
-                var now = DateTime.UtcNow;
-                var activeLots = await booksContext.BooksInfo
-                    .Include(b => b.Category)
-                    .Where(b => b.EndDate > now)
-                    .AsNoTracking()
-                    .ToListAsync();
-
-                if (!activeLots.Any())
-                {
-                    return Ok(new 
-                    { 
-                        success = false, 
-                        message = "Нет активных лотов на торгах",
-                        details = new 
-                        {
-                            totalActivePreferences = activePreferences.Count,
-                            usersWithTelegram = activePreferences.Count,
-                            activeLotsFound = 0,
-                            notificationsCreated = 0
-                        }
-                    });
-                }
-
-                _logger.LogInformation("Найдено {Count} активных лотов", activeLots.Count);
-
-                // Собираем все подходящие лоты для всех пользователей
-                var matchingBookIds = new HashSet<int>();
-                var matchedCounts = new Dictionary<string, int>();
-
-                foreach (var preference in activePreferences)
-                {
-                    var userMatchingBooks = FilterBooksByPreferences(activeLots, preference);
-                    var userMatchingIds = userMatchingBooks.Select(b => b.Id).ToList();
-                    
-                    matchedCounts[preference.User.Email ?? preference.User.Id] = userMatchingIds.Count;
-                    
-                    foreach (var bookId in userMatchingIds)
-                    {
-                        matchingBookIds.Add(bookId);
-                    }
-                    
-                    _logger.LogInformation("Пользователь {UserEmail}: найдено {Count} подходящих лотов", 
-                        preference.User.Email ?? preference.User.Id, userMatchingIds.Count);
-                }
-
-                if (!matchingBookIds.Any())
-                {
-                    return Ok(new 
-                    { 
-                        success = false, 
-                        message = "Нет активных лотов, соответствующих критериям пользователей",
-                        details = new 
-                        {
-                            totalActivePreferences = activePreferences.Count,
-                            usersWithTelegram = activePreferences.Count,
-                            activeLotsFound = activeLots.Count,
-                            notificationsCreated = 0,
-                            userMatches = matchedCounts
-                        }
-                    });
-                }
-
-                _logger.LogInformation("Всего найдено {Count} уникальных подходящих лотов", matchingBookIds.Count);
-
-                // Ограничиваем количество лотов для тестирования (чтобы не спамить)
-                var testBookIds = matchingBookIds.Take(request?.MaxBooks ?? 10).ToList();
+                var activeBookIds = await GetActiveBookIdsAsync(booksContext, request.LimitBooks);
                 
-                // Отправляем уведомления
-                var notificationsCreated = await bookNotificationService.ProcessNotificationsForNewBooksAsync(testBookIds);
-
-                _logger.LogInformation("Создано {Count} уведомлений для {BookCount} книг", notificationsCreated, testBookIds.Count);
-
-                return Ok(new 
-                { 
-                    success = true, 
-                    message = $"Тестирование завершено. Создано {notificationsCreated} уведомлений для {testBookIds.Count} книг",
-                    details = new 
+                if (!activeBookIds.Any())
+                {
+                    return Ok(new
                     {
-                        totalActivePreferences = activePreferences.Count,
-                        usersWithTelegram = activePreferences.Count,
-                        activeLotsFound = activeLots.Count,
-                        uniqueMatchingLots = matchingBookIds.Count,
-                        processedBooks = testBookIds.Count,
-                        notificationsCreated = notificationsCreated,
-                        userMatches = matchedCounts,
-                        processedBookIds = testBookIds
-                    }
+                        success = false,
+                        error = "Нет активных лотов для тестирования",
+                        activeBooks = 0,
+                        notificationsCreated = 0
+                    });
+                }
+
+                _logger.LogInformation("Найдено {Count} активных лотов для тестирования", activeBookIds.Count);
+
+                // Отправляем уведомления используя тот же метод что и в BookUpdateService
+                var notificationsCreated = await bookNotificationService.ProcessNotificationsForNewBooksAsync(
+                    activeBookIds, 
+                    HttpContext.RequestAborted
+                );
+
+                _logger.LogInformation("Создано {Count} тестовых уведомлений", notificationsCreated);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = $"Тестирование завершено. Обработано {activeBookIds.Count} активных лотов, создано {notificationsCreated} уведомлений",
+                    activeBooks = activeBookIds.Count,
+                    notificationsCreated = notificationsCreated,
+                    testBookIds = request.ShowBookIds ? activeBookIds.Take(10).ToList() : null
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка при тестировании системы уведомлений");
-                return StatusCode(500, new 
-                { 
-                    success = false, 
-                    error = "Ошибка тестирования системы уведомлений", 
-                    message = ex.Message 
+                _logger.LogError(ex, "Ошибка при тестировании уведомлений");
+                return Ok(new
+                {
+                    success = false,
+                    error = $"Ошибка тестирования: {ex.Message}",
+                    details = ex.ToString()
                 });
             }
         }
 
         /// <summary>
-        /// Фильтрует книги по критериям пользователя (аналогично команде /lots)
+        /// Получение активных книг по критериям (аналогично SearchActiveLotsAsync в TelegramBotService)
         /// </summary>
-        private List<RegularBaseBook> FilterBooksByPreferences(List<RegularBaseBook> books, UserNotificationPreference preferences)
+        private async Task<List<int>> GetActiveBookIdsAsync(BooksDbContext booksContext, int limit = 100)
         {
-            var result = books.AsEnumerable();
+            var query = booksContext.BooksInfo.AsQueryable();
 
-            // Фильтр по ключевым словам
-            var keywords = preferences.GetKeywordsList();
-            if (keywords.Any())
-            {
-                result = result.Where(book =>
-                {
-                    var title = book.NormalizedTitle?.ToLower() ?? book.Title?.ToLower() ?? "";
-                    var description = book.NormalizedDescription?.ToLower() ?? book.Description?.ToLower() ?? "";
-                    var tags = book.Tags != null ? string.Join(" ", book.Tags).ToLower() : "";
+            // Фильтр: только активные торги (торги еще не закончились)
+            var now = DateTime.UtcNow;
+            query = query.Where(b => b.EndDate > now);
 
-                    return keywords.Any(keyword => 
-                        title.Contains(keyword) || 
-                        description.Contains(keyword) || 
-                        tags.Contains(keyword));
-                });
-            }
+            // Сортировка по дате окончания (ближайшие к завершению - первыми)
+            query = query.OrderBy(b => b.EndDate);
 
-            // Фильтр по категориям
-            var categoryIds = preferences.GetCategoryIdsList();
-            if (categoryIds.Any())
-            {
-                result = result.Where(book => categoryIds.Contains(book.CategoryId));
-            }
+            // Ограничиваем количество для тестирования
+            var activeBookIds = await query
+                .AsNoTracking()
+                .Take(limit)
+                .Select(b => b.Id)
+                .ToListAsync();
 
-            // Фильтр по цене
-            if (preferences.MinPrice > 0)
-            {
-                result = result.Where(book => (decimal)book.Price >= preferences.MinPrice);
-            }
-            if (preferences.MaxPrice > 0)
-            {
-                result = result.Where(book => (decimal)book.Price <= preferences.MaxPrice);
-            }
+            _logger.LogInformation("Найдено {Count} активных лотов из {Limit} запрошенных", activeBookIds.Count, limit);
 
-            // Фильтр по году издания
-            if (preferences.MinYear > 0)
-            {
-                result = result.Where(book => book.YearPublished >= preferences.MinYear);
-            }
-            if (preferences.MaxYear > 0)
-            {
-                result = result.Where(book => book.YearPublished <= preferences.MaxYear);
-            }
-
-            // Фильтр по городам
-            var cities = preferences.GetCitiesList();
-            if (cities.Any())
-            {
-                result = result.Where(book =>
-                {
-                    var bookCity = book.City?.ToLower() ?? "";
-                    return cities.Any(city => bookCity.Contains(city));
-                });
-            }
-
-            return result.ToList();
+            return activeBookIds;
         }
     }
 
-    /// <summary>
-    /// Модель запроса для тестирования уведомлений
-    /// </summary>
     public class TestNotificationsRequest
     {
         /// <summary>
-        /// Максимальное количество книг для тестирования (по умолчанию 10)
+        /// Максимальное количество активных лотов для тестирования (по умолчанию 100)
         /// </summary>
-        public int? MaxBooks { get; set; } = 10;
+        public int LimitBooks { get; set; } = 100;
 
         /// <summary>
-        /// Только для определенного пользователя (по email)
+        /// Показывать ли ID книг в ответе (для отладки)
         /// </summary>
-        public string? UserEmail { get; set; }
+        public bool ShowBookIds { get; set; } = false;
     }
 }
