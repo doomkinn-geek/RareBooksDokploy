@@ -4,6 +4,8 @@ using Microsoft.Extensions.Logging;
 using RareBooksService.Common.Models;
 using RareBooksService.Data;
 using System.Text.RegularExpressions;
+using Iveonik.Stemmers;
+using LanguageDetection;
 
 namespace RareBooksService.WebApi.Services
 {
@@ -24,6 +26,15 @@ namespace RareBooksService.WebApi.Services
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<BookNotificationService> _logger;
         private readonly ITelegramNotificationService _telegramService;
+        private readonly Dictionary<string, IStemmer> _stemmers;
+        private static readonly LanguageDetector _languageDetector;
+
+        // Создаём статический экземпляр детектора языка один раз
+        static BookNotificationService()
+        {
+            _languageDetector = new LanguageDetector();
+            _languageDetector.AddAllLanguages();
+        }
 
         public BookNotificationService(
             IServiceScopeFactory scopeFactory,
@@ -33,6 +44,14 @@ namespace RareBooksService.WebApi.Services
             _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _telegramService = telegramService ?? throw new ArgumentNullException(nameof(telegramService));
+            
+            _stemmers = new Dictionary<string, IStemmer>
+            {
+                { "rus", new RussianStemmer() },
+                { "eng", new EnglishStemmer() },
+                { "fra", new FrenchStemmer() },
+                { "deu", new GermanStemmer() },
+            };
         }
 
         public async Task<List<UserNotificationPreference>> GetActiveNotificationPreferencesAsync(CancellationToken cancellationToken = default)
@@ -125,28 +144,111 @@ namespace RareBooksService.WebApi.Services
         {
             if (!keywords.Any()) return true;
 
-            var searchText = $"{book.Title} {book.Description} {string.Join(" ", book.Tags)}".ToLower();
-            
-            return keywords.Any(keyword => 
-                searchText.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
-                Regex.IsMatch(searchText, $@"\b{Regex.Escape(keyword)}\b", RegexOptions.IgnoreCase));
+            // Используем ту же логику поиска, что и в TelegramBotService
+            return keywords.All(keyword => {
+                var lowerKeyword = keyword.ToLower();
+                
+                // Поиск в названии
+                if (book.Title?.ToLower().Contains(lowerKeyword) == true) return true;
+                if (book.NormalizedTitle?.Contains(lowerKeyword) == true) return true;
+                
+                // Поиск в описании
+                if (book.Description?.ToLower().Contains(lowerKeyword) == true) return true;
+                if (book.NormalizedDescription?.Contains(lowerKeyword) == true) return true;
+                
+                // Поиск в тегах
+                if (book.Tags?.Any(tag => tag.ToLower().Contains(lowerKeyword)) == true) return true;
+                
+                // Стемминг для более точного поиска
+                try
+                {
+                    string detectedLanguage;
+                    var processedKeyword = PreprocessText(keyword, out detectedLanguage);
+                    var keywordParts = processedKeyword.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    
+                    return keywordParts.All(part =>
+                        (book.NormalizedTitle?.Contains(part) == true) ||
+                        (book.NormalizedDescription?.Contains(part) == true));
+                }
+                catch
+                {
+                    return false;
+                }
+            });
         }
 
         private List<string> GetMatchedKeywords(RegularBaseBook book, List<string> keywords)
         {
-            var searchText = $"{book.Title} {book.Description} {string.Join(" ", book.Tags)}".ToLower();
             var matched = new List<string>();
 
             foreach (var keyword in keywords)
             {
-                if (searchText.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
-                    Regex.IsMatch(searchText, $@"\b{Regex.Escape(keyword)}\b", RegexOptions.IgnoreCase))
+                var lowerKeyword = keyword.ToLower();
+                bool isMatched = false;
+                
+                // Поиск в названии
+                if (book.Title?.ToLower().Contains(lowerKeyword) == true) isMatched = true;
+                if (book.NormalizedTitle?.Contains(lowerKeyword) == true) isMatched = true;
+                
+                // Поиск в описании
+                if (book.Description?.ToLower().Contains(lowerKeyword) == true) isMatched = true;
+                if (book.NormalizedDescription?.Contains(lowerKeyword) == true) isMatched = true;
+                
+                // Поиск в тегах
+                if (book.Tags?.Any(tag => tag.ToLower().Contains(lowerKeyword)) == true) isMatched = true;
+                
+                // Стемминг для более точного поиска
+                if (!isMatched)
+                {
+                    try
+                    {
+                        string detectedLanguage;
+                        var processedKeyword = PreprocessText(keyword, out detectedLanguage);
+                        var keywordParts = processedKeyword.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        
+                        isMatched = keywordParts.Any(part =>
+                            (book.NormalizedTitle?.Contains(part) == true) ||
+                            (book.NormalizedDescription?.Contains(part) == true));
+                    }
+                    catch
+                    {
+                        // Игнорируем ошибки стемминга
+                    }
+                }
+                
+                if (isMatched)
                 {
                     matched.Add(keyword);
                 }
             }
 
             return matched;
+        }
+        
+        // ------------------- ПОМОГАЮЩИЙ МЕТОД: детект языка + стемминг -----------        
+        private string PreprocessText(string text, out string detectedLanguage)
+        {
+            // Используем статический детектор
+            detectedLanguage = DetectLanguage(text);
+            if (detectedLanguage == "bul" || detectedLanguage == "ukr" || detectedLanguage == "mkd")
+                detectedLanguage = "rus";
+
+            if (!_stemmers.ContainsKey(detectedLanguage))
+            {
+                throw new NotSupportedException($"Language {detectedLanguage} is not supported.");
+            }
+
+            var stemmer = _stemmers[detectedLanguage];
+            // Приводим к нижнему регистру с помощью ToLowerInvariant для производительности и предсказуемости
+            var normalizedText = Regex.Replace(text.ToLowerInvariant(), @"\p{P}", " ");
+            var words = normalizedText.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                                      .Select(word => stemmer.Stem(word));
+            return string.Join(" ", words);
+        }
+
+        private string DetectLanguage(string text)
+        {
+            return _languageDetector.Detect(text);
         }
 
         public async Task<BookNotification> CreateNotificationAsync(UserNotificationPreference preference, RegularBaseBook book, List<string> matchedKeywords, CancellationToken cancellationToken = default)
