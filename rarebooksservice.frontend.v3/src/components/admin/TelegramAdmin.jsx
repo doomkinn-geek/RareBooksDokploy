@@ -635,7 +635,7 @@ const TelegramAdmin = () => {
                                     </Alert>
                                     
                                     <Grid container spacing={2}>
-                                        <Grid item xs={6} md={3}>
+                                        <Grid item xs={6} md={4}>
                                             <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'info.light', color: 'info.contrastText' }}>
                                                 <Typography variant="h5">
                                                     {notificationTestResult.activeBooks}
@@ -645,7 +645,17 @@ const TelegramAdmin = () => {
                                                 </Typography>
                                             </Paper>
                                         </Grid>
-                                        <Grid item xs={6} md={3}>
+                                        <Grid item xs={6} md={4}>
+                                            <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'warning.light', color: 'warning.contrastText' }}>
+                                                <Typography variant="h5">
+                                                    {notificationTestResult.activePreferences || 0}
+                                                </Typography>
+                                                <Typography variant="body2">
+                                                    Настроек уведомлений
+                                                </Typography>
+                                            </Paper>
+                                        </Grid>
+                                        <Grid item xs={6} md={4}>
                                             <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'success.light', color: 'success.contrastText' }}>
                                                 <Typography variant="h5">
                                                     {notificationTestResult.notificationsCreated}
@@ -656,7 +666,7 @@ const TelegramAdmin = () => {
                                             </Paper>
                                         </Grid>
                                         {notificationTestResult.testBookIds && (
-                                            <Grid item xs={12} md={6}>
+                                            <Grid item xs={12}>
                                                 <Paper sx={{ p: 2, bgcolor: 'grey.100' }}>
                                                     <Typography variant="body2" color="text.secondary" gutterBottom>
                                                         <strong>Примеры ID книг:</strong>

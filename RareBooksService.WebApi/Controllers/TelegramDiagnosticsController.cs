@@ -433,6 +433,22 @@ namespace RareBooksService.WebApi.Controllers
 
                 _logger.LogInformation("Найдено {Count} активных лотов для тестирования", activeBookIds.Count);
 
+                // Получаем активные настройки пользователей для диагностики
+                var activePreferences = await bookNotificationService.GetActiveNotificationPreferencesAsync(HttpContext.RequestAborted);
+                _logger.LogInformation("Найдено {Count} активных настроек уведомлений", activePreferences.Count);
+
+                if (activePreferences.Count == 0)
+                {
+                    return Ok(new
+                    {
+                        success = false,
+                        error = "Нет активных настроек уведомлений у пользователей",
+                        activeBooks = activeBookIds.Count,
+                        notificationsCreated = 0,
+                        activePreferences = 0
+                    });
+                }
+
                 // Отправляем уведомления используя тот же метод что и в BookUpdateService
                 var notificationsCreated = await bookNotificationService.ProcessNotificationsForNewBooksAsync(
                     activeBookIds, 
@@ -452,8 +468,9 @@ namespace RareBooksService.WebApi.Controllers
                 return Ok(new
                 {
                     success = true,
-                    message = $"Тестирование завершено. Обработано {activeBookIds.Count} активных лотов, создано и отправлено {notificationsCreated} уведомлений",
+                    message = $"Тестирование завершено. Обработано {activeBookIds.Count} активных лотов, найдено {activePreferences.Count} настроек уведомлений, создано и отправлено {notificationsCreated} уведомлений",
                     activeBooks = activeBookIds.Count,
+                    activePreferences = activePreferences.Count,
                     notificationsCreated = notificationsCreated,
                     testBookIds = request.ShowBookIds ? activeBookIds.Take(10).ToList() : null
                 });

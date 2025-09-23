@@ -452,8 +452,8 @@ namespace RareBooksService.WebApi.Services
             var categoryIds = preference.GetCategoryIdsList();
             if (categoryIds.Any() && !categoryIds.Contains(book.CategoryId)) return false;
 
-            // Проверка статуса (только активные торги)
-            if (book.Status != 1) return false;
+            // Статус не проверяем - будем уведомлять о всех лотах независимо от статуса
+            // (активность проверяется по дате окончания в вызывающем коде)
 
             return true;
         }
