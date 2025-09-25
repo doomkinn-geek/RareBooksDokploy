@@ -322,14 +322,27 @@ namespace RareBooksService.WebApi
                 app.Use(async (context, next) =>
                 
                 {
-                    Console.WriteLine($"[Middleware] Request: {context.Request.Method} {context.Request.Path}");
-                    Console.WriteLine($"[Middleware] IsInitialSetupNeeded: {setupService.IsInitialSetupNeeded}");
+                    var timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                    Console.WriteLine($"[{timestamp}] [Middleware] ========== REQUEST START ==========");
+                    Console.WriteLine($"[{timestamp}] [Middleware] Method: {context.Request.Method}");
+                    Console.WriteLine($"[{timestamp}] [Middleware] Path: {context.Request.Path}");
+                    Console.WriteLine($"[{timestamp}] [Middleware] QueryString: {context.Request.QueryString}");
+                    Console.WriteLine($"[{timestamp}] [Middleware] Host: {context.Request.Host}");
+                    Console.WriteLine($"[{timestamp}] [Middleware] Scheme: {context.Request.Scheme}");
+                    Console.WriteLine($"[{timestamp}] [Middleware] ContentType: {context.Request.ContentType}");
+                    Console.WriteLine($"[{timestamp}] [Middleware] Headers:");
+                    foreach (var header in context.Request.Headers.Take(10)) // ограничиваем количество хедеров
+                    {
+                        Console.WriteLine($"[{timestamp}] [Middleware]   {header.Key}: {string.Join(", ", header.Value)}");
+                    }
+                    Console.WriteLine($"[{timestamp}] [Middleware] IsInitialSetupNeeded: {setupService.IsInitialSetupNeeded}");
                     
                     // ВСЕГДА пропускаем OPTIONS запросы (CORS preflight)
                     if (context.Request.Method == "OPTIONS")
                     {
-                        Console.WriteLine("[Middleware] OPTIONS request, passing through");
+                        Console.WriteLine($"[{timestamp}] [Middleware] OPTIONS request, passing through");
                         await next.Invoke();
+                        Console.WriteLine($"[{timestamp}] [Middleware] ========== OPTIONS END ========== Status: {context.Response.StatusCode}");
                         return;
                     }
 
@@ -339,8 +352,9 @@ namespace RareBooksService.WebApi
                         context.Request.Path.StartsWithSegments("/api/test") ||
                         context.Request.Path.StartsWithSegments("/api/telegramdiagnostics"))
                     {
-                        Console.WriteLine("[Middleware] API request allowed, passing through");
+                        Console.WriteLine($"[{timestamp}] [Middleware] API request allowed, passing through to controllers");
                         await next.Invoke();
+                        Console.WriteLine($"[{timestamp}] [Middleware] ========== API END ========== Status: {context.Response.StatusCode}");
                         return;
                     }
 
@@ -377,8 +391,9 @@ namespace RareBooksService.WebApi
                     }
 
                     // ����� � �� ��
-                    Console.WriteLine("[Middleware] System already configured, passing through");
+                    Console.WriteLine($"[{timestamp}] [Middleware] System already configured, passing through to next middleware");
                     await next.Invoke();
+                    Console.WriteLine($"[{timestamp}] [Middleware] ========== REQUEST END ========== Status: {context.Response.StatusCode}");
                 });
 
                 // Swagger

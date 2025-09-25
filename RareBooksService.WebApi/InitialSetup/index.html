@@ -244,6 +244,7 @@
         <button type="button" id="testBtn">Тест соединения</button>
         <button type="button" id="testPostBtn">Тест POST запроса</button>
         <button type="button" id="testGetBtn">Тест GET запроса (обход nginx)</button>
+        <button type="button" id="directTestBtn">Прямые URL тесты</button>
     </form>
 
     <div id="setupResult"></div>
@@ -283,6 +284,82 @@
                 setupResultDiv.className = 'error';
                 setupResultDiv.innerText = `❌ Ошибка теста: ${err.message}`;
             }
+        });
+
+        // Добавляем обработчик для кнопки прямых URL тестов
+        const directTestBtn = document.getElementById('directTestBtn');
+        directTestBtn.addEventListener('click', async () => {
+            setupResultDiv.textContent = 'Запуск прямых URL тестов...';
+            setupResultDiv.className = '';
+            
+            const tests = [
+                { name: 'GET /api/test/ping', url: '/api/test/ping', method: 'GET' },
+                { name: 'GET /api/test/setup-status', url: '/api/test/setup-status', method: 'GET' },
+                { name: 'GET /api/setup/test-get', url: '/api/setup/test-get?data=direct-test', method: 'GET' },
+                { name: 'POST /api/test/ping', url: '/api/test/ping', method: 'POST', data: { test: 'direct ping' } },
+                { name: 'POST /api/setup/test-post', url: '/api/setup/test-post', method: 'POST', data: { test: 'direct test-post' } }
+            ];
+
+            let results = [];
+            
+            for (const test of tests) {
+                try {
+                    console.log(`Testing: ${test.name}`);
+                    
+                    const options = {
+                        method: test.method,
+                        headers: { 'Accept': 'application/json' }
+                    };
+                    
+                    if (test.method === 'POST' && test.data) {
+                        options.headers['Content-Type'] = 'application/json';
+                        options.body = JSON.stringify(test.data);
+                    }
+                    
+                    const response = await fetch(test.url, options);
+                    const responseText = await response.text();
+                    
+                    let resultData;
+                    try {
+                        resultData = JSON.parse(responseText);
+                    } catch (e) {
+                        resultData = { error: 'Not JSON', response: responseText.substring(0, 200) + '...' };
+                    }
+                    
+                    results.push({
+                        test: test.name,
+                        status: response.status,
+                        success: response.ok,
+                        data: resultData
+                    });
+                    
+                    console.log(`${test.name}: ${response.status}`, resultData);
+                } catch (err) {
+                    results.push({
+                        test: test.name,
+                        status: 'ERROR',
+                        success: false,
+                        error: err.message
+                    });
+                    console.error(`${test.name}: ERROR`, err);
+                }
+            }
+            
+            // Отображаем результаты
+            setupResultDiv.className = 'success';
+            setupResultDiv.innerHTML = `
+                <h3>Результаты прямых URL тестов:</h3>
+                ${results.map(r => `
+                    <div style="margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 5px; background: ${r.success ? '#e8f5e8' : '#ffe8e8'}">
+                        <strong>${r.test}</strong><br>
+                        Status: ${r.status}<br>
+                        Success: ${r.success ? '✅ ДА' : '❌ НЕТ'}<br>
+                        ${r.data ? `Data: ${JSON.stringify(r.data, null, 2)}` : ''}
+                        ${r.error ? `Error: ${r.error}` : ''}
+                    </div>
+                `).join('')}
+                <p><strong>Анализ:</strong> Проверьте логи Docker для детальной информации о том, какие тесты достигли приложения.</p>
+            `;
         });
 
         // Добавляем обработчик для кнопки тестирования GET (обход nginx)
