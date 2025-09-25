@@ -2,8 +2,6 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Initial Setup</title>
     <style>
         body {
@@ -80,11 +78,6 @@
 </head>
 <body>
     <h2>Первичная настройка RareBooksService</h2>
-    
-    <div id="loadingIndicator" style="background: #e8f5e8; padding: 10px; border-radius: 5px; margin: 10px 0;">
-        ✅ Страница InitialSetup загружена успешно. JavaScript должен работать.
-    </div>
-    
     <form id="setupForm">
         <div class="section">
             <h3>Доступ администратора</h3>
@@ -242,24 +235,11 @@
 
         <button type="submit">Инициализировать систему</button>
         <button type="button" id="testBtn">Тест соединения</button>
-        <button type="button" id="testPostBtn">Тест POST запроса</button>
-        <button type="button" id="testGetBtn">Тест GET запроса (обход nginx)</button>
-        <button type="button" id="directTestBtn">Прямые URL тесты</button>
     </form>
 
     <div id="setupResult"></div>
 
     <script>
-        console.log('InitialSetup page loaded successfully!');
-        
-        // Обновляем индикатор загрузки
-        const loadingIndicator = document.getElementById('loadingIndicator');
-        if (loadingIndicator) {
-            loadingIndicator.style.background = '#d4edda';
-            loadingIndicator.style.color = '#155724';
-            loadingIndicator.innerHTML = '✅ Страница InitialSetup загружена успешно. JavaScript работает корректно!';
-        }
-        
         const form = document.getElementById('setupForm');
         const setupResultDiv = document.getElementById('setupResult');
         const testBtn = document.getElementById('testBtn');
@@ -283,160 +263,6 @@
             } catch (err) {
                 setupResultDiv.className = 'error';
                 setupResultDiv.innerText = `❌ Ошибка теста: ${err.message}`;
-            }
-        });
-
-        // Добавляем обработчик для кнопки прямых URL тестов
-        const directTestBtn = document.getElementById('directTestBtn');
-        directTestBtn.addEventListener('click', async () => {
-            setupResultDiv.textContent = 'Запуск прямых URL тестов...';
-            setupResultDiv.className = '';
-            
-            const tests = [
-                { name: 'GET /api/test/ping', url: '/api/test/ping', method: 'GET' },
-                { name: 'GET /api/test/setup-status', url: '/api/test/setup-status', method: 'GET' },
-                { name: 'GET /api/setup/test-get', url: '/api/setup/test-get?data=direct-test', method: 'GET' },
-                { name: 'POST /api/test/ping', url: '/api/test/ping', method: 'POST', data: { test: 'direct ping' } },
-                { name: 'POST /api/setup/test-post', url: '/api/setup/test-post', method: 'POST', data: { test: 'direct test-post' } }
-            ];
-
-            let results = [];
-            
-            for (const test of tests) {
-                try {
-                    console.log(`Testing: ${test.name}`);
-                    
-                    const options = {
-                        method: test.method,
-                        headers: { 'Accept': 'application/json' }
-                    };
-                    
-                    if (test.method === 'POST' && test.data) {
-                        options.headers['Content-Type'] = 'application/json';
-                        options.body = JSON.stringify(test.data);
-                    }
-                    
-                    const response = await fetch(test.url, options);
-                    const responseText = await response.text();
-                    
-                    let resultData;
-                    try {
-                        resultData = JSON.parse(responseText);
-                    } catch (e) {
-                        resultData = { error: 'Not JSON', response: responseText.substring(0, 200) + '...' };
-                    }
-                    
-                    results.push({
-                        test: test.name,
-                        status: response.status,
-                        success: response.ok,
-                        data: resultData
-                    });
-                    
-                    console.log(`${test.name}: ${response.status}`, resultData);
-                } catch (err) {
-                    results.push({
-                        test: test.name,
-                        status: 'ERROR',
-                        success: false,
-                        error: err.message
-                    });
-                    console.error(`${test.name}: ERROR`, err);
-                }
-            }
-            
-            // Отображаем результаты
-            setupResultDiv.className = 'success';
-            setupResultDiv.innerHTML = `
-                <h3>Результаты прямых URL тестов:</h3>
-                ${results.map(r => `
-                    <div style="margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 5px; background: ${r.success ? '#e8f5e8' : '#ffe8e8'}">
-                        <strong>${r.test}</strong><br>
-                        Status: ${r.status}<br>
-                        Success: ${r.success ? '✅ ДА' : '❌ НЕТ'}<br>
-                        ${r.data ? `Data: ${JSON.stringify(r.data, null, 2)}` : ''}
-                        ${r.error ? `Error: ${r.error}` : ''}
-                    </div>
-                `).join('')}
-                <p><strong>Анализ:</strong> Проверьте логи Docker для детальной информации о том, какие тесты достигли приложения.</p>
-            `;
-        });
-
-        // Добавляем обработчик для кнопки тестирования GET (обход nginx)
-        const testGetBtn = document.getElementById('testGetBtn');
-        testGetBtn.addEventListener('click', async () => {
-            try {
-                setupResultDiv.textContent = 'Тестирование GET запроса...';
-                setupResultDiv.className = '';
-                
-                const response = await fetch('/api/setup/test-get?data=' + encodeURIComponent('test from browser'), {
-                    method: 'GET',
-                    headers: { 'Accept': 'application/json' }
-                });
-
-                const rawText = await response.text();
-                console.log('GET Test - Raw response:', rawText);
-                console.log('GET Test - Response status:', response.status);
-                console.log('GET Test - Response headers:', [...response.headers.entries()]);
-
-                if (response.ok) {
-                    const data = JSON.parse(rawText);
-                    setupResultDiv.className = 'success';
-                    setupResultDiv.innerHTML = `✅ GET тест успешен (приложение работает!):<br>
-                        Status: ${response.status}<br>
-                        Message: ${data.message}<br>
-                        Note: ${data.note}<br>
-                        Setup needed: ${data.isSetupNeeded}<br>
-                        Timestamp: ${data.timestamp}`;
-                } else {
-                    setupResultDiv.className = 'error';
-                    setupResultDiv.innerHTML = `❌ GET тест неудачен:<br>
-                        Status: ${response.status}<br>
-                        Response: ${rawText}`;
-                }
-            } catch (err) {
-                setupResultDiv.className = 'error';
-                setupResultDiv.innerText = `❌ Ошибка GET теста: ${err.message}`;
-            }
-        });
-
-        // Добавляем обработчик для кнопки тестирования POST
-        const testPostBtn = document.getElementById('testPostBtn');
-        testPostBtn.addEventListener('click', async () => {
-            try {
-                setupResultDiv.textContent = 'Тестирование POST запроса...';
-                setupResultDiv.className = '';
-                
-                const testData = { test: 'POST request test', timestamp: new Date().toISOString() };
-                const response = await fetch('/api/setup/test-post', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(testData),
-                });
-
-                // Получаем raw text сначала для диагностики
-                const rawText = await response.text();
-                console.log('POST Test - Raw response:', rawText);
-                console.log('POST Test - Response status:', response.status);
-                console.log('POST Test - Response headers:', [...response.headers.entries()]);
-
-                if (response.ok) {
-                    const data = JSON.parse(rawText);
-                    setupResultDiv.className = 'success';
-                    setupResultDiv.innerHTML = `✅ POST тест успешен:<br>
-                        Status: ${response.status}<br>
-                        Message: ${data.message}<br>
-                        Setup needed: ${data.isSetupNeeded}<br>
-                        Timestamp: ${data.timestamp}`;
-                } else {
-                    setupResultDiv.className = 'error';
-                    setupResultDiv.innerHTML = `❌ POST тест неудачен:<br>
-                        Status: ${response.status}<br>
-                        Response: ${rawText}`;
-                }
-            } catch (err) {
-                setupResultDiv.className = 'error';
-                setupResultDiv.innerText = `❌ Ошибка POST теста: ${err.message}`;
             }
         });
 

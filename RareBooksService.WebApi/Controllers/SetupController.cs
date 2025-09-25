@@ -78,120 +78,26 @@ namespace RareBooksService.WebApi.Controllers
         [HttpGet("")]
         public IActionResult GetSetupPage()
         {
-            Console.WriteLine($"[SetupController] GetSetupPage called. IsInitialSetupNeeded = {_setupStateService.IsInitialSetupNeeded}");
-            
             // Если уже настроено — выдаём JSON-ответ с пояснением, 
             // чтобы на фронте не было ошибок парсинга HTML.
             if (!_setupStateService.IsInitialSetupNeeded)
             {
-                Console.WriteLine("[SetupController] System already configured, returning 403");
                 return StatusCode(StatusCodes.Status403Forbidden,
                     new { success = false, message = "System is already configured." });
             }
 
             var filePath = Path.Combine(_env.ContentRootPath, "InitialSetup", "index.html");
-            Console.WriteLine($"[SetupController] Looking for setup page at: {filePath}");
-            
             if (System.IO.File.Exists(filePath))
             {
-                Console.WriteLine("[SetupController] Setup page found, returning file");
                 return PhysicalFile(filePath, "text/html; charset=utf-8");
             }
-            
-            Console.WriteLine("[SetupController] Setup page NOT found");
             return NotFound("Initial setup page not found. Please contact admin.");
-        }
-
-        /// <summary>Диагностический метод для проверки POST запросов.</summary>
-        [HttpPost("test-post")]
-        public IActionResult TestPost([FromBody] object data)
-        {
-            var timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff");
-            
-            Console.WriteLine($"[{timestamp}] [SetupController] ======== TestPost CALLED ========");
-            Console.WriteLine($"[{timestamp}] [SetupController] Method: {Request.Method}");
-            Console.WriteLine($"[{timestamp}] [SetupController] Path: {Request.Path}");
-            Console.WriteLine($"[{timestamp}] [SetupController] ContentType: {Request.ContentType}");
-            Console.WriteLine($"[{timestamp}] [SetupController] Headers:");
-            foreach (var header in Request.Headers.Take(5))
-            {
-                Console.WriteLine($"[{timestamp}] [SetupController]   {header.Key}: {string.Join(", ", header.Value)}");
-            }
-            Console.WriteLine($"[{timestamp}] [SetupController] Received data: '{data?.ToString() ?? "null"}'");
-            
-            var result = new 
-            { 
-                success = true, 
-                message = "POST request to /api/setup/test-post working - ASP.NET Core received POST",
-                timestamp = DateTime.UtcNow,
-                isSetupNeeded = _setupStateService.IsInitialSetupNeeded,
-                receivedData = data?.ToString() ?? "null",
-                controllerExecuted = true,
-                note = "If you see this, nginx is allowing POST requests to /api/setup/"
-            };
-            
-            Console.WriteLine($"[{timestamp}] [SetupController] Returning successful POST response");
-            return Ok(result);
-        }
-
-        /// <summary>Временный GET endpoint для обхода nginx блокировки POST.</summary>
-        [HttpGet("test-get")]
-        public IActionResult TestGet([FromQuery] string data = "test")
-        {
-            var timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff");
-            
-            Console.WriteLine($"[{timestamp}] [SetupController] ======== TestGet CALLED ========");
-            Console.WriteLine($"[{timestamp}] [SetupController] Method: {Request.Method}");
-            Console.WriteLine($"[{timestamp}] [SetupController] Path: {Request.Path}");
-            Console.WriteLine($"[{timestamp}] [SetupController] QueryString: {Request.QueryString}");
-            Console.WriteLine($"[{timestamp}] [SetupController] Headers:");
-            foreach (var header in Request.Headers.Take(5))
-            {
-                Console.WriteLine($"[{timestamp}] [SetupController]   {header.Key}: {string.Join(", ", header.Value)}");
-            }
-            Console.WriteLine($"[{timestamp}] [SetupController] Received data: '{data}'");
-            Console.WriteLine($"[{timestamp}] [SetupController] IsInitialSetupNeeded: {_setupStateService.IsInitialSetupNeeded}");
-            
-            var result = new 
-            { 
-                success = true, 
-                message = "GET request to /api/setup/test-get working - nginx allows this",
-                timestamp = DateTime.UtcNow,
-                isSetupNeeded = _setupStateService.IsInitialSetupNeeded,
-                receivedData = data,
-                note = "This proves the application is working, nginx is blocking POST",
-                controllerExecuted = true,
-                requestInfo = new
-                {
-                    method = Request.Method,
-                    path = Request.Path.ToString(),
-                    host = Request.Host.ToString(),
-                    queryString = Request.QueryString.ToString()
-                }
-            };
-            
-            Console.WriteLine($"[{timestamp}] [SetupController] Returning successful GET response");
-            return Ok(result);
         }
 
         /// <summary>Основной метод инициализации.</summary>
         [HttpPost("initialize")]
         public async Task<IActionResult> Initialize([FromBody] SetupDto dto)
         {
-            var timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff");
-            
-            Console.WriteLine($"[{timestamp}] [SetupController] ======== Initialize CALLED ========");
-            Console.WriteLine($"[{timestamp}] [SetupController] Method: {Request.Method}");
-            Console.WriteLine($"[{timestamp}] [SetupController] Path: {Request.Path}");
-            Console.WriteLine($"[{timestamp}] [SetupController] ContentType: {Request.ContentType}");
-            Console.WriteLine($"[{timestamp}] [SetupController] DTO received: {dto != null}");
-            if (dto != null)
-            {
-                Console.WriteLine($"[{timestamp}] [SetupController] AdminEmail: {dto.AdminEmail}");
-                Console.WriteLine($"[{timestamp}] [SetupController] Has BooksConnectionString: {!string.IsNullOrEmpty(dto.BooksConnectionString)}");
-                Console.WriteLine($"[{timestamp}] [SetupController] Has UsersConnectionString: {!string.IsNullOrEmpty(dto.UsersConnectionString)}");
-            }
-            
             try
             {
                 // Если уже настроена — возвращаем JSON, 

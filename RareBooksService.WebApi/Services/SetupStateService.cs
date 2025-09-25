@@ -25,73 +25,30 @@ namespace RareBooksService.WebApi.Services
 
         public void DetermineIfSetupNeeded()
         {
-            // ВРЕМЕННО: принудительно отключаем setup режим для разблокировки системы
-            _isSetupNeeded = false;
-            Console.WriteLine("[SetupStateService] EMERGENCY BYPASS: Force IsInitialSetupNeeded = false - система разблокирована!");
-            return;
-            
+            //_isSetupNeeded = true;
+            //return;
             try
             {
-                Console.WriteLine("[SetupStateService] Starting DetermineIfSetupNeeded...");
-                
                 // 0) Проверяем, есть ли appsettings.json
                 string path = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
-                Console.WriteLine($"[SetupStateService] Checking appsettings.json at: {path}");
                 if (!File.Exists(path))
                 {
-                    Console.WriteLine("[SetupStateService] appsettings.json not found - setup needed");
                     _isSetupNeeded = true;
                     return;
                 }
 
                 // 1) Проверяем, можем ли мы подключиться к БД + EF 
-                Console.WriteLine("[SetupStateService] Checking database and admin users...");
                 using var scope = _serviceProvider.CreateScope();
                 var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 
-                // Дополнительная диагностика
-                Console.WriteLine("[SetupStateService] Getting UserManager service - OK");
-                
-                try 
+                var anyAdmins = userManager.GetUsersInRoleAsync("Admin").Result;
+                if (anyAdmins.Count == 0)
                 {
-                    var allUsers = userManager.Users.ToList();
-                    Console.WriteLine($"[SetupStateService] Total users in database: {allUsers.Count}");
-                    
-                    foreach (var user in allUsers.Take(5)) // показываем первых 5
-                    {
-                        Console.WriteLine($"[SetupStateService] User: {user.Email}, Role: {user.Role}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[SetupStateService] Error getting users: {ex.Message}");
-                }
-
-                try 
-                {
-                    var anyAdmins = userManager.GetUsersInRoleAsync("Admin").Result;
-                    Console.WriteLine($"[SetupStateService] Found {anyAdmins.Count} admin users via GetUsersInRoleAsync");
-                    
-                    if (anyAdmins.Count == 0)
-                    {
-                        Console.WriteLine("[SetupStateService] No admin users found - setup needed");
-                        _isSetupNeeded = true;
-                    }
-                    else
-                    {
-                        Console.WriteLine("[SetupStateService] Admin users found - setup not needed");
-                        foreach (var admin in anyAdmins.Take(3))
-                        {
-                            Console.WriteLine($"[SetupStateService] Admin user: {admin.Email}");
-                        }
-                        _isSetupNeeded = false;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[SetupStateService] Error getting admin users: {ex.Message}");
-                    Console.WriteLine("[SetupStateService] Assuming setup needed due to error");
                     _isSetupNeeded = true;
+                }
+                else
+                {
+                    _isSetupNeeded = false;
                 }
 
                 // 2) Проверяем JWT поля
@@ -101,28 +58,19 @@ namespace RareBooksService.WebApi.Services
             }
             catch(AggregateException e)
             {
-                Console.WriteLine($"[SetupStateService] AggregateException: {e.Message}");
-                Console.WriteLine($"[SetupStateService] InnerException: {e.InnerException?.Message}");
                 //исключение из БД, возможно не была выполнена миграция
                 if (e.InnerException is PostgresException)
                 {
-                    Console.WriteLine("[SetupStateService] PostgresException detected - setup needed");
                     _isSetupNeeded = true;  // Исправлена логика: если БД недоступна, нужна настройка
                     return;
                 }
-                Console.WriteLine("[SetupStateService] Other AggregateException - setup needed");
                 _isSetupNeeded = true;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[SetupStateService] General Exception: {ex.Message}");
-                Console.WriteLine($"[SetupStateService] StackTrace: {ex.StackTrace}");
                 // Любое исключение => считаем, что настройка не завершена
-                Console.WriteLine("[SetupStateService] Exception occurred - setup needed");
                 _isSetupNeeded = true;
             }
-            
-            Console.WriteLine($"[SetupStateService] Final result: IsInitialSetupNeeded = {_isSetupNeeded}");
         }
 
     }

@@ -322,68 +322,41 @@ namespace RareBooksService.WebApi
                 app.Use(async (context, next) =>
                 
                 {
-                    var timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff");
-                    Console.WriteLine($"[{timestamp}] [Middleware] ========== REQUEST START ==========");
-                    Console.WriteLine($"[{timestamp}] [Middleware] Method: {context.Request.Method}");
-                    Console.WriteLine($"[{timestamp}] [Middleware] Path: {context.Request.Path}");
-                    Console.WriteLine($"[{timestamp}] [Middleware] QueryString: {context.Request.QueryString}");
-                    Console.WriteLine($"[{timestamp}] [Middleware] Host: {context.Request.Host}");
-                    Console.WriteLine($"[{timestamp}] [Middleware] Scheme: {context.Request.Scheme}");
-                    Console.WriteLine($"[{timestamp}] [Middleware] ContentType: {context.Request.ContentType}");
-                    Console.WriteLine($"[{timestamp}] [Middleware] Headers:");
-                    foreach (var header in context.Request.Headers.Take(10)) // ограничиваем количество хедеров
-                    {
-                        Console.WriteLine($"[{timestamp}] [Middleware]   {header.Key}: {string.Join(", ", header.Value)}");
-                    }
-                    Console.WriteLine($"[{timestamp}] [Middleware] IsInitialSetupNeeded: {setupService.IsInitialSetupNeeded}");
-                    
                     // ВСЕГДА пропускаем OPTIONS запросы (CORS preflight)
                     if (context.Request.Method == "OPTIONS")
                     {
-                        Console.WriteLine($"[{timestamp}] [Middleware] OPTIONS request, passing through");
                         await next.Invoke();
-                        Console.WriteLine($"[{timestamp}] [Middleware] ========== OPTIONS END ========== Status: {context.Response.StatusCode}");
                         return;
                     }
 
                     // Пропускаем /api/setup/, /api/setupcheck/, /api/test/ и /api/telegramdiagnostics/
                     if (context.Request.Path.StartsWithSegments("/api/setup") ||
+                        context.Request.Path.StartsWithSegments("/setup") ||
                         context.Request.Path.StartsWithSegments("/api/setupcheck") ||
                         context.Request.Path.StartsWithSegments("/api/test") ||
                         context.Request.Path.StartsWithSegments("/api/telegramdiagnostics"))
                     {
-                        Console.WriteLine($"[{timestamp}] [Middleware] API request allowed, passing through to controllers");
                         await next.Invoke();
-                        Console.WriteLine($"[{timestamp}] [Middleware] ========== API END ========== Status: {context.Response.StatusCode}");
                         return;
                     }
 
                     // ���� IsInitialSetupNeeded
                     if (setupService.IsInitialSetupNeeded)
                     {
-                        Console.WriteLine("[Middleware] Initial setup needed, processing...");
-                        
                         if (context.Request.Path.StartsWithSegments("/api"))
                         {
-                            Console.WriteLine("[Middleware] API request blocked - setup needed");
                             context.Response.StatusCode = 403;
                             await context.Response.WriteAsync("System not configured. Please do initial setup via /api/setup or special HTML page.");
                             return;
                         }
-                        
-                        Console.WriteLine("[Middleware] Serving InitialSetup page");
                         var filePath = Path.Combine(app.Environment.ContentRootPath, "InitialSetup", "index.html");
-                        Console.WriteLine($"[Middleware] Looking for file: {filePath}");
-                        
                         if (System.IO.File.Exists(filePath))
                         {
-                            Console.WriteLine("[Middleware] InitialSetup file found, serving...");
                             context.Response.ContentType = "text/html; charset=utf-8";
                             await context.Response.SendFileAsync(filePath);
                         }
                         else
                         {
-                            Console.WriteLine("[Middleware] InitialSetup file NOT found");
                             context.Response.StatusCode = 404;
                             await context.Response.WriteAsync("InitialSetup page not found. Please contact admin.");
                         }
@@ -391,9 +364,7 @@ namespace RareBooksService.WebApi
                     }
 
                     // ����� � �� ��
-                    Console.WriteLine($"[{timestamp}] [Middleware] System already configured, passing through to next middleware");
                     await next.Invoke();
-                    Console.WriteLine($"[{timestamp}] [Middleware] ========== REQUEST END ========== Status: {context.Response.StatusCode}");
                 });
 
                 // Swagger
