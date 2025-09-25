@@ -18,3 +18,5 @@ Add-Migration TelegramBotExtended -Context UsersDbContext
 Add-Migration TelegramLinkTokenAdded -Context UsersDbContext
 
 Add-Migration TelegramDBEdited -Context UsersDbContext
+
+Add-Migration NotificationExactPhraseAdded -Context UsersDbContext

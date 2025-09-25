@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using NLog.Web;
@@ -289,9 +290,10 @@ namespace RareBooksService.WebApi
                 {
                     options.AddPolicy("AllowAll", policy =>
                     {
-                        policy.AllowAnyOrigin()
+                        policy.SetIsOriginAllowed(_ => true) // Разрешаем все источники, включая localhost
                               .AllowAnyMethod()
                               .AllowAnyHeader()
+                              .AllowCredentials() // Разрешаем передачу учетных данных
                               .WithExposedHeaders("X-Captcha-Token");
                     });
                 });
@@ -376,11 +378,18 @@ namespace RareBooksService.WebApi
                 {
                     app.UseHttpsRedirection();
                 }
-                app.UseRouting();
+                // CORS должен быть до UseRouting
                 app.UseCors("AllowAll");
+                app.UseRouting();
                 
-                // Настройка статических файлов
+                // Настройка статических файлов с доступом к InitialSetup
                 app.UseStaticFiles();
+                app.UseStaticFiles(new StaticFileOptions
+                {
+                    FileProvider = new PhysicalFileProvider(
+                        Path.Combine(app.Environment.ContentRootPath, "InitialSetup")),
+                    RequestPath = "/setup"
+                });
                 
                 // Временно отключаем middleware для диагностики 502 ошибки
                 // app.UseMiddleware<RareBooksService.WebApi.Middleware.FileDownloadLoggingMiddleware>();

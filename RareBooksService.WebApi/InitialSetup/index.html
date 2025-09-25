@@ -250,7 +250,10 @@
                 setupResultDiv.textContent = 'Тестирование соединения...';
                 setupResultDiv.className = '';
                 
-                const response = await fetch('/api/test/setup-status');
+                const response = await fetch('/api/test/setup-status', {
+                    headers: { 'Accept': 'application/json' },
+                    credentials: 'include'
+                });
                 const data = await response.json();
                 
                 if (response.ok) {
@@ -309,7 +312,11 @@
                 
                 const response = await fetch('/api/setup/initialize', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'include',
                     body: JSON.stringify(payload),
                 });
 
