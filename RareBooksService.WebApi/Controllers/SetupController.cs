@@ -94,6 +94,20 @@ namespace RareBooksService.WebApi.Controllers
             return NotFound("Initial setup page not found. Please contact admin.");
         }
 
+        /// <summary>Диагностический метод для проверки POST запросов.</summary>
+        [HttpPost("test-post")]
+        public IActionResult TestPost([FromBody] object data)
+        {
+            return Ok(new 
+            { 
+                success = true, 
+                message = "POST request to /api/setup/test-post working",
+                timestamp = DateTime.UtcNow,
+                isSetupNeeded = _setupStateService.IsInitialSetupNeeded,
+                receivedData = data?.ToString() ?? "null"
+            });
+        }
+
         /// <summary>Основной метод инициализации.</summary>
         [HttpPost("initialize")]
         public async Task<IActionResult> Initialize([FromBody] SetupDto dto)

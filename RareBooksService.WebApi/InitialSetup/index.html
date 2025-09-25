@@ -235,6 +235,7 @@
 
         <button type="submit">Инициализировать систему</button>
         <button type="button" id="testBtn">Тест соединения</button>
+        <button type="button" id="testPostBtn">Тест POST запроса</button>
     </form>
 
     <div id="setupResult"></div>
@@ -263,6 +264,46 @@
             } catch (err) {
                 setupResultDiv.className = 'error';
                 setupResultDiv.innerText = `❌ Ошибка теста: ${err.message}`;
+            }
+        });
+
+        // Добавляем обработчик для кнопки тестирования POST
+        const testPostBtn = document.getElementById('testPostBtn');
+        testPostBtn.addEventListener('click', async () => {
+            try {
+                setupResultDiv.textContent = 'Тестирование POST запроса...';
+                setupResultDiv.className = '';
+                
+                const testData = { test: 'POST request test', timestamp: new Date().toISOString() };
+                const response = await fetch('/api/setup/test-post', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(testData),
+                });
+
+                // Получаем raw text сначала для диагностики
+                const rawText = await response.text();
+                console.log('POST Test - Raw response:', rawText);
+                console.log('POST Test - Response status:', response.status);
+                console.log('POST Test - Response headers:', [...response.headers.entries()]);
+
+                if (response.ok) {
+                    const data = JSON.parse(rawText);
+                    setupResultDiv.className = 'success';
+                    setupResultDiv.innerHTML = `✅ POST тест успешен:<br>
+                        Status: ${response.status}<br>
+                        Message: ${data.message}<br>
+                        Setup needed: ${data.isSetupNeeded}<br>
+                        Timestamp: ${data.timestamp}`;
+                } else {
+                    setupResultDiv.className = 'error';
+                    setupResultDiv.innerHTML = `❌ POST тест неудачен:<br>
+                        Status: ${response.status}<br>
+                        Response: ${rawText}`;
+                }
+            } catch (err) {
+                setupResultDiv.className = 'error';
+                setupResultDiv.innerText = `❌ Ошибка POST теста: ${err.message}`;
             }
         });
 
