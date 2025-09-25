@@ -322,9 +322,13 @@ namespace RareBooksService.WebApi
                 app.Use(async (context, next) =>
                 
                 {
+                    Console.WriteLine($"[Middleware] Request: {context.Request.Method} {context.Request.Path}");
+                    Console.WriteLine($"[Middleware] IsInitialSetupNeeded: {setupService.IsInitialSetupNeeded}");
+                    
                     // ВСЕГДА пропускаем OPTIONS запросы (CORS preflight)
                     if (context.Request.Method == "OPTIONS")
                     {
+                        Console.WriteLine("[Middleware] OPTIONS request, passing through");
                         await next.Invoke();
                         return;
                     }
@@ -335,6 +339,7 @@ namespace RareBooksService.WebApi
                         context.Request.Path.StartsWithSegments("/api/test") ||
                         context.Request.Path.StartsWithSegments("/api/telegramdiagnostics"))
                     {
+                        Console.WriteLine("[Middleware] API request allowed, passing through");
                         await next.Invoke();
                         return;
                     }
@@ -342,20 +347,29 @@ namespace RareBooksService.WebApi
                     // ���� IsInitialSetupNeeded
                     if (setupService.IsInitialSetupNeeded)
                     {
+                        Console.WriteLine("[Middleware] Initial setup needed, processing...");
+                        
                         if (context.Request.Path.StartsWithSegments("/api"))
                         {
+                            Console.WriteLine("[Middleware] API request blocked - setup needed");
                             context.Response.StatusCode = 403;
                             await context.Response.WriteAsync("System not configured. Please do initial setup via /api/setup or special HTML page.");
                             return;
                         }
+                        
+                        Console.WriteLine("[Middleware] Serving InitialSetup page");
                         var filePath = Path.Combine(app.Environment.ContentRootPath, "InitialSetup", "index.html");
+                        Console.WriteLine($"[Middleware] Looking for file: {filePath}");
+                        
                         if (System.IO.File.Exists(filePath))
                         {
+                            Console.WriteLine("[Middleware] InitialSetup file found, serving...");
                             context.Response.ContentType = "text/html; charset=utf-8";
                             await context.Response.SendFileAsync(filePath);
                         }
                         else
                         {
+                            Console.WriteLine("[Middleware] InitialSetup file NOT found");
                             context.Response.StatusCode = 404;
                             await context.Response.WriteAsync("InitialSetup page not found. Please contact admin.");
                         }
@@ -363,6 +377,7 @@ namespace RareBooksService.WebApi
                     }
 
                     // ����� � �� ��
+                    Console.WriteLine("[Middleware] System already configured, passing through");
                     await next.Invoke();
                 });
 

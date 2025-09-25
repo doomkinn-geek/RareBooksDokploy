@@ -25,8 +25,11 @@ namespace RareBooksService.WebApi.Services
 
         public void DetermineIfSetupNeeded()
         {
-            //_isSetupNeeded = true;
-            //return;
+            // ВРЕМЕННО для диагностики - всегда возвращаем true
+            _isSetupNeeded = true;
+            Console.WriteLine("[SetupStateService] DIAGNOSTIC MODE: Force IsInitialSetupNeeded = true");
+            return;
+            
             try
             {
                 Console.WriteLine("[SetupStateService] Starting DetermineIfSetupNeeded...");

@@ -78,19 +78,27 @@ namespace RareBooksService.WebApi.Controllers
         [HttpGet("")]
         public IActionResult GetSetupPage()
         {
+            Console.WriteLine($"[SetupController] GetSetupPage called. IsInitialSetupNeeded = {_setupStateService.IsInitialSetupNeeded}");
+            
             // Если уже настроено — выдаём JSON-ответ с пояснением, 
             // чтобы на фронте не было ошибок парсинга HTML.
             if (!_setupStateService.IsInitialSetupNeeded)
             {
+                Console.WriteLine("[SetupController] System already configured, returning 403");
                 return StatusCode(StatusCodes.Status403Forbidden,
                     new { success = false, message = "System is already configured." });
             }
 
             var filePath = Path.Combine(_env.ContentRootPath, "InitialSetup", "index.html");
+            Console.WriteLine($"[SetupController] Looking for setup page at: {filePath}");
+            
             if (System.IO.File.Exists(filePath))
             {
+                Console.WriteLine("[SetupController] Setup page found, returning file");
                 return PhysicalFile(filePath, "text/html; charset=utf-8");
             }
+            
+            Console.WriteLine("[SetupController] Setup page NOT found");
             return NotFound("Initial setup page not found. Please contact admin.");
         }
 

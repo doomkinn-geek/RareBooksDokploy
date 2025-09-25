@@ -2,6 +2,8 @@
 <html>
 <head>
     <meta charset="utf-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Initial Setup</title>
     <style>
         body {
@@ -78,6 +80,11 @@
 </head>
 <body>
     <h2>Первичная настройка RareBooksService</h2>
+    
+    <div id="loadingIndicator" style="background: #e8f5e8; padding: 10px; border-radius: 5px; margin: 10px 0;">
+        ✅ Страница InitialSetup загружена успешно. JavaScript должен работать.
+    </div>
+    
     <form id="setupForm">
         <div class="section">
             <h3>Доступ администратора</h3>
@@ -241,6 +248,16 @@
     <div id="setupResult"></div>
 
     <script>
+        console.log('InitialSetup page loaded successfully!');
+        
+        // Обновляем индикатор загрузки
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        if (loadingIndicator) {
+            loadingIndicator.style.background = '#d4edda';
+            loadingIndicator.style.color = '#155724';
+            loadingIndicator.innerHTML = '✅ Страница InitialSetup загружена успешно. JavaScript работает корректно!';
+        }
+        
         const form = document.getElementById('setupForm');
         const setupResultDiv = document.getElementById('setupResult');
         const testBtn = document.getElementById('testBtn');
