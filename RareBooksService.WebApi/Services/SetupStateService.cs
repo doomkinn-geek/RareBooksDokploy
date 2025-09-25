@@ -49,17 +49,49 @@ namespace RareBooksService.WebApi.Services
                 using var scope = _serviceProvider.CreateScope();
                 var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 
-                var anyAdmins = userManager.GetUsersInRoleAsync("Admin").Result;
-                Console.WriteLine($"[SetupStateService] Found {anyAdmins.Count} admin users");
-                if (anyAdmins.Count == 0)
+                // Дополнительная диагностика
+                Console.WriteLine("[SetupStateService] Getting UserManager service - OK");
+                
+                try 
                 {
-                    Console.WriteLine("[SetupStateService] No admin users found - setup needed");
-                    _isSetupNeeded = true;
+                    var allUsers = userManager.Users.ToList();
+                    Console.WriteLine($"[SetupStateService] Total users in database: {allUsers.Count}");
+                    
+                    foreach (var user in allUsers.Take(5)) // показываем первых 5
+                    {
+                        Console.WriteLine($"[SetupStateService] User: {user.Email}, Role: {user.Role}");
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    Console.WriteLine("[SetupStateService] Admin users found - setup not needed");
-                    _isSetupNeeded = false;
+                    Console.WriteLine($"[SetupStateService] Error getting users: {ex.Message}");
+                }
+
+                try 
+                {
+                    var anyAdmins = userManager.GetUsersInRoleAsync("Admin").Result;
+                    Console.WriteLine($"[SetupStateService] Found {anyAdmins.Count} admin users via GetUsersInRoleAsync");
+                    
+                    if (anyAdmins.Count == 0)
+                    {
+                        Console.WriteLine("[SetupStateService] No admin users found - setup needed");
+                        _isSetupNeeded = true;
+                    }
+                    else
+                    {
+                        Console.WriteLine("[SetupStateService] Admin users found - setup not needed");
+                        foreach (var admin in anyAdmins.Take(3))
+                        {
+                            Console.WriteLine($"[SetupStateService] Admin user: {admin.Email}");
+                        }
+                        _isSetupNeeded = false;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[SetupStateService] Error getting admin users: {ex.Message}");
+                    Console.WriteLine("[SetupStateService] Assuming setup needed due to error");
+                    _isSetupNeeded = true;
                 }
 
                 // 2) Проверяем JWT поля
