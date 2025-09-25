@@ -11,6 +11,7 @@ namespace RareBooksService.Common.Models
         public int Id { get; set; }
         public bool IsEnabled { get; set; }
         public string Keywords { get; set; } = string.Empty;
+        public bool IsExactMatch { get; set; } = false;
         public string CategoryIds { get; set; } = string.Empty;
         public decimal MinPrice { get; set; }
         public decimal MaxPrice { get; set; }
@@ -34,6 +35,8 @@ namespace RareBooksService.Common.Models
 
         [MaxLength(2000)]
         public string? Keywords { get; set; }
+
+        public bool IsExactMatch { get; set; } = false;
 
         [MaxLength(500)]
         public string? CategoryIds { get; set; }
@@ -70,6 +73,8 @@ namespace RareBooksService.Common.Models
 
         [MaxLength(2000)]
         public string? Keywords { get; set; }
+
+        public bool IsExactMatch { get; set; } = false;
 
         [MaxLength(500)]
         public string? CategoryIds { get; set; }

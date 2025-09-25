@@ -82,7 +82,8 @@ const NotificationSettings = () => {
         keywords: '',
         categoryIds: '',
         notificationFrequencyMinutes: 60,
-        deliveryMethod: 1 // 1 = Email, 4 = Telegram
+        deliveryMethod: 1, // 1 = Email, 4 = Telegram
+        isExactMatch: false // false = нечеткий поиск, true = точное совпадение
     });
 
     // Форма подключения Telegram
@@ -147,7 +148,8 @@ const NotificationSettings = () => {
                 keywords: preference.keywords || '',
                 categoryIds: preference.categoryIds || '',
                 notificationFrequencyMinutes: preference.notificationFrequencyMinutes || 60,
-                deliveryMethod: preference.deliveryMethod
+                deliveryMethod: preference.deliveryMethod,
+                isExactMatch: preference.isExactMatch || false
             });
         } else {
             setEditingPreference(null);
@@ -156,7 +158,8 @@ const NotificationSettings = () => {
                 keywords: '',
                 categoryIds: '',
                 notificationFrequencyMinutes: 60,
-                deliveryMethod: telegramStatus?.isConnected ? 4 : 1
+                deliveryMethod: telegramStatus?.isConnected ? 4 : 1,
+                isExactMatch: false
             });
         }
         setOpenDialog(true);
@@ -336,6 +339,9 @@ const NotificationSettings = () => {
                                                     {t.frequency}: {preference.notificationFrequencyMinutes} {t.frequencyMinutes}
                                                 </Typography>
 
+                                                <Typography variant="body2" color="text.secondary" gutterBottom>
+                                                    Поиск: {preference.isExactMatch ? 'Точное совпадение' : 'Нечеткий поиск'}
+                                                </Typography>
 
                                                 {preference.lastNotificationSent && (
                                                     <Typography variant="body2" color="text.secondary">
@@ -546,6 +552,23 @@ const NotificationSettings = () => {
                                 multiline
                                 rows={2}
                             />
+                        </Grid>
+
+                        <Grid item xs={12}>
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        checked={formData.isExactMatch}
+                                        onChange={(e) => setFormData({ ...formData, isExactMatch: e.target.checked })}
+                                    />
+                                }
+                                label="Точное совпадение"
+                            />
+                            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                {formData.isExactMatch 
+                                    ? '✓ Будет искать точную фразу целиком. Например: "история реформации" найдет только точно эту фразу.'
+                                    : '✓ Будет искать все слова с учетом склонений. Например: "история реформации" найдет "истории реформаций", "историю реформации" и т.д.'}
+                            </Typography>
                         </Grid>
 
                         <Grid item xs={12} sm={6}>

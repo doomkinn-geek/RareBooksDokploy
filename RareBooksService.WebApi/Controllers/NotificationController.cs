@@ -53,6 +53,7 @@ namespace RareBooksService.WebApi.Controllers
                     Id = p.Id,
                     IsEnabled = p.IsEnabled,
                     Keywords = p.Keywords,
+                    IsExactMatch = p.IsExactMatch,
                     CategoryIds = p.CategoryIds,
                     MinPrice = p.MinPrice,
                     MaxPrice = p.MaxPrice,
@@ -93,6 +94,7 @@ namespace RareBooksService.WebApi.Controllers
                 UserId = userId,
                 IsEnabled = dto.IsEnabled,
                 Keywords = dto.Keywords ?? string.Empty,
+                IsExactMatch = dto.IsExactMatch,
                 CategoryIds = dto.CategoryIds ?? string.Empty,
                 MinPrice = dto.MinPrice,
                 MaxPrice = dto.MaxPrice,
@@ -113,6 +115,7 @@ namespace RareBooksService.WebApi.Controllers
                 Id = preference.Id,
                 IsEnabled = preference.IsEnabled,
                 Keywords = preference.Keywords,
+                IsExactMatch = preference.IsExactMatch,
                 CategoryIds = preference.CategoryIds,
                 MinPrice = preference.MinPrice,
                 MaxPrice = preference.MaxPrice,
@@ -149,6 +152,7 @@ namespace RareBooksService.WebApi.Controllers
                 Id = preference.Id,
                 IsEnabled = preference.IsEnabled,
                 Keywords = preference.Keywords,
+                IsExactMatch = preference.IsExactMatch,
                 CategoryIds = preference.CategoryIds,
                 MinPrice = preference.MinPrice,
                 MaxPrice = preference.MaxPrice,
@@ -192,6 +196,7 @@ namespace RareBooksService.WebApi.Controllers
 
             preference.IsEnabled = dto.IsEnabled;
             preference.Keywords = dto.Keywords ?? string.Empty;
+            preference.IsExactMatch = dto.IsExactMatch;
             preference.CategoryIds = dto.CategoryIds ?? string.Empty;
             preference.MinPrice = dto.MinPrice;
             preference.MaxPrice = dto.MaxPrice;
@@ -209,6 +214,7 @@ namespace RareBooksService.WebApi.Controllers
                 Id = preference.Id,
                 IsEnabled = preference.IsEnabled,
                 Keywords = preference.Keywords,
+                IsExactMatch = preference.IsExactMatch,
                 CategoryIds = preference.CategoryIds,
                 MinPrice = preference.MinPrice,
                 MaxPrice = preference.MaxPrice,

@@ -131,20 +131,11 @@ namespace RareBooksService.WebApi.Services
                 case "/settings":
                     await HandleSettingsCommandAsync(chatId, telegramId, cancellationToken);
                     break;
-                case "/list":
-                    await HandleListCommandAsync(chatId, telegramId, cancellationToken);
+                case "/my":
+                    await HandleMyCommandAsync(chatId, telegramId, cancellationToken);
                     break;
                 case "/cancel":
                     await HandleCancelCommandAsync(chatId, telegramId, cancellationToken);
-                    break;
-                case "/link":
-                    await HandleLinkCommandAsync(chatId, telegramId, command, cancellationToken);
-                    break;
-                case "/register":
-                    await HandleRegisterCommandAsync(chatId, telegramId, command, cancellationToken);
-                    break;
-                case "/login":
-                    await HandleLoginCommandAsync(chatId, telegramId, command, cancellationToken);
                     break;
                 case "/lots":
                     await HandleLotsCommandAsync(chatId, telegramId, command, cancellationToken);
@@ -168,37 +159,36 @@ namespace RareBooksService.WebApi.Services
 
             if (user == null)
             {
-                welcomeMessage.AppendLine("📋 <b>Ваш Telegram ID:</b> <code>" + telegramId + "</code>");
+                // Предлагаем перейти на сайт для привязки аккаунта
+                var linkUrl = $"https://rare-books.ru/notifications?telegramId={telegramId}";
+                
+                welcomeMessage.AppendLine("🔗 <b>Для подключения к вашему аккаунту:</b>");
                 welcomeMessage.AppendLine();
-                welcomeMessage.AppendLine("Чтобы начать получать уведомления:");
-                welcomeMessage.AppendLine("1. Скопируйте ваш ID выше");
-                welcomeMessage.AppendLine("2. Перейдите на сайт в раздел \"Уведомления\"");
-                welcomeMessage.AppendLine("3. Привяжите ваш Telegram ID к аккаунту");
-                welcomeMessage.AppendLine("4. Настройте критерии поиска интересных книг");
+                welcomeMessage.AppendLine("👆 <b>Перейдите по ссылке ниже</b> и войдите в свой аккаунт на сайте для автоматической привязки:");
+                welcomeMessage.AppendLine();
+                welcomeMessage.AppendLine($"🌐 <a href=\"{linkUrl}\">Привязать аккаунт на rare-books.ru</a>");
+                welcomeMessage.AppendLine();
+                welcomeMessage.AppendLine("📝 После привязки вы сможете:");
+                welcomeMessage.AppendLine("• Настроить критерии поиска интересных книг");
+                welcomeMessage.AppendLine("• Получать уведомления о новых лотах");
+                welcomeMessage.AppendLine("• Просматривать активные торги командой /lots");
+                welcomeMessage.AppendLine();
+                welcomeMessage.AppendLine("💡 <i>Если у вас нет аккаунта, зарегистрируйтесь на сайте</i>");
             }
             else
             {
-                welcomeMessage.AppendLine($"👋 Привет, {user.UserName ?? "пользователь"}!");
+                welcomeMessage.AppendLine($"👋 Добро пожаловать, {user.UserName ?? "пользователь"}!");
                 welcomeMessage.AppendLine();
-                welcomeMessage.AppendLine("Ваш аккаунт уже подключен к системе уведомлений.");
-                welcomeMessage.AppendLine("Используйте кнопки ниже для управления настройками:");
-                
-                var keyboard = new TelegramInlineKeyboardMarkup(); // TODO: Implement CreateMainMenuKeyboard
-                await _telegramService.SendMessageWithKeyboardAsync(chatId, welcomeMessage.ToString(), keyboard, cancellationToken);
-                return;
+                welcomeMessage.AppendLine("✅ Ваш аккаунт подключен к системе уведомлений.");
+                welcomeMessage.AppendLine();
+                welcomeMessage.AppendLine("📋 <b>Доступные команды:</b>");
+                welcomeMessage.AppendLine("• /lots - Показать активные лоты по вашим критериям");
+                welcomeMessage.AppendLine("• /my - Показать ваши настройки уведомлений");
+                welcomeMessage.AppendLine("• /settings - Перейти на сайт для настройки уведомлений");
+                welcomeMessage.AppendLine("• /help - Справка по командам");
             }
 
-            var helpKeyboard = new TelegramInlineKeyboardMarkup();
-            helpKeyboard.InlineKeyboard.Add(new List<TelegramInlineKeyboardButton>
-            {
-                new TelegramInlineKeyboardButton 
-                { 
-                    Text = "ℹ️ Справка", 
-                    CallbackData = TelegramCallbacks.Help 
-                }
-            });
-
-            await _telegramService.SendMessageWithKeyboardAsync(chatId, welcomeMessage.ToString(), helpKeyboard, cancellationToken);
+            await _telegramService.SendNotificationAsync(chatId, welcomeMessage.ToString(), cancellationToken);
         }
 
         private async Task HandleHelpCommandAsync(string chatId, CancellationToken cancellationToken)
@@ -206,34 +196,26 @@ namespace RareBooksService.WebApi.Services
             var helpMessage = new StringBuilder();
             helpMessage.AppendLine("📖 <b>Справка по командам бота</b>");
             helpMessage.AppendLine();
-            helpMessage.AppendLine("🔑 <b>Регистрация и вход:</b>");
-            helpMessage.AppendLine("/register EMAIL ПАРОЛЬ - Создать новый аккаунт");
-            helpMessage.AppendLine("/login EMAIL ПАРОЛЬ - Войти в существующий аккаунт");
-            helpMessage.AppendLine("/link ТОКЕН - Привязка через токен с сайта");
-            helpMessage.AppendLine();
             helpMessage.AppendLine("🔧 <b>Основные команды:</b>");
-            helpMessage.AppendLine("/start - Запуск бота и получение вашего ID");
-            helpMessage.AppendLine("/help - Показать эту справку");
-            helpMessage.AppendLine("/settings - Управление настройками уведомлений");
-            helpMessage.AppendLine("/list - Показать ваши настройки");
+            helpMessage.AppendLine("/start - Получить ссылку для привязки аккаунта");
             helpMessage.AppendLine("/lots - Показать активные лоты по вашим критериям");
-            helpMessage.AppendLine("/cancel - Отменить текущую операцию");
+            helpMessage.AppendLine("/my - Показать ваши настройки уведомлений");
+            helpMessage.AppendLine("/settings - Перейти на сайт для настройки уведомлений");
+            helpMessage.AppendLine("/help - Показать эту справку");
             helpMessage.AppendLine();
             helpMessage.AppendLine("🚀 <b>Быстрый старт:</b>");
-            helpMessage.AppendLine("1. <code>/register email@example.com пароль</code>");
-            helpMessage.AppendLine("2. <code>/settings</code> - настройте уведомления");
-            helpMessage.AppendLine("3. <code>/lots</code> - смотрите активные лоты");
-            helpMessage.AppendLine("4. Получайте уведомления о новых книгах!");
+            helpMessage.AppendLine("1. Используйте <code>/start</code> для получения ссылки");
+            helpMessage.AppendLine("2. Перейдите по ссылке и войдите на сайт rare-books.ru");
+            helpMessage.AppendLine("3. Настройте критерии поиска интересных книг");
+            helpMessage.AppendLine("4. Получайте уведомления о новых лотах!");
             helpMessage.AppendLine();
             helpMessage.AppendLine("📚 <b>Поиск лотов:</b>");
-            helpMessage.AppendLine("• <code>/lots</code> - показать активные лоты (стр. 1)");
-            helpMessage.AppendLine("• <code>/lots 2</code> - показать страницу 2");
-            helpMessage.AppendLine("• Лоты фильтруются по вашим настройкам");
+            helpMessage.AppendLine("• <code>/lots</code> - показать все активные лоты по вашим критериям");
+            helpMessage.AppendLine("• Лоты фильтруются по настройкам из вашего профиля");
+            helpMessage.AppendLine("• Уведомления приходят автоматически при появлении новых лотов");
             helpMessage.AppendLine();
-            helpMessage.AppendLine("📝 <b>Альтернативный способ:</b>");
-            helpMessage.AppendLine("• Зайдите на rare-books.ru");
-            helpMessage.AppendLine("• Перейдите в \"Уведомления\"");
-            helpMessage.AppendLine("• Получите токен и используйте /link");
+            helpMessage.AppendLine("🌐 <b>Сайт:</b> rare-books.ru");
+            helpMessage.AppendLine("📧 <b>Поддержка:</b> support@rare-books.ru");
 
             await _telegramService.SendNotificationAsync(chatId, helpMessage.ToString(), cancellationToken);
         }
@@ -249,10 +231,25 @@ namespace RareBooksService.WebApi.Services
                 return;
             }
 
-            await ShowSettingsMenuAsync(chatId, telegramId, cancellationToken);
+            var settingsMessage = new StringBuilder();
+            settingsMessage.AppendLine("⚙️ <b>Настройки уведомлений</b>");
+            settingsMessage.AppendLine();
+            settingsMessage.AppendLine("🌐 Для настройки критериев поиска и управления уведомлениями перейдите на сайт:");
+            settingsMessage.AppendLine();
+            settingsMessage.AppendLine("🔗 <a href=\"https://rare-books.ru/notifications\">Открыть настройки на rare-books.ru</a>");
+            settingsMessage.AppendLine();
+            settingsMessage.AppendLine("📝 На сайте вы сможете:");
+            settingsMessage.AppendLine("• Добавить новые критерии поиска книг");
+            settingsMessage.AppendLine("• Настроить ключевые слова и категории");
+            settingsMessage.AppendLine("• Выбрать режим поиска (точный/нечеткий)");
+            settingsMessage.AppendLine("• Управлять частотой уведомлений");
+            settingsMessage.AppendLine();
+            settingsMessage.AppendLine("💡 <i>Используйте команду /my для просмотра текущих настроек</i>");
+
+            await _telegramService.SendNotificationAsync(chatId, settingsMessage.ToString(), cancellationToken);
         }
 
-        private async Task HandleListCommandAsync(string chatId, string telegramId, CancellationToken cancellationToken)
+        private async Task HandleMyCommandAsync(string chatId, string telegramId, CancellationToken cancellationToken)
         {
             var user = await _telegramService.FindUserByTelegramIdAsync(telegramId, cancellationToken);
             if (user == null)
@@ -440,7 +437,7 @@ namespace RareBooksService.WebApi.Services
 
         private async Task ShowSettingsMenuAsync(string chatId, string telegramId, CancellationToken cancellationToken)
         {
-            await HandleListCommandAsync(chatId, telegramId, cancellationToken);
+            await HandleMyCommandAsync(chatId, telegramId, cancellationToken);
         }
 
         private async Task HandleLinkCommandAsync(string chatId, string telegramId, string command, CancellationToken cancellationToken)
@@ -707,79 +704,69 @@ namespace RareBooksService.WebApi.Services
                 if (user == null)
                 {
                     await _telegramService.SendNotificationAsync(chatId,
-                        "❌ Для просмотра лотов необходимо зарегистрироваться или войти в аккаунт.\n\n" +
-                        "Используйте:\n" +
-                        "• <code>/register email@example.com пароль</code>\n" +
-                        "• <code>/login email@example.com пароль</code>",
+                        "❌ Для просмотра лотов необходимо привязать аккаунт.\n\n" +
+                        "Используйте команду /start для получения ссылки на привязку.",
                         cancellationToken);
                     return;
                 }
 
-                var parts = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                int page = 1;
-                int pageSize = 5;
-
-                // Парсим номер страницы, если указан
-                if (parts.Length > 1 && int.TryParse(parts[1], out int requestedPage) && requestedPage > 0)
-                {
-                    page = requestedPage;
-                }
-
-                _logger.LogInformation("Пользователь {TelegramId} запросил активные лоты, страница {Page}", telegramId, page);
+                _logger.LogInformation("Пользователь {TelegramId} запросил активные лоты", telegramId);
 
                 using var scope = _scopeFactory.CreateScope();
                 var usersContext = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
-                var booksContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
 
-                // Получаем настройки уведомлений пользователя
+                // Получаем все настройки уведомлений пользователя
                 var notificationPreferences = await usersContext.UserNotificationPreferences
-                    .Where(np => np.UserId == user.Id && np.IsEnabled)
-                    .FirstOrDefaultAsync(cancellationToken);
+                    .Where(np => np.UserId == user.Id && np.IsEnabled && np.DeliveryMethod == NotificationDeliveryMethod.Telegram)
+                    .ToListAsync(cancellationToken);
 
-                if (notificationPreferences == null)
+                if (!notificationPreferences.Any())
                 {
                     await _telegramService.SendNotificationAsync(chatId,
-                        "📝 У вас нет активных настроек поиска.\n\n" +
-                        "Используйте <code>/settings</code> для настройки критериев поиска книг.",
+                        "📝 <b>У вас нет активных настроек поиска</b>\n\n" +
+                        "Используйте команду /settings для перехода на сайт и настройки критериев поиска книг.",
                         cancellationToken);
                     return;
                 }
 
-                // Поиск активных лотов по критериям
-                var activeLotsResult = await SearchActiveLotsAsync(booksContext, notificationPreferences, page, pageSize, cancellationToken);
+                // Используем единую логику поиска для всех настроек пользователя
+                var matchingBooks = await FindMatchingBooksAsync(notificationPreferences, null, cancellationToken);
 
-                if (activeLotsResult.TotalCount == 0)
+                if (!matchingBooks.Any())
                 {
                     await _telegramService.SendNotificationAsync(chatId,
                         "📭 <b>По вашим критериям нет активных лотов</b>\n\n" +
-                        "Попробуйте:\n" +
-                        "• Изменить настройки поиска: <code>/settings</code>\n" +
-                        "• Расширить ценовой диапазон\n" +
-                        "• Убрать фильтры по городу или году",
+                        "Попробуйте изменить настройки поиска на сайте: /settings",
                         cancellationToken);
                     return;
                 }
 
-                // Форматируем результаты для отображения
-                var message = await FormatLotsMessageAsync(activeLotsResult, page, pageSize, notificationPreferences, cancellationToken);
+                // Группируем результаты по настройкам как в уведомлениях
+                var groupedResults = new List<(UserNotificationPreference preference, List<RegularBaseBook> books)>();
                 
-                _logger.LogInformation("Отправляем пользователю {TelegramId} результат с {Count} лотами, размер сообщения: {MessageLength} символов", 
-                    telegramId, activeLotsResult.Books.Count, message.Length);
-                    
-                // Отправляем сообщение с результатами пользователю
-                bool sendResult = await _telegramService.SendNotificationAsync(chatId, message, cancellationToken);
-                
-                if (sendResult) {
-                    _logger.LogInformation("Сообщение с результатами поиска успешно отправлено пользователю {TelegramId}", telegramId);
-                } else {
-                    _logger.LogError("Ошибка при отправке сообщения пользователю {TelegramId}. Размер сообщения: {MessageLength}", 
-                        telegramId, message.Length);
-                        
-                    // Пробуем отправить только заголовок с ошибкой, если основное сообщение не отправилось
-                    await _telegramService.SendNotificationAsync(chatId, 
-                        "❌ <b>Ошибка при отправке результатов поиска</b>\n\nВозможно, сообщение слишком большое для Telegram API. Попробуйте уточнить поисковый запрос или перейти на другие страницы результатов.", 
-                        cancellationToken);
+                foreach (var preference in notificationPreferences)
+                {
+                    var booksForPreference = FilterBooksByPreference(matchingBooks, preference);
+                    if (booksForPreference.Any())
+                    {
+                        groupedResults.Add((preference, booksForPreference));
+                    }
                 }
+
+                if (!groupedResults.Any())
+                {
+                    await _telegramService.SendNotificationAsync(chatId,
+                        "📭 <b>По вашим критериям нет активных лотов</b>\n\n" +
+                        "Попробуйте изменить настройки поиска на сайте: /settings",
+                        cancellationToken);
+                    return;
+                }
+
+                // Используем ту же логику форматирования что и для уведомлений, но с заголовком для активных лотов
+                await SendActiveLotsNotificationAsync(chatId, groupedResults, cancellationToken);
+                
+                _logger.LogInformation("Отправлены результаты поиска активных лотов пользователю {TelegramId}: {GroupsCount} групп", 
+                    telegramId, groupedResults.Count);
             }
             catch (Exception ex)
             {
@@ -1435,85 +1422,121 @@ namespace RareBooksService.WebApi.Services
                 filteredBooks = filteredBooks.Where(b => categoryIds.Contains(b.CategoryId));
             }
 
-            // Фильтр по ключевым словам (основная логика поиска - ЛОГИКА AND для фраз)
+            // Фильтр по ключевым словам (поддержка точного и нечеткого поиска)
             var keywords = preference.GetKeywordsList();
             if (keywords.Any())
             {
-                // Объединяем все ключевые слова в одну фразу и разбиваем на отдельные слова
+                // Объединяем все ключевые слова в одну фразу
                 var fullPhrase = string.Join(" ", keywords);
-                var allWords = fullPhrase.Split(new char[] { ' ', ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(w => w.Trim().ToLower())
-                    .Where(w => !string.IsNullOrEmpty(w))
-                    .Distinct()
-                    .ToList();
-
-                _logger.LogInformation("Поиск по фразе: '{FullPhrase}' -> слова: [{Words}]", 
-                    fullPhrase, string.Join(", ", allWords));
-
-                // Создаем варианты поиска для каждого слова (стемминг + частичные совпадения)
-                var searchVariants = new List<List<string>>();
                 
-                foreach (var word in allWords)
+                _logger.LogInformation("Поиск по фразе: '{FullPhrase}', точное совпадение: {IsExactMatch}", 
+                    fullPhrase, preference.IsExactMatch);
+
+                if (preference.IsExactMatch)
                 {
-                    var wordVariants = new List<string> { word }; // Исходное слово
+                    // ТОЧНЫЙ ПОИСК - ищем точную фразу целиком
+                    var exactPhrase = fullPhrase.ToLower();
                     
-                    try
+                    filteredBooks = filteredBooks.Where(book =>
                     {
-                        // Стемминг
-                        string detectedLanguage;
-                        var stemmedWord = PreprocessText(word, out detectedLanguage);
-                        if (!string.IsNullOrEmpty(stemmedWord) && stemmedWord != word)
-                        {
-                            wordVariants.Add(stemmedWord.ToLower());
-                        }
+                        // Поиск точной фразы в заголовке
+                        var matchesTitle = book.Title?.ToLower().Contains(exactPhrase) == true ||
+                                         book.NormalizedTitle?.ToLower().Contains(exactPhrase) == true;
+
+                        // Поиск точной фразы в описании
+                        var matchesDescription = book.Description?.ToLower().Contains(exactPhrase) == true ||
+                                               book.NormalizedDescription?.ToLower().Contains(exactPhrase) == true;
+
+                        // Поиск точной фразы в тегах
+                        var matchesTags = book.Tags?.Any(tag => tag.ToLower().Contains(exactPhrase)) == true;
+
+                        var result = matchesTitle || matchesDescription || matchesTags;
                         
-                        // Частичные совпадения для склонений (первые 4-6 символов)
-                        if (word.Length >= 4)
+                        if (result)
                         {
-                            var partialWord = word.Substring(0, Math.Min(word.Length - 1, 6));
-                            if (!wordVariants.Contains(partialWord))
+                            _logger.LogDebug("Книга '{BookTitle}' найдена по точной фразе '{ExactPhrase}'", 
+                                book.Title, exactPhrase);
+                        }
+
+                        return result;
+                    });
+                }
+                else
+                {
+                    // НЕЧЕТКИЙ ПОИСК - логика AND для слов с учетом склонений
+                    var allWords = fullPhrase.Split(new char[] { ' ', ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(w => w.Trim().ToLower())
+                        .Where(w => !string.IsNullOrEmpty(w))
+                        .Distinct()
+                        .ToList();
+
+                    _logger.LogDebug("Нечеткий поиск по словам: [{Words}]", string.Join(", ", allWords));
+
+                    // Создаем варианты поиска для каждого слова (стемминг + частичные совпадения)
+                    var searchVariants = new List<List<string>>();
+                    
+                    foreach (var word in allWords)
+                    {
+                        var wordVariants = new List<string> { word }; // Исходное слово
+                        
+                        try
+                        {
+                            // Стемминг
+                            string detectedLanguage;
+                            var stemmedWord = PreprocessText(word, out detectedLanguage);
+                            if (!string.IsNullOrEmpty(stemmedWord) && stemmedWord != word)
                             {
-                                wordVariants.Add(partialWord);
+                                wordVariants.Add(stemmedWord.ToLower());
+                            }
+                            
+                            // Частичные совпадения для склонений (первые 4-6 символов)
+                            if (word.Length >= 4)
+                            {
+                                var partialWord = word.Substring(0, Math.Min(word.Length - 1, 6));
+                                if (!wordVariants.Contains(partialWord))
+                                {
+                                    wordVariants.Add(partialWord);
+                                }
                             }
                         }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Ошибка при обработке слова '{Word}', используем простой поиск", word);
+                        }
+                        
+                        searchVariants.Add(wordVariants.Distinct().ToList());
                     }
-                    catch (Exception ex)
+
+                    // Фильтруем книги: ВСЕ слова фразы должны найтись (логика AND)
+                    filteredBooks = filteredBooks.Where(book =>
                     {
-                        _logger.LogWarning(ex, "Ошибка при обработке слова '{Word}', используем простой поиск", word);
-                    }
-                    
-                    searchVariants.Add(wordVariants.Distinct().ToList());
+                        // Основной поиск: ВСЕ слова должны найтись в нормализованных полях
+                        var matchesText = searchVariants.All(wordVariants =>
+                            wordVariants.Any(variant =>
+                                (book.NormalizedTitle?.Contains(variant) == true) ||
+                                (book.NormalizedDescription?.Contains(variant) == true)));
+
+                        // Поиск по тегам: ВСЕ исходные слова должны найтись в тегах
+                        var matchesTags = allWords.All(word =>
+                            book.Tags?.Any(tag =>
+                                tag.ToLower().Contains(word)) == true);
+
+                        // Fallback поиск: ВСЕ слова должны найтись в исходных полях
+                        var matchesFallback = allWords.All(word =>
+                            (book.Title?.ToLower().Contains(word) == true) ||
+                            (book.Description?.ToLower().Contains(word) == true));
+
+                        var result = matchesText || matchesTags || matchesFallback;
+                        
+                        if (result)
+                        {
+                            _logger.LogDebug("Книга '{BookTitle}' соответствует нечеткой фразе '{FullPhrase}'", 
+                                book.Title, fullPhrase);
+                        }
+
+                        return result;
+                    });
                 }
-
-                // Фильтруем книги: ВСЕ слова фразы должны найтись (логика AND)
-                filteredBooks = filteredBooks.Where(book =>
-                {
-                    // Основной поиск: ВСЕ слова должны найтись в нормализованных полях
-                    var matchesText = searchVariants.All(wordVariants =>
-                        wordVariants.Any(variant =>
-                            (book.NormalizedTitle?.Contains(variant) == true) ||
-                            (book.NormalizedDescription?.Contains(variant) == true)));
-
-                    // Поиск по тегам: ВСЕ исходные слова должны найтись в тегах
-                    var matchesTags = allWords.All(word =>
-                        book.Tags?.Any(tag =>
-                            tag.ToLower().Contains(word)) == true);
-
-                    // Fallback поиск: ВСЕ слова должны найтись в исходных полях
-                    var matchesFallback = allWords.All(word =>
-                        (book.Title?.ToLower().Contains(word) == true) ||
-                        (book.Description?.ToLower().Contains(word) == true));
-
-                    var result = matchesText || matchesTags || matchesFallback;
-                    
-                    if (result)
-                    {
-                        _logger.LogDebug("Книга '{BookTitle}' соответствует фразе '{FullPhrase}'", 
-                            book.Title, fullPhrase);
-                    }
-
-                    return result;
-                });
             }
 
             return filteredBooks.OrderBy(b => b.EndDate).ToList();
@@ -1723,6 +1746,57 @@ namespace RareBooksService.WebApi.Services
 
             // ВАЖНО: Для теста пропускаем проверку частоты уведомлений
             return await ProcessNewBookNotificationsAsync(activeBookIds, cancellationToken);
+        }
+
+        /// <summary>
+        /// Отправка результатов активных лотов пользователю (для команды /lots)
+        /// </summary>
+        private async Task SendActiveLotsNotificationAsync(string telegramId, List<(UserNotificationPreference preference, List<RegularBaseBook> books)> preferencesWithBooks, CancellationToken cancellationToken)
+        {
+            int totalBooks = preferencesWithBooks.Sum(p => p.books.Count);
+            
+            _logger.LogInformation("Отправляем результаты активных лотов пользователю {TelegramId}: {PreferencesCount} критериев, {TotalBooks} книг", 
+                telegramId, preferencesWithBooks.Count, totalBooks);
+
+            // Формируем общее сообщение с группировкой по критериям
+            var message = new StringBuilder();
+            message.AppendLine("📚 <b>Активные лоты по вашим критериям</b>");
+            message.AppendLine();
+            message.AppendLine($"📊 Найдено: {totalBooks} активных лотов");
+            message.AppendLine();
+
+            // Группируем по критериям
+            foreach (var item in preferencesWithBooks)
+            {
+                var preference = item.preference;
+                var books = item.books;
+
+                if (!string.IsNullOrEmpty(preference.Keywords))
+                {
+                    message.AppendLine($"🔍 <b>По запросу:</b> {preference.Keywords}");
+                }
+                else
+                {
+                    message.AppendLine($"🔍 <b>По вашим критериям</b>");
+                }
+
+                foreach (var book in books)
+                {
+                    message.AppendLine($"📚 <b>{book.Title}</b>");
+                    message.AppendLine($"🗓️ Окончание: {book.EndDate.ToString("dd.MM.yyyy HH:mm")}");
+                    message.AppendLine($"🔗 <a href=\"https://meshok.net/item/{book.Id}\">Открыть лот №{book.Id}</a>");
+                    message.AppendLine();
+                }
+                
+                message.AppendLine("━━━━━━━━━━━━━━━━━━━━");
+                message.AppendLine();
+            }
+
+            message.AppendLine("⚙️ <code>/settings</code> - управление настройками");
+            message.AppendLine("🔄 <code>/lots</code> - обновить список лотов");
+
+            // Проверяем размер сообщения и разбиваем при необходимости
+            await SendLongMessageAsync(telegramId, message.ToString(), cancellationToken);
         }
 
         /// <summary>
