@@ -17,53 +17,47 @@ namespace RareBooksService.WebApi.Controllers
         [HttpGet("setup-status")]
         public IActionResult GetSetupStatus()
         {
-            try
+            return Ok(new
             {
-                return Ok(new 
-                { 
-                    success = true, 
-                    message = "Test endpoint working",
-                    timestamp = DateTime.UtcNow,
-                    isSetupNeeded = _setupStateService.IsInitialSetupNeeded,
-                    diagnostics = new
-                    {
-                        serverStatus = "OK",
-                        middlewareBypass = "Working"
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new 
-                { 
-                    success = false, 
-                    message = ex.Message,
-                    type = ex.GetType().Name
-                });
-            }
+                success = true,
+                message = _setupStateService.IsInitialSetupNeeded ? "Setup is required" : "System is already configured",
+                isInitialSetupNeeded = _setupStateService.IsInitialSetupNeeded
+            });
         }
 
-        [HttpPost("test-initialize")]
-        public IActionResult TestInitialize([FromBody] object payload)
+        [HttpGet("ping")]
+        public IActionResult Ping()
         {
-            try
+            return Ok(new
             {
-                return Ok(new 
-                { 
-                    success = true, 
-                    message = "Test initialization endpoint working",
-                    receivedPayload = payload?.ToString() ?? "null"
-                });
-            }
-            catch (Exception ex)
+                success = true,
+                message = "Pong! API is working."
+            });
+        }
+
+        [HttpGet("cors-test")]
+        public IActionResult CorsTest()
+        {
+            Response.Headers.Add("Access-Control-Allow-Origin", "*");
+            Response.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+            Response.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Accept");
+            
+            return Ok(new
             {
-                return StatusCode(500, new 
-                { 
-                    success = false, 
-                    message = ex.Message,
-                    type = ex.GetType().Name
-                });
-            }
+                success = true,
+                message = "CORS test successful",
+                headers = Request.Headers.ToDictionary(h => h.Key, h => h.Value.ToString())
+            });
+        }
+
+        [HttpOptions("cors-test")]
+        public IActionResult CorsTestOptions()
+        {
+            Response.Headers.Add("Access-Control-Allow-Origin", "*");
+            Response.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+            Response.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Accept");
+            
+            return Ok();
         }
     }
-} 
+}
