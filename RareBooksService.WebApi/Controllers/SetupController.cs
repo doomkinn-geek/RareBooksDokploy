@@ -76,6 +76,7 @@ namespace RareBooksService.WebApi.Controllers
 
         /// <summary>Отдаёт страницу инициализации.</summary>
         [HttpGet("")]
+        [HttpGet("index")]
         public IActionResult GetSetupPage()
         {
             // Если уже настроено — выдаём JSON-ответ с пояснением, 
