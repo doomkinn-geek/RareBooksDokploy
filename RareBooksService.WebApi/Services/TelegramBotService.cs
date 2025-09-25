@@ -1435,74 +1435,84 @@ namespace RareBooksService.WebApi.Services
                 filteredBooks = filteredBooks.Where(b => categoryIds.Contains(b.CategoryId));
             }
 
-            // Фильтр по ключевым словам (основная логика поиска)
+            // Фильтр по ключевым словам (основная логика поиска - ЛОГИКА AND для фраз)
             var keywords = preference.GetKeywordsList();
             if (keywords.Any())
             {
-                // Создаем группы поисковых терминов для каждого ключевого слова
-                var keywordGroups = new List<List<string>>();
-                var originalKeywords = new List<string>();
+                // Объединяем все ключевые слова в одну фразу и разбиваем на отдельные слова
+                var fullPhrase = string.Join(" ", keywords);
+                var allWords = fullPhrase.Split(new char[] { ' ', ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(w => w.Trim().ToLower())
+                    .Where(w => !string.IsNullOrEmpty(w))
+                    .Distinct()
+                    .ToList();
 
-                foreach (var keyword in keywords)
+                _logger.LogInformation("Поиск по фразе: '{FullPhrase}' -> слова: [{Words}]", 
+                    fullPhrase, string.Join(", ", allWords));
+
+                // Создаем варианты поиска для каждого слова (стемминг + частичные совпадения)
+                var searchVariants = new List<List<string>>();
+                
+                foreach (var word in allWords)
                 {
-                    var keywordSearchTerms = new List<string>();
-                    var lowerKeyword = keyword.ToLower();
-                    originalKeywords.Add(lowerKeyword);
+                    var wordVariants = new List<string> { word }; // Исходное слово
                     
                     try
                     {
                         // Стемминг
                         string detectedLanguage;
-                        var processedKeyword = PreprocessText(keyword, out detectedLanguage);
-                        var keywordParts = processedKeyword.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                        
-                        keywordSearchTerms.AddRange(keywordParts);
-                        
-                        // Добавляем исходное слово
-                        if (!keywordSearchTerms.Contains(lowerKeyword))
+                        var stemmedWord = PreprocessText(word, out detectedLanguage);
+                        if (!string.IsNullOrEmpty(stemmedWord) && stemmedWord != word)
                         {
-                            keywordSearchTerms.Add(lowerKeyword);
+                            wordVariants.Add(stemmedWord.ToLower());
                         }
                         
-                        // Частичные совпадения для склонений
-                        if (lowerKeyword.Length >= 4)
+                        // Частичные совпадения для склонений (первые 4-6 символов)
+                        if (word.Length >= 4)
                         {
-                            var partialWord = lowerKeyword.Substring(0, Math.Min(lowerKeyword.Length - 1, 6));
-                            if (!keywordSearchTerms.Contains(partialWord))
+                            var partialWord = word.Substring(0, Math.Min(word.Length - 1, 6));
+                            if (!wordVariants.Contains(partialWord))
                             {
-                                keywordSearchTerms.Add(partialWord);
+                                wordVariants.Add(partialWord);
                             }
                         }
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "Ошибка при обработке ключевого слова '{Keyword}', используем простой поиск", keyword);
-                        keywordSearchTerms.Add(lowerKeyword);
+                        _logger.LogWarning(ex, "Ошибка при обработке слова '{Word}', используем простой поиск", word);
                     }
                     
-                    keywordGroups.Add(keywordSearchTerms.Distinct().ToList());
+                    searchVariants.Add(wordVariants.Distinct().ToList());
                 }
 
-                // Фильтруем книги по ключевым словам
+                // Фильтруем книги: ВСЕ слова фразы должны найтись (логика AND)
                 filteredBooks = filteredBooks.Where(book =>
                 {
-                    // Основной поиск: стеммированные слова в нормализованных полях
-                    var matchesText = keywordGroups.All(group => 
-                        group.Any(searchTerm =>
-                            (book.NormalizedTitle?.Contains(searchTerm) == true) ||
-                            (book.NormalizedDescription?.Contains(searchTerm) == true)));
+                    // Основной поиск: ВСЕ слова должны найтись в нормализованных полях
+                    var matchesText = searchVariants.All(wordVariants =>
+                        wordVariants.Any(variant =>
+                            (book.NormalizedTitle?.Contains(variant) == true) ||
+                            (book.NormalizedDescription?.Contains(variant) == true)));
 
-                    // Поиск по тегам: исходные ключевые слова
-                    var matchesTags = originalKeywords.All(originalKeyword =>
+                    // Поиск по тегам: ВСЕ исходные слова должны найтись в тегах
+                    var matchesTags = allWords.All(word =>
                         book.Tags?.Any(tag =>
-                            tag.ToLower().Contains(originalKeyword)) == true);
+                            tag.ToLower().Contains(word)) == true);
 
-                    // Fallback поиск: исходные слова в исходных полях
-                    var matchesFallback = originalKeywords.All(originalKeyword =>
-                        (book.Title?.ToLower().Contains(originalKeyword) == true) ||
-                        (book.Description?.ToLower().Contains(originalKeyword) == true));
+                    // Fallback поиск: ВСЕ слова должны найтись в исходных полях
+                    var matchesFallback = allWords.All(word =>
+                        (book.Title?.ToLower().Contains(word) == true) ||
+                        (book.Description?.ToLower().Contains(word) == true));
 
-                    return matchesText || matchesTags || matchesFallback;
+                    var result = matchesText || matchesTags || matchesFallback;
+                    
+                    if (result)
+                    {
+                        _logger.LogDebug("Книга '{BookTitle}' соответствует фразе '{FullPhrase}'", 
+                            book.Title, fullPhrase);
+                    }
+
+                    return result;
                 });
             }
 
