@@ -243,6 +243,7 @@
         <button type="submit">Инициализировать систему</button>
         <button type="button" id="testBtn">Тест соединения</button>
         <button type="button" id="testPostBtn">Тест POST запроса</button>
+        <button type="button" id="testGetBtn">Тест GET запроса (обход nginx)</button>
     </form>
 
     <div id="setupResult"></div>
@@ -281,6 +282,44 @@
             } catch (err) {
                 setupResultDiv.className = 'error';
                 setupResultDiv.innerText = `❌ Ошибка теста: ${err.message}`;
+            }
+        });
+
+        // Добавляем обработчик для кнопки тестирования GET (обход nginx)
+        const testGetBtn = document.getElementById('testGetBtn');
+        testGetBtn.addEventListener('click', async () => {
+            try {
+                setupResultDiv.textContent = 'Тестирование GET запроса...';
+                setupResultDiv.className = '';
+                
+                const response = await fetch('/api/setup/test-get?data=' + encodeURIComponent('test from browser'), {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+
+                const rawText = await response.text();
+                console.log('GET Test - Raw response:', rawText);
+                console.log('GET Test - Response status:', response.status);
+                console.log('GET Test - Response headers:', [...response.headers.entries()]);
+
+                if (response.ok) {
+                    const data = JSON.parse(rawText);
+                    setupResultDiv.className = 'success';
+                    setupResultDiv.innerHTML = `✅ GET тест успешен (приложение работает!):<br>
+                        Status: ${response.status}<br>
+                        Message: ${data.message}<br>
+                        Note: ${data.note}<br>
+                        Setup needed: ${data.isSetupNeeded}<br>
+                        Timestamp: ${data.timestamp}`;
+                } else {
+                    setupResultDiv.className = 'error';
+                    setupResultDiv.innerHTML = `❌ GET тест неудачен:<br>
+                        Status: ${response.status}<br>
+                        Response: ${rawText}`;
+                }
+            } catch (err) {
+                setupResultDiv.className = 'error';
+                setupResultDiv.innerText = `❌ Ошибка GET теста: ${err.message}`;
             }
         });
 

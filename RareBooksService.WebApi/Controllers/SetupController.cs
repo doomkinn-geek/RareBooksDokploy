@@ -116,6 +116,21 @@ namespace RareBooksService.WebApi.Controllers
             });
         }
 
+        /// <summary>Временный GET endpoint для обхода nginx блокировки POST.</summary>
+        [HttpGet("test-get")]
+        public IActionResult TestGet([FromQuery] string data = "test")
+        {
+            return Ok(new 
+            { 
+                success = true, 
+                message = "GET request to /api/setup/test-get working - nginx allows this",
+                timestamp = DateTime.UtcNow,
+                isSetupNeeded = _setupStateService.IsInitialSetupNeeded,
+                receivedData = data,
+                note = "This proves the application is working, nginx is blocking POST"
+            });
+        }
+
         /// <summary>Основной метод инициализации.</summary>
         [HttpPost("initialize")]
         public async Task<IActionResult> Initialize([FromBody] SetupDto dto)
