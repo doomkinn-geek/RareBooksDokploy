@@ -12,6 +12,7 @@ namespace RareBooksService.WebApi.Services
     {
         Task<string> GenerateLinkTokenAsync(string userId, CancellationToken cancellationToken = default);
         Task<TelegramLinkResult> LinkTelegramAccountAsync(string token, string telegramId, string telegramUsername = null, CancellationToken cancellationToken = default);
+        Task<TelegramUnlinkResult> UnlinkTelegramAccountAsync(string telegramId, CancellationToken cancellationToken = default);
         Task<bool> IsTokenValidAsync(string token, CancellationToken cancellationToken = default);
         Task CleanupExpiredTokensAsync(CancellationToken cancellationToken = default);
     }
@@ -139,6 +140,57 @@ namespace RareBooksService.WebApi.Services
             };
         }
 
+        public async Task<TelegramUnlinkResult> UnlinkTelegramAccountAsync(string telegramId, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var context = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
+
+                // Ищем пользователя с данным Telegram ID
+                var user = await context.Users
+                    .FirstOrDefaultAsync(u => u.TelegramId == telegramId, cancellationToken);
+
+                if (user == null)
+                {
+                    return new TelegramUnlinkResult
+                    {
+                        Success = false,
+                        ErrorMessage = "Пользователь с данным Telegram ID не найден"
+                    };
+                }
+
+                // Сохраняем данные для результата
+                var result = new TelegramUnlinkResult
+                {
+                    Success = true,
+                    User = user,
+                    UnlinkedTelegramId = user.TelegramId,
+                    UnlinkedTelegramUsername = user.TelegramUsername
+                };
+
+                // Отвязываем Telegram аккаунт
+                user.TelegramId = null;
+                user.TelegramUsername = null;
+
+                await context.SaveChangesAsync(cancellationToken);
+
+                _logger.LogInformation("Telegram аккаунт {TelegramId} успешно отвязан от пользователя {UserId}", 
+                    telegramId, user.Id);
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при отвязке Telegram аккаунта {TelegramId}", telegramId);
+                return new TelegramUnlinkResult
+                {
+                    Success = false,
+                    ErrorMessage = "Произошла ошибка при отвязке аккаунта"
+                };
+            }
+        }
+
         public async Task<bool> IsTokenValidAsync(string token, CancellationToken cancellationToken = default)
         {
             using var scope = _scopeFactory.CreateScope();
@@ -193,5 +245,14 @@ namespace RareBooksService.WebApi.Services
         public ApplicationUser User { get; set; }
         public string LinkedTelegramId { get; set; }
         public string LinkedTelegramUsername { get; set; }
+    }
+
+    public class TelegramUnlinkResult
+    {
+        public bool Success { get; set; }
+        public string ErrorMessage { get; set; }
+        public ApplicationUser User { get; set; }
+        public string UnlinkedTelegramId { get; set; }
+        public string UnlinkedTelegramUsername { get; set; }
     }
 }

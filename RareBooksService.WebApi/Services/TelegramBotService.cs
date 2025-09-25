@@ -134,6 +134,18 @@ namespace RareBooksService.WebApi.Services
                 case "/my":
                     await HandleMyCommandAsync(chatId, telegramId, cancellationToken);
                     break;
+                case "/unlink":
+                    // Проверяем есть ли параметр confirm
+                    var parts = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length > 1 && parts[1].ToLower() == "confirm")
+                    {
+                        await HandleUnlinkConfirmAsync(chatId, telegramId, cancellationToken);
+                    }
+                    else
+                    {
+                        await HandleUnlinkCommandAsync(chatId, telegramId, cancellationToken);
+                    }
+                    break;
                 case "/cancel":
                     await HandleCancelCommandAsync(chatId, telegramId, cancellationToken);
                     break;
@@ -201,6 +213,7 @@ namespace RareBooksService.WebApi.Services
             helpMessage.AppendLine("/lots - Показать активные лоты по вашим критериям");
             helpMessage.AppendLine("/my - Показать ваши настройки уведомлений");
             helpMessage.AppendLine("/settings - Перейти на сайт для настройки уведомлений");
+            helpMessage.AppendLine("/unlink - Отвязать Telegram от аккаунта на сайте");
             helpMessage.AppendLine("/help - Показать эту справку");
             helpMessage.AppendLine();
             helpMessage.AppendLine("🚀 <b>Быстрый старт:</b>");
@@ -213,6 +226,10 @@ namespace RareBooksService.WebApi.Services
             helpMessage.AppendLine("• <code>/lots</code> - показать все активные лоты по вашим критериям");
             helpMessage.AppendLine("• Лоты фильтруются по настройкам из вашего профиля");
             helpMessage.AppendLine("• Уведомления приходят автоматически при появлении новых лотов");
+            helpMessage.AppendLine();
+            helpMessage.AppendLine("🔗 <b>Управление аккаунтом:</b>");
+            helpMessage.AppendLine("• <code>/unlink</code> - отвязать Telegram от аккаунта (требует подтверждения)");
+            helpMessage.AppendLine("• После отвязки нужно заново привязать аккаунт через /start");
             helpMessage.AppendLine();
             helpMessage.AppendLine("🌐 <b>Сайт:</b> rare-books.ru");
             helpMessage.AppendLine("📧 <b>Поддержка:</b> support@rare-books.ru");
@@ -298,6 +315,71 @@ namespace RareBooksService.WebApi.Services
 
             var keyboard = CreateSettingsListKeyboard(preferences.Take(5).ToList()); // Кнопки для первых 5 настроек
             await _telegramService.SendMessageWithKeyboardAsync(chatId, listMessage.ToString(), keyboard, cancellationToken);
+        }
+
+        private async Task HandleUnlinkCommandAsync(string chatId, string telegramId, CancellationToken cancellationToken)
+        {
+            var user = await _telegramService.FindUserByTelegramIdAsync(telegramId, cancellationToken);
+            if (user == null)
+            {
+                await _telegramService.SendNotificationAsync(chatId, 
+                    "❌ Ваш аккаунт не подключен к системе. Нет аккаунта для отвязки.", 
+                    cancellationToken);
+                return;
+            }
+
+            // Запрашиваем подтверждение
+            var confirmMessage = new StringBuilder();
+            confirmMessage.AppendLine("⚠️ <b>Подтверждение отвязки аккаунта</b>");
+            confirmMessage.AppendLine();
+            confirmMessage.AppendLine($"Вы действительно хотите отвязать этот Telegram от аккаунта <b>{user.Email}</b>?");
+            confirmMessage.AppendLine();
+            confirmMessage.AppendLine("📝 <b>После отвязки:</b>");
+            confirmMessage.AppendLine("• Вы перестанете получать уведомления о новых лотах");
+            confirmMessage.AppendLine("• Команды бота станут недоступны");
+            confirmMessage.AppendLine("• Для повторного использования потребуется заново привязать аккаунт");
+            confirmMessage.AppendLine();
+            confirmMessage.AppendLine("Для подтверждения отправьте: <code>/unlink confirm</code>");
+            confirmMessage.AppendLine("Для отмены используйте: <code>/cancel</code>");
+
+            await _telegramService.SendNotificationAsync(chatId, confirmMessage.ToString(), cancellationToken);
+        }
+
+        private async Task HandleUnlinkConfirmAsync(string chatId, string telegramId, CancellationToken cancellationToken)
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var linkService = scope.ServiceProvider.GetRequiredService<ITelegramLinkService>();
+                
+                var result = await linkService.UnlinkTelegramAccountAsync(telegramId, cancellationToken);
+                
+                if (result.Success)
+                {
+                    var successMessage = new StringBuilder();
+                    successMessage.AppendLine("✅ <b>Аккаунт успешно отвязан!</b>");
+                    successMessage.AppendLine();
+                    successMessage.AppendLine($"Telegram отвязан от аккаунта: <b>{result.User.Email}</b>");
+                    successMessage.AppendLine();
+                    successMessage.AppendLine("🔗 <b>Для повторного подключения:</b>");
+                    successMessage.AppendLine("Используйте команду /start и перейдите по ссылке для привязки нового аккаунта.");
+                    
+                    await _telegramService.SendNotificationAsync(chatId, successMessage.ToString(), cancellationToken);
+                }
+                else
+                {
+                    await _telegramService.SendNotificationAsync(chatId, 
+                        $"❌ <b>Ошибка отвязки:</b> {result.ErrorMessage}", 
+                        cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при отвязке аккаунта для Telegram ID {TelegramId}", telegramId);
+                await _telegramService.SendNotificationAsync(chatId, 
+                    "❌ Произошла ошибка при отвязке аккаунта. Попробуйте позже.", 
+                    cancellationToken);
+            }
         }
 
         private async Task HandleCancelCommandAsync(string chatId, string telegramId, CancellationToken cancellationToken)
