@@ -154,5 +154,34 @@ namespace RareBooksService.WebApi.Controllers
                 data = data?.ToString() ?? "null"
             });
         }
+
+        /// <summary>Диагностический endpoint для проверки прямого доступа</summary>
+        [HttpGet("external")]
+        public IActionResult ExternalTest()
+        {
+            var timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff");
+            
+            Console.WriteLine($"[{timestamp}] [TestController] ======== EXTERNAL TEST CALLED ========");
+            Console.WriteLine($"[{timestamp}] [TestController] Host: {Request.Host}");
+            Console.WriteLine($"[{timestamp}] [TestController] User-Agent: {Request.Headers["User-Agent"].FirstOrDefault() ?? "null"}");
+            Console.WriteLine($"[{timestamp}] [TestController] X-Forwarded-For: {Request.Headers["X-Forwarded-For"].FirstOrDefault() ?? "null"}");
+            Console.WriteLine($"[{timestamp}] [TestController] X-Real-IP: {Request.Headers["X-Real-IP"].FirstOrDefault() ?? "null"}");
+            
+            _logger.LogInformation("TestController.ExternalTest called from {Host}", Request.Host);
+            
+            return Ok(new 
+            { 
+                success = true, 
+                message = "🎯 EXTERNAL ACCESS OK - nginx проксирует запросы к ASP.NET Core",
+                timestamp = DateTime.UtcNow,
+                host = Request.Host.ToString(),
+                userAgent = Request.Headers["User-Agent"].FirstOrDefault() ?? "null",
+                realIP = Request.Headers["X-Real-IP"].FirstOrDefault() ?? "null",
+                forwardedFor = Request.Headers["X-Forwarded-For"].FirstOrDefault() ?? "null",
+                scheme = Request.Scheme,
+                controllerReached = true,
+                note = "If you see this, nginx is working correctly"
+            });
+        }
     }
 } 
