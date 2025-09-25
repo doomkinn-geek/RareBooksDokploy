@@ -25,10 +25,10 @@ namespace RareBooksService.WebApi.Services
 
         public void DetermineIfSetupNeeded()
         {
-            // ДИАГНОСТИКА: отключаем принудительный режим, чтобы проверить реальное состояние
-            //_isSetupNeeded = true;
-            //Console.WriteLine("[SetupStateService] DIAGNOSTIC MODE: Force IsInitialSetupNeeded = true");
-            //return;
+            // ВРЕМЕННО: принудительно отключаем setup режим для разблокировки системы
+            _isSetupNeeded = false;
+            Console.WriteLine("[SetupStateService] EMERGENCY BYPASS: Force IsInitialSetupNeeded = false - система разблокирована!");
+            return;
             
             try
             {
