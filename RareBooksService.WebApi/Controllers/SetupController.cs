@@ -74,6 +74,16 @@ namespace RareBooksService.WebApi.Controllers
             public string TelegramBotToken {  get; set; }
         }
 
+        /// <summary>Проверка состояния инициализации (для диагностики).</summary>
+        [HttpGet("status")]
+        public IActionResult GetSetupStatus()
+        {
+            return Ok(new { 
+                isInitialSetupNeeded = _setupStateService.IsInitialSetupNeeded,
+                message = _setupStateService.IsInitialSetupNeeded ? "Setup is required" : "System is already configured"
+            });
+        }
+
         /// <summary>Отдаёт страницу инициализации.</summary>
         [HttpGet("")]
         [HttpGet("index")]
