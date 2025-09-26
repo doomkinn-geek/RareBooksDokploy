@@ -368,9 +368,6 @@ namespace RareBooksService.WebApi
                 // Настройка статических файлов
                 app.UseStaticFiles();
                 
-                // Временно отключаем middleware для диагностики 502 ошибки
-                // app.UseMiddleware<RareBooksService.WebApi.Middleware.FileDownloadLoggingMiddleware>();
-                
                 app.UseAuthentication();
                 app.UseAuthorization();
 
