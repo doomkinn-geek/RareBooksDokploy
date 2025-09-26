@@ -368,6 +368,8 @@ namespace RareBooksService.WebApi
                 // Настройка статических файлов
                 app.UseStaticFiles();
                 
+
+
                 app.UseAuthentication();
                 app.UseAuthorization();
 
