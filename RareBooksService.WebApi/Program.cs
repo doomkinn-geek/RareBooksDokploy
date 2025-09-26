@@ -320,9 +320,8 @@ namespace RareBooksService.WebApi
                     }
                 }
 
-                // Middleware: ���� IsInitialSetupNeeded == true � ����� InitialSetup
+                // Middleware для блокировки API если система не настроена
                 app.Use(async (context, next) =>
-                
                 {
                     // ВСЕГДА пропускаем OPTIONS запросы (CORS preflight)
                     if (context.Request.Method == "OPTIONS")
@@ -333,7 +332,6 @@ namespace RareBooksService.WebApi
 
                     // Пропускаем /api/setup/, /api/setupcheck/, /api/test/ и /api/telegramdiagnostics/
                     if (context.Request.Path.StartsWithSegments("/api/setup") ||
-                        context.Request.Path.StartsWithSegments("/setup") ||
                         context.Request.Path.StartsWithSegments("/api/setupcheck") ||
                         context.Request.Path.StartsWithSegments("/api/test") ||
                         context.Request.Path.StartsWithSegments("/api/telegramdiagnostics"))
@@ -342,30 +340,15 @@ namespace RareBooksService.WebApi
                         return;
                     }
 
-                    // ���� IsInitialSetupNeeded
-                    if (setupService.IsInitialSetupNeeded)
+                    // Если система не настроена, блокируем остальные API вызовы
+                    if (setupService.IsInitialSetupNeeded && context.Request.Path.StartsWithSegments("/api"))
                     {
-                        if (context.Request.Path.StartsWithSegments("/api"))
-                        {
-                            context.Response.StatusCode = 403;
-                            await context.Response.WriteAsync("System not configured. Please do initial setup via /api/setup or special HTML page.");
-                            return;
-                        }
-                        var filePath = Path.Combine(app.Environment.ContentRootPath, "InitialSetup", "index.html");
-                        if (System.IO.File.Exists(filePath))
-                        {
-                            context.Response.ContentType = "text/html; charset=utf-8";
-                            await context.Response.SendFileAsync(filePath);
-                        }
-                        else
-                        {
-                            context.Response.StatusCode = 404;
-                            await context.Response.WriteAsync("InitialSetup page not found. Please contact admin.");
-                        }
+                        context.Response.StatusCode = 403;
+                        await context.Response.WriteAsync("System not configured. Please do initial setup via /api/setup.");
                         return;
                     }
 
-                    // ����� � �� ��
+                    // Остальные запросы пропускаем дальше
                     await next.Invoke();
                 });
 
@@ -382,14 +365,8 @@ namespace RareBooksService.WebApi
                 app.UseCors("AllowAll");
                 app.UseRouting();
                 
-                // Настройка статических файлов с доступом к InitialSetup
+                // Настройка статических файлов
                 app.UseStaticFiles();
-                app.UseStaticFiles(new StaticFileOptions
-                {
-                    FileProvider = new PhysicalFileProvider(
-                        Path.Combine(app.Environment.ContentRootPath, "InitialSetup")),
-                    RequestPath = "/setup"
-                });
                 
                 // Временно отключаем middleware для диагностики 502 ошибки
                 // app.UseMiddleware<RareBooksService.WebApi.Middleware.FileDownloadLoggingMiddleware>();
