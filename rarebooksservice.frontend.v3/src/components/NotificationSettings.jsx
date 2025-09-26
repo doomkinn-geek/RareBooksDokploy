@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
     Box,
     Paper,
@@ -65,6 +66,7 @@ import {
 const NotificationSettings = () => {
     const { language } = useContext(LanguageContext);
     const t = translations[language];
+    const [searchParams] = useSearchParams();
 
     const [preferences, setPreferences] = useState([]);
     const [history, setHistory] = useState([]);
@@ -98,7 +100,13 @@ const NotificationSettings = () => {
 
     useEffect(() => {
         loadData();
-    }, []);
+        
+        // Проверяем, есть ли telegramId в URL для автоматической привязки
+        const telegramIdFromUrl = searchParams.get('telegramId');
+        if (telegramIdFromUrl) {
+            handleAutoLinkTelegram(telegramIdFromUrl);
+        }
+    }, [searchParams]);
 
     const loadData = async () => {
         setLoading(true);
@@ -226,6 +234,45 @@ const NotificationSettings = () => {
         } catch (error) {
             console.error('Error generating link token:', error);
             showSnackbar(error.message || t.error, 'error');
+        }
+    };
+
+    // Автоматическая привязка Telegram аккаунта по ID из URL
+    const handleAutoLinkTelegram = async (telegramId) => {
+        try {
+            setLoading(true);
+            showSnackbar('Выполняется привязка Telegram аккаунта...', 'info');
+
+            const response = await fetch('/api/notification/telegram/auto-link', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('jwt')}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ telegramId })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Ошибка при привязке аккаунта');
+            }
+
+            const data = await response.json();
+            showSnackbar('🎉 Telegram аккаунт успешно привязан!', 'success');
+            
+            // Обновляем статус Telegram
+            await loadData();
+            
+            // Удаляем telegramId из URL, чтобы избежать повторной обработки
+            const url = new URL(window.location);
+            url.searchParams.delete('telegramId');
+            window.history.replaceState({}, '', url);
+            
+        } catch (error) {
+            console.error('Error auto-linking telegram:', error);
+            showSnackbar(error.message || 'Ошибка при автоматической привязке Telegram', 'error');
+        } finally {
+            setLoading(false);
         }
     };
 

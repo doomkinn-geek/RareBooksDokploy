@@ -446,6 +446,82 @@ namespace RareBooksService.WebApi.Controllers
         }
 
         /// <summary>
+        /// Автоматическая привязка Telegram аккаунта (для ссылок из бота)
+        /// </summary>
+        [HttpPost("telegram/auto-link")]
+        public async Task<ActionResult> AutoLinkTelegram([FromBody] AutoLinkTelegramDto dto)
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (userId == null) return Unauthorized();
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null) return NotFound("Пользователь не найден");
+
+            try
+            {
+                // Проверяем, не привязан ли уже Telegram к этому пользователю
+                if (!string.IsNullOrEmpty(user.TelegramId))
+                {
+                    if (user.TelegramId == dto.TelegramId)
+                    {
+                        return Ok(new { message = "Telegram аккаунт уже привязан к вашему аккаунту" });
+                    }
+                    else
+                    {
+                        return BadRequest(new { message = "К вашему аккаунту уже привязан другой Telegram аккаунт" });
+                    }
+                }
+
+                // Проверяем, не используется ли этот Telegram ID другим пользователем
+                var existingUser = await _userManager.Users
+                    .FirstOrDefaultAsync(u => u.TelegramId == dto.TelegramId && u.Id != userId);
+                
+                if (existingUser != null)
+                {
+                    return BadRequest(new { message = "Этот Telegram аккаунт уже привязан к другому пользователю" });
+                }
+
+                // Привязываем Telegram к пользователю
+                user.TelegramId = dto.TelegramId;
+
+                var result = await _userManager.UpdateAsync(user);
+                if (!result.Succeeded)
+                {
+                    return BadRequest(new { message = "Ошибка при обновлении данных пользователя" });
+                }
+
+                _logger.LogInformation("Telegram ID {TelegramId} автоматически привязан к пользователю {UserId} ({Email})", 
+                    dto.TelegramId, userId, user.Email);
+
+                // Отправляем уведомление в Telegram об успешной привязке
+                try
+                {
+                    await _telegramService.SendNotificationAsync(dto.TelegramId,
+                        $"🎉 <b>Аккаунт успешно привязан!</b>\n\n" +
+                        $"Ваш Telegram теперь привязан к аккаунту <b>{user.Email}</b> на сайте rare-books.ru.\n\n" +
+                        "✅ Теперь вы будете получать уведомления о новых интересных лотах прямо в Telegram!\n\n" +
+                        "📋 Доступные команды:\n" +
+                        "• /lots - показать активные лоты по вашим критериям\n" +
+                        "• /my - показать ваши настройки уведомлений\n" +
+                        "• /settings - перейти на сайт для настройки уведомлений\n" +
+                        "• /help - справка по командам бота");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Не удалось отправить уведомление о привязке пользователю {TelegramId}", dto.TelegramId);
+                }
+
+                return Ok(new { message = "Telegram аккаунт успешно привязан" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при автоматической привязке Telegram ID {TelegramId} к пользователю {UserId}", 
+                    dto.TelegramId, userId);
+                return StatusCode(500, new { message = "Внутренняя ошибка сервера при привязке аккаунта" });
+            }
+        }
+
+        /// <summary>
         /// Получить информацию о подключении к Telegram
         /// </summary>
         [HttpGet("telegram/status")]
@@ -530,5 +606,10 @@ namespace RareBooksService.WebApi.Controllers
         public string Token { get; set; }
         public DateTime ExpiresAt { get; set; }
         public string[] Instructions { get; set; }
+    }
+
+    public class AutoLinkTelegramDto
+    {
+        public string TelegramId { get; set; }
     }
 }
