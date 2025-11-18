@@ -161,7 +161,7 @@ const NavBar = () => {
                                 <ListItemIcon><NotificationsIcon /></ListItemIcon>
                                 <ListItemText primary={language === 'RU' ? 'Уведомления' : 'Notifications'} />
                             </ListItem>
-                            {user.hasCollectionAccess && (
+                            {(user.hasCollectionAccess || user.HasCollectionAccess) && (
                                 <ListItem button onClick={() => handleNavigate('/collection')}>
                                     <ListItemIcon><CollectionsBookmarkIcon /></ListItemIcon>
                                     <ListItemText primary={language === 'RU' ? 'Моя коллекция' : 'My Collection'} />
@@ -257,7 +257,7 @@ const NavBar = () => {
                                     >
                                         {language === 'RU' ? 'Избранное' : 'Favorites'}
                                     </Button>
-                                    {user.hasCollectionAccess && (
+                                    {(user.hasCollectionAccess || user.HasCollectionAccess) && (
                                         <Button 
                                             color="inherit" 
                                             component={Link} 

@@ -1,11 +1,13 @@
 ﻿using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection; // Добавлено для GetRequiredService
 using Microsoft.Extensions.Logging; // Добавлено для ILogger
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
 using RareBooksService.Common.Models;
+using RareBooksService.Data;
 using RareBooksService.WebApi.Services;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -23,6 +25,7 @@ namespace RareBooksService.WebApi.Controllers
         private readonly ILogger<AuthController> _logger; // Добавлено для логирования
         private readonly ICaptchaService _captchaService;
         private readonly IMemoryCache _memoryCache;
+        private readonly UsersDbContext _context;
 
         public AuthController(
             UserManager<ApplicationUser> userManager,
@@ -30,7 +33,8 @@ namespace RareBooksService.WebApi.Controllers
             IConfiguration configuration,
             ILogger<AuthController> logger,
             ICaptchaService captchaService,
-            IMemoryCache memoryCache)
+            IMemoryCache memoryCache,
+            UsersDbContext context)
             : base(userManager)
         {
             _signInManager = signInManager;
@@ -38,6 +42,7 @@ namespace RareBooksService.WebApi.Controllers
             _logger = logger;
             _captchaService = captchaService;
             _memoryCache = memoryCache;
+            _context = context;
         }
 
         [HttpGet("captcha")]
@@ -174,15 +179,42 @@ namespace RareBooksService.WebApi.Controllers
                 return NotFound("Пользователь не найден");
             }
 
-            var user = await _userManager.FindByIdAsync(userId);
+            // Загружаем пользователя с подписками и планами подписок
+            var user = await _context.Users
+                .Include(u => u.Subscriptions)
+                    .ThenInclude(s => s.SubscriptionPlan)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+
             if (user == null)
             {
                 _logger.LogWarning("Пользователь с ID {UserId} не найден", userId);
                 return NotFound("Пользователь не найден");
             }
 
-            _logger.LogInformation("Информация о пользователе с ID {UserId} успешно получена", userId);
-            return Ok(user);
+            // Добавляем вычисляемое свойство для удобства на frontend
+            var currentSubscription = user.Subscriptions?.FirstOrDefault(s => s.IsActive);
+            var hasCollectionAccess = currentSubscription?.SubscriptionPlan?.HasCollectionAccess ?? false;
+
+            _logger.LogInformation("Информация о пользователе с ID {UserId} успешно получена. HasCollectionAccess: {HasCollectionAccess}", 
+                userId, hasCollectionAccess);
+
+            // Возвращаем пользователя с дополнительным полем для удобства
+            var response = new
+            {
+                user.Id,
+                user.UserName,
+                user.Email,
+                user.Role,
+                user.HasSubscription,
+                user.CreatedAt,
+                user.TelegramId,
+                user.TelegramUsername,
+                Subscriptions = user.Subscriptions,
+                CurrentSubscription = currentSubscription,
+                HasCollectionAccess = hasCollectionAccess
+            };
+
+            return Ok(response);
         }
 
         private async Task<string> GenerateJwtTokenAsync(ApplicationUser user)
