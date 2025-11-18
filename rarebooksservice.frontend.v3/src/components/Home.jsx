@@ -66,6 +66,7 @@ import FindInPageIcon from '@mui/icons-material/FindInPage';
 import LoopIcon from '@mui/icons-material/Loop';
 import StorageIcon from '@mui/icons-material/Storage';
 import LockIcon from '@mui/icons-material/Lock';
+import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
 
 const Home = () => {
     const { user, setUser, loading } = useContext(UserContext);
@@ -855,6 +856,84 @@ const Home = () => {
                         </Typography>
                     </Paper>
                 </Grid>
+                
+                {user && (user.hasCollectionAccess || user.HasCollectionAccess) && (
+                    <Grid item xs={12} md={6}>
+                        <Paper elevation={3} sx={{ 
+                            p: 2, 
+                            height: '100%', 
+                            position: 'relative', 
+                            borderLeft: '4px solid #667eea',
+                            borderRadius: '4px',
+                            bgcolor: 'linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%)',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s',
+                            '&:hover': {
+                                transform: 'translateY(-4px)',
+                                boxShadow: 6
+                            }
+                        }}
+                        onClick={() => navigate('/collection')}
+                        >
+                            <Box sx={{ 
+                                position: 'absolute', 
+                                top: 10, 
+                                right: 10, 
+                                bgcolor: '#667eea', 
+                                color: 'white', 
+                                width: 24, 
+                                height: 24, 
+                                borderRadius: '50%', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                fontWeight: 'bold'
+                            }}>
+                                5
+                            </Box>
+                            <Typography variant="h6" gutterBottom fontWeight="bold" sx={{ color: '#333' }}>
+                                <CollectionsBookmarkIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#667eea' }} />
+                                {language === 'RU' ? 'Управление коллекцией' : 'Collection Management'}
+                            </Typography>
+                            <Typography variant="body2" paragraph sx={{ color: '#555' }}>
+                                {language === 'RU' 
+                                    ? 'Ведите учет вашей коллекции редких книг с автоматической оценкой стоимости.'
+                                    : 'Manage your rare book collection with automatic value estimation.'}
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: '#555' }}>
+                                {language === 'RU' 
+                                    ? 'Добавляйте книги, загружайте изображения, находите аналоги и'
+                                    : 'Add books, upload images, find matches and'}
+                                <Chip 
+                                    label={language === 'RU' ? 'экспортируйте отчеты' : 'export reports'}
+                                    size="small" 
+                                    sx={{ 
+                                        mx: 1, 
+                                        fontWeight: 'bold',
+                                        bgcolor: '#667eea',
+                                        color: 'white'
+                                    }} 
+                                />
+                                {language === 'RU' 
+                                    ? 'в PDF и JSON.'
+                                    : 'in PDF and JSON.'}
+                            </Typography>
+                            <Button 
+                                variant="contained" 
+                                fullWidth 
+                                sx={{ 
+                                    mt: 2, 
+                                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                    '&:hover': {
+                                        background: 'linear-gradient(135deg, #5568d3 0%, #63408a 100%)'
+                                    }
+                                }}
+                            >
+                                {language === 'RU' ? 'Перейти к коллекции' : 'Go to Collection'}
+                            </Button>
+                        </Paper>
+                    </Grid>
+                )}
             </Grid>
 
             <Typography variant="h3" gutterBottom sx={{ 

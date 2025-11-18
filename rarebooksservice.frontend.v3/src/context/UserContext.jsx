@@ -56,6 +56,8 @@ export const UserProvider = ({ children }) => {
             console.log('refreshUser - Полученные данные пользователя:', response.data);
             // Проверяем наличие hasSubscription
             console.log('refreshUser - hasSubscription:', response.data.hasSubscription);
+            console.log('refreshUser - HasCollectionAccess:', response.data.hasCollectionAccess || response.data.HasCollectionAccess);
+            console.log('refreshUser - CurrentSubscription:', response.data.currentSubscription || response.data.CurrentSubscription);
             
             setUser(response.data);
             console.log('refreshUser - Пользователь успешно установлен в контекст');
