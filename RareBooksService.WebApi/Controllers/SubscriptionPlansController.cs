@@ -57,8 +57,8 @@ namespace RareBooksService.WebApi.Controllers
                 return BadRequest("Price must be >= 0.");
 
             // Логируем данные плана для отладки
-            _logger.LogInformation("Создание нового плана подписки: {Name}, Цена: {Price}, Лимит: {Limit}, Описание: {Description}", 
-                plan.Name, plan.Price, plan.MonthlyRequestLimit, plan.Description ?? "не указано");
+            _logger.LogInformation("Создание нового плана подписки: {Name}, Цена: {Price}, Лимит: {Limit}, Описание: {Description}, Доступ к коллекции: {HasCollectionAccess}", 
+                plan.Name, plan.Price, plan.MonthlyRequestLimit, plan.Description ?? "не указано", plan.HasCollectionAccess);
 
             _context.SubscriptionPlans.Add(plan);
             await _context.SaveChangesAsync();
@@ -82,18 +82,19 @@ namespace RareBooksService.WebApi.Controllers
 
             // Логируем изменения для отладки
             _logger.LogInformation(
-                "Обновление плана подписки ID {PlanId}. Старые значения: Name={OldName}, Price={OldPrice}, Limit={OldLimit}, Description={OldDescription}",
-                id, existing.Name, existing.Price, existing.MonthlyRequestLimit, existing.Description ?? "не указано");
+                "Обновление плана подписки ID {PlanId}. Старые значения: Name={OldName}, Price={OldPrice}, Limit={OldLimit}, Description={OldDescription}, HasCollectionAccess={OldHasCollectionAccess}",
+                id, existing.Name, existing.Price, existing.MonthlyRequestLimit, existing.Description ?? "не указано", existing.HasCollectionAccess);
             
             _logger.LogInformation(
-                "Новые значения: Name={NewName}, Price={NewPrice}, Limit={NewLimit}, Description={NewDescription}",
-                plan.Name, plan.Price, plan.MonthlyRequestLimit, plan.Description ?? "не указано");
+                "Новые значения: Name={NewName}, Price={NewPrice}, Limit={NewLimit}, Description={NewDescription}, HasCollectionAccess={NewHasCollectionAccess}",
+                plan.Name, plan.Price, plan.MonthlyRequestLimit, plan.Description ?? "не указано", plan.HasCollectionAccess);
 
             existing.Name = plan.Name;
             existing.Price = plan.Price;
             existing.MonthlyRequestLimit = plan.MonthlyRequestLimit;
             existing.IsActive = plan.IsActive;
             existing.Description = plan.Description;
+            existing.HasCollectionAccess = plan.HasCollectionAccess;
 
             await _context.SaveChangesAsync();
             _logger.LogInformation("План подписки ID {PlanId} успешно обновлен", id);
