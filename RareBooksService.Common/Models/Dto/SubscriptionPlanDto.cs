@@ -14,5 +14,6 @@ namespace RareBooksService.Common.Models.Dto
         public decimal Price { get; set; }
         public int MonthlyRequestLimit { get; set; }
         public bool IsActive { get; set; }
+        public bool HasCollectionAccess { get; set; }
     }
 }

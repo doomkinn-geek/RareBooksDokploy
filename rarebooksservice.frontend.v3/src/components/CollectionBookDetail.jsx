@@ -1,0 +1,717 @@
+import React, { useState, useEffect } from 'react';
+import {
+    Box, Typography, Button, Paper, Alert, CircularProgress, Grid,
+    TextField, Dialog, DialogTitle, DialogContent, DialogActions,
+    IconButton, Chip, Divider, Card, CardContent
+} from '@mui/material';
+import {
+    ArrowBack as BackIcon,
+    Edit as EditIcon,
+    Delete as DeleteIcon,
+    Save as SaveIcon,
+    Cancel as CancelIcon,
+    AttachMoney as MoneyIcon,
+    Search as SearchIcon,
+    ChevronLeft, ChevronRight
+} from '@mui/icons-material';
+import { useNavigate, useParams } from 'react-router-dom';
+import axios from 'axios';
+import { API_URL } from '../api';
+import Cookies from 'js-cookie';
+import CollectionImageUploader from './CollectionImageUploader';
+import CollectionBookMatches from './CollectionBookMatches';
+
+const CollectionBookDetail = () => {
+    const { id } = useParams();
+    const navigate = useNavigate();
+
+    const [book, setBook] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [editMode, setEditMode] = useState(false);
+    const [uploading, setUploading] = useState(false);
+
+    // Форма редактирования
+    const [formData, setFormData] = useState({
+        title: '',
+        author: '',
+        yearPublished: '',
+        description: '',
+        notes: '',
+        estimatedPrice: '',
+        isManuallyPriced: false
+    });
+
+    // Диалог ручной установки цены
+    const [priceDialogOpen, setPriceDialogOpen] = useState(false);
+    const [manualPrice, setManualPrice] = useState('');
+
+    // Галерея
+    const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+    // Поиск аналогов
+    const [searchingMatches, setSearchingMatches] = useState(false);
+
+    useEffect(() => {
+        loadBook();
+    }, [id]);
+
+    const loadBook = async () => {
+        try {
+            setLoading(true);
+            const token = Cookies.get('token');
+            const response = await axios.get(`${API_URL}/usercollection/${id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            
+            const bookData = response.data;
+            setBook(bookData);
+            setFormData({
+                title: bookData.title || '',
+                author: bookData.author || '',
+                yearPublished: bookData.yearPublished || '',
+                description: bookData.description || '',
+                notes: bookData.notes || '',
+                estimatedPrice: bookData.estimatedPrice || '',
+                isManuallyPriced: bookData.isManuallyPriced || false
+            });
+            setError('');
+        } catch (err) {
+            console.error('Error loading book:', err);
+            setError('Не удалось загрузить информацию о книге');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleUpdate = async () => {
+        try {
+            const token = Cookies.get('token');
+            const updateData = {
+                id: parseInt(id),
+                title: formData.title,
+                author: formData.author || null,
+                yearPublished: formData.yearPublished ? parseInt(formData.yearPublished) : null,
+                description: formData.description || null,
+                notes: formData.notes || null,
+                estimatedPrice: formData.estimatedPrice ? parseFloat(formData.estimatedPrice) : null,
+                referenceBookId: book.referenceBookId || null
+            };
+
+            await axios.put(`${API_URL}/usercollection/${id}`, updateData, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            await loadBook();
+            setEditMode(false);
+            setError('');
+        } catch (err) {
+            console.error('Error updating book:', err);
+            setError('Не удалось обновить информацию о книге');
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!window.confirm('Вы уверены, что хотите удалить эту книгу из коллекции?')) {
+            return;
+        }
+
+        try {
+            const token = Cookies.get('token');
+            await axios.delete(`${API_URL}/usercollection/${id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            navigate('/collection');
+        } catch (err) {
+            console.error('Error deleting book:', err);
+            setError('Не удалось удалить книгу');
+        }
+    };
+
+    const handleImageUpload = async (file) => {
+        setUploading(true);
+        try {
+            const token = Cookies.get('token');
+            const formData = new FormData();
+            formData.append('file', file);
+
+            await axios.post(`${API_URL}/usercollection/${id}/images`, formData, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+
+            await loadBook();
+        } catch (err) {
+            console.error('Error uploading image:', err);
+            throw new Error('Не удалось загрузить изображение');
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const handleImageDelete = async (imageId) => {
+        if (!window.confirm('Удалить это изображение?')) {
+            return;
+        }
+
+        try {
+            const token = Cookies.get('token');
+            await axios.delete(`${API_URL}/usercollection/${id}/images/${imageId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            await loadBook();
+        } catch (err) {
+            console.error('Error deleting image:', err);
+            setError('Не удалось удалить изображение');
+        }
+    };
+
+    const handleSetMainImage = async (imageId) => {
+        try {
+            const token = Cookies.get('token');
+            await axios.put(`${API_URL}/usercollection/${id}/images/${imageId}/setmain`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            await loadBook();
+        } catch (err) {
+            console.error('Error setting main image:', err);
+            setError('Не удалось установить главное изображение');
+        }
+    };
+
+    const handleFindMatches = async () => {
+        try {
+            setSearchingMatches(true);
+            const token = Cookies.get('token');
+            const response = await axios.get(`${API_URL}/usercollection/${id}/matches`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            // Обновляем книгу с новыми аналогами
+            setBook({
+                ...book,
+                suggestedMatches: response.data
+            });
+        } catch (err) {
+            console.error('Error finding matches:', err);
+            setError('Не удалось найти аналоги');
+        } finally {
+            setSearchingMatches(false);
+        }
+    };
+
+    const handleSelectReference = async (referenceBookId) => {
+        try {
+            const token = Cookies.get('token');
+            await axios.post(`${API_URL}/usercollection/${id}/reference`, 
+                { referenceBookId: referenceBookId },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            await loadBook();
+            setError('');
+        } catch (err) {
+            console.error('Error selecting reference:', err);
+            setError('Не удалось выбрать референсную книгу');
+        }
+    };
+
+    const handleSetManualPrice = async () => {
+        if (!manualPrice || isNaN(parseFloat(manualPrice))) {
+            setError('Введите корректную цену');
+            return;
+        }
+
+        try {
+            const token = Cookies.get('token');
+            const updateData = {
+                id: parseInt(id),
+                title: formData.title,
+                author: formData.author || null,
+                yearPublished: formData.yearPublished ? parseInt(formData.yearPublished) : null,
+                description: formData.description || null,
+                notes: formData.notes || null,
+                estimatedPrice: parseFloat(manualPrice),
+                referenceBookId: book.referenceBookId || null
+            };
+
+            await axios.put(`${API_URL}/usercollection/${id}`, updateData, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            await loadBook();
+            setPriceDialogOpen(false);
+            setManualPrice('');
+        } catch (err) {
+            console.error('Error setting manual price:', err);
+            setError('Не удалось установить цену');
+        }
+    };
+
+    if (loading) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+                <CircularProgress />
+            </Box>
+        );
+    }
+
+    if (!book) {
+        return (
+            <Box sx={{ maxWidth: 900, mx: 'auto', p: 3 }}>
+                <Alert severity="error">Книга не найдена</Alert>
+                <Button onClick={() => navigate('/collection')} sx={{ mt: 2 }}>
+                    Вернуться к коллекции
+                </Button>
+            </Box>
+        );
+    }
+
+    const images = book.images || [];
+    const currentImage = images[currentImageIndex];
+
+    return (
+        <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}>
+            {/* Шапка */}
+            <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                <Button
+                    startIcon={<BackIcon />}
+                    onClick={() => navigate('/collection')}
+                    variant="outlined"
+                >
+                    К коллекции
+                </Button>
+
+                <Typography variant="h5" component="h1" sx={{ fontWeight: 'bold', flexGrow: 1 }}>
+                    {book.title}
+                </Typography>
+
+                {!editMode ? (
+                    <>
+                        <Button
+                            startIcon={<EditIcon />}
+                            onClick={() => setEditMode(true)}
+                            variant="outlined"
+                        >
+                            Редактировать
+                        </Button>
+                        <Button
+                            startIcon={<DeleteIcon />}
+                            onClick={handleDelete}
+                            color="error"
+                            variant="outlined"
+                        >
+                            Удалить
+                        </Button>
+                    </>
+                ) : (
+                    <>
+                        <Button
+                            startIcon={<SaveIcon />}
+                            onClick={handleUpdate}
+                            variant="contained"
+                        >
+                            Сохранить
+                        </Button>
+                        <Button
+                            startIcon={<CancelIcon />}
+                            onClick={() => {
+                                setEditMode(false);
+                                setFormData({
+                                    title: book.title || '',
+                                    author: book.author || '',
+                                    yearPublished: book.yearPublished || '',
+                                    description: book.description || '',
+                                    notes: book.notes || '',
+                                    estimatedPrice: book.estimatedPrice || '',
+                                    isManuallyPriced: book.isManuallyPriced || false
+                                });
+                            }}
+                            variant="outlined"
+                        >
+                            Отмена
+                        </Button>
+                    </>
+                )}
+            </Box>
+
+            {error && (
+                <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
+                    {error}
+                </Alert>
+            )}
+
+            <Grid container spacing={3}>
+                {/* Левая колонка - галерея и изображения */}
+                <Grid item xs={12} md={5}>
+                    <Paper elevation={2} sx={{ p: 2, mb: 2 }}>
+                        {images.length > 0 ? (
+                            <>
+                                {/* Главное изображение */}
+                                <Box
+                                    sx={{
+                                        position: 'relative',
+                                        paddingTop: '100%',
+                                        bgcolor: 'grey.100',
+                                        borderRadius: 1,
+                                        overflow: 'hidden',
+                                        mb: 2
+                                    }}
+                                >
+                                    <Box
+                                        component="img"
+                                        src={`${API_URL}${currentImage.imageUrl}`}
+                                        alt={book.title}
+                                        sx={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            left: 0,
+                                            width: '100%',
+                                            height: '100%',
+                                            objectFit: 'contain'
+                                        }}
+                                    />
+
+                                    {/* Навигация по изображениям */}
+                                    {images.length > 1 && (
+                                        <>
+                                            <IconButton
+                                                onClick={() => setCurrentImageIndex(Math.max(0, currentImageIndex - 1))}
+                                                disabled={currentImageIndex === 0}
+                                                sx={{
+                                                    position: 'absolute',
+                                                    left: 8,
+                                                    top: '50%',
+                                                    transform: 'translateY(-50%)',
+                                                    bgcolor: 'rgba(255,255,255,0.8)',
+                                                    '&:hover': { bgcolor: 'white' }
+                                                }}
+                                            >
+                                                <ChevronLeft />
+                                            </IconButton>
+
+                                            <IconButton
+                                                onClick={() => setCurrentImageIndex(Math.min(images.length - 1, currentImageIndex + 1))}
+                                                disabled={currentImageIndex === images.length - 1}
+                                                sx={{
+                                                    position: 'absolute',
+                                                    right: 8,
+                                                    top: '50%',
+                                                    transform: 'translateY(-50%)',
+                                                    bgcolor: 'rgba(255,255,255,0.8)',
+                                                    '&:hover': { bgcolor: 'white' }
+                                                }}
+                                            >
+                                                <ChevronRight />
+                                            </IconButton>
+
+                                            <Box
+                                                sx={{
+                                                    position: 'absolute',
+                                                    bottom: 8,
+                                                    left: '50%',
+                                                    transform: 'translateX(-50%)',
+                                                    bgcolor: 'rgba(0,0,0,0.6)',
+                                                    color: 'white',
+                                                    px: 2,
+                                                    py: 0.5,
+                                                    borderRadius: 1
+                                                }}
+                                            >
+                                                <Typography variant="caption">
+                                                    {currentImageIndex + 1} / {images.length}
+                                                </Typography>
+                                            </Box>
+                                        </>
+                                    )}
+                                </Box>
+
+                                {/* Миниатюры */}
+                                {images.length > 1 && (
+                                    <Grid container spacing={1}>
+                                        {images.map((img, idx) => (
+                                            <Grid item xs={3} key={img.id}>
+                                                <Box
+                                                    onClick={() => setCurrentImageIndex(idx)}
+                                                    sx={{
+                                                        paddingTop: '100%',
+                                                        position: 'relative',
+                                                        cursor: 'pointer',
+                                                        border: '2px solid',
+                                                        borderColor: idx === currentImageIndex ? 'primary.main' : 'transparent',
+                                                        borderRadius: 1,
+                                                        overflow: 'hidden',
+                                                        '&:hover': {
+                                                            borderColor: 'primary.light'
+                                                        }
+                                                    }}
+                                                >
+                                                    <Box
+                                                        component="img"
+                                                        src={`${API_URL}${img.imageUrl}`}
+                                                        alt=""
+                                                        sx={{
+                                                            position: 'absolute',
+                                                            top: 0,
+                                                            left: 0,
+                                                            width: '100%',
+                                                            height: '100%',
+                                                            objectFit: 'cover'
+                                                        }}
+                                                    />
+                                                </Box>
+                                            </Grid>
+                                        ))}
+                                    </Grid>
+                                )}
+                            </>
+                        ) : (
+                            <Box
+                                sx={{
+                                    paddingTop: '100%',
+                                    bgcolor: 'grey.100',
+                                    borderRadius: 1,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    position: 'relative'
+                                }}
+                            >
+                                <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                    sx={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)' }}
+                                >
+                                    Нет изображений
+                                </Typography>
+                            </Box>
+                        )}
+                    </Paper>
+
+                    {/* Загрузка изображений */}
+                    {editMode && (
+                        <Paper elevation={2} sx={{ p: 2 }}>
+                            <Typography variant="h6" gutterBottom>
+                                Управление изображениями
+                            </Typography>
+                            <CollectionImageUploader
+                                images={images.map(img => ({
+                                    ...img,
+                                    imageUrl: `${API_URL}${img.imageUrl}`
+                                }))}
+                                onUpload={handleImageUpload}
+                                onDelete={handleImageDelete}
+                                onSetMain={handleSetMainImage}
+                                uploading={uploading}
+                                maxFiles={10}
+                            />
+                        </Paper>
+                    )}
+                </Grid>
+
+                {/* Правая колонка - информация */}
+                <Grid item xs={12} md={7}>
+                    {/* Основная информация */}
+                    <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
+                        {editMode ? (
+                            <Grid container spacing={2}>
+                                <Grid item xs={12}>
+                                    <TextField
+                                        label="Название"
+                                        value={formData.title}
+                                        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                                        fullWidth
+                                        required
+                                    />
+                                </Grid>
+                                <Grid item xs={12} sm={6}>
+                                    <TextField
+                                        label="Автор"
+                                        value={formData.author}
+                                        onChange={(e) => setFormData({ ...formData, author: e.target.value })}
+                                        fullWidth
+                                    />
+                                </Grid>
+                                <Grid item xs={12} sm={6}>
+                                    <TextField
+                                        label="Год издания"
+                                        type="number"
+                                        value={formData.yearPublished}
+                                        onChange={(e) => setFormData({ ...formData, yearPublished: e.target.value })}
+                                        fullWidth
+                                    />
+                                </Grid>
+                                <Grid item xs={12}>
+                                    <TextField
+                                        label="Описание и состояние"
+                                        value={formData.description}
+                                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                        fullWidth
+                                        multiline
+                                        rows={4}
+                                    />
+                                </Grid>
+                                <Grid item xs={12}>
+                                    <TextField
+                                        label="Личные заметки"
+                                        value={formData.notes}
+                                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                                        fullWidth
+                                        multiline
+                                        rows={3}
+                                    />
+                                </Grid>
+                            </Grid>
+                        ) : (
+                            <>
+                                <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>
+                                    {book.title}
+                                </Typography>
+
+                                {book.author && (
+                                    <Typography variant="h6" color="text.secondary" gutterBottom>
+                                        {book.author}
+                                    </Typography>
+                                )}
+
+                                {book.yearPublished && (
+                                    <Typography variant="body1" gutterBottom>
+                                        Год издания: <strong>{book.yearPublished}</strong>
+                                    </Typography>
+                                )}
+
+                                {book.description && (
+                                    <>
+                                        <Divider sx={{ my: 2 }} />
+                                        <Typography variant="subtitle2" gutterBottom>
+                                            Описание и состояние:
+                                        </Typography>
+                                        <Typography variant="body2" paragraph>
+                                            {book.description}
+                                        </Typography>
+                                    </>
+                                )}
+
+                                {book.notes && (
+                                    <>
+                                        <Divider sx={{ my: 2 }} />
+                                        <Typography variant="subtitle2" gutterBottom>
+                                            Личные заметки:
+                                        </Typography>
+                                        <Typography variant="body2" paragraph sx={{ fontStyle: 'italic' }}>
+                                            {book.notes}
+                                        </Typography>
+                                    </>
+                                )}
+
+                                <Divider sx={{ my: 2 }} />
+
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                    Добавлено: {new Date(book.addedDate).toLocaleDateString('ru-RU')}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                    Обновлено: {new Date(book.updatedDate).toLocaleDateString('ru-RU')}
+                                </Typography>
+                            </>
+                        )}
+                    </Paper>
+
+                    {/* Оценка стоимости */}
+                    <Card elevation={2} sx={{ mb: 3, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
+                        <CardContent>
+                            <Typography variant="h6" gutterBottom>
+                                Оценка стоимости
+                            </Typography>
+
+                            {book.estimatedPrice ? (
+                                <>
+                                    <Typography variant="h3" sx={{ fontWeight: 'bold', mb: 1 }}>
+                                        {book.estimatedPrice.toLocaleString('ru-RU')} ₽
+                                    </Typography>
+                                    <Chip
+                                        label={book.isManuallyPriced ? 'Установлено вручную' : 'Автоматическая оценка'}
+                                        size="small"
+                                        sx={{ bgcolor: 'rgba(255,255,255,0.3)', color: 'white', mb: 2 }}
+                                    />
+
+                                    {book.referenceBook && !book.isManuallyPriced && (
+                                        <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                                            На основе книги: {book.referenceBook.title}
+                                        </Typography>
+                                    )}
+                                </>
+                            ) : (
+                                <Typography variant="body1" sx={{ mb: 2 }}>
+                                    Оценка еще не установлена
+                                </Typography>
+                            )}
+
+                            <Button
+                                variant="contained"
+                                startIcon={<MoneyIcon />}
+                                onClick={() => {
+                                    setManualPrice(book.estimatedPrice || '');
+                                    setPriceDialogOpen(true);
+                                }}
+                                sx={{ bgcolor: 'white', color: 'primary.main', '&:hover': { bgcolor: 'grey.100' } }}
+                                fullWidth
+                            >
+                                Установить цену вручную
+                            </Button>
+                        </CardContent>
+                    </Card>
+
+                    {/* Найденные аналоги */}
+                    <Paper elevation={2} sx={{ p: 3 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                            <Typography variant="h6">
+                                Найденные аналоги
+                            </Typography>
+                            <Button
+                                variant="outlined"
+                                size="small"
+                                startIcon={searchingMatches ? <CircularProgress size={16} /> : <SearchIcon />}
+                                onClick={handleFindMatches}
+                                disabled={searchingMatches}
+                            >
+                                {searchingMatches ? 'Поиск...' : 'Обновить'}
+                            </Button>
+                        </Box>
+
+                        <CollectionBookMatches
+                            matches={book.suggestedMatches || []}
+                            onSelectReference={handleSelectReference}
+                            selectedReferenceId={book.referenceBookId}
+                            loading={searchingMatches}
+                        />
+                    </Paper>
+                </Grid>
+            </Grid>
+
+            {/* Диалог установки цены вручную */}
+            <Dialog open={priceDialogOpen} onClose={() => setPriceDialogOpen(false)} maxWidth="xs" fullWidth>
+                <DialogTitle>Установить цену вручную</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        label="Цена (руб.)"
+                        type="number"
+                        value={manualPrice}
+                        onChange={(e) => setManualPrice(e.target.value)}
+                        fullWidth
+                        autoFocus
+                        sx={{ mt: 2 }}
+                        inputProps={{ min: 0, step: 0.01 }}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setPriceDialogOpen(false)}>Отмена</Button>
+                    <Button onClick={handleSetManualPrice} variant="contained">Сохранить</Button>
+                </DialogActions>
+            </Dialog>
+        </Box>
+    );
+};
+
+export default CollectionBookDetail;
+

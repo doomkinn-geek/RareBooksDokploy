@@ -54,5 +54,9 @@ namespace RareBooksService.Common.Models
         // История уведомлений пользователя
         public List<BookNotification> BookNotifications { get; set; }
             = new List<BookNotification>();
+
+        // Коллекция книг пользователя
+        public List<UserCollectionBook> CollectionBooks { get; set; }
+            = new List<UserCollectionBook>();
     }
 }

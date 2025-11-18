@@ -49,6 +49,9 @@ import Contacts from './components/Contacts';
 import Categories from './components/Categories';
 import NotificationSettings from './components/NotificationSettings';
 import TelegramBotGuide from './components/TelegramBotGuide';
+import UserCollection from './components/UserCollection';
+import AddCollectionBook from './components/AddCollectionBook';
+import CollectionBookDetail from './components/CollectionBookDetail';
 import theme from './theme';
 import './style.css';
 import Cookies from 'js-cookie';
@@ -64,6 +67,7 @@ import CategoryIcon from '@mui/icons-material/Category';
 import CloseIcon from '@mui/icons-material/Close';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import NotificationsIcon from '@mui/icons-material/Notifications';
+import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
 
 const NavBar = () => {
     const { user, setUser } = useContext(UserContext);
@@ -157,6 +161,12 @@ const NavBar = () => {
                                 <ListItemIcon><NotificationsIcon /></ListItemIcon>
                                 <ListItemText primary={language === 'RU' ? 'Уведомления' : 'Notifications'} />
                             </ListItem>
+                            {user.hasCollectionAccess && (
+                                <ListItem button onClick={() => handleNavigate('/collection')}>
+                                    <ListItemIcon><CollectionsBookmarkIcon /></ListItemIcon>
+                                    <ListItemText primary={language === 'RU' ? 'Моя коллекция' : 'My Collection'} />
+                                </ListItem>
+                            )}
                         </>
                     )}
                 </List>
@@ -247,6 +257,16 @@ const NavBar = () => {
                                     >
                                         {language === 'RU' ? 'Избранное' : 'Favorites'}
                                     </Button>
+                                    {user.hasCollectionAccess && (
+                                        <Button 
+                                            color="inherit" 
+                                            component={Link} 
+                                            to="/collection"
+                                            startIcon={<CollectionsBookmarkIcon />}
+                                        >
+                                            {language === 'RU' ? 'Моя коллекция' : 'My Collection'}
+                                        </Button>
+                                    )}
                                     <Button 
                                         color="inherit" 
                                         component={Link} 
@@ -414,6 +434,9 @@ const AppContent = () => {
                             <Route path="/books/:id" element={<BookDetail />} />
                             <Route path="/favorites" element={<FavoriteBooks />} />
                             <Route path="/notifications" element={<NotificationSettings />} />
+                            <Route path="/collection" element={<UserCollection />} />
+                            <Route path="/collection/add" element={<AddCollectionBook />} />
+                            <Route path="/collection/:id" element={<CollectionBookDetail />} />
                             <Route path="/searchByTitle/:title" element={<BookSearchByTitle />} />
                             <Route path="/searchByDescription/:description" element={<BookSearchByDescription />} />
                             <Route path="/searchByCategory/:categoryId" element={<SearchByCategory />} />

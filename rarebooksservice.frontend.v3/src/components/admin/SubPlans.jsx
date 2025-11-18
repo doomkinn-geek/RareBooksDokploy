@@ -26,6 +26,7 @@ const SubPlans = () => {
     const [monthlyRequestLimit, setMonthlyRequestLimit] = useState('');
     const [description, setDescription] = useState('');
     const [isActive, setIsActive] = useState(true);
+    const [hasCollectionAccess, setHasCollectionAccess] = useState(false);
     const [editingPlanId, setEditingPlanId] = useState(null);
     
     const loadSubscriptionPlans = async () => {
@@ -56,6 +57,7 @@ const SubPlans = () => {
         setMonthlyRequestLimit('');
         setDescription('');
         setIsActive(true);
+        setHasCollectionAccess(false);
         setEditingPlanId(null);
         setEditMode(false);
     };
@@ -85,6 +87,7 @@ const SubPlans = () => {
         setMonthlyRequestLimit(plan.monthlyRequestLimit?.toString() || '');
         setDescription(plan.description || '');
         setIsActive(plan.isActive !== undefined ? plan.isActive : true);
+        setHasCollectionAccess(plan.hasCollectionAccess || false);
         setEditingPlanId(plan.id);
         setEditMode(true);
     };
@@ -117,7 +120,8 @@ const SubPlans = () => {
                 yearlyPrice: yearlyPrice.trim() ? parseFloat(yearlyPrice) : parseFloat(monthlyPrice),
                 monthlyRequestLimit: parseInt(monthlyRequestLimit, 10),
                 description: description.trim(),
-                isActive: isActive
+                isActive: isActive,
+                hasCollectionAccess: hasCollectionAccess
             };
             
             console.log('Отправляем данные плана:', planData);
@@ -237,7 +241,7 @@ const SubPlans = () => {
                             sx={{ mb: 2 }}
                         />
                     </Grid>
-                    <Grid item xs={12}>
+                    <Grid item xs={12} sm={6}>
                         <FormControlLabel
                             control={
                                 <Switch
@@ -247,6 +251,18 @@ const SubPlans = () => {
                                 />
                             }
                             label="План активен"
+                        />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    checked={hasCollectionAccess}
+                                    onChange={(e) => setHasCollectionAccess(e.target.checked)}
+                                    color="primary"
+                                />
+                            }
+                            label="Доступ к коллекции"
                             sx={{ mb: 2 }}
                         />
                     </Grid>
@@ -302,6 +318,7 @@ const SubPlans = () => {
                                         <TableCell>Цена (год)</TableCell>
                                         <TableCell>Лимит запросов</TableCell>
                                         <TableCell>Статус</TableCell>
+                                        <TableCell>Коллекция</TableCell>
                                         <TableCell>Описание</TableCell>
                                         <TableCell>Действия</TableCell>
                                     </TableRow>
@@ -314,6 +331,7 @@ const SubPlans = () => {
                                             <TableCell>{plan.yearlyPrice || '-'} руб.</TableCell>
                                             <TableCell>{plan.monthlyRequestLimit}</TableCell>
                                             <TableCell>{plan.isActive ? 'Активен' : 'Неактивен'}</TableCell>
+                                            <TableCell>{plan.hasCollectionAccess ? 'Да' : 'Нет'}</TableCell>
                                             <TableCell>{plan.description || '-'}</TableCell>
                                             <TableCell>
                                                 <Box sx={{ display: 'flex', gap: 1 }}>
@@ -368,6 +386,10 @@ const SubPlans = () => {
                                             <Grid item xs={6}>
                                                 <Typography variant="body2" color="text.secondary">Статус:</Typography>
                                                 <Typography variant="body1">{plan.isActive ? 'Активен' : 'Неактивен'}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6}>
+                                                <Typography variant="body2" color="text.secondary">Коллекция:</Typography>
+                                                <Typography variant="body1">{plan.hasCollectionAccess ? 'Да' : 'Нет'}</Typography>
                                             </Grid>
                                             {plan.description && (
                                                 <Grid item xs={12}>

@@ -31,5 +31,10 @@ namespace RareBooksService.Common.Models
         /// Признак, что план активен и доступен к выбору.
         /// </summary>
         public bool IsActive { get; set; } = true;
+
+        /// <summary>
+        /// Доступ к функционалу коллекции редких книг
+        /// </summary>
+        public bool HasCollectionAccess { get; set; } = false;
     }
 }

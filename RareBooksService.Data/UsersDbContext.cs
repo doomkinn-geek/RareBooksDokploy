@@ -16,6 +16,9 @@ namespace RareBooksService.Data
         public DbSet<BookNotification> BookNotifications { get; set; }
         public DbSet<TelegramUserState> TelegramUserStates { get; set; }
         public DbSet<TelegramLinkToken> TelegramLinkTokens { get; set; }
+        public DbSet<UserCollectionBook> UserCollectionBooks { get; set; }
+        public DbSet<UserCollectionBookImage> UserCollectionBookImages { get; set; }
+        public DbSet<UserCollectionBookMatch> UserCollectionBookMatches { get; set; }
 
         public UsersDbContext(DbContextOptions<UsersDbContext> options)
             : base(options)
@@ -196,6 +199,86 @@ namespace RareBooksService.Data
 
             modelBuilder.Entity<TelegramUserState>()
                 .HasIndex(tus => tus.TelegramId)
+                .IsUnique();
+
+            // Настройка UserCollectionBook
+            modelBuilder.Entity<UserCollectionBook>()
+                .HasKey(cb => cb.Id);
+
+            modelBuilder.Entity<UserCollectionBook>()
+                .HasOne(cb => cb.User)
+                .WithMany(u => u.CollectionBooks)
+                .HasForeignKey(cb => cb.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<UserCollectionBook>()
+                .Property(cb => cb.Title)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            modelBuilder.Entity<UserCollectionBook>()
+                .Property(cb => cb.Author)
+                .HasMaxLength(300);
+
+            modelBuilder.Entity<UserCollectionBook>()
+                .Property(cb => cb.Description)
+                .HasMaxLength(2000);
+
+            modelBuilder.Entity<UserCollectionBook>()
+                .Property(cb => cb.Notes)
+                .HasMaxLength(2000);
+
+            modelBuilder.Entity<UserCollectionBook>()
+                .Property(cb => cb.EstimatedPrice)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<UserCollectionBook>()
+                .HasIndex(cb => cb.UserId);
+
+            modelBuilder.Entity<UserCollectionBook>()
+                .HasIndex(cb => cb.AddedDate);
+
+            // Настройка UserCollectionBookImage
+            modelBuilder.Entity<UserCollectionBookImage>()
+                .HasKey(img => img.Id);
+
+            modelBuilder.Entity<UserCollectionBookImage>()
+                .HasOne(img => img.UserCollectionBook)
+                .WithMany(cb => cb.Images)
+                .HasForeignKey(img => img.UserCollectionBookId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<UserCollectionBookImage>()
+                .Property(img => img.FileName)
+                .HasMaxLength(255)
+                .IsRequired();
+
+            modelBuilder.Entity<UserCollectionBookImage>()
+                .Property(img => img.FilePath)
+                .HasMaxLength(1000)
+                .IsRequired();
+
+            modelBuilder.Entity<UserCollectionBookImage>()
+                .HasIndex(img => img.UserCollectionBookId);
+
+            // Настройка UserCollectionBookMatch
+            modelBuilder.Entity<UserCollectionBookMatch>()
+                .HasKey(m => m.Id);
+
+            modelBuilder.Entity<UserCollectionBookMatch>()
+                .HasOne(m => m.UserCollectionBook)
+                .WithMany(cb => cb.SuggestedMatches)
+                .HasForeignKey(m => m.UserCollectionBookId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<UserCollectionBookMatch>()
+                .HasIndex(m => m.UserCollectionBookId);
+
+            modelBuilder.Entity<UserCollectionBookMatch>()
+                .HasIndex(m => m.MatchedBookId);
+
+            modelBuilder.Entity<UserCollectionBookMatch>()
+                .HasIndex(m => new { m.UserCollectionBookId, m.MatchedBookId })
                 .IsUnique();
         }
     }

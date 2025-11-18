@@ -212,6 +212,12 @@ namespace RareBooksService.WebApi
                 builder.Services.AddScoped<ITelegramBotService, TelegramBotService>();
                 builder.Services.AddScoped<ITelegramLinkService, TelegramLinkService>();
 
+                // Регистрация сервисов коллекции пользователя
+                builder.Services.AddScoped<IUserCollectionService, UserCollectionService>();
+                builder.Services.AddScoped<ICollectionMatchingService, CollectionMatchingService>();
+                builder.Services.AddScoped<ICollectionImageService, CollectionImageService>();
+                builder.Services.AddScoped<ICollectionExportService, CollectionExportService>();
+
                 // 8)  YandexStorageService ������ ������ ����� AddScoped<IYandexStorageService, YandexStorageService>()
                 //    � � ����� YandexStorageService ���������� IOptions<YandexCloudSettings>
                 builder.Services.AddScoped<IYandexStorageService, YandexStorageService>();

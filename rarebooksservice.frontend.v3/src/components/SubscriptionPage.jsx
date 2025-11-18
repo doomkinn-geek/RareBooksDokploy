@@ -715,11 +715,22 @@ const SubscriptionPage = () => {
                         const isCurrentPlan = user?.subscription?.subscriptionPlanId === plan?.id;
                         
                         // Получаем функции для плана из стандартного набора или используем общие
-                        const features = defaultPlanFeatures[plan?.name] || [
+                        let features = defaultPlanFeatures[plan?.name] || [
                             `Лимит запросов: ${plan?.monthlyRequestLimit || 'не указан'} в месяц`,
                             'Доступ к оценке стоимости книг',
                             'Поиск по базе данных антикварных книг'
                         ];
+                        
+                        // Добавляем информацию о доступе к коллекции, если она доступна в плане
+                        if (plan?.hasCollectionAccess) {
+                            features = [
+                                ...features,
+                                'Управление личной коллекцией редких книг',
+                                'Автоматический поиск аналогов для оценки',
+                                'Загрузка изображений книг',
+                                'Экспорт данных коллекции (PDF, JSON)'
+                            ];
+                        }
                         
                         // Получаем иконку для плана или используем стандартную
                         const featureIcon = featureIcons[plan?.name] || <StarIcon />;
