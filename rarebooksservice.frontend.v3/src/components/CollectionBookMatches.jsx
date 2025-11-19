@@ -20,7 +20,7 @@ import {
     Clear as ClearIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { API_URL, getAuthHeaders, checkIfBookIsFavorite, addBookToFavorites, removeBookFromFavorites, getBookImageFile } from '../api';
+import { API_URL, getAuthHeaders, checkIfBookIsFavorite, addBookToFavorites, removeBookFromFavorites, getBookImageFile, getBookImages } from '../api';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
@@ -102,27 +102,6 @@ const CollectionBookMatches = ({
         setCustomSearchError('');
     };
 
-    // Функция для извлечения имени файла из URL (если передан полный URL)
-    const extractImageName = (imageNameOrUrl) => {
-        if (!imageNameOrUrl) return null;
-        
-        // Если это уже имя файла (не содержит / или http), возвращаем как есть
-        if (!imageNameOrUrl.includes('/') && !imageNameOrUrl.startsWith('http')) {
-            return imageNameOrUrl;
-        }
-        
-        // Если это URL, извлекаем имя файла
-        try {
-            const url = new URL(imageNameOrUrl, window.location.origin);
-            const pathParts = url.pathname.split('/');
-            return pathParts[pathParts.length - 1];
-        } catch {
-            // Если не удалось распарсить как URL, пробуем извлечь имя из пути
-            const pathParts = imageNameOrUrl.split('/');
-            return pathParts[pathParts.length - 1];
-        }
-    };
-
     // Форматирование даты
     const formatDate = (dateString) => {
         if (!dateString) return 'Нет данных';
@@ -187,7 +166,7 @@ const CollectionBookMatches = ({
         return truncated + '...';
     };
 
-    // Загрузка изображений при изменении matches или customMatches
+    // Загрузка изображений при изменении matches или customMatches (как в FavoriteBooks.jsx)
     useEffect(() => {
         const allMatches = customMatches.length > 0 ? customMatches : matches;
         if (!allMatches || allMatches.length === 0) {
@@ -195,38 +174,44 @@ const CollectionBookMatches = ({
             return;
         }
 
-        // Очищаем предыдущие миниатюры
-        setThumbnails({});
-
-        // Параллельная загрузка изображений (как в BookList.jsx)
-        allMatches.forEach(async (match) => {
-            const book = match.matchedBook;
-            if (book && book.firstImageName && book.firstImageName.trim() !== '') {
+        const loadBookImages = async () => {
+            for (const match of allMatches) {
+                const book = match.matchedBook;
+                if (!book || !book.id) continue;
+                
                 try {
-                    console.log(`CollectionBookMatches - Загружаем изображение для книги ${book.id}: ${book.firstImageName}`);
-                    const fileName = extractImageName(book.firstImageName);
-                    console.log(`CollectionBookMatches - Извлечено имя файла: ${fileName}`);
+                    // Получаем список изображений для книги (как в FavoriteBooks.jsx)
+                    const imagesResponse = await getBookImages(book.id);
+                    const imageNames = imagesResponse?.data?.images || [];
                     
-                    const response = await getBookImageFile(book.id, fileName);
-                    console.log(`CollectionBookMatches - Получен blob размером: ${response.data.size} байт`);
-                    
-                    const imageUrl = URL.createObjectURL(response.data);
-                    console.log(`CollectionBookMatches - Создан blob URL: ${imageUrl}`);
-                    
-                    // Обновляем thumbnails для каждой книги сразу после загрузки
-                    setThumbnails(prev => ({
-                        ...prev,
-                        [book.id]: imageUrl
-                    }));
+                    // Если есть хотя бы одно изображение
+                    if (imageNames.length > 0) {
+                        const firstImageName = imageNames[0];
+                        
+                        // Загружаем первое изображение
+                        const imageResponse = await getBookImageFile(book.id, firstImageName);
+                        const imageUrl = URL.createObjectURL(imageResponse.data);
+                        
+                        // Сохраняем URL изображения в состоянии
+                        setThumbnails(prev => ({
+                            ...prev,
+                            [book.id]: imageUrl
+                        }));
+                    }
                 } catch (error) {
                     console.error(`CollectionBookMatches - Ошибка при загрузке изображения для книги ${book.id}:`, error);
-                    console.error(`CollectionBookMatches - Детали ошибки:`, error.response?.status, error.response?.statusText);
-                    // В случае ошибки продолжаем работу (не устанавливаем null, как в BookList.jsx)
+                    // В случае ошибки продолжаем работу
                 }
-            } else {
-                console.log(`CollectionBookMatches - Книга ${book?.id} не имеет firstImageName или оно пустое`);
             }
-        });
+        };
+
+        // Очищаем предыдущие миниатюры перед загрузкой новых
+        setThumbnails({});
+        
+        // Загружаем изображения
+        if (allMatches.length > 0) {
+            loadBookImages();
+        }
 
         // Очистка URL объектов при размонтировании
         return () => {
@@ -534,10 +519,10 @@ const CollectionBookMatches = ({
                                                 }}
                                                 onClick={() => navigate(`/books/${book.id}`)}
                                             >
-                                                {book.firstImageName && thumbnails[book.id] ? (
+                                                {thumbnails[book.id] ? (
                                                     <img
                                                         src={thumbnails[book.id]}
-                                                        alt={book.title}
+                                                        alt={book.title || 'Обложка книги'}
                                                         style={{
                                                             width: '100%',
                                                             height: '100%',
@@ -557,23 +542,10 @@ const CollectionBookMatches = ({
                                                         justifyContent: 'center',
                                                         backgroundColor: 'rgba(69, 39, 160, 0.05)'
                                                     }}>
-                                                        {book.firstImageName && book.firstImageName.trim() !== '' ? (
-                                                            <>
-                                                                <CircularProgress size={50} sx={{ color: theme.palette.primary.main, mb: 1 }} />
-                                                                <Typography variant="body2" color="text.secondary" align="center">
-                                                                    Загрузка изображения...
-                                                                </Typography>
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <Typography variant="h3" sx={{ fontSize: 60, color: 'rgba(69, 39, 160, 0.2)', mb: 1 }}>
-                                                                    📚
-                                                                </Typography>
-                                                                <Typography variant="body2" color="text.secondary" align="center">
-                                                                    Изображение отсутствует
-                                                                </Typography>
-                                                            </>
-                                                        )}
+                                                        <CircularProgress size={50} sx={{ color: theme.palette.primary.main, mb: 1 }} />
+                                                        <Typography variant="body2" color="text.secondary" align="center">
+                                                            Загрузка изображения...
+                                                        </Typography>
                                                     </Box>
                                                 )}
                                             </Grid>
