@@ -21,6 +21,68 @@ const CollectionImageUploader = ({
     const [error, setError] = useState('');
     const [processingFiles, setProcessingFiles] = useState(new Set());
 
+    // Функция для сжатия изображения
+    const compressImage = (file) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Максимальные размеры для сжатия
+                    const MAX_WIDTH = 1920;
+                    const MAX_HEIGHT = 1920;
+                    
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    // Вычисляем новые размеры с сохранением пропорций
+                    if (width > height) {
+                        if (width > MAX_WIDTH) {
+                            height *= MAX_WIDTH / width;
+                            width = MAX_WIDTH;
+                        }
+                    } else {
+                        if (height > MAX_HEIGHT) {
+                            width *= MAX_HEIGHT / height;
+                            height = MAX_HEIGHT;
+                        }
+                    }
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    
+                    // Рисуем изображение на canvas
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    // Конвертируем canvas в blob
+                    canvas.toBlob((blob) => {
+                        if (blob) {
+                            // Создаем новый файл из blob
+                            const compressedFile = new File([blob], file.name, {
+                                type: 'image/jpeg',
+                                lastModified: Date.now()
+                            });
+                            console.log(`Сжатие: ${(file.size / 1024 / 1024).toFixed(2)}MB -> ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
+                            resolve(compressedFile);
+                        } else {
+                            reject(new Error('Не удалось сжать изображение'));
+                        }
+                    }, 'image/jpeg', 0.85); // 85% качество
+                };
+                
+                img.onerror = () => reject(new Error('Не удалось загрузить изображение'));
+                img.src = e.target.result;
+            };
+            
+            reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
+            reader.readAsDataURL(file);
+        });
+    };
+
     const onDrop = useCallback(async (acceptedFiles) => {
         setError('');
 
@@ -35,14 +97,6 @@ const CollectionImageUploader = ({
         setProcessingFiles(newProcessing);
 
         for (const file of acceptedFiles) {
-            // Проверка размера (10MB)
-            if (file.size > 10 * 1024 * 1024) {
-                setError(`Файл ${file.name} слишком большой (максимум 10MB)`);
-                newProcessing.delete(file.name);
-                setProcessingFiles(new Set(newProcessing));
-                continue;
-            }
-
             // Проверка типа
             if (!['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(file.type)) {
                 setError(`Файл ${file.name} имеет неподдерживаемый формат (только JPG, PNG, WEBP)`);
@@ -52,12 +106,25 @@ const CollectionImageUploader = ({
             }
 
             try {
+                // Сжимаем изображение перед загрузкой
+                console.log(`Начинаем сжатие изображения: ${file.name}, размер: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+                const compressedFile = await compressImage(file);
+                
+                // Проверка размера после сжатия
+                if (compressedFile.size > 10 * 1024 * 1024) {
+                    setError(`Файл ${file.name} слишком большой даже после сжатия (максимум 10MB)`);
+                    newProcessing.delete(file.name);
+                    setProcessingFiles(new Set(newProcessing));
+                    continue;
+                }
+                
                 // Ждем завершения загрузки файла
-                await onUpload(file);
+                await onUpload(compressedFile);
                 // Удаляем файл из списка обрабатываемых после успешной загрузки
                 newProcessing.delete(file.name);
                 setProcessingFiles(new Set(newProcessing));
             } catch (err) {
+                console.error(`Ошибка обработки ${file.name}:`, err);
                 setError(`Ошибка загрузки ${file.name}: ${err.message}`);
                 newProcessing.delete(file.name);
                 setProcessingFiles(new Set(newProcessing));
@@ -116,7 +183,7 @@ const CollectionImageUploader = ({
                         или нажмите для выбора файлов
                     </Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                        JPG, PNG, WEBP до 10MB • Максимум {maxFiles} изображений
+                        JPG, PNG, WEBP • Автоматическое сжатие • Максимум {maxFiles} изображений
                     </Typography>
                     {isProcessing && (
                         <Box sx={{ mt: 2 }}>

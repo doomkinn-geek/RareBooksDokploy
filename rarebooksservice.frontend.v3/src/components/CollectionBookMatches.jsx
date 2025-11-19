@@ -20,7 +20,7 @@ import {
     Clear as ClearIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { API_URL, getAuthHeaders, checkIfBookIsFavorite, addBookToFavorites, removeBookFromFavorites } from '../api';
+import { API_URL, getAuthHeaders, checkIfBookIsFavorite, addBookToFavorites, removeBookFromFavorites, getBookImageFile } from '../api';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
@@ -123,20 +123,6 @@ const CollectionBookMatches = ({
         }
     };
 
-    // Функция загрузки изображений
-    const getBookImageFile = (id, imageName) => {
-        // Извлекаем имя файла, если передан полный URL
-        const fileName = extractImageName(imageName);
-        if (!fileName) {
-            throw new Error('Имя файла изображения не найдено');
-        }
-        
-        return axios.get(`${API_URL}/books/${id}/images/${fileName}`, {
-            headers: getAuthHeaders(),
-            responseType: 'blob',
-        });
-    };
-
     // Форматирование даты
     const formatDate = (dateString) => {
         if (!dateString) return 'Нет данных';
@@ -217,9 +203,15 @@ const CollectionBookMatches = ({
             const book = match.matchedBook;
             if (book && book.firstImageName && book.firstImageName.trim() !== '') {
                 try {
-                    console.log(`Загружаем изображение для книги ${book.id}: ${book.firstImageName}`);
-                    const response = await getBookImageFile(book.id, book.firstImageName);
+                    console.log(`CollectionBookMatches - Загружаем изображение для книги ${book.id}: ${book.firstImageName}`);
+                    const fileName = extractImageName(book.firstImageName);
+                    console.log(`CollectionBookMatches - Извлечено имя файла: ${fileName}`);
+                    
+                    const response = await getBookImageFile(book.id, fileName);
+                    console.log(`CollectionBookMatches - Получен blob размером: ${response.data.size} байт`);
+                    
                     const imageUrl = URL.createObjectURL(response.data);
+                    console.log(`CollectionBookMatches - Создан blob URL: ${imageUrl}`);
                     
                     // Обновляем thumbnails для каждой книги сразу после загрузки
                     setThumbnails(prev => ({
@@ -227,11 +219,12 @@ const CollectionBookMatches = ({
                         [book.id]: imageUrl
                     }));
                 } catch (error) {
-                    console.error(`Ошибка при загрузке изображения для книги ${book.id}:`, error);
+                    console.error(`CollectionBookMatches - Ошибка при загрузке изображения для книги ${book.id}:`, error);
+                    console.error(`CollectionBookMatches - Детали ошибки:`, error.response?.status, error.response?.statusText);
                     // В случае ошибки продолжаем работу (не устанавливаем null, как в BookList.jsx)
                 }
             } else {
-                console.log(`Книга ${book?.id} не имеет firstImageName или оно пустое`);
+                console.log(`CollectionBookMatches - Книга ${book?.id} не имеет firstImageName или оно пустое`);
             }
         });
 

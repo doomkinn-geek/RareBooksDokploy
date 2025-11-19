@@ -185,6 +185,8 @@ namespace RareBooksService.WebApi.Controllers
         /// Загрузить изображение для книги
         /// </summary>
         [HttpPost("{id}/images")]
+        [RequestSizeLimit(50_000_000)] // 50 MB
+        [RequestFormLimits(MultipartBodyLengthLimit = 50_000_000)]
         public async Task<ActionResult<UserCollectionBookImageDto>> UploadImage(int id, IFormFile file)
         {
             try
