@@ -60,36 +60,87 @@ const CollectionBookDetail = () => {
     // Функция для загрузки изображения с авторизацией
     const loadImage = async (imageUrl) => {
         if (imageBlobs[imageUrl]) {
+            console.log('CollectionBookDetail - Используем кэшированное изображение:', imageUrl);
             return imageBlobs[imageUrl];
         }
 
         try {
             const token = Cookies.get('token');
-            const response = await axios.get(`${API_URL.replace('/api', '')}${imageUrl}`, {
+            const fullUrl = `${API_URL.replace('/api', '')}${imageUrl}`;
+            console.log('CollectionBookDetail - Загружаем изображение с URL:', fullUrl);
+            console.log('CollectionBookDetail - Token:', token ? 'присутствует' : 'отсутствует');
+            
+            const response = await axios.get(fullUrl, {
                 headers: { Authorization: `Bearer ${token}` },
                 responseType: 'blob'
             });
             
+            console.log('CollectionBookDetail - Получен blob размером:', response.data.size, 'байт');
             const blobUrl = URL.createObjectURL(response.data);
+            console.log('CollectionBookDetail - Создан blob URL:', blobUrl);
+            
             setImageBlobs(prev => ({ ...prev, [imageUrl]: blobUrl }));
             return blobUrl;
         } catch (error) {
-            console.error('Ошибка загрузки изображения:', error);
-            return '/placeholder-book.svg';
+            console.error('CollectionBookDetail - Ошибка загрузки изображения:', error);
+            console.error('CollectionBookDetail - URL:', imageUrl);
+            console.error('CollectionBookDetail - Детали ошибки:', error.response?.status, error.response?.statusText);
+            throw error; // Пробрасываем ошибку для обработки в компоненте
         }
     };
 
     // Компонент для отображения авторизованного изображения
     const AuthorizedImage = ({ imageUrl, alt, sx, ...props }) => {
         const [src, setSrc] = useState('/placeholder-book.svg');
+        const [imageError, setImageError] = useState(false);
         
         useEffect(() => {
             if (imageUrl) {
-                loadImage(imageUrl).then(setSrc);
+                console.log('CollectionBookDetail - Загружаем изображение:', imageUrl);
+                setImageError(false);
+                loadImage(imageUrl)
+                    .then((blobUrl) => {
+                        console.log('CollectionBookDetail - Изображение загружено:', blobUrl);
+                        setSrc(blobUrl);
+                    })
+                    .catch((err) => {
+                        console.error('CollectionBookDetail - Ошибка загрузки изображения:', err);
+                        setImageError(true);
+                        setSrc('/placeholder-book.svg');
+                    });
             }
         }, [imageUrl]);
         
-        return <Box component="img" src={src} alt={alt} sx={sx} {...props} />;
+        if (imageError) {
+            return (
+                <Box 
+                    sx={{ 
+                        ...sx, 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        bgcolor: 'grey.200',
+                        color: 'text.secondary'
+                    }}
+                >
+                    <Typography variant="body2">Не удалось загрузить</Typography>
+                </Box>
+            );
+        }
+        
+        return (
+            <Box 
+                component="img" 
+                src={src} 
+                alt={alt} 
+                sx={sx} 
+                onError={(e) => {
+                    console.error('CollectionBookDetail - Ошибка отображения изображения');
+                    setImageError(true);
+                }}
+                {...props} 
+            />
+        );
     };
 
     const loadBook = async () => {
@@ -308,7 +359,7 @@ const CollectionBookDetail = () => {
     const currentImage = images[currentImageIndex];
 
     return (
-        <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}>
+        <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 }, overflowX: 'hidden' }}>
             {/* Шапка */}
             <Box sx={{ mb: 3 }}>
                 {/* Кнопка "Назад" и заголовок */}
@@ -409,13 +460,13 @@ const CollectionBookDetail = () => {
                 </Alert>
             )}
 
-            <Grid container spacing={3}>
+            <Grid container spacing={{ xs: 2, md: 3 }}>
                 {/* Верхняя секция - информация о книге с фотографиями */}
                 <Grid item xs={12}>
-                    <Grid container spacing={3}>
+                    <Grid container spacing={{ xs: 2, md: 3 }}>
                         {/* Левая колонка - галерея и изображения */}
                         <Grid item xs={12} md={5}>
-                    <Paper elevation={2} sx={{ p: 2, mb: 2 }}>
+                    <Paper elevation={2} sx={{ p: { xs: 1.5, md: 2 }, mb: { xs: 1.5, md: 2 } }}>
                         {images.length > 0 ? (
                             <>
                                 {/* Главное изображение */}
@@ -561,8 +612,8 @@ const CollectionBookDetail = () => {
 
                     {/* Загрузка изображений */}
                     {editMode && (
-                        <Paper elevation={2} sx={{ p: 2 }}>
-                            <Typography variant="h6" gutterBottom>
+                        <Paper elevation={2} sx={{ p: { xs: 1.5, md: 2 } }}>
+                            <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
                                 Управление изображениями
                             </Typography>
                             <CollectionImageUploader
@@ -583,7 +634,7 @@ const CollectionBookDetail = () => {
                         {/* Правая колонка - информация */}
                         <Grid item xs={12} md={7}>
                     {/* Основная информация */}
-                    <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
+                    <Paper elevation={2} sx={{ p: { xs: 2, md: 3 }, mb: { xs: 2, md: 3 } }}>
                         {editMode ? (
                             <Grid container spacing={2}>
                                 <Grid item xs={12}>
@@ -762,9 +813,16 @@ const CollectionBookDetail = () => {
 
                 {/* Нижняя секция - найденные аналоги на всю ширину */}
                 <Grid item xs={12}>
-                    <Paper elevation={2} sx={{ p: 3 }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                            <Typography variant="h6">
+                    <Paper elevation={2} sx={{ p: { xs: 2, md: 3 } }}>
+                        <Box sx={{ 
+                            display: 'flex', 
+                            flexDirection: { xs: 'column', sm: 'row' },
+                            justifyContent: 'space-between', 
+                            alignItems: { xs: 'flex-start', sm: 'center' }, 
+                            mb: 2,
+                            gap: { xs: 1, sm: 0 }
+                        }}>
+                            <Typography variant="h6" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
                                 Найденные аналоги
                             </Typography>
                             <Button
@@ -773,6 +831,8 @@ const CollectionBookDetail = () => {
                                 startIcon={searchingMatches ? <CircularProgress size={16} /> : <SearchIcon />}
                                 onClick={handleFindMatches}
                                 disabled={searchingMatches}
+                                fullWidth={false}
+                                sx={{ width: { xs: '100%', sm: 'auto' } }}
                             >
                                 {searchingMatches ? 'Поиск...' : 'Обновить'}
                             </Button>

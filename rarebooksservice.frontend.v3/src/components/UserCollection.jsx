@@ -179,8 +179,8 @@ const UserCollection = () => {
     }
 
     return (
-        <Box sx={{ maxWidth: 1400, mx: 'auto', p: { xs: 2, md: 3 } }}>
-            <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
+        <Box sx={{ maxWidth: 1400, mx: 'auto', p: { xs: 2, md: 3 }, overflowX: 'hidden' }}>
+            <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold', mb: 3, fontSize: { xs: '1.5rem', sm: '2rem' } }}>
                 Моя коллекция редких книг
             </Typography>
 

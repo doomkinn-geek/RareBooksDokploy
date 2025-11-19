@@ -438,7 +438,7 @@ const CollectionBookMatches = ({
                     </Typography>
                 )}
 
-                <Grid container spacing={3}>
+                <Grid container spacing={{ xs: 2, md: 3 }}>
                     {displayMatches.map((match) => {
                         const book = match.matchedBook;
                         const isSelected = match.matchedBookId === selectedReferenceId;
@@ -526,8 +526,8 @@ const CollectionBookMatches = ({
                                         </Box>
                                     )}
 
-                                    <CardContent sx={{ p: 0 }}>
-                                        <Grid container>
+                                    <CardContent sx={{ p: 0, overflowX: 'hidden' }}>
+                                        <Grid container sx={{ margin: 0, width: '100%' }}>
                                             {/* Изображение книги */}
                                             <Grid item xs={12} sm={3} md={2} 
                                                 sx={{ 
@@ -587,7 +587,7 @@ const CollectionBookMatches = ({
                                             
                                             {/* Информация о книге */}
                                             <Grid item xs={12} sm={9} md={10}>
-                                                <Box sx={{ p: { xs: 2, sm: 3 } }}>
+                                                <Box sx={{ p: { xs: 2, sm: 3 }, overflowX: 'hidden' }}>
                                                     <Typography 
                                                         variant="h5" 
                                                         component="h3"
@@ -598,14 +598,16 @@ const CollectionBookMatches = ({
                                                             cursor: 'pointer',
                                                             color: theme.palette.primary.dark,
                                                             '&:hover': { color: theme.palette.primary.main },
-                                                            transition: 'color 0.2s'
+                                                            transition: 'color 0.2s',
+                                                            wordBreak: 'break-word',
+                                                            overflowWrap: 'break-word'
                                                         }}
                                                         onClick={() => navigate(`/books/${book.id}`)}
                                                     >
                                                         {book.title}
                                                     </Typography>
                                                     
-                                                    <Grid container spacing={2} sx={{ mb: 2 }}>
+                                                    <Grid container spacing={{ xs: 1, sm: 2 }} sx={{ mb: 2 }}>
                                                         <Grid item xs={12} md={8}>
                                                             {book.description && (
                                                                 <Box
@@ -668,7 +670,7 @@ const CollectionBookMatches = ({
                                                             <Paper 
                                                                 elevation={0}
                                                                 sx={{ 
-                                                                    p: 2, 
+                                                                    p: { xs: 1.5, sm: 2 }, 
                                                                     bgcolor: 'rgba(69, 39, 160, 0.05)', 
                                                                     borderRadius: '8px',
                                                                     height: '100%',
@@ -677,9 +679,9 @@ const CollectionBookMatches = ({
                                                                     justifyContent: 'center'
                                                                 }}
                                                             >
-                                                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                                                                    <AttachMoneyIcon sx={{ mr: 1, color: theme.palette.primary.main }} />
-                                                                    <Typography variant="body1" fontWeight="medium">
+                                                                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 1 }}>
+                                                                    <AttachMoneyIcon sx={{ color: theme.palette.primary.main, flexShrink: 0, mt: 0.3 }} />
+                                                                    <Typography variant="body1" fontWeight="medium" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' }, wordBreak: 'break-word' }}>
                                                                         Цена: 
                                                                         <span style={{ 
                                                                             color: theme.palette.primary.dark, 
@@ -687,15 +689,15 @@ const CollectionBookMatches = ({
                                                                             marginLeft: '8px'
                                                                         }}>
                                                                             {book.price === 'Только для подписчиков' 
-                                                                                ? 'Только для подписчиков' 
+                                                                                ? 'Для подписчиков' 
                                                                                 : book.price ? `${book.price} ₽` : 'Нет данных'}
                                                                         </span>
                                                                     </Typography>
                                                                 </Box>
 
-                                                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <DateRangeIcon sx={{ mr: 1, color: theme.palette.primary.main }} />
-                                                                    <Typography variant="body1" fontWeight="medium">
+                                                                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                                                                    <DateRangeIcon sx={{ color: theme.palette.primary.main, flexShrink: 0, mt: 0.3 }} />
+                                                                    <Typography variant="body1" fontWeight="medium" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>
                                                                         Дата: 
                                                                         <span style={{ 
                                                                             color: theme.palette.primary.dark, 
