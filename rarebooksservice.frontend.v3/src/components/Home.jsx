@@ -857,7 +857,7 @@ const Home = () => {
                     </Paper>
                 </Grid>
                 
-                {user && (user.hasCollectionAccess || user.HasCollectionAccess) && (
+                {user && user.hasCollectionAccess && (
                     <Grid item xs={12} md={6}>
                         <Paper elevation={3} sx={{ 
                             p: 2, 

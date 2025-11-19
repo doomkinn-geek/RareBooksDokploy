@@ -24,11 +24,47 @@ const UserCollection = () => {
     const [error, setError] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState('addedDate');
+    const [imageBlobs, setImageBlobs] = useState({});
 
     useEffect(() => {
         loadCollection();
         loadStatistics();
     }, []);
+
+    // Функция для загрузки изображения с авторизацией
+    const loadImage = async (imageUrl) => {
+        if (!imageUrl || imageBlobs[imageUrl]) {
+            return imageBlobs[imageUrl] || '/placeholder-book.svg';
+        }
+
+        try {
+            const token = Cookies.get('token');
+            const response = await axios.get(`${API_URL.replace('/api', '')}${imageUrl}`, {
+                headers: { Authorization: `Bearer ${token}` },
+                responseType: 'blob'
+            });
+            
+            const blobUrl = URL.createObjectURL(response.data);
+            setImageBlobs(prev => ({ ...prev, [imageUrl]: blobUrl }));
+            return blobUrl;
+        } catch (error) {
+            console.error('Ошибка загрузки изображения:', error);
+            return '/placeholder-book.svg';
+        }
+    };
+
+    // Компонент для отображения авторизованного изображения
+    const AuthorizedCardMedia = ({ imageUrl, ...props }) => {
+        const [src, setSrc] = useState('/placeholder-book.svg');
+        
+        useEffect(() => {
+            if (imageUrl) {
+                loadImage(imageUrl).then(setSrc);
+            }
+        }, [imageUrl]);
+        
+        return <CardMedia image={src} {...props} />;
+    };
 
     const loadCollection = async () => {
         try {
@@ -280,11 +316,11 @@ const UserCollection = () => {
                                 }}
                             >
                                 <CardActionArea onClick={() => navigate(`/collection/${book.id}`)}>
-                                    {book.firstImageUrl ? (
-                                        <CardMedia
+                                    {book.mainImageUrl ? (
+                                        <AuthorizedCardMedia
                                             component="img"
                                             height="200"
-                                            image={`${API_URL}${book.firstImageUrl}`}
+                                            imageUrl={book.mainImageUrl}
                                             alt={book.title}
                                             sx={{ objectFit: 'cover' }}
                                         />

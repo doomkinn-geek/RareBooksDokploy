@@ -10,12 +10,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Linq.Expressions;
 
 namespace RareBooksService.WebApi.Services
 {
     public interface ICollectionMatchingService
     {
-        Task<List<BookMatchDto>> FindMatchesAsync(UserCollectionBook book, int maxResults = 10);
+        Task<List<BookMatchDto>> FindMatchesAsync(UserCollectionBook book, ApplicationUser user, int maxResults = 50);
         Task<UserCollectionBook> SelectReferenceBookAsync(int bookId, int referenceBookId, string userId);
         Task<UserCollectionBook> UpdateEstimatedPriceAsync(int bookId, string userId);
     }
@@ -26,6 +27,7 @@ namespace RareBooksService.WebApi.Services
         private readonly UsersDbContext _usersContext;
         private readonly ILogger<CollectionMatchingService> _logger;
         private readonly Dictionary<string, IStemmer> _stemmers;
+        private readonly IBooksService _booksService;
         private static readonly LanguageDetector _languageDetector;
 
         static CollectionMatchingService()
@@ -37,11 +39,13 @@ namespace RareBooksService.WebApi.Services
         public CollectionMatchingService(
             BooksDbContext booksContext,
             UsersDbContext usersContext,
-            ILogger<CollectionMatchingService> logger)
+            ILogger<CollectionMatchingService> logger,
+            IBooksService booksService)
         {
             _booksContext = booksContext;
             _usersContext = usersContext;
             _logger = logger;
+            _booksService = booksService;
 
             _stemmers = new Dictionary<string, IStemmer>
             {
@@ -54,76 +58,47 @@ namespace RareBooksService.WebApi.Services
             };
         }
 
-        public async Task<List<BookMatchDto>> FindMatchesAsync(UserCollectionBook book, int maxResults = 10)
+        public async Task<List<BookMatchDto>> FindMatchesAsync(UserCollectionBook book, ApplicationUser user, int maxResults = 50)
         {
             try
             {
-                _logger.LogInformation("Поиск аналогов для книги '{Title}' (ID: {BookId})", book.Title, book.Id);
+                _logger.LogInformation("Поиск аналогов для книги '{Title}' (ID: {BookId}) через BooksService", book.Title, book.Id);
 
-                // Нормализуем название книги
-                var processedTitle = PreprocessText(book.Title, out var detectedLanguage);
-                var searchWords = processedTitle.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                // Используем готовый сервис поиска по заголовку - он уже отлично работает!
+                var searchResult = await _booksService.SearchByTitleAsync(
+                    user, 
+                    book.Title, 
+                    exactPhrase: false, 
+                    page: 1, 
+                    pageSize: maxResults);
 
-                // Базовый запрос для поиска книг
-                IQueryable<RegularBaseBook> query = _booksContext.BooksInfo.AsQueryable();
+                _logger.LogInformation("BooksService нашел {Count} аналогов для книги '{Title}'", 
+                    searchResult.Items?.Count ?? 0, book.Title);
 
-                // Ищем по всем словам из названия
-                foreach (var word in searchWords)
+                if (searchResult.Items == null || searchResult.Items.Count == 0)
                 {
-                    query = query.Where(b => b.NormalizedTitle.Contains(word));
+                    _logger.LogWarning("Аналогов не найдено через BooksService");
+                    return new List<BookMatchDto>();
                 }
 
-                // Дополнительная фильтрация по автору, если указан
-                if (!string.IsNullOrWhiteSpace(book.Author))
-                {
-                    var processedAuthor = PreprocessText(book.Author, out _);
-                    var authorWords = processedAuthor.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    
-                    foreach (var word in authorWords)
+                // Используем результаты поиска напрямую, без дополнительной фильтрации
+                // Score вычисляется на основе позиции в результатах (чем выше, тем лучше)
+                var result = searchResult.Items
+                    .Select((item, index) => new BookMatchDto
                     {
-                        query = query.Where(b => b.NormalizedTitle.Contains(word) || 
-                                               b.NormalizedDescription.Contains(word));
-                    }
-                }
-
-                // Фильтрация по году, если указан (±5 лет)
-                if (book.YearPublished.HasValue)
-                {
-                    var yearMin = book.YearPublished.Value - 5;
-                    var yearMax = book.YearPublished.Value + 5;
-                    query = query.Where(b => b.YearPublished >= yearMin && b.YearPublished <= yearMax);
-                }
-
-                // Получаем топ результатов, отсортированных по дате (самые свежие первыми)
-                var matches = await query
-                    .OrderByDescending(b => b.EndDate)
-                    .Take(maxResults * 2) // Берем больше для расчета score
-                    .ToListAsync();
-
-                _logger.LogInformation("Найдено {Count} потенциальных аналогов для книги '{Title}'", 
-                    matches.Count, book.Title);
-
-                // Вычисляем score для каждого результата
-                var scoredMatches = matches
-                    .Select(m => new
-                    {
-                        Book = m,
-                        Score = CalculateMatchScore(book, m, searchWords)
+                        MatchedBookId = item.Id,
+                        // Score уменьшается от 1.0 до 0.5 в зависимости от позиции в результатах
+                        MatchScore = 1.0 - (index * 0.5 / Math.Max(searchResult.Items.Count, 1)),
+                        FoundDate = DateTime.UtcNow,
+                        IsSelected = false,
+                        MatchedBook = item
                     })
-                    .Where(m => m.Score > 0.3) // Порог минимального совпадения
-                    .OrderByDescending(m => m.Score)
-                    .Take(maxResults)
                     .ToList();
 
-                // Преобразуем в DTO
-                var result = scoredMatches.Select(m => new BookMatchDto
-                {
-                    MatchedBookId = m.Book.Id,
-                    MatchScore = m.Score,
-                    FoundDate = DateTime.UtcNow,
-                    IsSelected = false,
-                    MatchedBook = MapToSearchResultDto(m.Book)
-                }).ToList();
+                _logger.LogInformation("Возвращаем {Count} аналогов (от score {MaxScore:F2} до {MinScore:F2})", 
+                    result.Count,
+                    result.FirstOrDefault()?.MatchScore ?? 0,
+                    result.LastOrDefault()?.MatchScore ?? 0);
 
                 return result;
             }
@@ -166,11 +141,25 @@ namespace RareBooksService.WebApi.Services
                 book.ReferenceBookId = referenceBookId;
                 book.UpdatedDate = DateTime.UtcNow;
 
-                // Помечаем соответствующий match как выбранный
+                // Помечаем соответствующий match как выбранный, если он существует в базе
                 var selectedMatch = book.SuggestedMatches.FirstOrDefault(m => m.MatchedBookId == referenceBookId);
                 if (selectedMatch != null)
                 {
                     selectedMatch.IsSelected = true;
+                }
+                else
+                {
+                    // Если match не существует (например, при ручном поиске), создаем его
+                    _logger.LogInformation("Создаем новый match для референса {ReferenceBookId}", referenceBookId);
+                    var newMatch = new UserCollectionBookMatch
+                    {
+                        UserCollectionBookId = bookId,
+                        MatchedBookId = referenceBookId,
+                        MatchScore = 1.0, // Пользователь выбрал вручную
+                        FoundDate = DateTime.UtcNow,
+                        IsSelected = true
+                    };
+                    _usersContext.UserCollectionBookMatches.Add(newMatch);
                 }
 
                 await _usersContext.SaveChangesAsync();

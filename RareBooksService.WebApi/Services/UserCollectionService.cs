@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using RareBooksService.Common.Models;
@@ -31,19 +32,22 @@ namespace RareBooksService.WebApi.Services
         private readonly ICollectionImageService _imageService;
         private readonly ICollectionMatchingService _matchingService;
         private readonly ILogger<UserCollectionService> _logger;
+        private readonly UserManager<ApplicationUser> _userManager;
 
         public UserCollectionService(
             UsersDbContext usersContext,
             BooksDbContext booksContext,
             ICollectionImageService imageService,
             ICollectionMatchingService matchingService,
-            ILogger<UserCollectionService> logger)
+            ILogger<UserCollectionService> logger,
+            UserManager<ApplicationUser> userManager)
         {
             _usersContext = usersContext;
             _booksContext = booksContext;
             _imageService = imageService;
             _matchingService = matchingService;
             _logger = logger;
+            _userManager = userManager;
         }
 
         public async Task<List<UserCollectionBookDto>> GetUserCollectionAsync(string userId)
@@ -175,7 +179,10 @@ namespace RareBooksService.WebApi.Services
                 // Автоматически ищем аналоги
                 try
                 {
-                    var matches = await _matchingService.FindMatchesAsync(book);
+                    var user = await _userManager.FindByIdAsync(userId);
+                    if (user != null)
+                    {
+                        var matches = await _matchingService.FindMatchesAsync(book, user);
                     
                     foreach (var match in matches)
                     {
@@ -190,9 +197,14 @@ namespace RareBooksService.WebApi.Services
                         _usersContext.UserCollectionBookMatches.Add(bookMatch);
                     }
 
-                    await _usersContext.SaveChangesAsync();
-                    
-                    _logger.LogInformation("Найдено {Count} аналогов для книги {BookId}", matches.Count, book.Id);
+                        await _usersContext.SaveChangesAsync();
+                        
+                        _logger.LogInformation("Найдено {Count} аналогов для книги {BookId}", matches.Count, book.Id);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Пользователь {UserId} не найден при поиске аналогов", userId);
+                    }
                 }
                 catch (Exception ex)
                 {

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using RareBooksService.Data;
@@ -11,9 +12,11 @@ using RareBooksService.Data;
 namespace RareBooksService.Data.Migrations.UsersDb
 {
     [DbContext(typeof(UsersDbContext))]
-    partial class UsersDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251119074638_RemoveRegularBaseBookTablesFromUsersDb")]
+    partial class RemoveRegularBaseBookTablesFromUsersDb
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -343,7 +346,7 @@ namespace RareBooksService.Data.Migrations.UsersDb
 
                     b.HasIndex("UserNotificationPreferenceId");
 
-                    b.ToTable("BookNotifications", (string)null);
+                    b.ToTable("BookNotifications");
                 });
 
             modelBuilder.Entity("RareBooksService.Common.Models.Subscription", b =>
@@ -391,7 +394,7 @@ namespace RareBooksService.Data.Migrations.UsersDb
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Subscriptions", (string)null);
+                    b.ToTable("Subscriptions");
                 });
 
             modelBuilder.Entity("RareBooksService.Common.Models.SubscriptionPlan", b =>
@@ -425,7 +428,7 @@ namespace RareBooksService.Data.Migrations.UsersDb
 
                     b.HasKey("Id");
 
-                    b.ToTable("SubscriptionPlans", (string)null);
+                    b.ToTable("SubscriptionPlans");
                 });
 
             modelBuilder.Entity("RareBooksService.Common.Models.Telegram.TelegramUserState", b =>
@@ -460,7 +463,7 @@ namespace RareBooksService.Data.Migrations.UsersDb
                     b.HasIndex("TelegramId")
                         .IsUnique();
 
-                    b.ToTable("TelegramUserStates", (string)null);
+                    b.ToTable("TelegramUserStates");
                 });
 
             modelBuilder.Entity("RareBooksService.Common.Models.TelegramLinkToken", b =>
@@ -504,7 +507,7 @@ namespace RareBooksService.Data.Migrations.UsersDb
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("TelegramLinkTokens", (string)null);
+                    b.ToTable("TelegramLinkTokens");
                 });
 
             modelBuilder.Entity("RareBooksService.Common.Models.UserCollectionBook", b =>
@@ -560,7 +563,7 @@ namespace RareBooksService.Data.Migrations.UsersDb
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("UserCollectionBooks", (string)null);
+                    b.ToTable("UserCollectionBooks");
                 });
 
             modelBuilder.Entity("RareBooksService.Common.Models.UserCollectionBookImage", b =>
@@ -594,7 +597,7 @@ namespace RareBooksService.Data.Migrations.UsersDb
 
                     b.HasIndex("UserCollectionBookId");
 
-                    b.ToTable("UserCollectionBookImages", (string)null);
+                    b.ToTable("UserCollectionBookImages");
                 });
 
             modelBuilder.Entity("RareBooksService.Common.Models.UserCollectionBookMatch", b =>
@@ -629,7 +632,7 @@ namespace RareBooksService.Data.Migrations.UsersDb
                     b.HasIndex("UserCollectionBookId", "MatchedBookId")
                         .IsUnique();
 
-                    b.ToTable("UserCollectionBookMatches", (string)null);
+                    b.ToTable("UserCollectionBookMatches");
                 });
 
             modelBuilder.Entity("RareBooksService.Common.Models.UserFavoriteBook", b =>
@@ -655,7 +658,7 @@ namespace RareBooksService.Data.Migrations.UsersDb
                     b.HasIndex("UserId", "BookId")
                         .IsUnique();
 
-                    b.ToTable("UserFavoriteBooks", (string)null);
+                    b.ToTable("UserFavoriteBooks");
                 });
 
             modelBuilder.Entity("RareBooksService.Common.Models.UserNotificationPreference", b =>
@@ -724,7 +727,7 @@ namespace RareBooksService.Data.Migrations.UsersDb
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("UserNotificationPreferences", (string)null);
+                    b.ToTable("UserNotificationPreferences");
                 });
 
             modelBuilder.Entity("RareBooksService.Common.Models.UserSearchHistory", b =>
@@ -754,7 +757,7 @@ namespace RareBooksService.Data.Migrations.UsersDb
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("UserSearchHistories", (string)null);
+                    b.ToTable("UserSearchHistories");
                 });
 
             modelBuilder.Entity("RareBooksService.Common.Models.UserSearchState", b =>
@@ -785,7 +788,7 @@ namespace RareBooksService.Data.Migrations.UsersDb
                     b.HasIndex("UserId", "SearchType")
                         .IsUnique();
 
-                    b.ToTable("UserSearchStates", (string)null);
+                    b.ToTable("UserSearchStates");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

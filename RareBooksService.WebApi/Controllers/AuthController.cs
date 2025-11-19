@@ -192,13 +192,15 @@ namespace RareBooksService.WebApi.Controllers
             }
 
             // Добавляем вычисляемое свойство для удобства на frontend
-            var currentSubscription = user.Subscriptions?.FirstOrDefault(s => s.IsActive);
+            // Проверяем активную подписку с учетом даты окончания
+            var now = DateTime.UtcNow;
+            var currentSubscription = user.Subscriptions?.FirstOrDefault(s => s.IsActive && s.EndDate > now);
             var hasCollectionAccess = currentSubscription?.SubscriptionPlan?.HasCollectionAccess ?? false;
 
             _logger.LogInformation("Информация о пользователе с ID {UserId} успешно получена. HasCollectionAccess: {HasCollectionAccess}", 
                 userId, hasCollectionAccess);
 
-            // Возвращаем пользователя с дополнительным полем для удобства
+            // Создаем безопасный DTO без циклических ссылок
             var response = new
             {
                 user.Id,
@@ -209,8 +211,49 @@ namespace RareBooksService.WebApi.Controllers
                 user.CreatedAt,
                 user.TelegramId,
                 user.TelegramUsername,
-                Subscriptions = user.Subscriptions,
-                CurrentSubscription = currentSubscription,
+                // Преобразуем подписки в безопасный формат без навигационных свойств
+                Subscriptions = user.Subscriptions?.Select(s => new
+                {
+                    s.Id,
+                    s.IsActive,
+                    s.StartDate,
+                    s.EndDate,
+                    s.UsedRequestsThisPeriod,
+                    s.AutoRenew,
+                    s.PaymentId,
+                    // Включаем план подписки без ссылки на пользователя
+                    SubscriptionPlan = s.SubscriptionPlan == null ? null : new
+                    {
+                        s.SubscriptionPlan.Id,
+                        s.SubscriptionPlan.Name,
+                        s.SubscriptionPlan.Description,
+                        s.SubscriptionPlan.Price,
+                        s.SubscriptionPlan.MonthlyRequestLimit,
+                        s.SubscriptionPlan.IsActive,
+                        s.SubscriptionPlan.HasCollectionAccess
+                    }
+                }).ToList(),
+                // Текущая подписка также в безопасном формате
+                CurrentSubscription = currentSubscription == null ? null : new
+                {
+                    currentSubscription.Id,
+                    currentSubscription.IsActive,
+                    currentSubscription.StartDate,
+                    currentSubscription.EndDate,
+                    currentSubscription.UsedRequestsThisPeriod,
+                    currentSubscription.AutoRenew,
+                    currentSubscription.PaymentId,
+                    SubscriptionPlan = currentSubscription.SubscriptionPlan == null ? null : new
+                    {
+                        currentSubscription.SubscriptionPlan.Id,
+                        currentSubscription.SubscriptionPlan.Name,
+                        currentSubscription.SubscriptionPlan.Description,
+                        currentSubscription.SubscriptionPlan.Price,
+                        currentSubscription.SubscriptionPlan.MonthlyRequestLimit,
+                        currentSubscription.SubscriptionPlan.IsActive,
+                        currentSubscription.SubscriptionPlan.HasCollectionAccess
+                    }
+                },
                 HasCollectionAccess = hasCollectionAccess
             };
 

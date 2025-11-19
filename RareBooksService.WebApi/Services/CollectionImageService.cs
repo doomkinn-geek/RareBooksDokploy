@@ -183,7 +183,10 @@ namespace RareBooksService.WebApi.Services
 
         public string GetImageUrl(string userId, int bookId, string fileName)
         {
-            return $"/api/usercollection/{bookId}/images/{fileName}";
+            var url = $"/api/usercollection/{bookId}/images/{fileName}";
+            _logger.LogDebug("Сформирован URL изображения: {Url} для пользователя {UserId}, книги {BookId}, файла {FileName}", 
+                url, userId, bookId, fileName);
+            return url;
         }
 
         private string GetUserFolder(string userId, int bookId)

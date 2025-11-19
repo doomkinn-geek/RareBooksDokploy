@@ -138,7 +138,9 @@ namespace RareBooksService.WebApi.Services
                                     var imgPath = File.Exists(thumbnailPath) ? thumbnailPath : imagePath;
                                     
                                     var imageData = ImageDataFactory.Create(imgPath);
-                                    var img = new Image(imageData).SetWidth(150).SetHeight(150);
+                                    // Используем только ширину, чтобы сохранить пропорции изображения
+                                    // Высота будет вычислена автоматически на основе исходных пропорций
+                                    var img = new Image(imageData).SetWidth(150);
                                     bookTable.AddCell(new Cell().Add(img).SetVerticalAlignment(VerticalAlignment.TOP));
                                 }
                                 else

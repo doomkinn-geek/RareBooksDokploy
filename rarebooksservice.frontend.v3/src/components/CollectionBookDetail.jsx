@@ -30,6 +30,7 @@ const CollectionBookDetail = () => {
     const [error, setError] = useState('');
     const [editMode, setEditMode] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [imageBlobs, setImageBlobs] = useState({});
 
     // Форма редактирования
     const [formData, setFormData] = useState({
@@ -55,6 +56,41 @@ const CollectionBookDetail = () => {
     useEffect(() => {
         loadBook();
     }, [id]);
+
+    // Функция для загрузки изображения с авторизацией
+    const loadImage = async (imageUrl) => {
+        if (imageBlobs[imageUrl]) {
+            return imageBlobs[imageUrl];
+        }
+
+        try {
+            const token = Cookies.get('token');
+            const response = await axios.get(`${API_URL.replace('/api', '')}${imageUrl}`, {
+                headers: { Authorization: `Bearer ${token}` },
+                responseType: 'blob'
+            });
+            
+            const blobUrl = URL.createObjectURL(response.data);
+            setImageBlobs(prev => ({ ...prev, [imageUrl]: blobUrl }));
+            return blobUrl;
+        } catch (error) {
+            console.error('Ошибка загрузки изображения:', error);
+            return '/placeholder-book.svg';
+        }
+    };
+
+    // Компонент для отображения авторизованного изображения
+    const AuthorizedImage = ({ imageUrl, alt, sx, ...props }) => {
+        const [src, setSrc] = useState('/placeholder-book.svg');
+        
+        useEffect(() => {
+            if (imageUrl) {
+                loadImage(imageUrl).then(setSrc);
+            }
+        }, [imageUrl]);
+        
+        return <Box component="img" src={src} alt={alt} sx={sx} {...props} />;
+    };
 
     const loadBook = async () => {
         try {
@@ -343,8 +379,11 @@ const CollectionBookDetail = () => {
             )}
 
             <Grid container spacing={3}>
-                {/* Левая колонка - галерея и изображения */}
-                <Grid item xs={12} md={5}>
+                {/* Верхняя секция - информация о книге с фотографиями */}
+                <Grid item xs={12}>
+                    <Grid container spacing={3}>
+                        {/* Левая колонка - галерея и изображения */}
+                        <Grid item xs={12} md={5}>
                     <Paper elevation={2} sx={{ p: 2, mb: 2 }}>
                         {images.length > 0 ? (
                             <>
@@ -359,9 +398,8 @@ const CollectionBookDetail = () => {
                                         mb: 2
                                     }}
                                 >
-                                    <Box
-                                        component="img"
-                                        src={`${API_URL}${currentImage.imageUrl}`}
+                                    <AuthorizedImage
+                                        imageUrl={currentImage.imageUrl}
                                         alt={book.title}
                                         sx={{
                                             position: 'absolute',
@@ -447,9 +485,8 @@ const CollectionBookDetail = () => {
                                                         }
                                                     }}
                                                 >
-                                                    <Box
-                                                        component="img"
-                                                        src={`${API_URL}${img.imageUrl}`}
+                                                    <AuthorizedImage
+                                                        imageUrl={img.imageUrl}
                                                         alt=""
                                                         sx={{
                                                             position: 'absolute',
@@ -508,10 +545,10 @@ const CollectionBookDetail = () => {
                             />
                         </Paper>
                     )}
-                </Grid>
+                        </Grid>
 
-                {/* Правая колонка - информация */}
-                <Grid item xs={12} md={7}>
+                        {/* Правая колонка - информация */}
+                        <Grid item xs={12} md={7}>
                     {/* Основная информация */}
                     <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
                         {editMode ? (
@@ -638,6 +675,9 @@ const CollectionBookDetail = () => {
                                     {book.referenceBook && !book.isManuallyPriced && (
                                         <Typography variant="body2" sx={{ opacity: 0.9 }}>
                                             На основе книги: {book.referenceBook.title}
+                                            {book.referenceBookId && (
+                                                <span> (ID: {book.referenceBookId})</span>
+                                            )}
                                         </Typography>
                                     )}
                                 </>
@@ -662,7 +702,12 @@ const CollectionBookDetail = () => {
                         </CardContent>
                     </Card>
 
-                    {/* Найденные аналоги */}
+                        </Grid>
+                    </Grid>
+                </Grid>
+
+                {/* Нижняя секция - найденные аналоги на всю ширину */}
+                <Grid item xs={12}>
                     <Paper elevation={2} sx={{ p: 3 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                             <Typography variant="h6">
@@ -684,6 +729,8 @@ const CollectionBookDetail = () => {
                             onSelectReference={handleSelectReference}
                             selectedReferenceId={book.referenceBookId}
                             loading={searchingMatches}
+                            bookId={book.id}
+                            bookTitle={book.title}
                         />
                     </Paper>
                 </Grid>

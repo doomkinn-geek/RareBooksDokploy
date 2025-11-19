@@ -280,6 +280,14 @@ namespace RareBooksService.Data
             modelBuilder.Entity<UserCollectionBookMatch>()
                 .HasIndex(m => new { m.UserCollectionBookId, m.MatchedBookId })
                 .IsUnique();
+
+            // Игнорируем навигационные свойства, которые ссылаются на другую БД (BooksDb)
+            // MatchedBook и ReferenceBook находятся в BooksDb, а не в UsersDb
+            modelBuilder.Entity<UserCollectionBookMatch>()
+                .Ignore(m => m.MatchedBook);
+
+            modelBuilder.Entity<UserCollectionBook>()
+                .Ignore(cb => cb.ReferenceBook);
         }
     }
 }

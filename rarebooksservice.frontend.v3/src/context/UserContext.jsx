@@ -56,8 +56,16 @@ export const UserProvider = ({ children }) => {
             console.log('refreshUser - Полученные данные пользователя:', response.data);
             // Проверяем наличие hasSubscription
             console.log('refreshUser - hasSubscription:', response.data.hasSubscription);
-            console.log('refreshUser - HasCollectionAccess:', response.data.hasCollectionAccess || response.data.HasCollectionAccess);
-            console.log('refreshUser - CurrentSubscription:', response.data.currentSubscription || response.data.CurrentSubscription);
+            console.log('refreshUser - hasCollectionAccess:', response.data.hasCollectionAccess);
+            console.log('refreshUser - currentSubscription:', response.data.currentSubscription);
+            
+            // Дополнительная диагностика для доступа к коллекции
+            if (response.data.currentSubscription) {
+                const subscription = response.data.currentSubscription;
+                console.log('refreshUser - Подписка найдена:', subscription);
+                console.log('refreshUser - План подписки:', subscription.subscriptionPlan);
+                console.log('refreshUser - HasCollectionAccess в плане:', subscription.subscriptionPlan?.hasCollectionAccess);
+            }
             
             setUser(response.data);
             console.log('refreshUser - Пользователь успешно установлен в контекст');

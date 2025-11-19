@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using RareBooksService.Common.Models;
 using RareBooksService.Common.Models.Dto;
 using RareBooksService.Data;
 using RareBooksService.WebApi.Helpers;
@@ -20,6 +22,7 @@ namespace RareBooksService.WebApi.Controllers
         private readonly ICollectionImageService _imageService;
         private readonly ICollectionExportService _exportService;
         private readonly UsersDbContext _usersContext;
+        private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILogger<UserCollectionController> _logger;
 
         public UserCollectionController(
@@ -28,6 +31,7 @@ namespace RareBooksService.WebApi.Controllers
             ICollectionImageService imageService,
             ICollectionExportService exportService,
             UsersDbContext usersContext,
+            UserManager<ApplicationUser> userManager,
             ILogger<UserCollectionController> logger)
         {
             _collectionService = collectionService;
@@ -35,6 +39,7 @@ namespace RareBooksService.WebApi.Controllers
             _imageService = imageService;
             _exportService = exportService;
             _usersContext = usersContext;
+            _userManager = userManager;
             _logger = logger;
         }
 
@@ -42,6 +47,12 @@ namespace RareBooksService.WebApi.Controllers
         {
             return User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                 ?? throw new UnauthorizedAccessException("Пользователь не авторизован");
+        }
+
+        private async Task<ApplicationUser> GetCurrentUserAsync()
+        {
+            var userId = GetUserId();
+            return await _userManager.FindByIdAsync(userId);
         }
 
         /// <summary>
@@ -248,12 +259,13 @@ namespace RareBooksService.WebApi.Controllers
         /// Получить изображение
         /// </summary>
         [HttpGet("{bookId}/images/{fileName}")]
-        [AllowAnonymous] // Разрешаем анонимный доступ для отображения изображений
         public async Task<ActionResult> GetImage(int bookId, string fileName)
         {
+            _logger.LogInformation("Запрос изображения: bookId={BookId}, fileName={FileName}", bookId, fileName);
             try
             {
                 var userId = GetUserId();
+                _logger.LogInformation("UserId для изображения: {UserId}", userId);
                 var imagePath = await _imageService.GetImagePathAsync(userId, bookId, fileName);
                 
                 var contentType = "image/jpeg";
@@ -283,6 +295,12 @@ namespace RareBooksService.WebApi.Controllers
             try
             {
                 var userId = GetUserId();
+                var user = await GetCurrentUserAsync();
+                if (user == null)
+                {
+                    return Unauthorized("Пользователь не авторизован");
+                }
+
                 var book = await _collectionService.GetBookDetailsAsync(id, userId);
                 
                 // Преобразуем DTO обратно в модель для поиска
@@ -291,10 +309,11 @@ namespace RareBooksService.WebApi.Controllers
                     Id = book.Id,
                     Title = book.Title,
                     Author = book.Author,
-                    YearPublished = book.YearPublished
+                    YearPublished = book.YearPublished,
+                    Description = book.Description
                 };
 
-                var matches = await _matchingService.FindMatchesAsync(bookModel);
+                var matches = await _matchingService.FindMatchesAsync(bookModel, user);
                 return Ok(matches);
             }
             catch (InvalidOperationException ex)
@@ -304,6 +323,54 @@ namespace RareBooksService.WebApi.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при поиске аналогов для книги {BookId}", id);
+                return StatusCode(500, new { error = "Ошибка при поиске аналогов" });
+            }
+        }
+
+        /// <summary>
+        /// Найти аналоги для книги с пользовательским запросом
+        /// </summary>
+        [HttpGet("{id}/matches/search")]
+        public async Task<ActionResult<List<BookMatchDto>>> FindMatchesWithCustomQuery(int id, [FromQuery] string query)
+        {
+            try
+            {
+                var userId = GetUserId();
+                var user = await GetCurrentUserAsync();
+                if (user == null)
+                {
+                    return Unauthorized("Пользователь не авторизован");
+                }
+
+                if (string.IsNullOrWhiteSpace(query))
+                {
+                    return BadRequest(new { error = "Запрос не может быть пустым" });
+                }
+
+                var book = await _collectionService.GetBookDetailsAsync(id, userId);
+                
+                // Создаем временную модель с пользовательским запросом
+                var bookModel = new Common.Models.UserCollectionBook
+                {
+                    Id = book.Id,
+                    Title = query, // Используем пользовательский запрос
+                    Author = book.Author,
+                    YearPublished = book.YearPublished,
+                    Description = book.Description
+                };
+
+                _logger.LogInformation("Поиск аналогов с пользовательским запросом '{Query}' для книги {BookId}", query, id);
+                
+                var matches = await _matchingService.FindMatchesAsync(bookModel, user);
+                return Ok(matches);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return NotFound(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при поиске аналогов с пользовательским запросом для книги {BookId}", id);
                 return StatusCode(500, new { error = "Ошибка при поиске аналогов" });
             }
         }
