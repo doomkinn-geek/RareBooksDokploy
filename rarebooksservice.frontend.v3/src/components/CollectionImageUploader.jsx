@@ -19,6 +19,7 @@ const CollectionImageUploader = ({
     maxFiles = 10 
 }) => {
     const [error, setError] = useState('');
+    const [processingFiles, setProcessingFiles] = useState(new Set());
 
     const onDrop = useCallback(async (acceptedFiles) => {
         setError('');
@@ -28,26 +29,44 @@ const CollectionImageUploader = ({
             return;
         }
 
+        // Добавляем файлы в список обрабатываемых
+        const newProcessing = new Set(processingFiles);
+        acceptedFiles.forEach(file => newProcessing.add(file.name));
+        setProcessingFiles(newProcessing);
+
         for (const file of acceptedFiles) {
             // Проверка размера (10MB)
             if (file.size > 10 * 1024 * 1024) {
                 setError(`Файл ${file.name} слишком большой (максимум 10MB)`);
+                newProcessing.delete(file.name);
+                setProcessingFiles(new Set(newProcessing));
                 continue;
             }
 
             // Проверка типа
             if (!['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(file.type)) {
                 setError(`Файл ${file.name} имеет неподдерживаемый формат (только JPG, PNG, WEBP)`);
+                newProcessing.delete(file.name);
+                setProcessingFiles(new Set(newProcessing));
                 continue;
             }
 
             try {
+                // Ждем завершения загрузки файла
                 await onUpload(file);
+                // Удаляем файл из списка обрабатываемых после успешной загрузки
+                newProcessing.delete(file.name);
+                setProcessingFiles(new Set(newProcessing));
             } catch (err) {
                 setError(`Ошибка загрузки ${file.name}: ${err.message}`);
+                newProcessing.delete(file.name);
+                setProcessingFiles(new Set(newProcessing));
             }
         }
-    }, [images, maxFiles, onUpload]);
+    }, [images, maxFiles, onUpload, processingFiles]);
+
+    // Проверяем, есть ли файлы в процессе загрузки
+    const isProcessing = processingFiles.size > 0 || uploading;
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         onDrop,
@@ -57,7 +76,7 @@ const CollectionImageUploader = ({
             'image/webp': ['.webp']
         },
         multiple: true,
-        disabled: uploading || images.length >= maxFiles
+        disabled: isProcessing || images.length >= maxFiles
     });
 
     return (
@@ -79,7 +98,7 @@ const CollectionImageUploader = ({
                         border: '2px dashed',
                         borderColor: isDragActive ? 'primary.main' : 'grey.400',
                         bgcolor: isDragActive ? 'action.hover' : 'grey.50',
-                        cursor: uploading ? 'wait' : 'pointer',
+                        cursor: isProcessing ? 'wait' : 'pointer',
                         textAlign: 'center',
                         transition: 'all 0.3s',
                         '&:hover': {
@@ -89,8 +108,8 @@ const CollectionImageUploader = ({
                     }}
                 >
                     <input {...getInputProps()} />
-                    <UploadIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                    <Typography variant="h6" gutterBottom>
+                    <UploadIcon sx={{ fontSize: { xs: 40, sm: 48 }, color: 'primary.main', mb: 2 }} />
+                    <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
                         {isDragActive ? 'Отпустите файлы здесь' : 'Перетащите изображения сюда'}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
@@ -99,9 +118,12 @@ const CollectionImageUploader = ({
                     <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                         JPG, PNG, WEBP до 10MB • Максимум {maxFiles} изображений
                     </Typography>
-                    {uploading && (
+                    {isProcessing && (
                         <Box sx={{ mt: 2 }}>
                             <CircularProgress size={24} />
+                            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                                Загрузка...
+                            </Typography>
                         </Box>
                     )}
                 </Paper>
@@ -154,14 +176,15 @@ const CollectionImageUploader = ({
                                                 color: 'white',
                                                 borderRadius: '50%',
                                                 p: 0.5,
-                                                boxShadow: 2
+                                                boxShadow: 2,
+                                                zIndex: 1
                                             }}
                                         >
                                             <StarIcon fontSize="small" />
                                         </Box>
                                     )}
 
-                                    {/* Кнопки действий */}
+                                    {/* Кнопки действий - всегда видны на мобильных, на hover на десктопе */}
                                     <Box
                                         className="actions"
                                         sx={{
@@ -174,7 +197,7 @@ const CollectionImageUploader = ({
                                             justifyContent: 'center',
                                             gap: 1,
                                             p: 1,
-                                            opacity: 0,
+                                            opacity: { xs: 1, md: 0 }, // Всегда видны на мобильных
                                             transition: 'opacity 0.3s'
                                         }}
                                     >
@@ -182,10 +205,14 @@ const CollectionImageUploader = ({
                                             <IconButton
                                                 size="small"
                                                 onClick={() => onSetMain(image.id)}
-                                                sx={{ color: 'white' }}
+                                                sx={{ 
+                                                    color: 'white',
+                                                    bgcolor: 'rgba(255, 255, 255, 0.1)',
+                                                    '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.2)' }
+                                                }}
                                                 title="Сделать главным"
                                             >
-                                                <StarBorderIcon />
+                                                <StarBorderIcon fontSize="small" />
                                             </IconButton>
                                         )}
 
@@ -193,10 +220,14 @@ const CollectionImageUploader = ({
                                             <IconButton
                                                 size="small"
                                                 onClick={() => onDelete(image.id)}
-                                                sx={{ color: 'white' }}
+                                                sx={{ 
+                                                    color: 'white',
+                                                    bgcolor: 'rgba(255, 255, 255, 0.1)',
+                                                    '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.2)' }
+                                                }}
                                                 title="Удалить"
                                             >
-                                                <DeleteIcon />
+                                                <DeleteIcon fontSize="small" />
                                             </IconButton>
                                         )}
                                     </Box>

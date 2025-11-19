@@ -310,66 +310,97 @@ const CollectionBookDetail = () => {
     return (
         <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}>
             {/* Шапка */}
-            <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                <Button
-                    startIcon={<BackIcon />}
-                    onClick={() => navigate('/collection')}
-                    variant="outlined"
-                >
-                    К коллекции
-                </Button>
+            <Box sx={{ mb: 3 }}>
+                {/* Кнопка "Назад" и заголовок */}
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 2 }}>
+                    <Button
+                        startIcon={<BackIcon />}
+                        onClick={() => navigate('/collection')}
+                        variant="outlined"
+                        size="small"
+                        sx={{ flexShrink: 0 }}
+                    >
+                        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>К коллекции</Box>
+                        <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>Назад</Box>
+                    </Button>
 
-                <Typography variant="h5" component="h1" sx={{ fontWeight: 'bold', flexGrow: 1 }}>
-                    {book.title}
-                </Typography>
+                    <Typography 
+                        variant="h5" 
+                        component="h1" 
+                        sx={{ 
+                            fontWeight: 'bold', 
+                            flexGrow: 1,
+                            fontSize: { xs: '1.25rem', sm: '1.5rem' }
+                        }}
+                    >
+                        {book.title}
+                    </Typography>
+                </Box>
 
-                {!editMode ? (
-                    <>
-                        <Button
-                            startIcon={<EditIcon />}
-                            onClick={() => setEditMode(true)}
-                            variant="outlined"
-                        >
-                            Редактировать
-                        </Button>
-                        <Button
-                            startIcon={<DeleteIcon />}
-                            onClick={handleDelete}
-                            color="error"
-                            variant="outlined"
-                        >
-                            Удалить
-                        </Button>
-                    </>
-                ) : (
-                    <>
-                        <Button
-                            startIcon={<SaveIcon />}
-                            onClick={handleUpdate}
-                            variant="contained"
-                        >
-                            Сохранить
-                        </Button>
-                        <Button
-                            startIcon={<CancelIcon />}
-                            onClick={() => {
-                                setEditMode(false);
-                                setFormData({
-                                    title: book.title || '',
-                                    author: book.author || '',
-                                    yearPublished: book.yearPublished || '',
-                                    description: book.description || '',
-                                    notes: book.notes || '',
-                                    estimatedPrice: book.estimatedPrice || '',
-                                    isManuallyPriced: book.isManuallyPriced || false
-                                });
-                            }}
-                            variant="outlined"
-                        >
-                            Отмена
-                        </Button>
-                    </>
-                )}
+                {/* Кнопки действий */}
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    {!editMode ? (
+                        <>
+                            <Button
+                                startIcon={<EditIcon />}
+                                onClick={() => setEditMode(true)}
+                                variant="outlined"
+                                size="small"
+                                fullWidth={false}
+                                sx={{ flexGrow: { xs: 1, sm: 0 } }}
+                            >
+                                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Редактировать</Box>
+                                <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>Ред.</Box>
+                            </Button>
+                            <Button
+                                startIcon={<DeleteIcon />}
+                                onClick={handleDelete}
+                                color="error"
+                                variant="outlined"
+                                size="small"
+                                fullWidth={false}
+                                sx={{ flexGrow: { xs: 1, sm: 0 } }}
+                            >
+                                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Удалить</Box>
+                                <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>Удал.</Box>
+                            </Button>
+                        </>
+                    ) : (
+                        <>
+                            <Button
+                                startIcon={<SaveIcon />}
+                                onClick={handleUpdate}
+                                variant="contained"
+                                size="small"
+                                fullWidth={false}
+                                sx={{ flexGrow: { xs: 1, sm: 0 } }}
+                            >
+                                Сохранить
+                            </Button>
+                            <Button
+                                startIcon={<CancelIcon />}
+                                onClick={() => {
+                                    setEditMode(false);
+                                    setFormData({
+                                        title: book.title || '',
+                                        author: book.author || '',
+                                        yearPublished: book.yearPublished || '',
+                                        description: book.description || '',
+                                        notes: book.notes || '',
+                                        estimatedPrice: book.estimatedPrice || '',
+                                        isManuallyPriced: book.isManuallyPriced || false
+                                    });
+                                }}
+                                variant="outlined"
+                                size="small"
+                                fullWidth={false}
+                                sx={{ flexGrow: { xs: 1, sm: 0 } }}
+                            >
+                                Отмена
+                            </Button>
+                        </>
+                    )}
+                </Box>
             </Box>
 
             {error && (
@@ -417,31 +448,33 @@ const CollectionBookDetail = () => {
                                             <IconButton
                                                 onClick={() => setCurrentImageIndex(Math.max(0, currentImageIndex - 1))}
                                                 disabled={currentImageIndex === 0}
+                                                size="small"
                                                 sx={{
                                                     position: 'absolute',
-                                                    left: 8,
+                                                    left: { xs: 4, sm: 8 },
                                                     top: '50%',
                                                     transform: 'translateY(-50%)',
                                                     bgcolor: 'rgba(255,255,255,0.8)',
                                                     '&:hover': { bgcolor: 'white' }
                                                 }}
                                             >
-                                                <ChevronLeft />
+                                                <ChevronLeft fontSize="small" />
                                             </IconButton>
 
                                             <IconButton
                                                 onClick={() => setCurrentImageIndex(Math.min(images.length - 1, currentImageIndex + 1))}
                                                 disabled={currentImageIndex === images.length - 1}
+                                                size="small"
                                                 sx={{
                                                     position: 'absolute',
-                                                    right: 8,
+                                                    right: { xs: 4, sm: 8 },
                                                     top: '50%',
                                                     transform: 'translateY(-50%)',
                                                     bgcolor: 'rgba(255,255,255,0.8)',
                                                     '&:hover': { bgcolor: 'white' }
                                                 }}
                                             >
-                                                <ChevronRight />
+                                                <ChevronRight fontSize="small" />
                                             </IconButton>
 
                                             <Box
@@ -469,7 +502,7 @@ const CollectionBookDetail = () => {
                                 {images.length > 1 && (
                                     <Grid container spacing={1}>
                                         {images.map((img, idx) => (
-                                            <Grid item xs={3} key={img.id}>
+                                            <Grid item xs={4} sm={3} key={img.id}>
                                                 <Box
                                                     onClick={() => setCurrentImageIndex(idx)}
                                                     sx={{
@@ -602,12 +635,24 @@ const CollectionBookDetail = () => {
                             </Grid>
                         ) : (
                             <>
-                                <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>
+                                <Typography 
+                                    variant="h4" 
+                                    gutterBottom 
+                                    sx={{ 
+                                        fontWeight: 'bold',
+                                        fontSize: { xs: '1.5rem', sm: '2rem' }
+                                    }}
+                                >
                                     {book.title}
                                 </Typography>
 
                                 {book.author && (
-                                    <Typography variant="h6" color="text.secondary" gutterBottom>
+                                    <Typography 
+                                        variant="h6" 
+                                        color="text.secondary" 
+                                        gutterBottom
+                                        sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+                                    >
                                         {book.author}
                                     </Typography>
                                 )}
@@ -657,13 +702,20 @@ const CollectionBookDetail = () => {
                     {/* Оценка стоимости */}
                     <Card elevation={2} sx={{ mb: 3, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
                         <CardContent>
-                            <Typography variant="h6" gutterBottom>
+                            <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
                                 Оценка стоимости
                             </Typography>
 
                             {book.estimatedPrice ? (
                                 <>
-                                    <Typography variant="h3" sx={{ fontWeight: 'bold', mb: 1 }}>
+                                    <Typography 
+                                        variant="h3" 
+                                        sx={{ 
+                                            fontWeight: 'bold', 
+                                            mb: 1,
+                                            fontSize: { xs: '2rem', sm: '3rem' }
+                                        }}
+                                    >
                                         {book.estimatedPrice.toLocaleString('ru-RU')} ₽
                                     </Typography>
                                     <Chip
@@ -673,7 +725,7 @@ const CollectionBookDetail = () => {
                                     />
 
                                     {book.referenceBook && !book.isManuallyPriced && (
-                                        <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                                        <Typography variant="body2" sx={{ opacity: 0.9, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
                                             На основе книги: {book.referenceBook.title}
                                             {book.referenceBookId && (
                                                 <span> (ID: {book.referenceBookId})</span>
@@ -694,10 +746,12 @@ const CollectionBookDetail = () => {
                                     setManualPrice(book.estimatedPrice || '');
                                     setPriceDialogOpen(true);
                                 }}
+                                size="small"
                                 sx={{ bgcolor: 'white', color: 'primary.main', '&:hover': { bgcolor: 'grey.100' } }}
                                 fullWidth
                             >
-                                Установить цену вручную
+                                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Установить цену вручную</Box>
+                                <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>Установить цену</Box>
                             </Button>
                         </CardContent>
                     </Card>

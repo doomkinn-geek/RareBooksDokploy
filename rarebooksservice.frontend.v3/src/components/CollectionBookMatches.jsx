@@ -463,22 +463,31 @@ const CollectionBookMatches = ({
                                     }}
                                 >
                                     {/* Индикатор совпадения */}
-                                    <Box sx={{ position: 'absolute', top: 12, left: 12, zIndex: 10 }}>
+                                    <Box sx={{ 
+                                        position: 'absolute', 
+                                        top: { xs: 8, sm: 12 }, 
+                                        left: { xs: 8, sm: 12 }, 
+                                        zIndex: 10 
+                                    }}>
                                         <Chip
-                                            label={`Совпадение: ${getMatchPercentage(match.matchScore)}%`}
+                                            label={`${getMatchPercentage(match.matchScore)}%`}
                                             size="small"
                                             color={getMatchColor(match.matchScore)}
-                                            sx={{ fontWeight: 'bold' }}
+                                            sx={{ 
+                                                fontWeight: 'bold',
+                                                fontSize: { xs: '0.7rem', sm: '0.8125rem' }
+                                            }}
                                         />
                                     </Box>
 
                                     {/* Кнопка избранного */}
                                     <Tooltip title={favoriteBooks[book.id] ? "Удалить из избранного" : "Добавить в избранное"}>
                                         <IconButton
+                                            size="small"
                                             sx={{
                                                 position: 'absolute',
-                                                top: 8,
-                                                right: 8,
+                                                top: { xs: 4, sm: 8 },
+                                                right: { xs: 4, sm: 8 },
                                                 zIndex: 10,
                                                 backgroundColor: 'rgba(255, 255, 255, 0.8)',
                                                 '&:hover': {
@@ -489,11 +498,11 @@ const CollectionBookMatches = ({
                                             disabled={favoritesLoading[book.id]}
                                         >
                                             {favoritesLoading[book.id] ? (
-                                                <CircularProgress size={24} />
+                                                <CircularProgress size={20} />
                                             ) : favoriteBooks[book.id] ? (
-                                                <FavoriteIcon sx={{ color: 'red' }} />
+                                                <FavoriteIcon sx={{ color: 'red', fontSize: { xs: '1.2rem', sm: '1.5rem' } }} />
                                             ) : (
-                                                <FavoriteBorderIcon />
+                                                <FavoriteBorderIcon sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }} />
                                             )}
                                         </IconButton>
                                     </Tooltip>
@@ -503,17 +512,17 @@ const CollectionBookMatches = ({
                                         <Box
                                             sx={{
                                                 position: 'absolute',
-                                                top: 8,
-                                                right: 60,
+                                                top: { xs: 4, sm: 8 },
+                                                right: { xs: 44, sm: 60 },
                                                 bgcolor: 'success.main',
                                                 color: 'white',
                                                 borderRadius: '50%',
-                                                p: 0.5,
+                                                p: { xs: 0.3, sm: 0.5 },
                                                 zIndex: 10,
                                                 boxShadow: 2
                                             }}
                                         >
-                                            <CheckIcon />
+                                            <CheckIcon sx={{ fontSize: { xs: '1rem', sm: '1.5rem' } }} />
                                         </Box>
                                     )}
 
@@ -527,7 +536,7 @@ const CollectionBookMatches = ({
                                                     alignItems: 'center',
                                                     justifyContent: 'center',
                                                     cursor: 'pointer',
-                                                    minHeight: '200px',
+                                                    minHeight: { xs: '150px', sm: '200px' },
                                                     position: 'relative'
                                                 }}
                                                 onClick={() => navigate(`/books/${book.id}`)}
@@ -578,13 +587,14 @@ const CollectionBookMatches = ({
                                             
                                             {/* Информация о книге */}
                                             <Grid item xs={12} sm={9} md={10}>
-                                                <Box sx={{ p: 3 }}>
+                                                <Box sx={{ p: { xs: 2, sm: 3 } }}>
                                                     <Typography 
                                                         variant="h5" 
                                                         component="h3"
                                                         fontWeight="bold"
                                                         sx={{ 
                                                             mb: 1,
+                                                            fontSize: { xs: '1.1rem', sm: '1.5rem' },
                                                             cursor: 'pointer',
                                                             color: theme.palette.primary.dark,
                                                             '&:hover': { color: theme.palette.primary.main },
@@ -700,8 +710,15 @@ const CollectionBookMatches = ({
                                                         </Grid>
                                                     </Grid>
 
-                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
-                                                        <Box>
+                                                    <Box sx={{ 
+                                                        display: 'flex', 
+                                                        flexDirection: { xs: 'column', sm: 'row' },
+                                                        justifyContent: 'space-between', 
+                                                        alignItems: { xs: 'stretch', sm: 'center' }, 
+                                                        mt: 2,
+                                                        gap: { xs: 1, sm: 0 }
+                                                    }}>
+                                                        <Box sx={{ order: { xs: 2, sm: 1 } }}>
                                                             {favoriteBooks[book.id] && (
                                                                 <Chip
                                                                     icon={<FavoriteIcon sx={{ color: 'red !important' }} />}
@@ -717,19 +734,26 @@ const CollectionBookMatches = ({
                                                             )}
                                                         </Box>
 
-                                                        <Box sx={{ display: 'flex', gap: 1 }}>
+                                                        <Box sx={{ 
+                                                            display: 'flex', 
+                                                            flexDirection: { xs: 'column', sm: 'row' },
+                                                            gap: 1,
+                                                            order: { xs: 1, sm: 2 }
+                                                        }}>
                                                             {!isSelected && onSelectReference && (
                                                                 <Button
                                                                     variant="contained"
                                                                     startIcon={<TrendingIcon />}
                                                                     onClick={() => onSelectReference(match.matchedBookId)}
+                                                                    size="small"
                                                                     sx={{ 
                                                                         borderRadius: '8px', 
                                                                         textTransform: 'none',
                                                                         fontWeight: 'bold'
                                                                     }}
                                                                 >
-                                                                    Использовать для оценки
+                                                                    <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Использовать для оценки</Box>
+                                                                    <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>Использовать</Box>
                                                                 </Button>
                                                             )}
 
@@ -738,6 +762,7 @@ const CollectionBookMatches = ({
                                                                     label="Выбран как референс"
                                                                     color="success"
                                                                     icon={<CheckIcon />}
+                                                                    size="small"
                                                                     sx={{ fontWeight: 'bold' }}
                                                                 />
                                                             )}
@@ -746,6 +771,7 @@ const CollectionBookMatches = ({
                                                                 variant="outlined"
                                                                 endIcon={<OpenIcon />}
                                                                 onClick={() => navigate(`/books/${book.id}`)}
+                                                                size="small"
                                                                 sx={{ 
                                                                     borderRadius: '8px', 
                                                                     textTransform: 'none',

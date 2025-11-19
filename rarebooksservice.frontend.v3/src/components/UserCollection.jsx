@@ -223,61 +223,74 @@ const UserCollection = () => {
             )}
 
             {/* Панель управления */}
-            <Box sx={{ mb: 3, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2, alignItems: { md: 'center' } }}>
-                <TextField
-                    placeholder="Поиск по названию или автору..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    size="small"
-                    sx={{ flexGrow: 1 }}
-                    InputProps={{
-                        startAdornment: (
-                            <InputAdornment position="start">
-                                <SearchIcon />
-                            </InputAdornment>
-                        )
-                    }}
-                />
+            <Box sx={{ mb: 3 }}>
+                {/* Поиск и сортировка */}
+                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2, mb: 2 }}>
+                    <TextField
+                        placeholder="Поиск по названию или автору..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        size="small"
+                        sx={{ flexGrow: 1 }}
+                        InputProps={{
+                            startAdornment: (
+                                <InputAdornment position="start">
+                                    <SearchIcon />
+                                </InputAdornment>
+                            )
+                        }}
+                    />
 
-                <TextField
-                    select
-                    label="Сортировка"
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    size="small"
-                    sx={{ minWidth: 200 }}
-                >
-                    <MenuItem value="addedDate">По дате добавления</MenuItem>
-                    <MenuItem value="title">По названию</MenuItem>
-                    <MenuItem value="price">По оценке</MenuItem>
-                </TextField>
+                    <TextField
+                        select
+                        label="Сортировка"
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value)}
+                        size="small"
+                        sx={{ minWidth: { xs: '100%', sm: 200 } }}
+                    >
+                        <MenuItem value="addedDate">По дате добавления</MenuItem>
+                        <MenuItem value="title">По названию</MenuItem>
+                        <MenuItem value="price">По оценке</MenuItem>
+                    </TextField>
+                </Box>
 
-                <Button
-                    variant="contained"
-                    startIcon={<AddIcon />}
-                    onClick={() => navigate('/collection/add')}
-                    sx={{ minWidth: { xs: '100%', md: 'auto' } }}
-                >
-                    Добавить книгу
-                </Button>
+                {/* Кнопки действий */}
+                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
+                    <Button
+                        variant="contained"
+                        startIcon={<AddIcon />}
+                        onClick={() => navigate('/collection/add')}
+                        fullWidth={true}
+                        sx={{ flexGrow: { sm: 1 } }}
+                    >
+                        Добавить книгу
+                    </Button>
 
-                <Button
-                    variant="outlined"
-                    startIcon={<PdfIcon />}
-                    onClick={handleExportPdf}
-                    disabled={books.length === 0}
-                >
-                    PDF
-                </Button>
+                    <Box sx={{ display: 'flex', gap: 2 }}>
+                        <Button
+                            variant="outlined"
+                            startIcon={<PdfIcon />}
+                            onClick={handleExportPdf}
+                            disabled={books.length === 0}
+                            fullWidth
+                            sx={{ flexGrow: 1 }}
+                        >
+                            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Экспорт </Box>PDF
+                        </Button>
 
-                <Button
-                    variant="outlined"
-                    startIcon={<ZipIcon />}
-                    onClick={handleExportJson}
-                    disabled={books.length === 0}
-                >
-                    ZIP
-                </Button>
+                        <Button
+                            variant="outlined"
+                            startIcon={<ZipIcon />}
+                            onClick={handleExportJson}
+                            disabled={books.length === 0}
+                            fullWidth
+                            sx={{ flexGrow: 1 }}
+                        >
+                            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Экспорт </Box>ZIP
+                        </Button>
+                    </Box>
+                </Box>
             </Box>
 
             {/* Список книг */}
