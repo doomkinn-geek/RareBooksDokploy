@@ -2,16 +2,17 @@
 FROM node:18-alpine AS build
 WORKDIR /app
 
-# Копируем package.json, package-lock.json
+# Копируем package.json, package-lock.json (для кеширования слоя dependencies)
 COPY package*.json ./
-# Устанавливаем все зависимости явно, включая yet-another-react-lightbox
-RUN npm install
-# Для гарантии установки критической зависимости
-RUN npm install yet-another-react-lightbox@3.16.0 --save
+
+# Используем npm ci для более быстрой и надежной установки в production
+# --prefer-offline использует кеш, если доступен
+RUN npm ci --prefer-offline --no-audit
 
 # Копируем исходники
 COPY . .
-# Создание сборки (в Vite передается VITE_API_URL и т.д.)
+
+# Создание оптимизированной сборки
 RUN npm run build
 
 # 2) Этап "runtime": nginx + собранное приложение

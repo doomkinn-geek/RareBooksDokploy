@@ -1,9 +1,16 @@
-﻿# .dockerignore
+﻿# .dockerignore для Backend
 
+# Исключаем ненужные папки
 **/bin/
 **/obj/
 **/node_modules/
 **/books_photos/
+
+# Исключаем фронтенд полностью
+rarebooksservice.frontend.v3/
+**/dist/
+
+# Исключаем файлы разработки
 **/*.db
 .DS_Store
 .git
@@ -11,6 +18,42 @@
 .vscode
 *.sln
 *.user
+*.md
+**/README.md
+
+# Исключаем backup и временные файлы
+_BACKUPS/
+_bak/
+_CERTS/
+*.bak
+
+# Исключаем nginx и конфиги
+nginx/
+*.conf
+
+# Исключаем документацию
+**/*.md
+doc.txt
+*.txt
+!packages.txt
+
+# Исключаем скрипты
+*.sh
+*.bat
+*.ps1
+
+# Исключаем ключи
+id_ed25519*
+KEYS/
+
+# Исключаем тестовые проекты, которые не нужны для runtime
+TelegramBotTest/
+TelegramBotManager/
+RareBooksService.CategoryCleanup/
+
+# Исключаем парсеры
 MeshokParser/
-books_extended.db
+
+# Исключаем конфиги development
+appsettings.Development.json
 appsettings.json

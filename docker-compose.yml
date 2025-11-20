@@ -53,6 +53,11 @@ services:
     build:
       context: .
       dockerfile: RareBooksService.WebApi/Dockerfile
+      cache_from:
+        - rarebooks_backend:latest
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    image: rarebooks_backend:latest
     container_name: rarebooks_backend
     depends_on:
       db_books:
@@ -78,6 +83,11 @@ services:
     build:
       context: ./rarebooksservice.frontend.v3
       dockerfile: Dockerfile
+      cache_from:
+        - rarebooks_frontend:latest
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    image: rarebooks_frontend:latest
     container_name: rarebooks_frontend
     depends_on:
       backend:
