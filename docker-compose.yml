@@ -1,5 +1,4 @@
-﻿version: '3.8'
-name: RareBooksDokploy
+﻿name: RareBooksDokploy
 
 # Создаём изолированную сеть для безопасности
 networks:
@@ -53,8 +52,6 @@ services:
     build:
       context: .
       dockerfile: RareBooksService.WebApi/Dockerfile
-      cache_from:
-        - rarebooks_backend:latest
       args:
         BUILDKIT_INLINE_CACHE: 1
     image: rarebooks_backend:latest
@@ -83,8 +80,6 @@ services:
     build:
       context: ./rarebooksservice.frontend.v3
       dockerfile: Dockerfile
-      cache_from:
-        - rarebooks_frontend:latest
       args:
         BUILDKIT_INLINE_CACHE: 1
     image: rarebooks_frontend:latest
