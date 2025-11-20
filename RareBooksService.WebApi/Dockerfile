@@ -26,9 +26,7 @@ WORKDIR /src/RareBooksService.WebApi
 RUN dotnet publish -c Release -o /app/out \
     --runtime linux-x64 \
     --self-contained false \
-    --no-restore \
-    /p:PublishTrimmed=false \
-    /p:PublishReadyToRun=true
+    --no-restore
 
 # --------------------------------------------------
 # 2) Этап runtime: .NET 8 ASP.NET
