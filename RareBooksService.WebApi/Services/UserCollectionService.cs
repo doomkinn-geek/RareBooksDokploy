@@ -241,7 +241,7 @@ namespace RareBooksService.WebApi.Services
                     throw new InvalidOperationException($"Книга {bookId} не найдена");
                 }
 
-                book.Title = formData.Title;
+                book.Title = request.Title;
                 book.Author = request.Author;
                 book.YearPublished = request.YearPublished;
                 book.Description = request.Description;
