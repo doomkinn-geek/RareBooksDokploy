@@ -62,12 +62,12 @@ fi
 
 echo ""
 echo -e "${YELLOW}Шаг 4: Остановка контейнеров...${NC}"
-docker-compose down
+docker compose down
 echo -e "${GREEN}✅ Контейнеры остановлены${NC}"
 
 echo ""
 echo -e "${YELLOW}Шаг 5: Пересоздание контейнеров с новой конфигурацией...${NC}"
-docker-compose up -d --build
+docker compose up -d --build
 echo -e "${GREEN}✅ Контейнеры пересозданы${NC}"
 
 # Ждем, пока контейнер backend станет здоровым
