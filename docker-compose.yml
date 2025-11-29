@@ -66,6 +66,9 @@ services:
       - ConnectionStrings__UsersDb=Host=db_users;Port=5432;Database=RareBooks_Users;Username=postgres;Password=123456
       - ASPNETCORE_URLS=http://+:80
       - ASPNETCORE_ENVIRONMENT=Production
+    volumes:
+      # Постоянное хранилище для изображений коллекций пользователей
+      - collection_images:/app/wwwroot/collection_images
     networks:
       - rarebooks_network
     restart: unless-stopped
@@ -130,3 +133,4 @@ services:
 volumes:
   db_books_data:
   db_users_data:
+  collection_images:  # Постоянное хранилище для изображений коллекций пользователей
