@@ -94,6 +94,9 @@ namespace RareBooksService.WebApi.Services
                     EstimatedPrice = book.EstimatedPrice,
                     PurchasePrice = book.PurchasePrice,
                     PurchaseDate = book.PurchaseDate,
+                    IsSold = book.IsSold,
+                    SoldPrice = book.SoldPrice,
+                    SoldDate = book.SoldDate,
                     IsManuallyPriced = book.IsManuallyPriced,
                     ReferenceBookId = book.ReferenceBookId,
                     AddedDate = book.AddedDate,
@@ -238,13 +241,16 @@ namespace RareBooksService.WebApi.Services
                     throw new InvalidOperationException($"Книга {bookId} не найдена");
                 }
 
-                book.Title = request.Title;
+                book.Title = formData.Title;
                 book.Author = request.Author;
                 book.YearPublished = request.YearPublished;
                 book.Description = request.Description;
                 book.Notes = request.Notes;
                 book.PurchasePrice = request.PurchasePrice;
                 book.PurchaseDate = request.PurchaseDate;
+                book.IsSold = request.IsSold;
+                book.SoldPrice = request.SoldPrice;
+                book.SoldDate = request.SoldDate;
                 book.UpdatedDate = DateTime.UtcNow;
 
                 // Обновляем цену, если она установлена вручную
@@ -435,10 +441,18 @@ namespace RareBooksService.WebApi.Services
                     .Where(b => b.UserId == userId)
                     .ToListAsync();
 
-                var totalEstimatedValue = books.Where(b => b.EstimatedPrice.HasValue)
+                var booksNotSold = books.Where(b => !b.IsSold).ToList();
+                var booksSold = books.Where(b => b.IsSold).ToList();
+
+                var totalEstimatedValue = booksNotSold.Where(b => b.EstimatedPrice.HasValue)
                                             .Sum(b => b.EstimatedPrice.Value);
                 var totalPurchaseValue = books.Where(b => b.PurchasePrice.HasValue)
                                           .Sum(b => b.PurchasePrice.Value);
+                var totalSoldValue = booksSold.Where(b => b.SoldPrice.HasValue)
+                                          .Sum(b => b.SoldPrice.Value);
+                var purchaseOfSoldBooks = booksSold.Where(b => b.PurchasePrice.HasValue)
+                                                    .Sum(b => b.PurchasePrice.Value);
+                var totalProfit = totalSoldValue - purchaseOfSoldBooks;
                 var valueDifference = totalEstimatedValue - totalPurchaseValue;
                 var percentageChange = totalPurchaseValue > 0 
                     ? (valueDifference / totalPurchaseValue) * 100 
@@ -447,12 +461,16 @@ namespace RareBooksService.WebApi.Services
                 var stats = new CollectionStatisticsDto
                 {
                     TotalBooks = books.Count,
+                    BooksSold = booksSold.Count,
+                    BooksInCollection = booksNotSold.Count,
                     TotalEstimatedValue = totalEstimatedValue,
                     TotalPurchaseValue = totalPurchaseValue,
+                    TotalSoldValue = totalSoldValue,
+                    TotalProfit = totalProfit,
                     ValueDifference = valueDifference,
                     PercentageChange = percentageChange,
-                    BooksWithEstimate = books.Count(b => b.EstimatedPrice.HasValue),
-                    BooksWithoutEstimate = books.Count(b => !b.EstimatedPrice.HasValue),
+                    BooksWithEstimate = booksNotSold.Count(b => b.EstimatedPrice.HasValue),
+                    BooksWithoutEstimate = booksNotSold.Count(b => !b.EstimatedPrice.HasValue),
                     BooksWithPurchaseInfo = books.Count(b => b.PurchasePrice.HasValue),
                     BooksWithReferenceBook = books.Count(b => b.ReferenceBookId.HasValue),
                     TotalImages = books.Sum(b => b.Images.Count)
@@ -480,6 +498,9 @@ namespace RareBooksService.WebApi.Services
                 EstimatedPrice = book.EstimatedPrice,
                 PurchasePrice = book.PurchasePrice,
                 PurchaseDate = book.PurchaseDate,
+                IsSold = book.IsSold,
+                SoldPrice = book.SoldPrice,
+                SoldDate = book.SoldDate,
                 IsManuallyPriced = book.IsManuallyPriced,
                 AddedDate = book.AddedDate,
                 UpdatedDate = book.UpdatedDate,

@@ -6,8 +6,12 @@ namespace RareBooksService.Common.Models.Dto
     public class CollectionStatisticsDto
     {
         public int TotalBooks { get; set; }
+        public int BooksSold { get; set; }
+        public int BooksInCollection { get; set; }
         public decimal TotalEstimatedValue { get; set; }
         public decimal TotalPurchaseValue { get; set; }
+        public decimal TotalSoldValue { get; set; }
+        public decimal TotalProfit { get; set; }
         public decimal ValueDifference { get; set; }
         public decimal PercentageChange { get; set; }
         public int BooksWithEstimate { get; set; }

@@ -57,6 +57,21 @@ namespace RareBooksService.Common.Models
         public DateTime? PurchaseDate { get; set; }
 
         /// <summary>
+        /// Признак, что книга продана
+        /// </summary>
+        public bool IsSold { get; set; }
+
+        /// <summary>
+        /// Цена продажи книги
+        /// </summary>
+        public decimal? SoldPrice { get; set; }
+
+        /// <summary>
+        /// Дата продажи книги
+        /// </summary>
+        public DateTime? SoldDate { get; set; }
+
+        /// <summary>
         /// Признак, что цена установлена вручную
         /// </summary>
         public bool IsManuallyPriced { get; set; }

@@ -16,6 +16,9 @@ namespace RareBooksService.Common.Models.Dto
         public bool IsManuallyPriced { get; set; }
         public decimal? PurchasePrice { get; set; }
         public DateTime? PurchaseDate { get; set; }
+        public bool IsSold { get; set; }
+        public decimal? SoldPrice { get; set; }
+        public DateTime? SoldDate { get; set; }
     }
 }
 

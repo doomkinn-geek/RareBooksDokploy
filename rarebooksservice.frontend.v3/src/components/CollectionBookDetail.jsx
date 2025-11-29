@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     Box, Typography, Button, Paper, Alert, CircularProgress, Grid,
     TextField, Dialog, DialogTitle, DialogContent, DialogActions,
-    IconButton, Chip, Divider, Card, CardContent
+    IconButton, Chip, Divider, Card, CardContent, Switch, FormControlLabel, InputAdornment
 } from '@mui/material';
 import {
     ArrowBack as BackIcon,
@@ -42,7 +42,10 @@ const CollectionBookDetail = () => {
         estimatedPrice: '',
         isManuallyPriced: false,
         purchasePrice: '',
-        purchaseDate: ''
+        purchaseDate: '',
+        isSold: false,
+        soldPrice: '',
+        soldDate: ''
     });
 
     // Диалог ручной установки цены
@@ -164,7 +167,10 @@ const CollectionBookDetail = () => {
                 estimatedPrice: bookData.estimatedPrice || '',
                 isManuallyPriced: bookData.isManuallyPriced || false,
                 purchasePrice: bookData.purchasePrice || '',
-                purchaseDate: bookData.purchaseDate ? bookData.purchaseDate.split('T')[0] : ''
+                purchaseDate: bookData.purchaseDate ? bookData.purchaseDate.split('T')[0] : '',
+                isSold: bookData.isSold || false,
+                soldPrice: bookData.soldPrice || '',
+                soldDate: bookData.soldDate ? bookData.soldDate.split('T')[0] : ''
             });
             setError('');
         } catch (err) {
@@ -188,6 +194,9 @@ const CollectionBookDetail = () => {
                 estimatedPrice: formData.estimatedPrice ? parseFloat(formData.estimatedPrice) : null,
                 purchasePrice: formData.purchasePrice ? parseFloat(formData.purchasePrice) : null,
                 purchaseDate: formData.purchaseDate || null,
+                isSold: formData.isSold,
+                soldPrice: formData.soldPrice ? parseFloat(formData.soldPrice) : null,
+                soldDate: formData.soldDate || null,
                 isManuallyPriced: formData.isManuallyPriced,
                 referenceBookId: book.referenceBookId || null
             };
@@ -690,6 +699,89 @@ const CollectionBookDetail = () => {
                                         rows={3}
                                     />
                                 </Grid>
+
+                                {/* Информация о покупке */}
+                                <Grid item xs={12}>
+                                    <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+                                        Информация о покупке
+                                    </Typography>
+                                </Grid>
+
+                                <Grid item xs={12} sm={6}>
+                                    <TextField
+                                        label="Цена покупки"
+                                        type="number"
+                                        value={formData.purchasePrice}
+                                        onChange={(e) => setFormData({ ...formData, purchasePrice: e.target.value })}
+                                        fullWidth
+                                        InputProps={{
+                                            startAdornment: <InputAdornment position="start">₽</InputAdornment>,
+                                        }}
+                                        inputProps={{ min: 0, step: 0.01 }}
+                                    />
+                                </Grid>
+
+                                <Grid item xs={12} sm={6}>
+                                    <TextField
+                                        label="Дата покупки"
+                                        type="date"
+                                        value={formData.purchaseDate}
+                                        onChange={(e) => setFormData({ ...formData, purchaseDate: e.target.value })}
+                                        fullWidth
+                                        InputLabelProps={{ shrink: true }}
+                                        inputProps={{ max: new Date().toISOString().split('T')[0] }}
+                                    />
+                                </Grid>
+
+                                {/* Информация о продаже */}
+                                <Grid item xs={12}>
+                                    <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+                                        Информация о продаже
+                                    </Typography>
+                                </Grid>
+
+                                <Grid item xs={12}>
+                                    <FormControlLabel
+                                        control={
+                                            <Switch
+                                                checked={formData.isSold}
+                                                onChange={(e) => setFormData({ ...formData, isSold: e.target.checked })}
+                                                color="primary"
+                                            />
+                                        }
+                                        label="Книга продана"
+                                    />
+                                </Grid>
+
+                                {formData.isSold && (
+                                    <>
+                                        <Grid item xs={12} sm={6}>
+                                            <TextField
+                                                label="Цена продажи"
+                                                type="number"
+                                                value={formData.soldPrice}
+                                                onChange={(e) => setFormData({ ...formData, soldPrice: e.target.value })}
+                                                fullWidth
+                                                InputProps={{
+                                                    startAdornment: <InputAdornment position="start">₽</InputAdornment>,
+                                                }}
+                                                inputProps={{ min: 0, step: 0.01 }}
+                                            />
+                                        </Grid>
+
+                                        <Grid item xs={12} sm={6}>
+                                            <TextField
+                                                label="Дата продажи"
+                                                type="date"
+                                                value={formData.soldDate}
+                                                onChange={(e) => setFormData({ ...formData, soldDate: e.target.value })}
+                                                fullWidth
+                                                InputLabelProps={{ shrink: true }}
+                                                inputProps={{ max: new Date().toISOString().split('T')[0] }}
+                                            />
+                                        </Grid>
+                                    </>
+                                )}
                             </Grid>
                         ) : (
                             <>

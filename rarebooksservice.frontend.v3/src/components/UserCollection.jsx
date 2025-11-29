@@ -193,50 +193,45 @@ const UserCollection = () => {
             {/* Статистика */}
             {statistics && (
                 <Paper elevation={2} sx={{ p: 3, mb: 3, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
-                    <Grid container spacing={3}>
-                        <Grid item xs={6} sm={6} md={3}>
-                            <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: { xs: '1.5rem', sm: '2rem' } }}>
-                                {statistics.totalBooks}
+                    <Grid container spacing={2}>
+                        <Grid item xs={6} sm={6} md={2.4}>
+                            <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: { xs: '1.25rem', sm: '1.75rem', md: '2rem' } }}>
+                                {statistics.booksInCollection}
                             </Typography>
-                            <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Всего книг</Typography>
+                            <Typography variant="body2" sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>В коллекции</Typography>
                         </Grid>
-                        <Grid item xs={6} sm={6} md={3}>
-                            <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: { xs: '1.5rem', sm: '2rem' } }}>
+                        <Grid item xs={6} sm={6} md={2.4}>
+                            <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: { xs: '1.25rem', sm: '1.75rem', md: '2rem' } }}>
+                                {statistics.totalPurchaseValue ? `${statistics.totalPurchaseValue.toLocaleString('ru-RU')} ₽` : '0 ₽'}
+                            </Typography>
+                            <Typography variant="body2" sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>Затрачено</Typography>
+                        </Grid>
+                        <Grid item xs={6} sm={6} md={2.4}>
+                            <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: { xs: '1.25rem', sm: '1.75rem', md: '2rem' } }}>
                                 {statistics.totalEstimatedValue.toLocaleString('ru-RU')} ₽
                             </Typography>
-                            <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Оценочная стоимость</Typography>
+                            <Typography variant="body2" sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>Оценка</Typography>
                         </Grid>
-                        <Grid item xs={6} sm={6} md={3}>
-                            <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: { xs: '1.5rem', sm: '2rem' } }}>
-                                {statistics.totalPurchaseValue ? `${statistics.totalPurchaseValue.toLocaleString('ru-RU')} ₽` : '—'}
+                        <Grid item xs={6} sm={6} md={2.4}>
+                            <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: { xs: '1.25rem', sm: '1.75rem', md: '2rem' } }}>
+                                {statistics.totalSoldValue ? `${statistics.totalSoldValue.toLocaleString('ru-RU')} ₽` : '0 ₽'}
                             </Typography>
-                            <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Стоимость покупки</Typography>
+                            <Typography variant="body2" sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>Продано ({statistics.booksSold || 0})</Typography>
                         </Grid>
-                        <Grid item xs={6} sm={6} md={3}>
-                            {statistics.totalPurchaseValue > 0 ? (
-                                <>
-                                    <Typography 
-                                        variant="h4" 
-                                        sx={{ 
-                                            fontWeight: 'bold',
-                                            fontSize: { xs: '1.5rem', sm: '2rem' },
-                                            color: statistics.valueDifference >= 0 ? '#4caf50' : '#ff5252'
-                                        }}
-                                    >
-                                        {statistics.valueDifference >= 0 ? '+' : ''}{statistics.valueDifference.toLocaleString('ru-RU')} ₽
-                                    </Typography>
-                                    <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-                                        Изменение ({statistics.percentageChange >= 0 ? '+' : ''}{statistics.percentageChange.toFixed(1)}%)
-                                    </Typography>
-                                </>
-                            ) : (
-                                <>
-                                    <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: { xs: '1.5rem', sm: '2rem' } }}>
-                                        —
-                                    </Typography>
-                                    <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Изменение</Typography>
-                                </>
-                            )}
+                        <Grid item xs={12} sm={12} md={2.4}>
+                            <Typography 
+                                variant="h4" 
+                                sx={{ 
+                                    fontWeight: 'bold',
+                                    fontSize: { xs: '1.25rem', sm: '1.75rem', md: '2rem' },
+                                    color: statistics.totalProfit >= 0 ? '#4caf50' : '#ff5252'
+                                }}
+                            >
+                                {statistics.totalProfit >= 0 ? '+' : ''}{(statistics.totalProfit || 0).toLocaleString('ru-RU')} ₽
+                            </Typography>
+                            <Typography variant="body2" sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
+                                Прибыль
+                            </Typography>
                         </Grid>
                     </Grid>
                 </Paper>
