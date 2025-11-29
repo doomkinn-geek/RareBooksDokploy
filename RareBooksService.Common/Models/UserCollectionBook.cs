@@ -47,6 +47,16 @@ namespace RareBooksService.Common.Models
         public decimal? EstimatedPrice { get; set; }
 
         /// <summary>
+        /// Цена приобретения книги
+        /// </summary>
+        public decimal? PurchasePrice { get; set; }
+
+        /// <summary>
+        /// Дата приобретения книги
+        /// </summary>
+        public DateTime? PurchaseDate { get; set; }
+
+        /// <summary>
         /// Признак, что цена установлена вручную
         /// </summary>
         public bool IsManuallyPriced { get; set; }

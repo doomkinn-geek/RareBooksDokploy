@@ -92,6 +92,8 @@ namespace RareBooksService.WebApi.Services
                     Description = book.Description,
                     Notes = book.Notes,
                     EstimatedPrice = book.EstimatedPrice,
+                    PurchasePrice = book.PurchasePrice,
+                    PurchaseDate = book.PurchaseDate,
                     IsManuallyPriced = book.IsManuallyPriced,
                     ReferenceBookId = book.ReferenceBookId,
                     AddedDate = book.AddedDate,
@@ -166,6 +168,8 @@ namespace RareBooksService.WebApi.Services
                     YearPublished = request.YearPublished,
                     Description = request.Description,
                     Notes = request.Notes,
+                    PurchasePrice = request.PurchasePrice,
+                    PurchaseDate = request.PurchaseDate,
                     AddedDate = DateTime.UtcNow,
                     UpdatedDate = DateTime.UtcNow
                 };
@@ -239,6 +243,8 @@ namespace RareBooksService.WebApi.Services
                 book.YearPublished = request.YearPublished;
                 book.Description = request.Description;
                 book.Notes = request.Notes;
+                book.PurchasePrice = request.PurchasePrice;
+                book.PurchaseDate = request.PurchaseDate;
                 book.UpdatedDate = DateTime.UtcNow;
 
                 // Обновляем цену, если она установлена вручную
@@ -429,13 +435,25 @@ namespace RareBooksService.WebApi.Services
                     .Where(b => b.UserId == userId)
                     .ToListAsync();
 
+                var totalEstimatedValue = books.Where(b => b.EstimatedPrice.HasValue)
+                                            .Sum(b => b.EstimatedPrice.Value);
+                var totalPurchaseValue = books.Where(b => b.PurchasePrice.HasValue)
+                                          .Sum(b => b.PurchasePrice.Value);
+                var valueDifference = totalEstimatedValue - totalPurchaseValue;
+                var percentageChange = totalPurchaseValue > 0 
+                    ? (valueDifference / totalPurchaseValue) * 100 
+                    : 0;
+
                 var stats = new CollectionStatisticsDto
                 {
                     TotalBooks = books.Count,
-                    TotalEstimatedValue = books.Where(b => b.EstimatedPrice.HasValue)
-                                                .Sum(b => b.EstimatedPrice.Value),
+                    TotalEstimatedValue = totalEstimatedValue,
+                    TotalPurchaseValue = totalPurchaseValue,
+                    ValueDifference = valueDifference,
+                    PercentageChange = percentageChange,
                     BooksWithEstimate = books.Count(b => b.EstimatedPrice.HasValue),
                     BooksWithoutEstimate = books.Count(b => !b.EstimatedPrice.HasValue),
+                    BooksWithPurchaseInfo = books.Count(b => b.PurchasePrice.HasValue),
                     BooksWithReferenceBook = books.Count(b => b.ReferenceBookId.HasValue),
                     TotalImages = books.Sum(b => b.Images.Count)
                 };
@@ -460,6 +478,8 @@ namespace RareBooksService.WebApi.Services
                 Author = book.Author,
                 YearPublished = book.YearPublished,
                 EstimatedPrice = book.EstimatedPrice,
+                PurchasePrice = book.PurchasePrice,
+                PurchaseDate = book.PurchaseDate,
                 IsManuallyPriced = book.IsManuallyPriced,
                 AddedDate = book.AddedDate,
                 UpdatedDate = book.UpdatedDate,

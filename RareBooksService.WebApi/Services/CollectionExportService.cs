@@ -105,16 +105,28 @@ namespace RareBooksService.WebApi.Services
                     document.Add(new Paragraph("\n"));
 
                     // Статистика
-                    var totalValue = books.Where(b => b.EstimatedPrice.HasValue)
+                    var totalEstimatedValue = books.Where(b => b.EstimatedPrice.HasValue)
                                          .Sum(b => b.EstimatedPrice.Value);
+                    var totalPurchaseValue = books.Where(b => b.PurchasePrice.HasValue)
+                                         .Sum(b => b.PurchasePrice.Value);
+                    var valueDifference = totalEstimatedValue - totalPurchaseValue;
+                    var percentageChange = totalPurchaseValue > 0 
+                        ? (valueDifference / totalPurchaseValue) * 100 
+                        : 0;
                     
                     var statsTable = new Table(2).UseAllAvailableWidth();
                     statsTable.AddCell(new Cell().Add(new Paragraph("Всего книг:").SetBold()));
                     statsTable.AddCell(new Cell().Add(new Paragraph(books.Count.ToString())));
                     statsTable.AddCell(new Cell().Add(new Paragraph("Книг с оценкой:").SetBold()));
                     statsTable.AddCell(new Cell().Add(new Paragraph(books.Count(b => b.EstimatedPrice.HasValue).ToString())));
+                    statsTable.AddCell(new Cell().Add(new Paragraph("Книг с данными о покупке:").SetBold()));
+                    statsTable.AddCell(new Cell().Add(new Paragraph(books.Count(b => b.PurchasePrice.HasValue).ToString())));
                     statsTable.AddCell(new Cell().Add(new Paragraph("Общая оценочная стоимость:").SetBold()));
-                    statsTable.AddCell(new Cell().Add(new Paragraph($"{totalValue:N0} руб.")));
+                    statsTable.AddCell(new Cell().Add(new Paragraph($"{totalEstimatedValue:N0} руб.")));
+                    statsTable.AddCell(new Cell().Add(new Paragraph("Общая стоимость покупки:").SetBold()));
+                    statsTable.AddCell(new Cell().Add(new Paragraph($"{totalPurchaseValue:N0} руб.")));
+                    statsTable.AddCell(new Cell().Add(new Paragraph("Изменение стоимости:").SetBold()));
+                    statsTable.AddCell(new Cell().Add(new Paragraph($"{valueDifference:N0} руб. ({percentageChange:F2}%)")));
 
                     document.Add(statsTable);
                     document.Add(new Paragraph("\n\n"));
@@ -186,6 +198,26 @@ namespace RareBooksService.WebApi.Services
                             infoCell.Add(new Paragraph(priceText).SetBold());
                         }
                         
+                        if (book.PurchasePrice.HasValue)
+                        {
+                            infoCell.Add(new Paragraph($"Цена покупки: {book.PurchasePrice.Value:N0} руб."));
+                            
+                            if (book.PurchaseDate.HasValue)
+                            {
+                                infoCell.Add(new Paragraph($"Дата покупки: {book.PurchaseDate.Value:dd.MM.yyyy}"));
+                            }
+                            
+                            if (book.EstimatedPrice.HasValue)
+                            {
+                                var gain = book.EstimatedPrice.Value - book.PurchasePrice.Value;
+                                var gainPercent = (gain / book.PurchasePrice.Value) * 100;
+                                var gainText = gain >= 0 
+                                    ? $"Прирост: +{gain:N0} руб. (+{gainPercent:F2}%)"
+                                    : $"Убыток: {gain:N0} руб. ({gainPercent:F2}%)";
+                                infoCell.Add(new Paragraph(gainText).SetFontSize(10).SetItalic());
+                            }
+                        }
+                        
                         if (book.ReferenceBookId.HasValue && referenceBooks.ContainsKey(book.ReferenceBookId.Value))
                         {
                             var refBook = referenceBooks[book.ReferenceBookId.Value];
@@ -242,12 +274,23 @@ namespace RareBooksService.WebApi.Services
                     .ToDictionaryAsync(b => b.Id);
 
                 // Создаем структуру данных для JSON
+                var totalEstimatedValue = books.Where(b => b.EstimatedPrice.HasValue)
+                                             .Sum(b => b.EstimatedPrice.Value);
+                var totalPurchaseValue = books.Where(b => b.PurchasePrice.HasValue)
+                                             .Sum(b => b.PurchasePrice.Value);
+                var valueDifference = totalEstimatedValue - totalPurchaseValue;
+                var percentageChange = totalPurchaseValue > 0 
+                    ? (valueDifference / totalPurchaseValue) * 100 
+                    : 0;
+                    
                 var exportData = new
                 {
                     exportDate = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
                     totalBooks = books.Count,
-                    totalValue = books.Where(b => b.EstimatedPrice.HasValue)
-                                     .Sum(b => b.EstimatedPrice.Value),
+                    totalEstimatedValue = totalEstimatedValue,
+                    totalPurchaseValue = totalPurchaseValue,
+                    valueDifference = valueDifference,
+                    percentageChange = percentageChange,
                     books = books.Select(book => new
                     {
                         id = book.Id,
@@ -257,6 +300,8 @@ namespace RareBooksService.WebApi.Services
                         description = book.Description,
                         notes = book.Notes,
                         estimatedPrice = book.EstimatedPrice,
+                        purchasePrice = book.PurchasePrice,
+                        purchaseDate = book.PurchaseDate?.ToString("yyyy-MM-dd"),
                         isManuallyPriced = book.IsManuallyPriced,
                         addedDate = book.AddedDate,
                         updatedDate = book.UpdatedDate,

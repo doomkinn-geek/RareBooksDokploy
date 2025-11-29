@@ -40,7 +40,9 @@ const CollectionBookDetail = () => {
         description: '',
         notes: '',
         estimatedPrice: '',
-        isManuallyPriced: false
+        isManuallyPriced: false,
+        purchasePrice: '',
+        purchaseDate: ''
     });
 
     // Диалог ручной установки цены
@@ -160,7 +162,9 @@ const CollectionBookDetail = () => {
                 description: bookData.description || '',
                 notes: bookData.notes || '',
                 estimatedPrice: bookData.estimatedPrice || '',
-                isManuallyPriced: bookData.isManuallyPriced || false
+                isManuallyPriced: bookData.isManuallyPriced || false,
+                purchasePrice: bookData.purchasePrice || '',
+                purchaseDate: bookData.purchaseDate ? bookData.purchaseDate.split('T')[0] : ''
             });
             setError('');
         } catch (err) {
@@ -182,6 +186,9 @@ const CollectionBookDetail = () => {
                 description: formData.description || null,
                 notes: formData.notes || null,
                 estimatedPrice: formData.estimatedPrice ? parseFloat(formData.estimatedPrice) : null,
+                purchasePrice: formData.purchasePrice ? parseFloat(formData.purchasePrice) : null,
+                purchaseDate: formData.purchaseDate || null,
+                isManuallyPriced: formData.isManuallyPriced,
                 referenceBookId: book.referenceBookId || null
             };
 

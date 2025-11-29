@@ -194,29 +194,49 @@ const UserCollection = () => {
             {statistics && (
                 <Paper elevation={2} sx={{ p: 3, mb: 3, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
                     <Grid container spacing={3}>
-                        <Grid item xs={6} sm={3}>
-                            <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                        <Grid item xs={6} sm={6} md={3}>
+                            <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: { xs: '1.5rem', sm: '2rem' } }}>
                                 {statistics.totalBooks}
                             </Typography>
-                            <Typography variant="body2">Всего книг</Typography>
+                            <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Всего книг</Typography>
                         </Grid>
-                        <Grid item xs={6} sm={3}>
-                            <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                        <Grid item xs={6} sm={6} md={3}>
+                            <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: { xs: '1.5rem', sm: '2rem' } }}>
                                 {statistics.totalEstimatedValue.toLocaleString('ru-RU')} ₽
                             </Typography>
-                            <Typography variant="body2">Общая оценка</Typography>
+                            <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Оценочная стоимость</Typography>
                         </Grid>
-                        <Grid item xs={6} sm={3}>
-                            <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                                {statistics.booksWithReference}
+                        <Grid item xs={6} sm={6} md={3}>
+                            <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: { xs: '1.5rem', sm: '2rem' } }}>
+                                {statistics.totalPurchaseValue ? `${statistics.totalPurchaseValue.toLocaleString('ru-RU')} ₽` : '—'}
                             </Typography>
-                            <Typography variant="body2">С референсом</Typography>
+                            <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Стоимость покупки</Typography>
                         </Grid>
-                        <Grid item xs={6} sm={3}>
-                            <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                                {statistics.booksWithoutReference}
-                            </Typography>
-                            <Typography variant="body2">Без референса</Typography>
+                        <Grid item xs={6} sm={6} md={3}>
+                            {statistics.totalPurchaseValue > 0 ? (
+                                <>
+                                    <Typography 
+                                        variant="h4" 
+                                        sx={{ 
+                                            fontWeight: 'bold',
+                                            fontSize: { xs: '1.5rem', sm: '2rem' },
+                                            color: statistics.valueDifference >= 0 ? '#4caf50' : '#ff5252'
+                                        }}
+                                    >
+                                        {statistics.valueDifference >= 0 ? '+' : ''}{statistics.valueDifference.toLocaleString('ru-RU')} ₽
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+                                        Изменение ({statistics.percentageChange >= 0 ? '+' : ''}{statistics.percentageChange.toFixed(1)}%)
+                                    </Typography>
+                                </>
+                            ) : (
+                                <>
+                                    <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: { xs: '1.5rem', sm: '2rem' } }}>
+                                        —
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Изменение</Typography>
+                                </>
+                            )}
                         </Grid>
                     </Grid>
                 </Paper>
@@ -332,15 +352,20 @@ const UserCollection = () => {
                                     {book.mainImageUrl ? (
                                         <AuthorizedCardMedia
                                             component="img"
-                                            height="200"
+                                            height="auto"
                                             imageUrl={book.mainImageUrl}
                                             alt={book.title}
-                                            sx={{ objectFit: 'cover' }}
+                                            sx={{ 
+                                                objectFit: 'contain',
+                                                maxHeight: { xs: 160, sm: 180, md: 200 },
+                                                minHeight: { xs: 160, sm: 180, md: 200 },
+                                                bgcolor: '#f5f5f5'
+                                            }}
                                         />
                                     ) : (
                                         <Box
                                             sx={{
-                                                height: 200,
+                                                height: { xs: 160, sm: 180, md: 200 },
                                                 bgcolor: 'grey.200',
                                                 display: 'flex',
                                                 alignItems: 'center',

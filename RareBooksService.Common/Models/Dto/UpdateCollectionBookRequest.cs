@@ -1,5 +1,7 @@
 namespace RareBooksService.Common.Models.Dto
 {
+    using System;
+
     /// <summary>
     /// Запрос на обновление книги в коллекции
     /// </summary>
@@ -12,6 +14,8 @@ namespace RareBooksService.Common.Models.Dto
         public string? Notes { get; set; }
         public decimal? EstimatedPrice { get; set; }
         public bool IsManuallyPriced { get; set; }
+        public decimal? PurchasePrice { get; set; }
+        public DateTime? PurchaseDate { get; set; }
     }
 }
 

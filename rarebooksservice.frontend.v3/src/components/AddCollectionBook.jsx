@@ -16,7 +16,9 @@ const AddCollectionBook = () => {
         author: '',
         yearPublished: '',
         description: '',
-        notes: ''
+        notes: '',
+        purchasePrice: '',
+        purchaseDate: ''
     });
     const [images, setImages] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -49,7 +51,9 @@ const AddCollectionBook = () => {
                 author: formData.author || null,
                 yearPublished: formData.yearPublished ? parseInt(formData.yearPublished) : null,
                 description: formData.description || null,
-                notes: formData.notes || null
+                notes: formData.notes || null,
+                purchasePrice: formData.purchasePrice ? parseFloat(formData.purchasePrice) : null,
+                purchaseDate: formData.purchaseDate || null
             };
 
             const response = await axios.post(`${API_URL}/usercollection`, bookData, {
@@ -225,6 +229,44 @@ const AddCollectionBook = () => {
                                 rows={3}
                                 variant="outlined"
                                 placeholder="Ваши заметки о книге..."
+                            />
+                        </Grid>
+
+                        <Grid item xs={12}>
+                            <Typography variant="h6" gutterBottom sx={{ mt: 2, mb: 1 }}>
+                                Информация о покупке (необязательно)
+                            </Typography>
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                label="Цена покупки"
+                                name="purchasePrice"
+                                type="number"
+                                value={formData.purchasePrice}
+                                onChange={handleChange}
+                                fullWidth
+                                variant="outlined"
+                                InputProps={{
+                                    startAdornment: <Box component="span" sx={{ mr: 1 }}>₽</Box>,
+                                }}
+                                inputProps={{ min: 0, step: 0.01 }}
+                                helperText="Сколько заплатили за книгу"
+                            />
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                label="Дата покупки"
+                                name="purchaseDate"
+                                type="date"
+                                value={formData.purchaseDate}
+                                onChange={handleChange}
+                                fullWidth
+                                variant="outlined"
+                                InputLabelProps={{ shrink: true }}
+                                inputProps={{ max: new Date().toISOString().split('T')[0] }}
+                                helperText="Когда приобрели книгу"
                             />
                         </Grid>
 
