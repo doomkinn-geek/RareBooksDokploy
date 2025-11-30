@@ -7,13 +7,13 @@ namespace RareBooksService.Common.Models.Dto
     {
         public DateTime ExportDate { get; set; }
         public int TotalBooks { get; set; }
-        public List<ImportBookData> Books { get; set; }
+        public List<ImportBookData> Books { get; set; } = new List<ImportBookData>();
     }
 
     public class ImportBookData
     {
-        public string Title { get; set; }
-        public string Author { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string? Author { get; set; }
         public int? YearPublished { get; set; }
         public DateTime? PurchaseDate { get; set; }
         public decimal? PurchasePrice { get; set; }
@@ -21,9 +21,9 @@ namespace RareBooksService.Common.Models.Dto
         public decimal? TotalPurchasePrice { get; set; }
         public decimal? SoldPrice { get; set; }
         public DateTime? SoldDate { get; set; }
-        public string SaleNotes { get; set; }
-        public string Comments { get; set; }
-        public string Notes { get; set; }
+        public string? SaleNotes { get; set; }
+        public string? Comments { get; set; }
+        public string? Notes { get; set; }
         public bool IsSold { get; set; }
     }
 
@@ -33,7 +33,7 @@ namespace RareBooksService.Common.Models.Dto
         public int ImportedBooks { get; set; }
         public int SkippedBooks { get; set; }
         public List<string> Errors { get; set; } = new List<string>();
-        public string Message { get; set; }
+        public string Message { get; set; } = string.Empty;
     }
 }
 
