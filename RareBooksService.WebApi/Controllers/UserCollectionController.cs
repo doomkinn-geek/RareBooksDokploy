@@ -502,7 +502,7 @@ namespace RareBooksService.WebApi.Controllers
                 
                 if (!response.Success)
                 {
-                    return BadRequest(response);
+                    return BadRequest(response.Message);
                 }
                 
                 return Ok(response);
