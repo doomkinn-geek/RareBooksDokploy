@@ -2,7 +2,7 @@
   "profiles": {
     "RareBooksImporter": {
       "commandName": "Project",
-      "commandLineArgs": "d:\\\\documents\\\\!rare books\\\\реестр.xlsx d:\\\\documents\\\\!rare books\\\\реестр.json"
+      "commandLineArgs": "d:\\\\documents\\\\!rare_books\\\\реестр.xlsx d:\\\\documents\\\\!rare_books\\\\реестр.json"
     }
   }
 }

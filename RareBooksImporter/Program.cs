@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using OfficeOpenXml;
+using ClosedXML.Excel;
 
 namespace RareBooksImporter
 {
@@ -14,7 +15,7 @@ namespace RareBooksImporter
         static void Main(string[] args)
         {
             // EPPlus требует установки LicenseContext
-            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+            //ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
 
             Console.WriteLine("=== Конвертер коллекции книг XLSX → JSON ===");
             Console.WriteLine();
@@ -63,45 +64,46 @@ namespace RareBooksImporter
 
         static List<BookData> ProcessExcelFile(string filePath)
         {
-            using var package = new ExcelPackage(new FileInfo(filePath));
-            var worksheet = package.Workbook.Worksheets[0]; // Первый лист
-
-            int rowCount = worksheet.Dimension.Rows;
-            Console.WriteLine($"Найдено строк: {rowCount}");
-            Console.WriteLine();
+            using var workbook = new XLWorkbook(filePath);
+            var ws = workbook.Worksheet(1);
 
             var books = new List<BookData>();
-            int parsed = 0;
-            int skipped = 0;
+            int rowCount = ws.LastRowUsed().RowNumber();
 
-            // Начинаем со строки 3 (строка 1 - заголовки, строка 2 - СУММА)
             for (int row = 3; row <= rowCount; row++)
             {
-                try
-                {
-                    var bookData = ParseRow(worksheet, row);
-                    
-                    if (bookData == null)
-                    {
-                        Console.WriteLine($"Строка {row}: Пропущена (пустая)");
-                        skipped++;
-                        continue;
-                    }
+                string title = ws.Cell(row, 2).GetString();
 
-                    books.Add(bookData);
-                    Console.WriteLine($"Строка {row}: ✅ {bookData.Title}");
-                    parsed++;
-                }
-                catch (Exception ex)
+                if (string.IsNullOrWhiteSpace(title))
+                    continue;
+
+                var book = new BookData
                 {
-                    Console.WriteLine($"Строка {row}: ❌ ОШИБКА - {ex.Message}");
-                    skipped++;
-                }
+                    Title = title,
+                    Author = ExtractAuthor(title),
+                    PurchaseDate = ParseDate(ws.Cell(row, 1).GetString()),
+                    YearPublished = ParseYear(ws.Cell(row, 3).GetString()),
+                    PurchasePrice = ParsePrice(ws.Cell(row, 4).GetString()),
+                    DeliveryCost = ParsePrice(ws.Cell(row, 5).GetString()),
+                    SoldPrice = ParsePrice(ws.Cell(row, 6).GetString()),
+                    SoldDate = ParseDate(ws.Cell(row, 9).GetString()),
+                    SaleNotes = ws.Cell(row, 10).GetString(),
+                    Comments = ws.Cell(row, 11).GetString()
+                };
+
+                // Цена общая
+                if (book.PurchasePrice.HasValue && book.DeliveryCost.HasValue)
+                    book.TotalPurchasePrice = book.PurchasePrice.Value + book.DeliveryCost.Value;
+                else
+                    book.TotalPurchasePrice = book.PurchasePrice;
+
+                // Комментарии
+                book.FullNotes = BuildFullNotes(book.SaleNotes, book.Comments);
+
+                book.IsSold = book.SoldPrice.HasValue || book.SoldDate.HasValue;
+
+                books.Add(book);
             }
-
-            Console.WriteLine();
-            Console.WriteLine($"Обработано: {parsed}");
-            Console.WriteLine($"Пропущено: {skipped}");
 
             return books;
         }

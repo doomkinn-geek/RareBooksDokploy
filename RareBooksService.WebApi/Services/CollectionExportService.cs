@@ -7,6 +7,7 @@ using iText.Layout.Element;
 using iText.Layout.Properties;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using RareBooksService.Common.Models;
 using RareBooksService.Common.Models.Dto;
 using RareBooksService.Data;
 using System;
