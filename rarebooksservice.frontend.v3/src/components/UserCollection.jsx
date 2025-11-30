@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import {
     Box, Typography, Button, Grid, Card, CardContent, CardMedia,
     CardActionArea, TextField, MenuItem, CircularProgress, Alert,
-    Paper, Chip, InputAdornment, Dialog, DialogTitle, DialogContent, DialogActions
+    Paper, Chip, InputAdornment, Dialog, DialogTitle, DialogContent, DialogActions,
+    useTheme, useMediaQuery
 } from '@mui/material';
 import {
     Add as AddIcon,
     Search as SearchIcon,
-    Download as DownloadIcon,
     Description as PdfIcon,
     Archive as ZipIcon,
     Upload as UploadIcon,
@@ -21,6 +21,10 @@ import ImportCollection from './ImportCollection';
 
 const UserCollection = () => {
     const navigate = useNavigate();
+    const theme = useTheme();
+    const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
+    const buttonSize = isSmallScreen ? 'medium' : 'large';
+
     const [books, setBooks] = useState([]);
     const [statistics, setStatistics] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -50,7 +54,7 @@ const UserCollection = () => {
                 headers: { Authorization: `Bearer ${token}` },
                 responseType: 'blob'
             });
-            
+
             const blobUrl = URL.createObjectURL(response.data);
             setImageBlobs(prev => ({ ...prev, [imageUrl]: blobUrl }));
             return blobUrl;
@@ -63,13 +67,13 @@ const UserCollection = () => {
     // Компонент для отображения авторизованного изображения
     const AuthorizedCardMedia = ({ imageUrl, ...props }) => {
         const [src, setSrc] = useState('/placeholder-book.svg');
-        
+
         useEffect(() => {
             if (imageUrl) {
                 loadImage(imageUrl).then(setSrc);
             }
         }, [imageUrl]);
-        
+
         return <CardMedia image={src} {...props} />;
     };
 
@@ -113,7 +117,7 @@ const UserCollection = () => {
                 headers: { Authorization: `Bearer ${token}` },
                 responseType: 'blob'
             });
-            
+
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
@@ -134,7 +138,7 @@ const UserCollection = () => {
                 headers: { Authorization: `Bearer ${token}` },
                 responseType: 'blob'
             });
-            
+
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
@@ -152,10 +156,10 @@ const UserCollection = () => {
         setDeleting(true);
         try {
             const token = Cookies.get('token');
-            const response = await axios.delete(`${API_URL}/usercollection/all`, {
+            await axios.delete(`${API_URL}/usercollection/all`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            
+
             setDeleteAllDialogOpen(false);
             await loadCollection();
             await loadStatistics();
@@ -183,7 +187,7 @@ const UserCollection = () => {
         // Сортировка
         filtered = [...filtered].sort((a, b) => {
             let comparison = 0;
-            
+
             switch (sortBy) {
                 case 'addedDate': {
                     const dateA = new Date(a.addedDate).getTime();
@@ -232,46 +236,56 @@ const UserCollection = () => {
     }
 
     return (
-        <Box sx={{ maxWidth: 1400, mx: 'auto', p: { xs: 1, sm: 2, md: 3 }, overflowX: 'hidden' }}>
-            <Typography 
-                variant="h4" 
-                component="h1" 
-                gutterBottom 
-                sx={{ 
-                    fontWeight: 'bold', 
-                    mb: { xs: 2, sm: 3 }, 
+        <Box
+            sx={{
+                width: '100%',
+                maxWidth: 1400,
+                mx: 'auto',
+                px: { xs: 1, sm: 2, md: 3 },
+                py: { xs: 1, sm: 2, md: 3 },
+                boxSizing: 'border-box',
+                overflowX: 'hidden'
+            }}
+        >
+            <Typography
+                variant="h4"
+                component="h1"
+                gutterBottom
+                sx={{
+                    fontWeight: 'bold',
+                    mb: { xs: 2, sm: 3 },
                     fontSize: { xs: '1.25rem', sm: '1.75rem', md: '2rem' },
-                    px: { xs: 1, sm: 0 }
                 }}
             >
                 Моя коллекция редких книг
             </Typography>
 
             {error && (
-                <Alert severity="error" sx={{ mb: 2, mx: { xs: 1, sm: 0 } }} onClose={() => setError('')}>
+                <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
                     {error}
                 </Alert>
             )}
 
             {/* Статистика */}
             {statistics && (
-                <Paper 
-                    elevation={2} 
-                    sx={{ 
-                        p: { xs: 1.5, sm: 2, md: 3 }, 
-                        mb: { xs: 2, sm: 3 }, 
-                        mx: { xs: 0.5, sm: 0 },
-                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
-                        color: 'white' 
+                <Paper
+                    elevation={2}
+                    sx={{
+                        p: { xs: 1.5, sm: 2, md: 3 },
+                        mb: { xs: 2, sm: 3 },
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        color: 'white',
+                        borderRadius: 2,
+                        overflow: 'hidden'
                     }}
                 >
                     <Grid container spacing={{ xs: 1, sm: 2 }}>
                         <Grid item xs={6} sm={4} md={2.4}>
-                            <Typography 
-                                variant="h4" 
-                                sx={{ 
-                                    fontWeight: 'bold', 
-                                    fontSize: { xs: '1rem', sm: '1.5rem', md: '2rem' } 
+                            <Typography
+                                variant="h4"
+                                sx={{
+                                    fontWeight: 'bold',
+                                    fontSize: { xs: '1rem', sm: '1.5rem', md: '2rem' }
                                 }}
                             >
                                 {statistics.booksInCollection}
@@ -281,11 +295,11 @@ const UserCollection = () => {
                             </Typography>
                         </Grid>
                         <Grid item xs={6} sm={4} md={2.4}>
-                            <Typography 
-                                variant="h4" 
-                                sx={{ 
-                                    fontWeight: 'bold', 
-                                    fontSize: { xs: '1rem', sm: '1.5rem', md: '2rem' } 
+                            <Typography
+                                variant="h4"
+                                sx={{
+                                    fontWeight: 'bold',
+                                    fontSize: { xs: '1rem', sm: '1.5rem', md: '2rem' }
                                 }}
                             >
                                 {statistics.totalPurchaseValue ? `${statistics.totalPurchaseValue.toLocaleString('ru-RU')} ₽` : '0 ₽'}
@@ -295,11 +309,11 @@ const UserCollection = () => {
                             </Typography>
                         </Grid>
                         <Grid item xs={6} sm={4} md={2.4}>
-                            <Typography 
-                                variant="h4" 
-                                sx={{ 
-                                    fontWeight: 'bold', 
-                                    fontSize: { xs: '1rem', sm: '1.5rem', md: '2rem' } 
+                            <Typography
+                                variant="h4"
+                                sx={{
+                                    fontWeight: 'bold',
+                                    fontSize: { xs: '1rem', sm: '1.5rem', md: '2rem' }
                                 }}
                             >
                                 {statistics.totalEstimatedValue.toLocaleString('ru-RU')} ₽
@@ -309,11 +323,11 @@ const UserCollection = () => {
                             </Typography>
                         </Grid>
                         <Grid item xs={6} sm={6} md={2.4}>
-                            <Typography 
-                                variant="h4" 
-                                sx={{ 
-                                    fontWeight: 'bold', 
-                                    fontSize: { xs: '1rem', sm: '1.5rem', md: '2rem' } 
+                            <Typography
+                                variant="h4"
+                                sx={{
+                                    fontWeight: 'bold',
+                                    fontSize: { xs: '1rem', sm: '1.5rem', md: '2rem' }
                                 }}
                             >
                                 {statistics.totalSoldValue ? `${statistics.totalSoldValue.toLocaleString('ru-RU')} ₽` : '0 ₽'}
@@ -323,9 +337,9 @@ const UserCollection = () => {
                             </Typography>
                         </Grid>
                         <Grid item xs={12} sm={6} md={2.4}>
-                            <Typography 
-                                variant="h4" 
-                                sx={{ 
+                            <Typography
+                                variant="h4"
+                                sx={{
                                     fontWeight: 'bold',
                                     fontSize: { xs: '1rem', sm: '1.5rem', md: '2rem' },
                                     color: statistics.totalProfit >= 0 ? '#4caf50' : '#ff5252'
@@ -342,7 +356,7 @@ const UserCollection = () => {
             )}
 
             {/* Панель управления */}
-            <Box sx={{ mb: { xs: 2, sm: 3 }, px: { xs: 0.5, sm: 0 } }}>
+            <Box sx={{ mb: { xs: 2, sm: 3 } }}>
                 {/* Поиск и сортировка */}
                 <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2, mb: 2 }}>
                     <TextField
@@ -350,7 +364,7 @@ const UserCollection = () => {
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         size="small"
-                        sx={{ flexGrow: 1 }}
+                        fullWidth
                         InputProps={{
                             startAdornment: (
                                 <InputAdornment position="start">
@@ -397,7 +411,7 @@ const UserCollection = () => {
                             startIcon={<AddIcon />}
                             onClick={() => navigate('/collection/add')}
                             fullWidth
-                            size={window.innerWidth < 600 ? "medium" : "large"}
+                            size={buttonSize}
                         >
                             Добавить книгу
                         </Button>
@@ -408,7 +422,7 @@ const UserCollection = () => {
                             startIcon={<UploadIcon />}
                             onClick={() => setImportDialogOpen(true)}
                             fullWidth
-                            size={window.innerWidth < 600 ? "medium" : "large"}
+                            size={buttonSize}
                         >
                             Импортировать
                         </Button>
@@ -422,7 +436,7 @@ const UserCollection = () => {
                             onClick={handleExportPdf}
                             disabled={books.length === 0}
                             fullWidth
-                            size={window.innerWidth < 600 ? "medium" : "large"}
+                            size={buttonSize}
                         >
                             Экспорт PDF
                         </Button>
@@ -433,7 +447,7 @@ const UserCollection = () => {
                             onClick={handleExportJson}
                             disabled={books.length === 0}
                             fullWidth
-                            size={window.innerWidth < 600 ? "medium" : "large"}
+                            size={buttonSize}
                         >
                             Экспорт ZIP
                         </Button>
@@ -445,7 +459,7 @@ const UserCollection = () => {
                             onClick={() => setDeleteAllDialogOpen(true)}
                             disabled={books.length === 0}
                             fullWidth
-                            size={window.innerWidth < 600 ? "medium" : "large"}
+                            size={buttonSize}
                         >
                             Удалить всё
                         </Button>
@@ -455,7 +469,7 @@ const UserCollection = () => {
 
             {/* Список книг */}
             {books.length === 0 ? (
-                <Paper elevation={1} sx={{ p: { xs: 3, sm: 4, md: 6 }, textAlign: 'center', mx: { xs: 0.5, sm: 0 } }}>
+                <Paper elevation={1} sx={{ p: { xs: 3, sm: 4, md: 6 }, textAlign: 'center' }}>
                     <Typography variant="h6" color="text.secondary" gutterBottom sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
                         Ваша коллекция пока пуста
                     </Typography>
@@ -466,20 +480,27 @@ const UserCollection = () => {
                         variant="contained"
                         startIcon={<AddIcon />}
                         onClick={() => navigate('/collection/add')}
-                        size={window.innerWidth < 600 ? "medium" : "large"}
+                        size={buttonSize}
                     >
                         Добавить первую книгу
                     </Button>
                 </Paper>
             ) : (
-                <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }} sx={{ px: { xs: 0.5, sm: 0 } }}>
+                <Grid
+                    container
+                    spacing={{ xs: 2, sm: 2.5, md: 3 }}
+                    sx={{
+                        width: '100%',
+                        m: 0
+                    }}
+                >
                     {filteredAndSortedBooks().map((book) => (
                         <Grid item xs={12} sm={6} md={4} lg={3} key={book.id}>
-                            <Card 
+                            <Card
                                 elevation={2}
-                                sx={{ 
-                                    height: '100%', 
-                                    display: 'flex', 
+                                sx={{
+                                    height: '100%',
+                                    display: 'flex',
                                     flexDirection: 'column',
                                     transition: 'transform 0.2s, box-shadow 0.2s',
                                     '&:hover': {
@@ -495,7 +516,7 @@ const UserCollection = () => {
                                             height="auto"
                                             imageUrl={book.mainImageUrl}
                                             alt={book.title}
-                                            sx={{ 
+                                            sx={{
                                                 objectFit: 'contain',
                                                 maxHeight: { xs: 160, sm: 180, md: 200 },
                                                 minHeight: { xs: 160, sm: 180, md: 200 },
@@ -519,10 +540,10 @@ const UserCollection = () => {
                                     )}
 
                                     <CardContent sx={{ flexGrow: 1, p: { xs: 1.5, sm: 2 } }}>
-                                        <Typography 
-                                            variant="h6" 
-                                            component="div" 
-                                            gutterBottom 
+                                        <Typography
+                                            variant="h6"
+                                            component="div"
+                                            gutterBottom
                                             noWrap
                                             sx={{ fontSize: { xs: '0.95rem', sm: '1.15rem' } }}
                                         >
@@ -530,10 +551,10 @@ const UserCollection = () => {
                                         </Typography>
 
                                         {book.author && (
-                                            <Typography 
-                                                variant="body2" 
-                                                color="text.secondary" 
-                                                gutterBottom 
+                                            <Typography
+                                                variant="body2"
+                                                color="text.secondary"
+                                                gutterBottom
                                                 noWrap
                                                 sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
                                             >
@@ -542,9 +563,9 @@ const UserCollection = () => {
                                         )}
 
                                         {book.yearPublished && (
-                                            <Typography 
-                                                variant="body2" 
-                                                color="text.secondary" 
+                                            <Typography
+                                                variant="body2"
+                                                color="text.secondary"
                                                 gutterBottom
                                                 sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
                                             >
@@ -553,9 +574,9 @@ const UserCollection = () => {
                                         )}
 
                                         {book.purchaseDate && (
-                                            <Typography 
-                                                variant="body2" 
-                                                color="text.secondary" 
+                                            <Typography
+                                                variant="body2"
+                                                color="text.secondary"
                                                 gutterBottom
                                                 sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
                                             >
@@ -592,11 +613,7 @@ const UserCollection = () => {
                                                             : 'success' // прибыль или нет цены покупки — зелёный
                                                     }
                                                     size="small"
-                                                    variant={
-                                                        book.purchasePrice && book.soldPrice < book.purchasePrice
-                                                            ? 'filled'
-                                                            : 'filled'
-                                                    }
+                                                    variant="filled"
                                                 />
                                             )}
 
@@ -617,15 +634,15 @@ const UserCollection = () => {
             )}
 
             {/* Диалог импорта */}
-            <Dialog 
-                open={importDialogOpen} 
+            <Dialog
+                open={importDialogOpen}
                 onClose={() => setImportDialogOpen(false)}
                 maxWidth="sm"
                 fullWidth
             >
                 <DialogTitle>Импорт коллекции</DialogTitle>
                 <DialogContent>
-                    <ImportCollection 
+                    <ImportCollection
                         onImportComplete={() => {
                             setImportDialogOpen(false);
                             loadCollection();
@@ -641,10 +658,11 @@ const UserCollection = () => {
             </Dialog>
 
             {/* Диалог подтверждения удаления всех книг */}
-            <Dialog 
-                open={deleteAllDialogOpen} 
+            <Dialog
+                open={deleteAllDialogOpen}
                 onClose={() => !deleting && setDeleteAllDialogOpen(false)}
                 maxWidth="sm"
+                fullWidth
             >
                 <DialogTitle>Удалить всю коллекцию?</DialogTitle>
                 <DialogContent>
@@ -665,13 +683,13 @@ const UserCollection = () => {
                     </Typography>
                 </DialogContent>
                 <DialogActions>
-                    <Button 
+                    <Button
                         onClick={() => setDeleteAllDialogOpen(false)}
                         disabled={deleting}
                     >
                         Отмена
                     </Button>
-                    <Button 
+                    <Button
                         onClick={handleDeleteAll}
                         color="error"
                         variant="contained"
@@ -687,4 +705,3 @@ const UserCollection = () => {
 };
 
 export default UserCollection;
-
