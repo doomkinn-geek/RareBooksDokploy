@@ -11,6 +11,15 @@ namespace RareBooksService.Data.Migrations.UsersDb
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.AlterColumn<decimal>(
+                name: "PurchasePrice",
+                table: "UserCollectionBooks",
+                type: "numeric(18,2)",
+                nullable: true,
+                oldClrType: typeof(decimal),
+                oldType: "numeric",
+                oldNullable: true);
+
             migrationBuilder.AddColumn<bool>(
                 name: "IsSold",
                 table: "UserCollectionBooks",
@@ -27,7 +36,7 @@ namespace RareBooksService.Data.Migrations.UsersDb
             migrationBuilder.AddColumn<decimal>(
                 name: "SoldPrice",
                 table: "UserCollectionBooks",
-                type: "numeric",
+                type: "numeric(18,2)",
                 nullable: true);
         }
 
@@ -45,6 +54,15 @@ namespace RareBooksService.Data.Migrations.UsersDb
             migrationBuilder.DropColumn(
                 name: "SoldPrice",
                 table: "UserCollectionBooks");
+
+            migrationBuilder.AlterColumn<decimal>(
+                name: "PurchasePrice",
+                table: "UserCollectionBooks",
+                type: "numeric",
+                nullable: true,
+                oldClrType: typeof(decimal),
+                oldType: "numeric(18,2)",
+                oldNullable: true);
         }
     }
 }

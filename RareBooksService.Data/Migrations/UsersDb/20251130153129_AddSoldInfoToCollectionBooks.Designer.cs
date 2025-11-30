@@ -12,7 +12,7 @@ using RareBooksService.Data;
 namespace RareBooksService.Data.Migrations.UsersDb
 {
     [DbContext(typeof(UsersDbContext))]
-    [Migration("20251129185907_AddSoldInfoToCollectionBooks")]
+    [Migration("20251130153129_AddSoldInfoToCollectionBooks")]
     partial class AddSoldInfoToCollectionBooks
     {
         /// <inheritdoc />
@@ -546,7 +546,7 @@ namespace RareBooksService.Data.Migrations.UsersDb
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<decimal?>("PurchasePrice")
-                        .HasColumnType("numeric");
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int?>("ReferenceBookId")
                         .HasColumnType("integer");
@@ -555,7 +555,7 @@ namespace RareBooksService.Data.Migrations.UsersDb
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<decimal?>("SoldPrice")
-                        .HasColumnType("numeric");
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("Title")
                         .IsRequired()

@@ -233,6 +233,14 @@ namespace RareBooksService.Data
                 .HasColumnType("decimal(18,2)");
 
             modelBuilder.Entity<UserCollectionBook>()
+                .Property(cb => cb.PurchasePrice)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<UserCollectionBook>()
+                .Property(cb => cb.SoldPrice)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<UserCollectionBook>()
                 .HasIndex(cb => cb.UserId);
 
             modelBuilder.Entity<UserCollectionBook>()

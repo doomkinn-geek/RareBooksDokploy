@@ -242,6 +242,9 @@ namespace RareBooksService.WebApi.Services
                     throw new InvalidOperationException($"Книга {bookId} не найдена");
                 }
 
+                _logger.LogInformation("Обновление книги {BookId}. IsSold: {IsSold}, SoldPrice: {SoldPrice}, SoldDate: {SoldDate}", 
+                    bookId, request.IsSold, request.SoldPrice, request.SoldDate);
+
                 book.Title = request.Title;
                 book.Author = request.Author;
                 book.YearPublished = request.YearPublished;
@@ -267,9 +270,15 @@ namespace RareBooksService.WebApi.Services
 
                 return MapToDto(book);
             }
+            catch (DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Ошибка БД при обновлении книги {BookId}. Inner: {Inner}", 
+                    bookId, dbEx.InnerException?.Message);
+                throw new Exception($"Ошибка при сохранении: {dbEx.InnerException?.Message ?? dbEx.Message}");
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка при обновлении книги {BookId}", bookId);                
+                _logger.LogError(ex, "Ошибка при обновлении книги {BookId}", bookId);
                 throw;
             }
         }
