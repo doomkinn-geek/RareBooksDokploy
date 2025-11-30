@@ -70,7 +70,7 @@ namespace RareBooksService.WebApi.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при получении коллекции");
-                return StatusCode(500, new { error = "Ошибка при получении коллекции" });
+                return StatusCode(500, new { error = $"Ошибка при получении коллекции: {ex.Message}" });
             }
         }
 
@@ -89,7 +89,7 @@ namespace RareBooksService.WebApi.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при получении статистики");
-                return StatusCode(500, new { error = "Ошибка при получении статистики" });
+                return StatusCode(500, new { error = $"Ошибка при получении статистики: {ex.Message}" });
             }
         }
 
@@ -112,7 +112,7 @@ namespace RareBooksService.WebApi.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при получении деталей книги {BookId}", id);
-                return StatusCode(500, new { error = "Ошибка при получении деталей книги" });
+                return StatusCode(500, new { error = $"Ошибка при получении деталей книги {ex.Message}" });
             }
         }
 
@@ -131,7 +131,7 @@ namespace RareBooksService.WebApi.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при добавлении книги в коллекцию");
-                return StatusCode(500, new { error = "Ошибка при добавлении книги" });
+                return StatusCode(500, new { error = $"Ошибка при добавлении книги: {ex.Message}" });
             }
         }
 
@@ -154,7 +154,7 @@ namespace RareBooksService.WebApi.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при обновлении книги {BookId}", id);
-                return StatusCode(500, new { error = "Ошибка при обновлении книги" });
+                return StatusCode(500, new { error = $"Ошибка при обновлении книги: {ex.Message}" });
             }
         }
 
@@ -177,7 +177,7 @@ namespace RareBooksService.WebApi.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при удалении книги {BookId}", id);
-                return StatusCode(500, new { error = "Ошибка при удалении книги" });
+                return StatusCode(500, new { error = $"Ошибка при удалении книги: {ex.Message}" });
             }
         }
 
@@ -207,7 +207,7 @@ namespace RareBooksService.WebApi.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при загрузке изображения для книги {BookId}", id);
-                return StatusCode(500, new { error = "Ошибка при загрузке изображения" });
+                return StatusCode(500, new { error = $"Ошибка при загрузке изображения: {ex.Message}" });
             }
         }
 
@@ -230,7 +230,7 @@ namespace RareBooksService.WebApi.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при удалении изображения {ImageId}", imageId);
-                return StatusCode(500, new { error = "Ошибка при удалении изображения" });
+                return StatusCode(500, new { error = $"Ошибка при удалении изображения: {ex.Message}" });
             }
         }
 
@@ -253,7 +253,7 @@ namespace RareBooksService.WebApi.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при установке главного изображения {ImageId}", imageId);
-                return StatusCode(500, new { error = "Ошибка при установке главного изображения" });
+                return StatusCode(500, new { error = $"Ошибка при установке главного изображения: {ex.Message}" });
             }
         }
 
@@ -284,7 +284,7 @@ namespace RareBooksService.WebApi.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при получении изображения {FileName}", fileName);
-                return StatusCode(500, new { error = "Ошибка при получении изображения" });
+                return StatusCode(500, new { error = $"Ошибка при получении изображения: {ex.Message}" });
             }
         }
 
@@ -325,7 +325,7 @@ namespace RareBooksService.WebApi.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при поиске аналогов для книги {BookId}", id);
-                return StatusCode(500, new { error = "Ошибка при поиске аналогов" });
+                return StatusCode(500, new { error = $"Ошибка при поиске аналогов: {ex.Message}" });
             }
         }
 
@@ -373,7 +373,7 @@ namespace RareBooksService.WebApi.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при поиске аналогов с пользовательским запросом для книги {BookId}", id);
-                return StatusCode(500, new { error = "Ошибка при поиске аналогов" });
+                return StatusCode(500, new { error = $"Ошибка при поиске аналогов: {ex.Message}" });
             }
         }
 
@@ -396,7 +396,7 @@ namespace RareBooksService.WebApi.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при выборе референсной книги для {BookId}", id);
-                return StatusCode(500, new { error = "Ошибка при выборе референсной книги" });
+                return StatusCode(500, new { error = $"Ошибка при выборе референсной книги: {ex.Message}" });
             }
         }
 
@@ -432,7 +432,7 @@ namespace RareBooksService.WebApi.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при удалении референсной книги для {BookId}", id);
-                return StatusCode(500, new { error = "Ошибка при удалении референсной книги" });
+                return StatusCode(500, new { error = $"Ошибка при удалении референсной книги: {ex.Message}" });
             }
         }
 
@@ -457,7 +457,7 @@ namespace RareBooksService.WebApi.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при экспорте в PDF");
-                return StatusCode(500, new { error = "Ошибка при экспорте коллекции" });
+                return StatusCode(500, new { error = $"Ошибка при экспорте коллекции: {ex.Message}" });
             }
         }
 
@@ -482,7 +482,7 @@ namespace RareBooksService.WebApi.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при экспорте в JSON");
-                return StatusCode(500, new { error = "Ошибка при экспорте коллекции" });
+                return StatusCode(500, new { error = $"Ошибка при экспорте коллекции: {ex.Message}" });
             }
         }
     }

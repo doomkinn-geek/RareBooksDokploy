@@ -1,3 +1,4 @@
+using Grpc.Core;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -268,7 +269,7 @@ namespace RareBooksService.WebApi.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка при обновлении книги {BookId}", bookId);
+                _logger.LogError(ex, "Ошибка при обновлении книги {BookId}", bookId);                
                 throw;
             }
         }
