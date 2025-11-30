@@ -182,6 +182,58 @@ namespace RareBooksService.WebApi.Controllers
         }
 
         /// <summary>
+        /// Удалить все книги из коллекции
+        /// </summary>
+        [HttpDelete("all")]
+        public async Task<ActionResult> DeleteAllBooks()
+        {
+            try
+            {
+                var userId = GetUserId();
+                
+                // Получаем все книги пользователя
+                var books = await _usersContext.UserCollectionBooks
+                    .Where(b => b.UserId == userId)
+                    .ToListAsync();
+
+                if (books.Count == 0)
+                {
+                    return Ok(new { message = "Коллекция пуста", deletedCount = 0 });
+                }
+
+                var deletedCount = books.Count;
+
+                // Удаляем изображения для каждой книги
+                foreach (var book in books)
+                {
+                    try
+                    {
+                        await _imageService.DeleteAllBookImagesAsync(userId, book.Id);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Ошибка при удалении изображений для книги {BookId}", book.Id);
+                        // Продолжаем удаление даже если не удалось удалить изображения
+                    }
+                }
+
+                // Удаляем все книги
+                _usersContext.UserCollectionBooks.RemoveRange(books);
+                await _usersContext.SaveChangesAsync();
+
+                _logger.LogInformation("Удалены все книги ({Count}) из коллекции пользователя {UserId}", 
+                    deletedCount, userId);
+
+                return Ok(new { message = $"Удалено книг: {deletedCount}", deletedCount });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при удалении всех книг");
+                return StatusCode(500, new { error = $"Ошибка при удалении коллекции: {ex.Message}" });
+            }
+        }
+
+        /// <summary>
         /// Загрузить изображение для книги
         /// </summary>
         [HttpPost("{id}/images")]

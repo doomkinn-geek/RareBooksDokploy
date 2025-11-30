@@ -10,7 +10,8 @@ import {
     Download as DownloadIcon,
     Description as PdfIcon,
     Archive as ZipIcon,
-    Upload as UploadIcon
+    Upload as UploadIcon,
+    DeleteForever as DeleteAllIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -25,9 +26,12 @@ const UserCollection = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
-    const [sortBy, setSortBy] = useState('addedDate');
+    const [sortBy, setSortBy] = useState('purchaseDate');
+    const [sortOrder, setSortOrder] = useState('desc');
     const [imageBlobs, setImageBlobs] = useState({});
     const [importDialogOpen, setImportDialogOpen] = useState(false);
+    const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     useEffect(() => {
         loadCollection();
@@ -144,6 +148,26 @@ const UserCollection = () => {
         }
     };
 
+    const handleDeleteAll = async () => {
+        setDeleting(true);
+        try {
+            const token = Cookies.get('token');
+            const response = await axios.delete(`${API_URL}/usercollection/all`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            
+            setDeleteAllDialogOpen(false);
+            await loadCollection();
+            await loadStatistics();
+            setError('');
+        } catch (err) {
+            console.error('Error deleting all books:', err);
+            setError('Не удалось удалить коллекцию');
+        } finally {
+            setDeleting(false);
+        }
+    };
+
     const filteredAndSortedBooks = () => {
         let filtered = books;
 
@@ -158,26 +182,41 @@ const UserCollection = () => {
 
         // Сортировка
         filtered = [...filtered].sort((a, b) => {
+            let comparison = 0;
+            
             switch (sortBy) {
-                case 'addedDate':
-                    return new Date(b.addedDate) - new Date(a.addedDate);
+                case 'addedDate': {
+                    const dateA = new Date(a.addedDate).getTime();
+                    const dateB = new Date(b.addedDate).getTime();
+                    comparison = dateB - dateA;
+                    break;
+                }
 
                 case 'purchaseDate': {
                     const dateA = a.purchaseDate ? new Date(a.purchaseDate).getTime() : 0;
                     const dateB = b.purchaseDate ? new Date(b.purchaseDate).getTime() : 0;
-                    // Новые покупки выше
-                    return dateB - dateA;
+                    comparison = dateB - dateA;
+                    break;
                 }
 
                 case 'title':
-                    return (a.title || '').localeCompare(b.title || '');
+                    comparison = (a.title || '').localeCompare(b.title || '');
+                    break;
 
                 case 'price':
-                    return (b.estimatedPrice || 0) - (a.estimatedPrice || 0);
+                    comparison = (b.estimatedPrice || 0) - (a.estimatedPrice || 0);
+                    break;
+
+                case 'purchasePrice':
+                    comparison = (b.purchasePrice || 0) - (a.purchasePrice || 0);
+                    break;
 
                 default:
-                    return 0;
+                    comparison = 0;
             }
+
+            // Применяем направление сортировки
+            return sortOrder === 'asc' ? -comparison : comparison;
         });
 
         return filtered;
@@ -278,10 +317,23 @@ const UserCollection = () => {
                         size="small"
                         sx={{ minWidth: { xs: '100%', sm: 200 } }}
                     >
+                        <MenuItem value="purchaseDate">По дате покупки</MenuItem>
                         <MenuItem value="addedDate">По дате добавления</MenuItem>
-                        <MenuItem value="purchaseDate">По дате покупки</MenuItem> {/* НОВОЕ */}
                         <MenuItem value="title">По названию</MenuItem>
                         <MenuItem value="price">По оценке</MenuItem>
+                        <MenuItem value="purchasePrice">По цене покупки</MenuItem>
+                    </TextField>
+
+                    <TextField
+                        select
+                        label="Порядок"
+                        value={sortOrder}
+                        onChange={(e) => setSortOrder(e.target.value)}
+                        size="small"
+                        sx={{ minWidth: { xs: '100%', sm: 140 } }}
+                    >
+                        <MenuItem value="desc">По убыванию</MenuItem>
+                        <MenuItem value="asc">По возрастанию</MenuItem>
                     </TextField>
                 </Box>
 
@@ -329,6 +381,18 @@ const UserCollection = () => {
                             sx={{ flexGrow: 1 }}
                         >
                             <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Экспорт </Box>ZIP
+                        </Button>
+
+                        <Button
+                            variant="outlined"
+                            color="error"
+                            startIcon={<DeleteAllIcon />}
+                            onClick={() => setDeleteAllDialogOpen(true)}
+                            disabled={books.length === 0}
+                            fullWidth
+                            sx={{ flexGrow: 1 }}
+                        >
+                            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Удалить </Box>всё
                         </Button>
                     </Box>
                 </Box>
@@ -486,6 +550,49 @@ const UserCollection = () => {
                 <DialogActions>
                     <Button onClick={() => setImportDialogOpen(false)}>
                         Закрыть
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Диалог подтверждения удаления всех книг */}
+            <Dialog 
+                open={deleteAllDialogOpen} 
+                onClose={() => !deleting && setDeleteAllDialogOpen(false)}
+                maxWidth="sm"
+            >
+                <DialogTitle>Удалить всю коллекцию?</DialogTitle>
+                <DialogContent>
+                    <Typography variant="body1" gutterBottom>
+                        Вы уверены, что хотите удалить все книги из коллекции?
+                    </Typography>
+                    <Typography variant="body2" color="error" sx={{ mt: 2 }}>
+                        Это действие необратимо! Будут удалены:
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 1 }}>
+                        • Все книги ({books.length} шт.)
+                    </Typography>
+                    <Typography variant="body2">
+                        • Все изображения
+                    </Typography>
+                    <Typography variant="body2">
+                        • Все связи с референсными книгами
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button 
+                        onClick={() => setDeleteAllDialogOpen(false)}
+                        disabled={deleting}
+                    >
+                        Отмена
+                    </Button>
+                    <Button 
+                        onClick={handleDeleteAll}
+                        color="error"
+                        variant="contained"
+                        disabled={deleting}
+                        startIcon={deleting ? <CircularProgress size={20} /> : <DeleteAllIcon />}
+                    >
+                        {deleting ? 'Удаление...' : 'Удалить всё'}
                     </Button>
                 </DialogActions>
             </Dialog>
