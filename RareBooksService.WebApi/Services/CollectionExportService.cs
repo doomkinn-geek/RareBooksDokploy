@@ -469,7 +469,7 @@ namespace RareBooksService.WebApi.Services
             {
                 _logger.LogError(ex, "Критическая ошибка при импорте коллекции для пользователя {UserId}", userId);
                 response.Success = false;
-                response.Message = $"Критическая ошибка импорта: {ex.Message}";
+                response.Message = $"Критическая ошибка импорта: {ex}";
                 return response;
             }
         }
