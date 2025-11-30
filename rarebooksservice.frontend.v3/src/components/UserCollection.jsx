@@ -232,57 +232,108 @@ const UserCollection = () => {
     }
 
     return (
-        <Box sx={{ maxWidth: 1400, mx: 'auto', p: { xs: 2, md: 3 }, overflowX: 'hidden' }}>
-            <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold', mb: 3, fontSize: { xs: '1.5rem', sm: '2rem' } }}>
+        <Box sx={{ maxWidth: 1400, mx: 'auto', p: { xs: 1, sm: 2, md: 3 }, overflowX: 'hidden' }}>
+            <Typography 
+                variant="h4" 
+                component="h1" 
+                gutterBottom 
+                sx={{ 
+                    fontWeight: 'bold', 
+                    mb: { xs: 2, sm: 3 }, 
+                    fontSize: { xs: '1.25rem', sm: '1.75rem', md: '2rem' },
+                    px: { xs: 1, sm: 0 }
+                }}
+            >
                 Моя коллекция редких книг
             </Typography>
 
             {error && (
-                <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
+                <Alert severity="error" sx={{ mb: 2, mx: { xs: 1, sm: 0 } }} onClose={() => setError('')}>
                     {error}
                 </Alert>
             )}
 
             {/* Статистика */}
             {statistics && (
-                <Paper elevation={2} sx={{ p: 3, mb: 3, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
-                    <Grid container spacing={2}>
-                        <Grid item xs={6} sm={6} md={2.4}>
-                            <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: { xs: '1.25rem', sm: '1.75rem', md: '2rem' } }}>
+                <Paper 
+                    elevation={2} 
+                    sx={{ 
+                        p: { xs: 1.5, sm: 2, md: 3 }, 
+                        mb: { xs: 2, sm: 3 }, 
+                        mx: { xs: 0.5, sm: 0 },
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+                        color: 'white' 
+                    }}
+                >
+                    <Grid container spacing={{ xs: 1, sm: 2 }}>
+                        <Grid item xs={6} sm={4} md={2.4}>
+                            <Typography 
+                                variant="h4" 
+                                sx={{ 
+                                    fontWeight: 'bold', 
+                                    fontSize: { xs: '1rem', sm: '1.5rem', md: '2rem' } 
+                                }}
+                            >
                                 {statistics.booksInCollection}
                             </Typography>
-                            <Typography variant="body2" sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>В коллекции</Typography>
+                            <Typography variant="body2" sx={{ fontSize: { xs: '0.65rem', sm: '0.875rem' } }}>
+                                В коллекции
+                            </Typography>
                         </Grid>
-                        <Grid item xs={6} sm={6} md={2.4}>
-                            <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: { xs: '1.25rem', sm: '1.75rem', md: '2rem' } }}>
+                        <Grid item xs={6} sm={4} md={2.4}>
+                            <Typography 
+                                variant="h4" 
+                                sx={{ 
+                                    fontWeight: 'bold', 
+                                    fontSize: { xs: '1rem', sm: '1.5rem', md: '2rem' } 
+                                }}
+                            >
                                 {statistics.totalPurchaseValue ? `${statistics.totalPurchaseValue.toLocaleString('ru-RU')} ₽` : '0 ₽'}
                             </Typography>
-                            <Typography variant="body2" sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>Затрачено</Typography>
+                            <Typography variant="body2" sx={{ fontSize: { xs: '0.65rem', sm: '0.875rem' } }}>
+                                Затрачено
+                            </Typography>
                         </Grid>
-                        <Grid item xs={6} sm={6} md={2.4}>
-                            <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: { xs: '1.25rem', sm: '1.75rem', md: '2rem' } }}>
+                        <Grid item xs={6} sm={4} md={2.4}>
+                            <Typography 
+                                variant="h4" 
+                                sx={{ 
+                                    fontWeight: 'bold', 
+                                    fontSize: { xs: '1rem', sm: '1.5rem', md: '2rem' } 
+                                }}
+                            >
                                 {statistics.totalEstimatedValue.toLocaleString('ru-RU')} ₽
                             </Typography>
-                            <Typography variant="body2" sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>Оценка</Typography>
+                            <Typography variant="body2" sx={{ fontSize: { xs: '0.65rem', sm: '0.875rem' } }}>
+                                Оценка
+                            </Typography>
                         </Grid>
                         <Grid item xs={6} sm={6} md={2.4}>
-                            <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: { xs: '1.25rem', sm: '1.75rem', md: '2rem' } }}>
+                            <Typography 
+                                variant="h4" 
+                                sx={{ 
+                                    fontWeight: 'bold', 
+                                    fontSize: { xs: '1rem', sm: '1.5rem', md: '2rem' } 
+                                }}
+                            >
                                 {statistics.totalSoldValue ? `${statistics.totalSoldValue.toLocaleString('ru-RU')} ₽` : '0 ₽'}
                             </Typography>
-                            <Typography variant="body2" sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>Продано ({statistics.booksSold || 0})</Typography>
+                            <Typography variant="body2" sx={{ fontSize: { xs: '0.65rem', sm: '0.875rem' } }}>
+                                Продано ({statistics.booksSold || 0})
+                            </Typography>
                         </Grid>
-                        <Grid item xs={12} sm={12} md={2.4}>
+                        <Grid item xs={12} sm={6} md={2.4}>
                             <Typography 
                                 variant="h4" 
                                 sx={{ 
                                     fontWeight: 'bold',
-                                    fontSize: { xs: '1.25rem', sm: '1.75rem', md: '2rem' },
+                                    fontSize: { xs: '1rem', sm: '1.5rem', md: '2rem' },
                                     color: statistics.totalProfit >= 0 ? '#4caf50' : '#ff5252'
                                 }}
                             >
                                 {statistics.totalProfit >= 0 ? '+' : ''}{(statistics.totalProfit || 0).toLocaleString('ru-RU')} ₽
                             </Typography>
-                            <Typography variant="body2" sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
+                            <Typography variant="body2" sx={{ fontSize: { xs: '0.65rem', sm: '0.875rem' } }}>
                                 Прибыль
                             </Typography>
                         </Grid>
@@ -291,7 +342,7 @@ const UserCollection = () => {
             )}
 
             {/* Панель управления */}
-            <Box sx={{ mb: 3 }}>
+            <Box sx={{ mb: { xs: 2, sm: 3 }, px: { xs: 0.5, sm: 0 } }}>
                 {/* Поиск и сортировка */}
                 <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2, mb: 2 }}>
                     <TextField
@@ -338,38 +389,42 @@ const UserCollection = () => {
                 </Box>
 
                 {/* Кнопки действий */}
-                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
-                    <Button
-                        variant="contained"
-                        startIcon={<AddIcon />}
-                        onClick={() => navigate('/collection/add')}
-                        fullWidth={true}
-                        sx={{ flexGrow: { sm: 1 } }}
-                    >
-                        Добавить книгу
-                    </Button>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.5, sm: 2 } }}>
+                    {/* Основные кнопки */}
+                    <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 1.5, sm: 2 } }}>
+                        <Button
+                            variant="contained"
+                            startIcon={<AddIcon />}
+                            onClick={() => navigate('/collection/add')}
+                            fullWidth
+                            size={window.innerWidth < 600 ? "medium" : "large"}
+                        >
+                            Добавить книгу
+                        </Button>
 
-                    <Button
-                        variant="contained"
-                        color="secondary"
-                        startIcon={<UploadIcon />}
-                        onClick={() => setImportDialogOpen(true)}
-                        fullWidth={true}
-                        sx={{ flexGrow: { sm: 1 } }}
-                    >
-                        Импортировать
-                    </Button>
+                        <Button
+                            variant="contained"
+                            color="secondary"
+                            startIcon={<UploadIcon />}
+                            onClick={() => setImportDialogOpen(true)}
+                            fullWidth
+                            size={window.innerWidth < 600 ? "medium" : "large"}
+                        >
+                            Импортировать
+                        </Button>
+                    </Box>
 
-                    <Box sx={{ display: 'flex', gap: 2 }}>
+                    {/* Кнопки экспорта и удаления */}
+                    <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 1.5, sm: 2 } }}>
                         <Button
                             variant="outlined"
                             startIcon={<PdfIcon />}
                             onClick={handleExportPdf}
                             disabled={books.length === 0}
                             fullWidth
-                            sx={{ flexGrow: 1 }}
+                            size={window.innerWidth < 600 ? "medium" : "large"}
                         >
-                            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Экспорт </Box>PDF
+                            Экспорт PDF
                         </Button>
 
                         <Button
@@ -378,9 +433,9 @@ const UserCollection = () => {
                             onClick={handleExportJson}
                             disabled={books.length === 0}
                             fullWidth
-                            sx={{ flexGrow: 1 }}
+                            size={window.innerWidth < 600 ? "medium" : "large"}
                         >
-                            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Экспорт </Box>ZIP
+                            Экспорт ZIP
                         </Button>
 
                         <Button
@@ -390,9 +445,9 @@ const UserCollection = () => {
                             onClick={() => setDeleteAllDialogOpen(true)}
                             disabled={books.length === 0}
                             fullWidth
-                            sx={{ flexGrow: 1 }}
+                            size={window.innerWidth < 600 ? "medium" : "large"}
                         >
-                            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Удалить </Box>всё
+                            Удалить всё
                         </Button>
                     </Box>
                 </Box>
@@ -400,24 +455,24 @@ const UserCollection = () => {
 
             {/* Список книг */}
             {books.length === 0 ? (
-                <Paper elevation={1} sx={{ p: 6, textAlign: 'center' }}>
-                    <Typography variant="h6" color="text.secondary" gutterBottom>
+                <Paper elevation={1} sx={{ p: { xs: 3, sm: 4, md: 6 }, textAlign: 'center', mx: { xs: 0.5, sm: 0 } }}>
+                    <Typography variant="h6" color="text.secondary" gutterBottom sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
                         Ваша коллекция пока пуста
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: { xs: 2, sm: 3 }, fontSize: { xs: '0.875rem', sm: '1rem' } }}>
                         Начните добавлять книги, чтобы отслеживать свою коллекцию и получать оценки стоимости
                     </Typography>
                     <Button
                         variant="contained"
                         startIcon={<AddIcon />}
                         onClick={() => navigate('/collection/add')}
-                        size="large"
+                        size={window.innerWidth < 600 ? "medium" : "large"}
                     >
                         Добавить первую книгу
                     </Button>
                 </Paper>
             ) : (
-                <Grid container spacing={3}>
+                <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }} sx={{ px: { xs: 0.5, sm: 0 } }}>
                     {filteredAndSortedBooks().map((book) => (
                         <Grid item xs={12} sm={6} md={4} lg={3} key={book.id}>
                             <Card 
@@ -463,30 +518,52 @@ const UserCollection = () => {
                                         </Box>
                                     )}
 
-                                    <CardContent sx={{ flexGrow: 1 }}>
-                                        <Typography variant="h6" component="div" gutterBottom noWrap>
+                                    <CardContent sx={{ flexGrow: 1, p: { xs: 1.5, sm: 2 } }}>
+                                        <Typography 
+                                            variant="h6" 
+                                            component="div" 
+                                            gutterBottom 
+                                            noWrap
+                                            sx={{ fontSize: { xs: '0.95rem', sm: '1.15rem' } }}
+                                        >
                                             {book.title}
                                         </Typography>
 
                                         {book.author && (
-                                            <Typography variant="body2" color="text.secondary" gutterBottom noWrap>
+                                            <Typography 
+                                                variant="body2" 
+                                                color="text.secondary" 
+                                                gutterBottom 
+                                                noWrap
+                                                sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
+                                            >
                                                 {book.author}
                                             </Typography>
                                         )}
 
                                         {book.yearPublished && (
-                                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                                            <Typography 
+                                                variant="body2" 
+                                                color="text.secondary" 
+                                                gutterBottom
+                                                sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+                                            >
                                                 {book.yearPublished} г.
                                             </Typography>
                                         )}
 
                                         {book.purchaseDate && (
-                                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                                            <Typography 
+                                                variant="body2" 
+                                                color="text.secondary" 
+                                                gutterBottom
+                                                sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+                                            >
                                                 Куплена: {new Date(book.purchaseDate).toLocaleDateString('ru-RU')}
                                             </Typography>
                                         )}
 
-                                        <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                                        <Box sx={{ mt: { xs: 1.5, sm: 2 }, display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
                                             {book.estimatedPrice ? (
                                                 <Chip
                                                     label={`Оценка: ${book.estimatedPrice.toLocaleString('ru-RU')} ₽`}
