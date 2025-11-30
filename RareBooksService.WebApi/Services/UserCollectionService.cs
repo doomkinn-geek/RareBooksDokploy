@@ -173,7 +173,9 @@ namespace RareBooksService.WebApi.Services
                     Description = request.Description,
                     Notes = request.Notes,
                     PurchasePrice = request.PurchasePrice,
-                    PurchaseDate = request.PurchaseDate,
+                    PurchaseDate = request.PurchaseDate.HasValue 
+                        ? DateTime.SpecifyKind(request.PurchaseDate.Value, DateTimeKind.Utc) 
+                        : (DateTime?)null,
                     AddedDate = DateTime.UtcNow,
                     UpdatedDate = DateTime.UtcNow
                 };
@@ -251,10 +253,14 @@ namespace RareBooksService.WebApi.Services
                 book.Description = request.Description;
                 book.Notes = request.Notes;
                 book.PurchasePrice = request.PurchasePrice;
-                book.PurchaseDate = request.PurchaseDate;
+                book.PurchaseDate = request.PurchaseDate.HasValue 
+                    ? DateTime.SpecifyKind(request.PurchaseDate.Value, DateTimeKind.Utc) 
+                    : (DateTime?)null;
                 book.IsSold = request.IsSold;
                 book.SoldPrice = request.SoldPrice;
-                book.SoldDate = request.SoldDate;
+                book.SoldDate = request.SoldDate.HasValue 
+                    ? DateTime.SpecifyKind(request.SoldDate.Value, DateTimeKind.Utc) 
+                    : (DateTime?)null;
                 book.UpdatedDate = DateTime.UtcNow;
 
                 // Обновляем цену, если она установлена вручную

@@ -33,7 +33,7 @@ import MenuBookIcon from '@mui/icons-material/MenuBook';
 const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const { setUser } = useContext(UserContext);
+    const { setUser, refreshUser } = useContext(UserContext);
     const navigate = useNavigate();
     const location = useLocation();
     const [error, setError] = useState('');
@@ -54,8 +54,9 @@ const Login = () => {
             // вместо Cookies:
             //localStorage.setItem('token', response.data.token);
 
-            // прописываем пользователя в контекст
-            setUser(response.data.user);
+            // Сначала устанавливаем токен, затем загружаем полные данные пользователя
+            await refreshUser(true);
+            
             // попытка вернуть на исходную страницу, если была сохранена
             const stateFrom = location.state && location.state.from;
             const storedReturnTo = (() => { try { return localStorage.getItem('returnTo'); } catch (_) { return null; } })();
