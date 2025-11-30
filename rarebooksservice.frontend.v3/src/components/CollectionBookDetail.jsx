@@ -813,6 +813,34 @@ const CollectionBookDetail = () => {
                                     </Typography>
                                 )}
 
+                                {book.purchasePrice && (
+                                    <Typography variant="body1" gutterBottom sx={{ color: 'info.main' }}>
+                                        Цена покупки: <strong>{book.purchasePrice.toLocaleString('ru-RU')} ₽</strong>
+                                        {book.purchaseDate && ` (${new Date(book.purchaseDate).toLocaleDateString('ru-RU')})`}
+                                    </Typography>
+                                )}
+
+                                {book.isSold && book.soldPrice && (
+                                    <Typography variant="body1" gutterBottom sx={{ color: 'success.main' }}>
+                                        Цена продажи: <strong>{book.soldPrice.toLocaleString('ru-RU')} ₽</strong>
+                                        {book.soldDate && ` (${new Date(book.soldDate).toLocaleDateString('ru-RU')})`}
+                                    </Typography>
+                                )}
+
+                                {book.isSold && book.purchasePrice && book.soldPrice && (
+                                    <Typography 
+                                        variant="body1" 
+                                        gutterBottom 
+                                        sx={{ 
+                                            color: (book.soldPrice - book.purchasePrice) >= 0 ? 'success.dark' : 'error.main',
+                                            fontWeight: 'bold'
+                                        }}
+                                    >
+                                        Прибыль: {(book.soldPrice - book.purchasePrice) >= 0 ? '+' : ''}
+                                        {(book.soldPrice - book.purchasePrice).toLocaleString('ru-RU')} ₽
+                                    </Typography>
+                                )}
+
                                 {book.description && (
                                     <>
                                         <Divider sx={{ my: 2 }} />

@@ -485,6 +485,38 @@ namespace RareBooksService.WebApi.Controllers
                 return StatusCode(500, new { error = $"Ошибка при экспорте коллекции: {ex.Message}" });
             }
         }
+
+        /// <summary>
+        /// Импорт коллекции из JSON
+        /// </summary>
+        [HttpPost("import")]
+        public async Task<ActionResult<ImportCollectionResponse>> ImportFromJson([FromBody] ImportCollectionRequest request)
+        {
+            try
+            {
+                var userId = GetUserId();
+                
+                _logger.LogInformation("Запрос на импорт коллекции от пользователя {UserId}", userId);
+                
+                var response = await _exportService.ImportFromJsonAsync(request, userId);
+                
+                if (!response.Success)
+                {
+                    return BadRequest(response);
+                }
+                
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при импорте коллекции");
+                return StatusCode(500, new ImportCollectionResponse 
+                { 
+                    Success = false,
+                    Message = $"Ошибка сервера: {ex.Message}"
+                });
+            }
+        }
     }
 
     /// <summary>

@@ -33,6 +33,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramBotTest", "Telegram
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramBotManager", "TelegramBotManager\TelegramBotManager.csproj", "{4BA99BC4-FE5B-E3E8-F297-7EB16599951C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RareBooksImporter", "RareBooksImporter\RareBooksImporter.csproj", "{19A05800-DE0D-4B0E-89F3-FBA375EFB8AF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -73,6 +75,10 @@ Global
 		{4BA99BC4-FE5B-E3E8-F297-7EB16599951C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4BA99BC4-FE5B-E3E8-F297-7EB16599951C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4BA99BC4-FE5B-E3E8-F297-7EB16599951C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{19A05800-DE0D-4B0E-89F3-FBA375EFB8AF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{19A05800-DE0D-4B0E-89F3-FBA375EFB8AF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{19A05800-DE0D-4B0E-89F3-FBA375EFB8AF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{19A05800-DE0D-4B0E-89F3-FBA375EFB8AF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

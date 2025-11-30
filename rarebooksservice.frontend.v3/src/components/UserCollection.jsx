@@ -2,19 +2,21 @@ import React, { useState, useEffect } from 'react';
 import {
     Box, Typography, Button, Grid, Card, CardContent, CardMedia,
     CardActionArea, TextField, MenuItem, CircularProgress, Alert,
-    Paper, Chip, InputAdornment
+    Paper, Chip, InputAdornment, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
 import {
     Add as AddIcon,
     Search as SearchIcon,
     Download as DownloadIcon,
     Description as PdfIcon,
-    Archive as ZipIcon
+    Archive as ZipIcon,
+    Upload as UploadIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../api';
 import Cookies from 'js-cookie';
+import ImportCollection from './ImportCollection';
 
 const UserCollection = () => {
     const navigate = useNavigate();
@@ -25,6 +27,7 @@ const UserCollection = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState('addedDate');
     const [imageBlobs, setImageBlobs] = useState({});
+    const [importDialogOpen, setImportDialogOpen] = useState(false);
 
     useEffect(() => {
         loadCollection();
@@ -282,6 +285,17 @@ const UserCollection = () => {
                         Добавить книгу
                     </Button>
 
+                    <Button
+                        variant="contained"
+                        color="secondary"
+                        startIcon={<UploadIcon />}
+                        onClick={() => setImportDialogOpen(true)}
+                        fullWidth={true}
+                        sx={{ flexGrow: { sm: 1 } }}
+                    >
+                        Импортировать
+                    </Button>
+
                     <Box sx={{ display: 'flex', gap: 2 }}>
                         <Button
                             variant="outlined"
@@ -393,7 +407,7 @@ const UserCollection = () => {
                                         <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                                             {book.estimatedPrice ? (
                                                 <Chip
-                                                    label={`${book.estimatedPrice.toLocaleString('ru-RU')} ₽`}
+                                                    label={`Оценка: ${book.estimatedPrice.toLocaleString('ru-RU')} ₽`}
                                                     color="primary"
                                                     size="small"
                                                 />
@@ -401,8 +415,25 @@ const UserCollection = () => {
                                                 <Chip label="Нет оценки" size="small" variant="outlined" />
                                             )}
 
+                                            {book.purchasePrice && (
+                                                <Chip
+                                                    label={`Куплена: ${book.purchasePrice.toLocaleString('ru-RU')} ₽`}
+                                                    color="info"
+                                                    size="small"
+                                                    variant="outlined"
+                                                />
+                                            )}
+
+                                            {book.isSold && book.soldPrice && (
+                                                <Chip
+                                                    label={`Продана: ${book.soldPrice.toLocaleString('ru-RU')} ₽`}
+                                                    color="success"
+                                                    size="small"
+                                                />
+                                            )}
+
                                             {book.hasReferenceBook && (
-                                                <Chip label="Есть референс" size="small" color="success" variant="outlined" />
+                                                <Chip label="Есть референс" size="small" color="secondary" variant="outlined" />
                                             )}
 
                                             {book.imagesCount > 0 && (
@@ -416,6 +447,30 @@ const UserCollection = () => {
                     ))}
                 </Grid>
             )}
+
+            {/* Диалог импорта */}
+            <Dialog 
+                open={importDialogOpen} 
+                onClose={() => setImportDialogOpen(false)}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>Импорт коллекции</DialogTitle>
+                <DialogContent>
+                    <ImportCollection 
+                        onImportComplete={() => {
+                            setImportDialogOpen(false);
+                            loadCollection();
+                            loadStatistics();
+                        }}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setImportDialogOpen(false)}>
+                        Закрыть
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 };

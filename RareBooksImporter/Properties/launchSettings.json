@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "RareBooksImporter": {
+      "commandName": "Project",
+      "commandLineArgs": "d:\\\\documents\\\\!rare books\\\\реестр.xlsx d:\\\\documents\\\\!rare books\\\\реестр.json"
+    }
+  }
+}

@@ -23,6 +23,7 @@ namespace RareBooksService.WebApi.Services
     {
         Task<byte[]> ExportToPdfAsync(string userId);
         Task<byte[]> ExportToJsonAsync(string userId);
+        Task<ImportCollectionResponse> ImportFromJsonAsync(ImportCollectionRequest request, string userId);
     }
 
     public class CollectionExportService : ICollectionExportService
@@ -375,6 +376,100 @@ namespace RareBooksService.WebApi.Services
             {
                 _logger.LogError(ex, "Ошибка при экспорте коллекции в JSON для пользователя {UserId}", userId);
                 throw;
+            }
+        }
+
+        public async Task<ImportCollectionResponse> ImportFromJsonAsync(ImportCollectionRequest request, string userId)
+        {
+            var response = new ImportCollectionResponse
+            {
+                Success = true,
+                ImportedBooks = 0,
+                SkippedBooks = 0,
+                Errors = new List<string>()
+            };
+
+            try
+            {
+                _logger.LogInformation("Начало импорта коллекции для пользователя {UserId}. Книг в файле: {Count}", 
+                    userId, request.Books?.Count ?? 0);
+
+                if (request.Books == null || request.Books.Count == 0)
+                {
+                    response.Success = false;
+                    response.Message = "Файл не содержит книг для импорта";
+                    return response;
+                }
+
+                foreach (var bookData in request.Books)
+                {
+                    try
+                    {
+                        // Валидация обязательных полей
+                        if (string.IsNullOrWhiteSpace(bookData.Title))
+                        {
+                            response.Errors.Add($"Пропущена книга без названия");
+                            response.SkippedBooks++;
+                            continue;
+                        }
+
+                        // Определяем финальное название (без автора)
+                        string finalTitle = bookData.Title;
+                        if (!string.IsNullOrEmpty(bookData.Author) && bookData.Title.StartsWith(bookData.Author))
+                        {
+                            finalTitle = bookData.Title.Substring(bookData.Author.Length).TrimStart('.', ' ');
+                        }
+
+                        // Создаем книгу
+                        var book = new UserCollectionBook
+                        {
+                            UserId = userId,
+                            Title = finalTitle,
+                            Author = bookData.Author,
+                            YearPublished = bookData.YearPublished,
+                            Description = null, // Пока не используется
+                            Notes = bookData.Notes,
+                            PurchasePrice = bookData.TotalPurchasePrice ?? bookData.PurchasePrice,
+                            PurchaseDate = bookData.PurchaseDate.HasValue 
+                                ? DateTime.SpecifyKind(bookData.PurchaseDate.Value, DateTimeKind.Utc) 
+                                : null,
+                            IsSold = bookData.IsSold,
+                            SoldPrice = bookData.SoldPrice,
+                            SoldDate = bookData.SoldDate.HasValue 
+                                ? DateTime.SpecifyKind(bookData.SoldDate.Value, DateTimeKind.Utc) 
+                                : null,
+                            AddedDate = DateTime.UtcNow,
+                            UpdatedDate = DateTime.UtcNow,
+                            IsManuallyPriced = false,
+                            EstimatedPrice = null
+                        };
+
+                        _usersContext.UserCollectionBooks.Add(book);
+                        await _usersContext.SaveChangesAsync();
+
+                        response.ImportedBooks++;
+                        _logger.LogDebug("Импортирована книга: {Title}", finalTitle);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Ошибка при импорте книги: {Title}", bookData.Title);
+                        response.Errors.Add($"Ошибка при импорте '{bookData.Title}': {ex.Message}");
+                        response.SkippedBooks++;
+                    }
+                }
+
+                response.Message = $"Импортировано книг: {response.ImportedBooks}. Пропущено: {response.SkippedBooks}";
+                _logger.LogInformation("Импорт завершен. Импортировано: {Imported}, Пропущено: {Skipped}", 
+                    response.ImportedBooks, response.SkippedBooks);
+
+                return response;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Критическая ошибка при импорте коллекции для пользователя {UserId}", userId);
+                response.Success = false;
+                response.Message = $"Критическая ошибка импорта: {ex.Message}";
+                return response;
             }
         }
     }
