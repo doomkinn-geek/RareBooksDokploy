@@ -509,8 +509,17 @@ const UserCollection = () => {
                                             {book.isSold && book.soldPrice && (
                                                 <Chip
                                                     label={`Продана: ${book.soldPrice.toLocaleString('ru-RU')} ₽`}
-                                                    color="success"
+                                                    color={
+                                                        book.purchasePrice && book.soldPrice < book.purchasePrice
+                                                            ? 'error'   // убыток — красный
+                                                            : 'success' // прибыль или нет цены покупки — зелёный
+                                                    }
                                                     size="small"
+                                                    variant={
+                                                        book.purchasePrice && book.soldPrice < book.purchasePrice
+                                                            ? 'filled'
+                                                            : 'filled'
+                                                    }
                                                 />
                                             )}
 
