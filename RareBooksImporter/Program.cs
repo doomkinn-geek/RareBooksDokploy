@@ -345,7 +345,7 @@ namespace RareBooksImporter
         [JsonPropertyName("isSold")]
         public bool IsSold { get; set; }
 
-        [JsonIgnore]
+        /*[JsonIgnore]
         public string CleanTitle
         {
             get
@@ -357,6 +357,6 @@ namespace RareBooksImporter
                 }
                 return Title;
             }
-        }
+        }*/
     }
 }

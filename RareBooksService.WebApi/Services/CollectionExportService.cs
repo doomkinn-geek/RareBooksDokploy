@@ -416,10 +416,10 @@ namespace RareBooksService.WebApi.Services
 
                         // Определяем финальное название (без автора)
                         string finalTitle = bookData.Title;
-                        if (!string.IsNullOrEmpty(bookData.Author) && bookData.Title.StartsWith(bookData.Author))
+                        /*if (!string.IsNullOrEmpty(bookData.Author) && bookData.Title.StartsWith(bookData.Author))
                         {
                             finalTitle = bookData.Title.Substring(bookData.Author.Length).TrimStart('.', ' ');
-                        }
+                        }*/
 
                         // Создаем книгу
                         var book = new UserCollectionBook
