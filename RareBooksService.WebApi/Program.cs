@@ -315,14 +315,36 @@ namespace RareBooksService.WebApi
                     setupService = scope.ServiceProvider.GetRequiredService<ISetupStateService>();
                     setupService.DetermineIfSetupNeeded();
 
-                    // 1) ���� ������� �� ������� initial setup -> ������ ��������� ����
+                    // 1) Если система не требует initial setup -> можем применять миграции
                     if (!setupService.IsInitialSetupNeeded)
                     {
-                        var booksDb = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
-                        booksDb.Database.Migrate();
+                        var migrationLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+                        
+                        try
+                        {
+                            migrationLogger.LogInformation("Применение миграций BooksDb...");
+                            var booksDb = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+                            booksDb.Database.Migrate();
+                            migrationLogger.LogInformation("Миграции BooksDb применены успешно");
+                        }
+                        catch (Exception ex)
+                        {
+                            migrationLogger.LogError(ex, "Ошибка при применении миграций BooksDb");
+                            // Не прерываем запуск, продолжаем
+                        }
 
-                        var usersDb = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
-                        usersDb.Database.Migrate();
+                        try
+                        {
+                            migrationLogger.LogInformation("Применение миграций UsersDb...");
+                            var usersDb = scope.ServiceProvider.GetRequiredService<UsersDbContext>();
+                            usersDb.Database.Migrate();
+                            migrationLogger.LogInformation("Миграции UsersDb применены успешно");
+                        }
+                        catch (Exception ex)
+                        {
+                            migrationLogger.LogError(ex, "Ошибка при применении миграций UsersDb");
+                            // Не прерываем запуск, продолжаем
+                        }
                     }
                 }
 
