@@ -416,6 +416,12 @@ const UserCollection = () => {
                                             </Typography>
                                         )}
 
+                                        {book.purchaseDate && (
+                                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                                                Куплена: {new Date(book.purchaseDate).toLocaleDateString('ru-RU')}
+                                            </Typography>
+                                        )}
+
                                         <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                                             {book.estimatedPrice ? (
                                                 <Chip
