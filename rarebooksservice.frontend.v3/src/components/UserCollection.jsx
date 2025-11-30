@@ -161,10 +161,20 @@ const UserCollection = () => {
             switch (sortBy) {
                 case 'addedDate':
                     return new Date(b.addedDate) - new Date(a.addedDate);
+
+                case 'purchaseDate': {
+                    const dateA = a.purchaseDate ? new Date(a.purchaseDate).getTime() : 0;
+                    const dateB = b.purchaseDate ? new Date(b.purchaseDate).getTime() : 0;
+                    // Новые покупки выше
+                    return dateB - dateA;
+                }
+
                 case 'title':
                     return (a.title || '').localeCompare(b.title || '');
+
                 case 'price':
                     return (b.estimatedPrice || 0) - (a.estimatedPrice || 0);
+
                 default:
                     return 0;
             }
@@ -172,6 +182,7 @@ const UserCollection = () => {
 
         return filtered;
     };
+
 
     if (loading) {
         return (
@@ -268,6 +279,7 @@ const UserCollection = () => {
                         sx={{ minWidth: { xs: '100%', sm: 200 } }}
                     >
                         <MenuItem value="addedDate">По дате добавления</MenuItem>
+                        <MenuItem value="purchaseDate">По дате покупки</MenuItem> {/* НОВОЕ */}
                         <MenuItem value="title">По названию</MenuItem>
                         <MenuItem value="price">По оценке</MenuItem>
                     </TextField>
