@@ -1,4 +1,4 @@
-﻿name: RareBooksDokploy
+name: RareBooksDokploy
 
 # Создаём изолированную сеть для безопасности
 networks:
@@ -14,9 +14,6 @@ services:
       - POSTGRES_DB=RareBooks_Books
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=123456
-    # УБИРАЕМ ОТКРЫТЫЕ ПОРТЫ - база данных доступна только внутри Docker сети
-    # ports:
-    #   - "5433:5432"        # ЗАКРЫТО для безопасности!
     volumes:
       - db_books_data:/var/lib/postgresql/data
     networks:
@@ -35,9 +32,6 @@ services:
       - POSTGRES_DB=RareBooks_Users
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=123456
-    # УБИРАЕМ ОТКРЫТЫЕ ПОРТЫ - база данных доступна только внутри Docker сети
-    # ports:
-    #   - "5434:5432"        # ЗАКРЫТО для безопасности!
     volumes:
       - db_users_data:/var/lib/postgresql/data
     networks:
@@ -67,7 +61,6 @@ services:
       - ASPNETCORE_URLS=http://+:80
       - ASPNETCORE_ENVIRONMENT=Production
     volumes:
-      # Постоянное хранилище для изображений коллекций пользователей
       - collection_images:/app/wwwroot/collection_images
     networks:
       - rarebooks_network
@@ -106,15 +99,15 @@ services:
     image: nginx:stable-alpine
     container_name: nginx_container
     ports:
-      - 80:80      # Только nginx открыт наружу
-      - 443:443    # Только nginx открыт наружу
+      - 80:80
+      - 443:443
     volumes:
-      #- ./nginx/nginx_dev.conf:/etc/nginx/nginx.conf
       - ./nginx/nginx_prod.conf:/etc/nginx/nginx.conf
-      - /etc/letsencrypt:/etc/letsencrypt:ro   # SSL сертификаты
-      - /var/www/certbot:/var/www/certbot      # Certbot challenge
-      #- /home/docker/ssl/rare-books.ru:/etc/ssl/rare-books.ru:ro #чтобы получить бесплатный сертификат из letsencrypt, нужно сначала развернуться со старым просроченным
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot
     depends_on:
+      maymessenger_backend:
+        condition: service_healthy
       frontend:
         condition: service_healthy
       backend:
@@ -125,7 +118,6 @@ services:
       - rarebooks_network
     restart: unless-stopped
     healthcheck:
-      # Проверяем Setup API через HTTP (всегда доступен)
       test: ["CMD-SHELL", "wget -q -O - http://localhost:80/api/test/setup-status > /dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 15s
@@ -166,11 +158,11 @@ services:
         condition: service_healthy
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - ASPNETCORE_URLS=http://+:5000
       - ConnectionStrings__DefaultConnection=Host=db_maymessenger;Port=5432;Database=maymessenger;Username=postgres;Password=postgres123
-      - Jwt__Secret=MayMessenger_SuperSecret_Key_2024_Change_This_In_Production_12345678
+      - Jwt__SecretKey=MayMessenger_SuperSecret_Key_2024_Change_This_In_Production_12345678
       - Jwt__Issuer=MayMessengerAPI
       - Jwt__Audience=MayMessengerClients
+      - Jwt__ExpiryMinutes=43200
     volumes:
       - maymessenger_audio:/app/wwwroot/audio
     networks:
@@ -185,6 +177,7 @@ services:
 volumes:
   db_books_data:
   db_users_data:
-  collection_images:  # Постоянное хранилище для изображений коллекций пользователей
+  collection_images:
   db_maymessenger_data:
   maymessenger_audio:
+
