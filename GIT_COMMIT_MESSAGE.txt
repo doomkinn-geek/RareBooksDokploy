@@ -1,0 +1,49 @@
+feat: Настройка SSL сертификата для messenger.rare-books.ru
+
+## Проблема
+Домен messenger.rare-books.ru использовал сертификат от rare-books.ru,
+что вызывало ошибку NET::ERR_CERT_COMMON_NAME_INVALID в браузерах.
+
+## Решение
+- Обновлена конфигурация nginx для использования отдельного сертификата
+- Созданы скрипты для получения и автообновления сертификатов
+- Подготовлена полная документация
+
+## Изменения
+
+### Обновленные файлы
+- nginx/nginx_prod.conf
+  * Изменены пути к SSL сертификату для messenger.rare-books.ru
+  * Теперь используется /etc/letsencrypt/live/messenger.rare-books.ru/
+
+### Новые скрипты
+- scripts/get_messenger_certificate.sh - получение сертификата
+- scripts/renew_all_certificates.sh - автообновление сертификатов
+- scripts/pre_certificate_check.sh - проверка готовности системы
+- scripts/check_certificates.sh - проверка статуса сертификатов
+
+### Новая документация
+- scripts/QUICK_START.md - быстрая инструкция (5 минут)
+- scripts/CERTIFICATE_SETUP_INSTRUCTIONS.md - подробная инструкция
+- scripts/COMMANDS_CHEATSHEET.md - шпаргалка команд
+- scripts/README.md - общая информация о скриптах
+- CERTIFICATE_CHANGES_SUMMARY.md - итоговая сводка
+- ИТОГИ_НАСТРОЙКИ_SSL.md - резюме на русском
+- GIT_COMMIT_MESSAGE.txt - этот файл
+
+## Результат
+После применения изменений:
+✅ messenger.rare-books.ru будет иметь валидный SSL сертификат
+✅ HTTPS будет работать без предупреждений браузера
+✅ Сертификаты будут автоматически обновляться
+✅ Полная документация для развертывания и поддержки
+
+## Следующие шаги на сервере
+1. git pull для получения изменений
+2. Запустить scripts/pre_certificate_check.sh для проверки
+3. Запустить scripts/get_messenger_certificate.sh для получения сертификата
+4. docker-compose restart proxy для применения
+5. Настроить cron для автообновления
+
+Подробности: ИТОГИ_НАСТРОЙКИ_SSL.md
+
