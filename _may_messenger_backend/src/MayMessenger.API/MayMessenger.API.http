@@ -1,0 +1,6 @@
+@MayMessenger.API_HostAddress = http://localhost:5279
+
+GET {{MayMessenger.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
