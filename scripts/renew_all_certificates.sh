@@ -17,8 +17,7 @@ if [ $? -eq 0 ]; then
     echo "$(date): Сертификаты успешно проверены/обновлены" >> "$LOG_FILE"
     
     # Перезапуск nginx в Docker для применения обновленных сертификатов
-    # ВАЖНО: Укажите правильный путь к вашему docker-compose.yml
-    cd /home/docker/RareBooksDokploy || cd /home/youruser/RareBooksDokploy
+    cd /root/RareBooksDokploy
     
     if [ -f "docker-compose.yml" ]; then
         docker-compose restart proxy >> "$LOG_FILE" 2>&1
