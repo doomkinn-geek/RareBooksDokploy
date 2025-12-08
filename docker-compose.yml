@@ -119,8 +119,9 @@ services:
         condition: service_healthy
       backend:
         condition: service_healthy
-      maymessenger_backend:
-        condition: service_healthy
+      # Временно убрано для получения сертификата
+      #maymessenger_backend:
+      #  condition: service_healthy
     networks:
       - rarebooks_network
     restart: unless-stopped
