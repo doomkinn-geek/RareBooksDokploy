@@ -20,7 +20,7 @@ echo "ВАЖНО: Убедитесь, что домен messenger.rare-books.ru 
 echo "и nginx уже запущен с конфигурацией, позволяющей обработку /.well-known/acme-challenge/"
 echo ""
 
-sudo certbot certonly --webroot -w /var/www/certbot -d messenger.rare-books.ru
+sudo certbot certonly -v --webroot -w /var/www/certbot -d messenger.rare-books.ru
 
 # Проверка результата
 if [ $? -eq 0 ]; then
