@@ -5,6 +5,7 @@ using MayMessenger.Application.DTOs;
 using MayMessenger.Domain.Entities;
 using MayMessenger.Domain.Enums;
 using MayMessenger.Domain.Interfaces;
+using MayMessenger.Infrastructure.Data;
 
 namespace MayMessenger.API.Controllers;
 
@@ -14,10 +15,12 @@ namespace MayMessenger.API.Controllers;
 public class ChatsController : ControllerBase
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly AppDbContext _context;
     
-    public ChatsController(IUnitOfWork unitOfWork)
+    public ChatsController(IUnitOfWork unitOfWork, AppDbContext context)
     {
         _unitOfWork = unitOfWork;
+        _context = context;
     }
     
     private Guid GetCurrentUserId()
@@ -135,15 +138,16 @@ public class ChatsController : ControllerBase
         };
         
         await _unitOfWork.Chats.AddAsync(chat);
+        await _unitOfWork.SaveChangesAsync(); // Save chat first to get ID
         
-        // Add creator
+        // Add creator as participant
         var creatorParticipant = new ChatParticipant
         {
             ChatId = chat.Id,
             UserId = userId,
             IsAdmin = true
         };
-        await _unitOfWork.Chats.AddAsync(chat);
+        await _context.ChatParticipants.AddAsync(creatorParticipant);
         
         // Add other participants
         foreach (var participantId in dto.ParticipantIds)
@@ -151,9 +155,10 @@ public class ChatsController : ControllerBase
             var participant = new ChatParticipant
             {
                 ChatId = chat.Id,
-                UserId = participantId
+                UserId = participantId,
+                IsAdmin = false
             };
-            // Note: Should use ChatParticipant repository
+            await _context.ChatParticipants.AddAsync(participant);
         }
         
         await _unitOfWork.SaveChangesAsync();
