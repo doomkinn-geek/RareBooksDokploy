@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Extensions.FileProviders;
 using MayMessenger.Application.Interfaces;
 using MayMessenger.Domain.Interfaces;
 using MayMessenger.Infrastructure.Data;
@@ -110,6 +111,16 @@ app.MapGet("/health", () => Results.Ok(new { status = "Healthy" }));
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
+
+// Serve audio files from uploads directory
+var uploadsPath = Path.Combine(builder.Environment.ContentRootPath, "uploads");
+Directory.CreateDirectory(uploadsPath);
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(uploadsPath),
+    RequestPath = "/uploads"
+});
 
 app.UseCors("AllowAll");
 
