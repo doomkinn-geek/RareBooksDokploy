@@ -33,7 +33,17 @@ public class ChatsController : ControllerBase
     public async Task<ActionResult<IEnumerable<ChatDto>>> GetChats()
     {
         var userId = GetCurrentUserId();
+        
+        // #region agent log
+        var logger = HttpContext.RequestServices.GetRequiredService<ILogger<ChatsController>>();
+        logger.LogInformation("[H6] GET /chats called, userId: {UserId}", userId);
+        // #endregion
+        
         var chats = await _unitOfWork.Chats.GetUserChatsAsync(userId);
+        
+        // #region agent log
+        logger.LogInformation("[H6] GetUserChatsAsync returned {Count} chats for userId: {UserId}", chats.Count(), userId);
+        // #endregion
         
         var chatDtos = new List<ChatDto>();
         foreach (var chat in chats)
@@ -63,6 +73,10 @@ public class ChatsController : ControllerBase
                 } : null
             });
         }
+        
+        // #region agent log
+        logger.LogInformation("[H6] Returning {Count} chatDtos", chatDtos.Count);
+        // #endregion
         
         return Ok(chatDtos);
     }
@@ -113,12 +127,21 @@ public class ChatsController : ControllerBase
     {
         var userId = GetCurrentUserId();
         
+        // #region agent log
+        var logger = HttpContext.RequestServices.GetRequiredService<ILogger<ChatsController>>();
+        logger.LogInformation("[H6] POST /chats called, userId: {UserId}, participantIds: {ParticipantIds}", userId, string.Join(",", dto.ParticipantIds));
+        // #endregion
+        
         // For private chat
         if (dto.ParticipantIds.Count == 1)
         {
             var existingChat = await _unitOfWork.Chats.GetPrivateChatAsync(userId, dto.ParticipantIds[0]);
             if (existingChat != null)
             {
+                // #region agent log
+                logger.LogInformation("[H6] Existing private chat found: {ChatId}", existingChat.Id);
+                // #endregion
+                
                 return Ok(new ChatDto
                 {
                     Id = existingChat.Id,
@@ -140,6 +163,10 @@ public class ChatsController : ControllerBase
         await _unitOfWork.Chats.AddAsync(chat);
         await _unitOfWork.SaveChangesAsync(); // Save chat first to get ID
         
+        // #region agent log
+        logger.LogInformation("[H6] New chat created: {ChatId}, type: {Type}", chat.Id, chat.Type);
+        // #endregion
+        
         // Add creator as participant
         var creatorParticipant = new ChatParticipant
         {
@@ -159,9 +186,17 @@ public class ChatsController : ControllerBase
                 IsAdmin = false
             };
             await _context.ChatParticipants.AddAsync(participant);
+            
+            // #region agent log
+            logger.LogInformation("[H6] Added participant: userId={UserId}, chatId={ChatId}", participantId, chat.Id);
+            // #endregion
         }
         
         await _unitOfWork.SaveChangesAsync();
+        
+        // #region agent log
+        logger.LogInformation("[H6] Chat creation completed: {ChatId}", chat.Id);
+        // #endregion
         
         return Ok(new ChatDto
         {
