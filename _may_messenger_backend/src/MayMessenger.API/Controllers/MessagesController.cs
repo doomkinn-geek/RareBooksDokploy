@@ -1,10 +1,12 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using MayMessenger.Application.DTOs;
 using MayMessenger.Domain.Entities;
 using MayMessenger.Domain.Enums;
 using MayMessenger.Domain.Interfaces;
+using MayMessenger.API.Hubs;
 
 namespace MayMessenger.API.Controllers;
 
@@ -15,11 +17,13 @@ public class MessagesController : ControllerBase
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IWebHostEnvironment _environment;
+    private readonly IHubContext<ChatHub> _hubContext;
     
-    public MessagesController(IUnitOfWork unitOfWork, IWebHostEnvironment environment)
+    public MessagesController(IUnitOfWork unitOfWork, IWebHostEnvironment environment, IHubContext<ChatHub> hubContext)
     {
         _unitOfWork = unitOfWork;
         _environment = environment;
+        _hubContext = hubContext;
     }
     
     private Guid GetCurrentUserId()
@@ -75,12 +79,12 @@ public class MessagesController : ControllerBase
         await _unitOfWork.SaveChangesAsync();
         
         // #region agent log
-        DiagnosticsController.AddLog($"[H1,H4] Message saved to DB - Id: {message.Id}, NO SignalR notification sent!");
+        DiagnosticsController.AddLog($"[H1,H4] Message saved to DB - Id: {message.Id}");
         // #endregion
         
         var sender = await _unitOfWork.Users.GetByIdAsync(userId);
         
-        return Ok(new MessageDto
+        var messageDto = new MessageDto
         {
             Id = message.Id,
             ChatId = message.ChatId,
@@ -91,12 +95,25 @@ public class MessagesController : ControllerBase
             FilePath = message.FilePath,
             Status = message.Status,
             CreatedAt = message.CreatedAt
-        });
+        };
+        
+        // Send SignalR notification to all users in the chat
+        await _hubContext.Clients.Group(dto.ChatId.ToString()).SendAsync("ReceiveMessage", messageDto);
+        
+        // #region agent log
+        DiagnosticsController.AddLog($"[H1,H4-FIX] SignalR notification sent to group {dto.ChatId}");
+        // #endregion
+        
+        return Ok(messageDto);
     }
     
     [HttpPost("audio")]
     public async Task<ActionResult<MessageDto>> SendAudioMessage([FromForm] Guid chatId, IFormFile audioFile)
     {
+        // #region agent log
+        DiagnosticsController.AddLog($"[H5] REST SendAudioMessage called - ChatId: {chatId}");
+        // #endregion
+        
         var userId = GetCurrentUserId();
         
         if (audioFile == null || audioFile.Length == 0)
@@ -114,6 +131,10 @@ public class MessagesController : ControllerBase
             await audioFile.CopyToAsync(stream);
         }
         
+        // #region agent log
+        DiagnosticsController.AddLog($"[H5] Audio file saved - Path: /uploads/audio/{fileName}");
+        // #endregion
+        
         var message = new Message
         {
             ChatId = chatId,
@@ -128,7 +149,7 @@ public class MessagesController : ControllerBase
         
         var sender = await _unitOfWork.Users.GetByIdAsync(userId);
         
-        return Ok(new MessageDto
+        var messageDto = new MessageDto
         {
             Id = message.Id,
             ChatId = message.ChatId,
@@ -139,7 +160,16 @@ public class MessagesController : ControllerBase
             FilePath = message.FilePath,
             Status = message.Status,
             CreatedAt = message.CreatedAt
-        });
+        };
+        
+        // Send SignalR notification to all users in the chat
+        await _hubContext.Clients.Group(chatId.ToString()).SendAsync("ReceiveMessage", messageDto);
+        
+        // #region agent log
+        DiagnosticsController.AddLog($"[H5-FIX] Audio message SignalR notification sent to group {chatId}");
+        // #endregion
+        
+        return Ok(messageDto);
     }
 }
 
