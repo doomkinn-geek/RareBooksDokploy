@@ -52,7 +52,15 @@ public class MessagesController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<MessageDto>> SendMessage([FromBody] SendMessageDto dto)
     {
+        // #region agent log
+        DiagnosticsController.AddLog($"[H1,H4] REST SendMessage called - ChatId: {dto.ChatId}, Type: {dto.Type}, Content: {dto.Content?.Substring(0, Math.Min(20, dto.Content?.Length ?? 0))}");
+        // #endregion
+        
         var userId = GetCurrentUserId();
+        
+        // #region agent log
+        DiagnosticsController.AddLog($"[H1,H4] SendMessage userId: {userId}");
+        // #endregion
         
         var message = new Message
         {
@@ -65,6 +73,10 @@ public class MessagesController : ControllerBase
         
         await _unitOfWork.Messages.AddAsync(message);
         await _unitOfWork.SaveChangesAsync();
+        
+        // #region agent log
+        DiagnosticsController.AddLog($"[H1,H4] Message saved to DB - Id: {message.Id}, NO SignalR notification sent!");
+        // #endregion
         
         var sender = await _unitOfWork.Users.GetByIdAsync(userId);
         
