@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Mic, X, Send } from 'lucide-react';
+import { X, Send } from 'lucide-react';
 import { audioRecorder } from '../../services/audioRecorder';
 import { formatDuration } from '../../utils/formatters';
 

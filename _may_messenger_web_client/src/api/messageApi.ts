@@ -1,5 +1,5 @@
 import { apiClient } from './apiClient';
-import { Message, SendMessageRequest, MessageType } from '../types/chat';
+import { Message, SendMessageRequest } from '../types/chat';
 import { ENDPOINTS } from '../utils/constants';
 
 export const messageApi = {

@@ -18,7 +18,7 @@ interface MessageState {
   clearError: () => void;
 }
 
-export const useMessageStore = create<MessageState>((set, get) => ({
+export const useMessageStore = create<MessageState>((set) => ({
   messagesByChatId: {},
   isSending: false,
   isLoading: false,

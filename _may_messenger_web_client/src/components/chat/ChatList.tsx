@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useChatStore } from '../../stores/chatStore';
-import { Chat MessageCircle } from 'lucide-react';
+import { MessageCircle } from 'lucide-react';
 import { formatDate } from '../../utils/formatters';
 
 interface ChatListItemProps {
