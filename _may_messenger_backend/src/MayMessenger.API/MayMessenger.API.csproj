@@ -23,4 +23,10 @@
     <ProjectReference Include="..\MayMessenger.Infrastructure\MayMessenger.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="FirebaseSetup\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>
