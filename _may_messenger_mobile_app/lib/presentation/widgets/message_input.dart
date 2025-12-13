@@ -73,19 +73,26 @@ class _MessageInputState extends State<MessageInput> {
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 4,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: Row(
+    return SafeArea(
+      bottom: true,
+      child: Container(
+        padding: EdgeInsets.only(
+          left: 8,
+          right: 8,
+          top: 8,
+          bottom: MediaQuery.of(context).padding.bottom + 8,
+        ),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 4,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: Row(
         children: [
           Expanded(
             child: TextField(
@@ -125,6 +132,7 @@ class _MessageInputState extends State<MessageInput> {
           ),
         ],
       ),
+    ),
     );
   }
 }

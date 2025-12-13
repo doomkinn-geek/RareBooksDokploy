@@ -222,23 +222,11 @@ public class MessagesController : ControllerBase
     /// </summary>
     private async Task SendPushNotificationsAsync(Chat chat, User sender, MessageDto message)
     {
-        // #region agent log
-        DiagnosticsController.AddLog($"[H3-ENTRY] SendPushNotificationsAsync called - MessageId: {message.Id}, ChatId: {message.ChatId}, SenderId: {sender.Id}");
-        // #endregion
-        
         if (!_firebaseService.IsInitialized)
         {
-            // #region agent log
-            DiagnosticsController.AddLog($"[H3-FIREBASE] Firebase NOT initialized - push skipped");
-            // #endregion
-            
             _logger.LogWarning("Firebase not initialized. Cannot send push notifications.");
             return;
         }
-
-        // #region agent log
-        DiagnosticsController.AddLog($"[H3-FIREBASE] Firebase IS initialized - proceeding with push");
-        // #endregion
 
         try
         {
@@ -254,17 +242,9 @@ public class MessagesController : ControllerBase
                 { "type", message.Type.ToString() }
             };
 
-            // #region agent log
-            DiagnosticsController.AddLog($"[H3-PARTICIPANTS] Chat has {chat.Participants.Count} participants");
-            // #endregion
-
             // Send to all participants except sender
             foreach (var participant in chat.Participants)
             {
-                // #region agent log
-                DiagnosticsController.AddLog($"[H3-LOOP] Checking participant UserId: {participant.UserId}, IsSender: {participant.UserId == sender.Id}");
-                // #endregion
-                
                 if (participant.UserId == sender.Id)
                     continue;
 
@@ -272,33 +252,17 @@ public class MessagesController : ControllerBase
                 {
                     var tokens = await _unitOfWork.FcmTokens.GetActiveTokensForUserAsync(participant.UserId);
                     
-                    // #region agent log
-                    DiagnosticsController.AddLog($"[H4-TOKENS] Retrieved {tokens.Count} FCM tokens for user {participant.UserId}");
-                    // #endregion
-                    
                     if (tokens.Any())
                     {
                         _logger.LogInformation($"Sending push notification to user {participant.UserId}, {tokens.Count} tokens");
                         
-                        // #region agent log
-                        DiagnosticsController.AddLog($"[H3-PUSH] Sending push to user {participant.UserId} with {tokens.Count} tokens");
-                        // #endregion
-                        
                         foreach (var token in tokens)
                         {
-                            // #region agent log
-                            DiagnosticsController.AddLog($"[H3-SEND] Calling FirebaseService.SendNotificationAsync - Token: {token.Token.Substring(0, 20)}..., Title: {title}");
-                            // #endregion
-                            
                             var sent = await _firebaseService.SendNotificationAsync(
                                 token.Token, 
                                 title, 
                                 body ?? "", 
                                 data);
-                            
-                            // #region agent log
-                            DiagnosticsController.AddLog($"[H3-RESULT] Push send result: {sent}");
-                            // #endregion
                             
                             if (sent)
                             {
@@ -309,29 +273,15 @@ public class MessagesController : ControllerBase
                         
                         await _unitOfWork.SaveChangesAsync();
                     }
-                    else
-                    {
-                        // #region agent log
-                        DiagnosticsController.AddLog($"[H4-NO-TOKENS] User {participant.UserId} has NO active FCM tokens registered");
-                        // #endregion
-                    }
                 }
                 catch (Exception ex)
                 {
-                    // #region agent log
-                    DiagnosticsController.AddLog($"[H3-ERROR] Exception in push loop for user {participant.UserId}: {ex.Message}");
-                    // #endregion
-                    
                     _logger.LogError(ex, $"Failed to send push to user {participant.UserId}");
                 }
             }
         }
         catch (Exception ex)
         {
-            // #region agent log
-            DiagnosticsController.AddLog($"[H3-OUTER-ERROR] Exception in SendPushNotificationsAsync: {ex.Message}");
-            // #endregion
-            
             _logger.LogError(ex, "Error in SendPushNotificationsAsync");
         }
     }

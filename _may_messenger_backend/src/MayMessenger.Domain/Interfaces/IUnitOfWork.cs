@@ -7,6 +7,7 @@ public interface IUnitOfWork : IDisposable
     IMessageRepository Messages { get; }
     IInviteLinkRepository InviteLinks { get; }
     IFcmTokenRepository FcmTokens { get; }
+    IContactRepository Contacts { get; }
     
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

@@ -46,10 +46,18 @@ class MyApp extends ConsumerWidget {
         final notificationService = ref.read(notificationServiceProvider);
         await notificationService.initialize();
         
-        // Initialize FCM
+        // Initialize FCM and register token
         try {
           final fcmService = ref.read(fcmServiceProvider);
           await fcmService.initialize();
+          
+          // Register token immediately after initialization
+          final authRepo = ref.read(authRepositoryProvider);
+          final token = await authRepo.getStoredToken();
+          
+          if (token != null) {
+            await fcmService.registerToken(token);
+          }
         } catch (e) {
           print('FCM initialization failed: $e');
         }

@@ -111,17 +111,32 @@ public class ChatHub : Hub
         // #endregion
     }
     
+    public async Task MessageDelivered(Guid messageId, Guid chatId)
+    {
+        var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
+        if (message != null && message.Status == MessageStatus.Sent)
+        {
+            message.Status = MessageStatus.Delivered;
+            message.DeliveredAt = DateTime.UtcNow;
+            await _unitOfWork.Messages.UpdateAsync(message);
+            await _unitOfWork.SaveChangesAsync();
+            
+            // Notify sender about delivery
+            await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, MessageStatus.Delivered);
+        }
+    }
+    
     public async Task MessageRead(Guid messageId, Guid chatId)
     {
         var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
-        if (message != null)
+        if (message != null && message.Status != MessageStatus.Read)
         {
             message.Status = MessageStatus.Read;
             message.ReadAt = DateTime.UtcNow;
             await _unitOfWork.Messages.UpdateAsync(message);
             await _unitOfWork.SaveChangesAsync();
             
-            // Notify sender
+            // Notify sender about read status
             await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, MessageStatus.Read);
         }
     }

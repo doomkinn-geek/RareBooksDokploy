@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using MayMessenger.Application.Interfaces;
 using MayMessenger.Domain.Entities;
 using MayMessenger.Domain.Enums;
@@ -19,6 +21,13 @@ public class AuthService : IAuthService
         _unitOfWork = unitOfWork;
         _passwordHasher = passwordHasher;
         _tokenService = tokenService;
+    }
+    
+    private string ComputePhoneNumberHash(string phoneNumber)
+    {
+        using var sha256 = SHA256.Create();
+        var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(phoneNumber));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
     
     public async Task<(bool Success, string Token, string Message)> RegisterAsync(
@@ -47,6 +56,7 @@ public class AuthService : IAuthService
         var user = new User
         {
             PhoneNumber = phoneNumber,
+            PhoneNumberHash = ComputePhoneNumberHash(phoneNumber),
             DisplayName = displayName,
             PasswordHash = _passwordHasher.HashPassword(password),
             Role = UserRole.User,

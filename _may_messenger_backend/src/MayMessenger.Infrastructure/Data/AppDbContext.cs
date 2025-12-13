@@ -15,6 +15,7 @@ public class AppDbContext : DbContext
     public DbSet<Message> Messages { get; set; } = null!;
     public DbSet<InviteLink> InviteLinks { get; set; } = null!;
     public DbSet<FcmToken> FcmTokens { get; set; } = null!;
+    public DbSet<Contact> Contacts { get; set; } = null!;
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -25,7 +26,9 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.PhoneNumber).IsUnique();
+            entity.HasIndex(e => e.PhoneNumberHash); // Add index for contact sync
             entity.Property(e => e.PhoneNumber).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.PhoneNumberHash).IsRequired().HasMaxLength(64);
             entity.Property(e => e.DisplayName).IsRequired().HasMaxLength(100);
             entity.Property(e => e.PasswordHash).IsRequired();
             
@@ -95,6 +98,21 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => new { e.UserId, e.Token });
             entity.Property(e => e.Token).IsRequired().HasMaxLength(500);
             entity.Property(e => e.DeviceInfo).HasMaxLength(200);
+            
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Contact configuration
+        modelBuilder.Entity<Contact>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.UserId, e.PhoneNumberHash });
+            entity.HasIndex(e => e.PhoneNumberHash); // For quick lookup
+            entity.Property(e => e.PhoneNumberHash).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.DisplayName).HasMaxLength(100);
             
             entity.HasOne(e => e.User)
                 .WithMany()

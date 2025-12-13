@@ -186,6 +186,134 @@ public class ChatsController : ControllerBase
             UnreadCount = 0
         });
     }
+
+    [HttpPost("create-or-get")]
+    public async Task<ActionResult<ChatDto>> CreateOrGetDirectChat([FromBody] CreateDirectChatRequest request)
+    {
+        var userId = GetCurrentUserId();
+        
+        // Check if target user exists
+        var targetUser = await _unitOfWork.Users.GetByIdAsync(request.TargetUserId);
+        if (targetUser == null)
+        {
+            return NotFound("User not found");
+        }
+        
+        // Check if direct chat already exists between these two users
+        var userChats = await _unitOfWork.Chats.GetUserChatsAsync(userId);
+        var existingChat = userChats.FirstOrDefault(c => 
+            c.Participants.Count == 2 && 
+            c.Participants.Any(p => p.UserId == request.TargetUserId));
+        
+        if (existingChat != null)
+        {
+            var lastMessage1 = await _unitOfWork.Messages.GetLastMessageAsync(existingChat.Id);
+            var unreadCount1 = await _unitOfWork.Messages.GetUnreadCountAsync(existingChat.Id, userId);
+            
+            return Ok(new ChatDto
+            {
+                Id = existingChat.Id,
+                Type = existingChat.Type,
+                Title = targetUser.DisplayName,
+                Avatar = existingChat.Avatar,
+                CreatedAt = existingChat.CreatedAt,
+                UnreadCount = unreadCount1,
+                LastMessage = lastMessage1 != null ? new MessageDto
+                {
+                    Id = lastMessage1.Id,
+                    ChatId = lastMessage1.ChatId,
+                    SenderId = lastMessage1.SenderId,
+                    SenderName = lastMessage1.Sender.DisplayName,
+                    Type = lastMessage1.Type,
+                    Content = lastMessage1.Content,
+                    FilePath = lastMessage1.FilePath,
+                    Status = lastMessage1.Status,
+                    CreatedAt = lastMessage1.CreatedAt
+                } : null
+            });
+        }
+        
+        // Create new direct chat
+        var chat = new Chat
+        {
+            Type = ChatType.Private,
+            Title = targetUser.DisplayName
+        };
+        
+        await _unitOfWork.Chats.AddAsync(chat);
+        await _unitOfWork.SaveChangesAsync();
+        
+        // Add both users as participants
+        var participant1 = new ChatParticipant
+        {
+            ChatId = chat.Id,
+            UserId = userId,
+            IsAdmin = false
+        };
+        var participant2 = new ChatParticipant
+        {
+            ChatId = chat.Id,
+            UserId = request.TargetUserId,
+            IsAdmin = false
+        };
+        
+        await _context.ChatParticipants.AddAsync(participant1);
+        await _context.ChatParticipants.AddAsync(participant2);
+        await _unitOfWork.SaveChangesAsync();
+        
+        return Ok(new ChatDto
+        {
+            Id = chat.Id,
+            Type = chat.Type,
+            Title = targetUser.DisplayName,
+            Avatar = chat.Avatar,
+            CreatedAt = chat.CreatedAt,
+            UnreadCount = 0
+        });
+    }
+
+    [HttpDelete("reset-all")]
+    public async Task<IActionResult> ResetAllChats()
+    {
+        var userId = GetCurrentUserId();
+        
+        // Get all user's chats
+        var userChats = await _unitOfWork.Chats.GetUserChatsAsync(userId);
+        
+        // Remove user from all chats
+        foreach (var chat in userChats)
+        {
+            // Remove participant
+            var participant = chat.Participants.FirstOrDefault(p => p.UserId == userId);
+            if (participant != null)
+            {
+                _context.ChatParticipants.Remove(participant);
+            }
+            
+            // If this was a private chat and user was the only or last participant, delete the chat entirely
+            if (chat.Type == ChatType.Private || chat.Participants.Count <= 1)
+            {
+                // Delete all messages in the chat
+                var messages = await _unitOfWork.Messages.GetChatMessagesAsync(chat.Id, 0, int.MaxValue);
+                foreach (var message in messages)
+                {
+                    _context.Remove(message);
+                }
+                
+                // Delete the chat itself
+                _context.Remove(chat);
+            }
+        }
+        
+        await _unitOfWork.SaveChangesAsync();
+        
+        return Ok(new { message = "All chats reset successfully" });
+    }
+}
+
+public class CreateDirectChatRequest
+{
+    public Guid TargetUserId { get; set; }
 }
 
 

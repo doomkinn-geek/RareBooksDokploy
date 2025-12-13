@@ -8,10 +8,6 @@ class SignalRService {
   final _logger = LoggerService();
 
   Future<void> connect(String token) async {
-    // #region agent log
-    await _logger.debug('signalr_service.connect.entry', '[H1,H2] Connecting to SignalR', {'hubUrl': ApiConstants.hubUrl});
-    // #endregion
-    
     _hubConnection = HubConnectionBuilder()
         .withUrl(
           ApiConstants.hubUrl,
@@ -23,45 +19,15 @@ class SignalRService {
         .withAutomaticReconnect()
         .build();
 
-    // #region agent log
-    await _logger.debug('signalr_service.connect.starting', '[H1,H2] Calling hubConnection.start()', {});
-    // #endregion
-
     await _hubConnection?.start();
-    
-    // #region agent log
-    await _logger.debug('signalr_service.connect.done', '[H1,H2] SignalR connected', {'state': '${_hubConnection?.state}', 'connectionId': '${_hubConnection?.connectionId}'});
-    // #endregion
   }
 
   void onReceiveMessage(Function(Message) callback) {
-    // #region agent log
-    _logger.debug('signalr_service.onReceiveMessage.register', '[H1,H2] Registering ReceiveMessage handler', {'connectionState': '${_hubConnection?.state}'});
-    // #endregion
-    
     _hubConnection?.on('ReceiveMessage', (arguments) {
-      // #region agent log
-      _logger.debug('signalr_service.onReceiveMessage.fired', '[H1,H2-CRITICAL] ReceiveMessage event FIRED from backend', {'hasArgs': '${arguments != null && arguments.isNotEmpty}', 'argCount': '${arguments?.length ?? 0}', 'connectionState': '${_hubConnection?.state}'});
-      // #endregion
-      
       if (arguments != null && arguments.isNotEmpty) {
         final messageJson = arguments[0] as Map<String, dynamic>;
-        
-        // #region agent log
-        _logger.debug('signalr_service.onReceiveMessage.parsing', '[H1,H2] Parsing message JSON', {'jsonKeys': '${messageJson.keys.join(", ")}'});
-        // #endregion
-        
         final message = Message.fromJson(messageJson);
-        
-        // #region agent log
-        _logger.debug('signalr_service.onReceiveMessage.parsed', '[H1,H2] Message parsed successfully', {'messageId': message.id, 'chatId': message.chatId, 'senderId': message.senderId, 'content': message.content ?? 'audio'});
-        // #endregion
-        
         callback(message);
-        
-        // #region agent log
-        _logger.debug('signalr_service.onReceiveMessage.callbackDone', '[H1,H2] Callback executed', {'messageId': message.id});
-        // #endregion
       }
     });
   }
@@ -77,7 +43,18 @@ class SignalRService {
     });
   }
 
-  void onUserTyping(Function(String userId, String userName, bool isTyping) callback) {
+  Future<void> markMessageAsDelivered(String messageId, String chatId) async {
+    try {
+      await _hubConnection?.invoke('MessageDelivered', args: [messageId, chatId]);
+    } catch (e) {
+      print('Failed to send delivery confirmation: $e');
+    }
+  }
+
+  Future<void> markMessageAsRead(String messageId, String chatId) async {
+    await _hubConnection?.invoke('MessageRead', args: [messageId, chatId]);
+  }
+
     _hubConnection?.on('UserTyping', (arguments) {
       if (arguments != null && arguments.length >= 3) {
         final userId = arguments[0] as String;
@@ -89,15 +66,7 @@ class SignalRService {
   }
 
   Future<void> joinChat(String chatId) async {
-    // #region agent log
-    await _logger.debug('signalr_service.joinChat.entry', '[H2] JoinChat invoked', {'chatId': chatId, 'connectionState': '${_hubConnection?.state}', 'isConnected': '$isConnected'});
-    // #endregion
-    
     await _hubConnection?.invoke('JoinChat', args: [chatId]);
-    
-    // #region agent log
-    await _logger.debug('signalr_service.joinChat.done', '[H2] JoinChat completed', {'chatId': chatId});
-    // #endregion
   }
 
   Future<void> leaveChat(String chatId) async {
@@ -122,7 +91,7 @@ class SignalRService {
     await _hubConnection?.invoke('MessageRead', args: [messageId, chatId]);
   }
 
-  Future<void> sendTypingIndicator(String chatId, bool isTyping) async {
+  void onUserTyping(Function(String userId, String userName, bool isTyping) callback) {
     await _hubConnection?.invoke('TypingIndicator', args: [chatId, isTyping]);
   }
 

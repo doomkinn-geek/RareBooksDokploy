@@ -5,6 +5,7 @@ import '../widgets/chat_list_item.dart';
 import 'chat_screen.dart';
 import 'settings_screen.dart';
 import 'create_chat_screen.dart';
+import 'new_chat_screen.dart';
 
 class MainScreen extends ConsumerStatefulWidget {
   const MainScreen({super.key});
@@ -77,13 +78,23 @@ class _MainScreenState extends ConsumerState<MainScreen> with SingleTickerProvid
           // 0 = Группы, 1 = Личные
           final isGroupChat = _tabController.index == 0;
           
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => CreateChatScreen(
-                initialIsGroupChat: isGroupChat,
+          if (isGroupChat) {
+            // Для групп используем старый экран
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => CreateChatScreen(
+                  initialIsGroupChat: true,
+                ),
               ),
-            ),
-          );
+            );
+          } else {
+            // Для личных чатов используем новый экран с контактами
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const NewChatScreen(),
+              ),
+            );
+          }
         },
         tooltip: _tabController.index == 0 
             ? 'Создать группу' 

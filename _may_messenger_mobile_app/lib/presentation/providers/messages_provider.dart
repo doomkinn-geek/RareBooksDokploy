@@ -168,6 +168,27 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       // #endregion
     }
   }
+
+  void updateMessageStatus(String messageId, MessageStatus status) {
+    final messageIndex = state.messages.indexWhere((m) => m.id == messageId);
+    if (messageIndex != -1) {
+      final updatedMessages = [...state.messages];
+      final oldMessage = updatedMessages[messageIndex];
+      updatedMessages[messageIndex] = Message(
+        id: oldMessage.id,
+        chatId: oldMessage.chatId,
+        senderId: oldMessage.senderId,
+        senderName: oldMessage.senderName,
+        type: oldMessage.type,
+        content: oldMessage.content,
+        filePath: oldMessage.filePath,
+        status: status,
+        createdAt: oldMessage.createdAt,
+      );
+      
+      state = state.copyWith(messages: updatedMessages);
+    }
+  }
 }
 
 

@@ -12,6 +12,7 @@ public class UnitOfWork : IUnitOfWork
     public IMessageRepository Messages { get; }
     public IInviteLinkRepository InviteLinks { get; }
     public IFcmTokenRepository FcmTokens { get; }
+    public IContactRepository Contacts { get; }
     
     public UnitOfWork(
         AppDbContext context,
@@ -19,7 +20,8 @@ public class UnitOfWork : IUnitOfWork
         IChatRepository chatRepository,
         IMessageRepository messageRepository,
         IInviteLinkRepository inviteLinkRepository,
-        IFcmTokenRepository fcmTokenRepository)
+        IFcmTokenRepository fcmTokenRepository,
+        IContactRepository contactRepository)
     {
         _context = context;
         Users = userRepository;
@@ -27,6 +29,7 @@ public class UnitOfWork : IUnitOfWork
         Messages = messageRepository;
         InviteLinks = inviteLinkRepository;
         FcmTokens = fcmTokenRepository;
+        Contacts = contactRepository;
     }
     
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

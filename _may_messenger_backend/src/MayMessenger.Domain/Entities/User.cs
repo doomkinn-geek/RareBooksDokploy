@@ -5,6 +5,7 @@ namespace MayMessenger.Domain.Entities;
 public class User : BaseEntity
 {
     public string PhoneNumber { get; set; } = string.Empty;
+    public string PhoneNumberHash { get; set; } = string.Empty; // SHA256 hash for contact sync
     public string DisplayName { get; set; } = string.Empty;
     public string? Avatar { get; set; }
     public UserRole Role { get; set; } = UserRole.User;

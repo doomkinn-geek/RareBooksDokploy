@@ -39,6 +39,10 @@ dependencies:
   # Permissions
   permission_handler: ^11.0.1
   
+  # Contacts
+  contacts_service: ^0.6.3
+  crypto: ^3.0.5
+  
   # Storage
   path_provider: ^2.1.1
   hive_flutter: ^1.1.0
@@ -59,6 +63,14 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "_icon_big.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "_icon_big.png"
 
 dependency_overrides:
   record_linux: ^1.0.0

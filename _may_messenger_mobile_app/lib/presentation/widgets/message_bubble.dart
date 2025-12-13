@@ -97,6 +97,47 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     super.dispose();
   }
 
+  Widget _buildMessageStatusIcon() {
+    switch (widget.message.status) {
+      case MessageStatus.sending:
+        return const SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+          ),
+        );
+      case MessageStatus.sent:
+        // Одна серая галочка - отправлено, но не доставлено
+        return const Icon(
+          Icons.check,
+          size: 14,
+          color: Colors.white70,
+        );
+      case MessageStatus.delivered:
+        // Две серых галочки - доставлено, но не прочитано
+        return Icon(
+          Icons.done_all,
+          size: 14,
+          color: Colors.grey[400],
+        );
+      case MessageStatus.read:
+        // Две зеленых галочки - прочитано
+        return const Icon(
+          Icons.done_all,
+          size: 14,
+          color: Colors.green,
+        );
+      case MessageStatus.failed:
+        return const Icon(
+          Icons.error_outline,
+          size: 14,
+          color: Colors.red,
+        );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final profileState = ref.watch(profileProvider);
@@ -192,13 +233,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                 ),
                 if (isMe) ...[
                   const SizedBox(width: 4),
-                  Icon(
-                    widget.message.status == MessageStatus.read
-                        ? Icons.done_all
-                        : Icons.done,
-                    size: 14,
-                    color: Colors.white70,
-                  ),
+                  _buildMessageStatusIcon(),
                 ],
               ],
             ),

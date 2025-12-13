@@ -77,6 +77,13 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
           _logger.debug('signalr_provider.onReceiveMessage.entry', '[H1] Message received via SignalR', {'messageId': message.id, 'chatId': message.chatId, 'senderId': message.senderId, 'content': message.content ?? 'audio'});
           // #endregion
           
+          // Send delivery confirmation to backend
+          try {
+            _signalRService.markMessageAsDelivered(message.id, message.chatId);
+          } catch (e) {
+            print('Failed to send delivery confirmation: $e');
+          }
+          
           // Add message to appropriate chat
           try {
             // Try to add message to the provider
@@ -126,6 +133,25 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
             // #region agent log
             _logger.error('signalr_provider.onReceiveMessage.notificationError', '[H1] Error showing notification', {'error': e.toString(), 'messageId': message.id});
             // #endregion
+          }
+        });
+
+        // Setup message status update listener
+        _signalRService.onMessageStatusUpdated((messageId, status) {
+          // Update message status in all providers
+          try {
+            // Try to update in all active chat providers
+            // This will update the UI for the sender
+            final chatsState = _ref.read(chatsProvider);
+            for (final chat in chatsState.chats) {
+              try {
+                _ref.read(messagesProvider(chat.id).notifier).updateMessageStatus(messageId, status);
+              } catch (e) {
+                // Provider not active - that's OK
+              }
+            }
+          } catch (e) {
+            print('Failed to update message status: $e');
           }
         });
 
