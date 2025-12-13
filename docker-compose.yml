@@ -1,4 +1,4 @@
-﻿name: RareBooksDokploy
+name: RareBooksDokploy
 
 # Создаём изолированную сеть для безопасности
 networks:
@@ -121,6 +121,8 @@ services:
         condition: service_healthy
       maymessenger_backend:
         condition: service_healthy
+      maymessenger_web_client:
+        condition: service_healthy
     networks:
       - rarebooks_network
     restart: unless-stopped
@@ -181,6 +183,23 @@ services:
       timeout: 10s
       retries: 10
       start_period: 120s
+
+  maymessenger_web_client:
+    build:
+      context: ./_may_messenger_web_client
+      dockerfile: Dockerfile
+    image: maymessenger_web_client:latest
+    container_name: maymessenger_web_client
+    restart: unless-stopped
+    environment:
+      - VITE_API_URL=https://messenger.rare-books.ru
+    networks:
+      - rarebooks_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:80 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   db_books_data:
