@@ -79,13 +79,22 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
           
           // Add message to appropriate chat
           try {
+            // Try to add message to the provider
+            // If the provider doesn't exist (chat not open), it will be loaded when user opens the chat
             _ref.read(messagesProvider(message.chatId).notifier).addMessage(message);
             
             // #region agent log
-            _logger.debug('signalr_provider.onReceiveMessage.added', '[H1] Message added to provider', {'messageId': message.id});
+            _logger.debug('signalr_provider.onReceiveMessage.added', '[H1] Message added to provider', {'messageId': message.id, 'chatId': message.chatId});
             // #endregion
-            
-            // Show notification if user is not in the current chat
+          } catch (e) {
+            // #region agent log
+            _logger.error('signalr_provider.onReceiveMessage.providerError', '[H1] Error accessing messages provider', {'error': e.toString(), 'messageId': message.id, 'chatId': message.chatId});
+            // #endregion
+            // Provider might not be initialized yet - that's OK, message will be loaded from API when chat opens
+          }
+          
+          // Show notification and update chat list regardless of provider state
+          try {
             final chatsState = _ref.read(chatsProvider);
             
             final chat = chatsState.chats.firstWhere(
@@ -95,9 +104,13 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
             
             final notificationService = _ref.read(notificationServiceProvider);
             notificationService.showMessageNotification(message, chat.title);
+            
+            // #region agent log
+            _logger.debug('signalr_provider.onReceiveMessage.notificationShown', '[H1] Notification shown', {'messageId': message.id});
+            // #endregion
           } catch (e) {
             // #region agent log
-            _logger.error('signalr_provider.onReceiveMessage.error', '[H1] Error handling message', {'error': e.toString(), 'messageId': message.id});
+            _logger.error('signalr_provider.onReceiveMessage.notificationError', '[H1] Error showing notification', {'error': e.toString(), 'messageId': message.id});
             // #endregion
           }
         });

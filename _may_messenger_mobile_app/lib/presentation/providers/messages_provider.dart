@@ -5,6 +5,8 @@ import 'auth_provider.dart';
 
 final messagesProvider = StateNotifierProvider.family<MessagesNotifier, MessagesState, String>(
   (ref, chatId) {
+    // Keep the provider alive even when not used
+    ref.keepAlive();
     return MessagesNotifier(ref.read(messageRepositoryProvider), chatId);
   },
 );
@@ -133,8 +135,16 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
 
   void addMessage(Message message) {
     // #region agent log
-    _logger.debug('messages_provider.addMessage.entry', '[H1] addMessage called', {'messageId': message.id, 'chatId': message.chatId, 'currentCount': '${state.messages.length}'});
+    _logger.debug('messages_provider.addMessage.entry', '[H1] addMessage called', {'messageId': message.id, 'chatId': message.chatId, 'currentChatId': chatId, 'currentCount': '${state.messages.length}'});
     // #endregion
+    
+    // Проверяем, что сообщение для этого чата
+    if (message.chatId != chatId) {
+      // #region agent log
+      _logger.debug('messages_provider.addMessage.wrongChat', '[H1] Message for different chat, ignoring', {'messageId': message.id, 'messageChatId': message.chatId, 'currentChatId': chatId});
+      // #endregion
+      return;
+    }
     
     // Проверяем, нет ли уже сообщения с таким ID
     final exists = state.messages.any((m) => m.id == message.id);
@@ -144,12 +154,17 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     // #endregion
     
     if (!exists) {
+      final newMessages = [...state.messages, message];
       state = state.copyWith(
-        messages: [...state.messages, message],
+        messages: newMessages,
       );
       
       // #region agent log
       _logger.debug('messages_provider.addMessage.added', '[H1] Message added', {'messageId': message.id, 'newCount': '${state.messages.length}'});
+      // #endregion
+    } else {
+      // #region agent log
+      _logger.debug('messages_provider.addMessage.duplicate', '[H1] Message already exists, ignoring', {'messageId': message.id});
       // #endregion
     }
   }
