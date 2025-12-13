@@ -12,30 +12,35 @@ npm run dev  # проверка на localhost:3000
 
 ## Развертывание на сервере
 
-### 1. Остановка контейнеров
+### 1. Pull изменений
+```bash
+git pull origin master
+```
+
+### 2. Остановка контейнеров
 ```bash
 docker compose down
 ```
 
-### 2. Пересборка контейнеров
+### 3. Пересборка контейнеров
 ```bash
 docker compose build --no-cache maymessenger_backend
 docker compose build --no-cache maymessenger_web_client
 ```
 
-### 3. Запуск
+### 4. Запуск
 ```bash
 docker compose up -d
 ```
 
-### 4. Проверка логов
+### 5. Проверка логов
 ```bash
 docker compose logs -f maymessenger_backend
 docker compose logs -f maymessenger_web_client
 docker compose logs -f proxy
 ```
 
-### 5. Проверка статуса
+### 6. Проверка статуса
 ```bash
 docker compose ps
 ```
