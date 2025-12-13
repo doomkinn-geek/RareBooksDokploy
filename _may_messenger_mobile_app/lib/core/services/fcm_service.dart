@@ -57,7 +57,7 @@ class FcmService {
     }
   }
 
-  Future<void> registerToken(String userId, String token) async {
+  Future<void> registerToken(String token) async {
     if (_fcmToken == null) return;
     
     try {

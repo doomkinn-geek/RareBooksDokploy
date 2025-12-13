@@ -9,7 +9,7 @@ class SignalRService {
 
   Future<void> connect(String token) async {
     // #region agent log
-    await _logger.debug('signalr_service.connect.entry', '[H5] Connecting to SignalR', {'hubUrl': ApiConstants.hubUrl});
+    await _logger.debug('signalr_service.connect.entry', '[H1,H2] Connecting to SignalR', {'hubUrl': ApiConstants.hubUrl});
     // #endregion
     
     _hubConnection = HubConnectionBuilder()
@@ -23,35 +23,44 @@ class SignalRService {
         .withAutomaticReconnect()
         .build();
 
+    // #region agent log
+    await _logger.debug('signalr_service.connect.starting', '[H1,H2] Calling hubConnection.start()', {});
+    // #endregion
+
     await _hubConnection?.start();
     
     // #region agent log
-    await _logger.debug('signalr_service.connect.done', '[H5] SignalR connected', {'state': '${_hubConnection?.state}', 'connectionId': '${_hubConnection?.connectionId}'});
+    await _logger.debug('signalr_service.connect.done', '[H1,H2] SignalR connected', {'state': '${_hubConnection?.state}', 'connectionId': '${_hubConnection?.connectionId}'});
     // #endregion
   }
 
   void onReceiveMessage(Function(Message) callback) {
     // #region agent log
-    _logger.debug('signalr_service.onReceiveMessage.register', '[H1,H5] Registering ReceiveMessage handler', {});
+    _logger.debug('signalr_service.onReceiveMessage.register', '[H1,H2] Registering ReceiveMessage handler', {'connectionState': '${_hubConnection?.state}'});
     // #endregion
     
     _hubConnection?.on('ReceiveMessage', (arguments) {
       // #region agent log
-      _logger.debug('signalr_service.onReceiveMessage.fired', '[H1] ReceiveMessage event fired', {'hasArgs': '${arguments != null && arguments.isNotEmpty}', 'argCount': '${arguments?.length ?? 0}'});
+      _logger.debug('signalr_service.onReceiveMessage.fired', '[H1,H2-CRITICAL] ReceiveMessage event FIRED from backend', {'hasArgs': '${arguments != null && arguments.isNotEmpty}', 'argCount': '${arguments?.length ?? 0}', 'connectionState': '${_hubConnection?.state}'});
       // #endregion
       
       if (arguments != null && arguments.isNotEmpty) {
         final messageJson = arguments[0] as Map<String, dynamic>;
+        
+        // #region agent log
+        _logger.debug('signalr_service.onReceiveMessage.parsing', '[H1,H2] Parsing message JSON', {'jsonKeys': '${messageJson.keys.join(", ")}'});
+        // #endregion
+        
         final message = Message.fromJson(messageJson);
         
         // #region agent log
-        _logger.debug('signalr_service.onReceiveMessage.parsed', '[H1] Message parsed', {'messageId': message.id, 'chatId': message.chatId, 'senderId': message.senderId, 'content': message.content ?? 'audio'});
+        _logger.debug('signalr_service.onReceiveMessage.parsed', '[H1,H2] Message parsed successfully', {'messageId': message.id, 'chatId': message.chatId, 'senderId': message.senderId, 'content': message.content ?? 'audio'});
         // #endregion
         
         callback(message);
         
         // #region agent log
-        _logger.debug('signalr_service.onReceiveMessage.callbackDone', '[H1] Callback executed', {'messageId': message.id});
+        _logger.debug('signalr_service.onReceiveMessage.callbackDone', '[H1,H2] Callback executed', {'messageId': message.id});
         // #endregion
       }
     });

@@ -226,11 +226,10 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
 
   Future<void> _registerFcmToken() async {
     try {
-      final token = await _authRepository.getToken();
-      final userId = await _authRepository.getUserId();
+      final token = await _authRepository.getStoredToken();
       
-      if (token != null && userId != null) {
-        await _fcmService.registerToken(userId, token);
+      if (token != null) {
+        await _fcmService.registerToken(token);
         print('FCM token registered after auth');
       }
     } catch (e) {
