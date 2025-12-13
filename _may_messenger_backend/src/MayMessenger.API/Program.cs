@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.FileProviders;
@@ -8,6 +9,7 @@ using MayMessenger.Domain.Interfaces;
 using MayMessenger.Infrastructure.Data;
 using MayMessenger.Infrastructure.Repositories;
 using MayMessenger.Infrastructure.Services;
+using MayMessenger.API.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -69,7 +71,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// SignalR
+// SignalR with custom UserIdProvider
+builder.Services.AddSingleton<IUserIdProvider, CustomUserIdProvider>();
 builder.Services.AddSignalR();
 
 // CORS

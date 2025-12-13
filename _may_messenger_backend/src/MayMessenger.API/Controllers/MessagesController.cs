@@ -97,12 +97,27 @@ public class MessagesController : ControllerBase
             CreatedAt = message.CreatedAt
         };
         
-        // Send SignalR notification to all users in the chat
-        await _hubContext.Clients.Group(dto.ChatId.ToString()).SendAsync("ReceiveMessage", messageDto);
-        
-        // #region agent log
-        DiagnosticsController.AddLog($"[H1,H4-FIX] SignalR notification sent to group {dto.ChatId}");
-        // #endregion
+        // Send SignalR notification to all participants of the chat
+        var chat = await _unitOfWork.Chats.GetByIdAsync(dto.ChatId);
+        if (chat != null)
+        {
+            // #region agent log
+            DiagnosticsController.AddLog($"[H1,H4-FIX] Chat found, participants count: {chat.Participants.Count}");
+            // #endregion
+            
+            foreach (var participant in chat.Participants)
+            {
+                // Send to each participant's connection
+                await _hubContext.Clients.User(participant.UserId.ToString()).SendAsync("ReceiveMessage", messageDto);
+                
+                // #region agent log
+                DiagnosticsController.AddLog($"[H1,H4-FIX] SignalR notification sent to user {participant.UserId}");
+                // #endregion
+            }
+            
+            // Also send to group for users currently in the chat
+            await _hubContext.Clients.Group(dto.ChatId.ToString()).SendAsync("ReceiveMessage", messageDto);
+        }
         
         return Ok(messageDto);
     }
@@ -162,12 +177,27 @@ public class MessagesController : ControllerBase
             CreatedAt = message.CreatedAt
         };
         
-        // Send SignalR notification to all users in the chat
-        await _hubContext.Clients.Group(chatId.ToString()).SendAsync("ReceiveMessage", messageDto);
-        
-        // #region agent log
-        DiagnosticsController.AddLog($"[H5-FIX] Audio message SignalR notification sent to group {chatId}");
-        // #endregion
+        // Send SignalR notification to all participants of the chat
+        var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+        if (chat != null)
+        {
+            // #region agent log
+            DiagnosticsController.AddLog($"[H5-FIX] Audio - Chat found, participants count: {chat.Participants.Count}");
+            // #endregion
+            
+            foreach (var participant in chat.Participants)
+            {
+                // Send to each participant's connection
+                await _hubContext.Clients.User(participant.UserId.ToString()).SendAsync("ReceiveMessage", messageDto);
+                
+                // #region agent log
+                DiagnosticsController.AddLog($"[H5-FIX] Audio SignalR notification sent to user {participant.UserId}");
+                // #endregion
+            }
+            
+            // Also send to group for users currently in the chat
+            await _hubContext.Clients.Group(chatId.ToString()).SendAsync("ReceiveMessage", messageDto);
+        }
         
         return Ok(messageDto);
     }
