@@ -1,6 +1,8 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'dart:io';
 import '../constants/api_constants.dart';
 
 final fcmServiceProvider = Provider<FcmService>((ref) {
@@ -59,18 +61,40 @@ class FcmService {
     if (_fcmToken == null) return;
     
     try {
+      final deviceInfo = await _getDeviceInfo();
+      
       await _dio.post(
         '${ApiConstants.baseUrl}/api/notifications/register-token',
         data: {
-          'userId': userId,
           'token': _fcmToken,
+          'deviceInfo': deviceInfo,
         },
         options: Options(
           headers: {'Authorization': 'Bearer $token'},
         ),
       );
+      print('FCM token registered successfully');
     } catch (e) {
       print('Failed to register FCM token: $e');
+    }
+  }
+
+  Future<String> _getDeviceInfo() async {
+    try {
+      final deviceInfo = DeviceInfoPlugin();
+      
+      if (Platform.isAndroid) {
+        final androidInfo = await deviceInfo.androidInfo;
+        return 'Android ${androidInfo.version.release} - ${androidInfo.model}';
+      } else if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        return 'iOS ${iosInfo.systemVersion} - ${iosInfo.model}';
+      } else {
+        return 'Unknown Platform';
+      }
+    } catch (e) {
+      print('Failed to get device info: $e');
+      return 'Unknown Device';
     }
   }
 

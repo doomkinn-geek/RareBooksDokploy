@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using MayMessenger.Domain.Interfaces;
 
 namespace MayMessenger.API.Controllers;
 
@@ -9,11 +10,17 @@ namespace MayMessenger.API.Controllers;
 [Authorize]
 public class NotificationsController : ControllerBase
 {
-    private static readonly Dictionary<Guid, string> _userTokens = new();
-    private static readonly object _lockObject = new();
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly ILogger<NotificationsController> _logger;
+
+    public NotificationsController(IUnitOfWork unitOfWork, ILogger<NotificationsController> logger)
+    {
+        _unitOfWork = unitOfWork;
+        _logger = logger;
+    }
 
     [HttpPost("register-token")]
-    public IActionResult RegisterToken([FromBody] RegisterTokenRequest request)
+    public async Task<IActionResult> RegisterToken([FromBody] RegisterTokenRequest request)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (userId == null || !Guid.TryParse(userId, out var userGuid))
@@ -21,57 +28,53 @@ public class NotificationsController : ControllerBase
             return Unauthorized();
         }
 
-        lock (_lockObject)
+        try
         {
-            _userTokens[userGuid] = request.Token;
+            await _unitOfWork.FcmTokens.RegisterOrUpdateAsync(userGuid, request.Token, request.DeviceInfo ?? "Unknown");
+            _logger.LogInformation($"FCM token registered for user {userGuid}");
+            
+            return Ok(new { success = true, message = "Token registered successfully" });
         }
-
-        return Ok(new { success = true, message = "Token registered successfully" });
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Failed to register FCM token for user {userGuid}");
+            return StatusCode(500, new { success = false, message = "Failed to register token" });
+        }
     }
 
-    [HttpPost("send")]
-    public async Task<IActionResult> SendNotification([FromBody] SendNotificationRequest request)
+    [HttpPost("deactivate-token")]
+    public async Task<IActionResult> DeactivateToken([FromBody] DeactivateTokenRequest request)
     {
-        // This endpoint would integrate with Firebase Admin SDK
-        // For now, it's a placeholder for future FCM integration
-        
-        string? token;
-        lock (_lockObject)
+        try
         {
-            _userTokens.TryGetValue(request.UserId, out token);
+            await _unitOfWork.FcmTokens.DeactivateTokenAsync(request.Token);
+            return Ok(new { success = true, message = "Token deactivated successfully" });
         }
-
-        if (token == null)
+        catch (Exception ex)
         {
-            return NotFound(new { error = "User token not found" });
+            _logger.LogError(ex, "Failed to deactivate FCM token");
+            return StatusCode(500, new { success = false, message = "Failed to deactivate token" });
         }
-
-        // TODO: Integrate with Firebase Admin SDK to send push notification
-        // Example:
-        // var message = new Message
-        // {
-        //     Token = token,
-        //     Notification = new Notification
-        //     {
-        //         Title = request.Title,
-        //         Body = request.Body,
-        //     },
-        //     Data = new Dictionary<string, string>
-        //     {
-        //         { "chatId", request.ChatId.ToString() }
-        //     }
-        // };
-        // await FirebaseMessaging.DefaultInstance.SendAsync(message);
-
-        return Ok(new { success = true, message = "Notification sent (placeholder)" });
     }
 
     [HttpGet("tokens")]
-    public IActionResult GetRegisteredTokens()
+    public async Task<IActionResult> GetRegisteredTokens()
     {
-        lock (_lockObject)
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (userId == null || !Guid.TryParse(userId, out var userGuid))
         {
-            return Ok(new { count = _userTokens.Count, tokens = _userTokens });
+            return Unauthorized();
+        }
+
+        try
+        {
+            var tokens = await _unitOfWork.FcmTokens.GetActiveTokensForUserAsync(userGuid);
+            return Ok(new { count = tokens.Count, tokens });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Failed to get tokens for user {userGuid}");
+            return StatusCode(500, new { success = false, message = "Failed to get tokens" });
         }
     }
 }
@@ -79,13 +82,11 @@ public class NotificationsController : ControllerBase
 public class RegisterTokenRequest
 {
     public string Token { get; set; } = "";
+    public string? DeviceInfo { get; set; }
 }
 
-public class SendNotificationRequest
+public class DeactivateTokenRequest
 {
-    public Guid UserId { get; set; }
-    public string Title { get; set; } = "";
-    public string Body { get; set; } = "";
-    public Guid ChatId { get; set; }
+    public string Token { get; set; } = "";
 }
 

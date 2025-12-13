@@ -5,6 +5,7 @@ import '../../data/datasources/local_datasource.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/chat_repository.dart';
 import '../../data/repositories/message_repository.dart';
+import '../../core/services/fcm_service.dart';
 
 // Утилита для форматирования ошибок
 String _formatError(dynamic error) {
@@ -110,7 +111,10 @@ final messageRepositoryProvider = Provider<MessageRepository>((ref) {
 
 // Auth State
 final authStateProvider = StateNotifierProvider<AuthStateNotifier, AuthState>((ref) {
-  return AuthStateNotifier(ref.read(authRepositoryProvider));
+  return AuthStateNotifier(
+    ref.read(authRepositoryProvider),
+    ref.read(fcmServiceProvider),
+  );
 });
 
 class AuthState {
@@ -139,8 +143,9 @@ class AuthState {
 
 class AuthStateNotifier extends StateNotifier<AuthState> {
   final AuthRepository _authRepository;
+  final FcmService _fcmService;
 
-  AuthStateNotifier(this._authRepository) : super(AuthState()) {
+  AuthStateNotifier(this._authRepository, this._fcmService) : super(AuthState()) {
     checkAuth();
   }
 
@@ -169,6 +174,9 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
           isAuthenticated: true,
           isLoading: false,
         );
+        
+        // Register FCM token after successful registration
+        await _registerFcmToken();
       } else {
         state = state.copyWith(
           isLoading: false,
@@ -199,6 +207,9 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
           isAuthenticated: true,
           isLoading: false,
         );
+        
+        // Register FCM token after successful login
+        await _registerFcmToken();
       } else {
         state = state.copyWith(
           isLoading: false,
@@ -210,6 +221,21 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
         isLoading: false,
         error: _formatError(e),
       );
+    }
+  }
+
+  Future<void> _registerFcmToken() async {
+    try {
+      final token = await _authRepository.getToken();
+      final userId = await _authRepository.getUserId();
+      
+      if (token != null && userId != null) {
+        await _fcmService.registerToken(userId, token);
+        print('FCM token registered after auth');
+      }
+    } catch (e) {
+      print('Failed to register FCM token after auth: $e');
+      // Don't fail the auth flow if FCM registration fails
     }
   }
 

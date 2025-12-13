@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Firebase Setup - May Messenger</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+
+        h2 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .section {
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #3498db;
+        }
+
+        label {
+            display: block;
+            margin-top: 15px;
+            font-weight: bold;
+            color: #34495e;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 12px;
+            margin-top: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            min-height: 300px;
+            resize: vertical;
+        }
+
+        button {
+            background-color: #3498db;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 20px;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        .field-description {
+            font-size: 13px;
+            color: #7f8c8d;
+            margin-top: 5px;
+            font-style: italic;
+        }
+
+        #setupResult {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .validation-error {
+            color: #e74c3c;
+            font-size: 14px;
+            margin-top: 5px;
+            display: none;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .json-info {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .json-info strong {
+            color: #856404;
+        }
+
+        pre {
+            background-color: #f4f4f4;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🔔 Firebase Push Notifications Setup</h2>
+        
+        <div class="info">
+            <strong>ℹ️ Информация:</strong> Эта страница предназначена для одноразовой настройки Firebase Cloud Messaging.
+            После успешной инициализации доступ к этой странице будет закрыт.
+        </div>
+
+        <div class="json-info">
+            <strong>📋 Инструкция:</strong>
+            <ol>
+                <li>Откройте <a href="https://console.firebase.google.com/" target="_blank">Firebase Console</a></li>
+                <li>Выберите ваш проект (MayMessenger)</li>
+                <li>Перейдите в Project Settings → Service Accounts</li>
+                <li>Нажмите "Generate new private key"</li>
+                <li>Скопируйте содержимое скаченного JSON файла</li>
+                <li>Вставьте его в поле ниже</li>
+            </ol>
+        </div>
+
+        <form id="setupForm">
+            <div class="section">
+                <label>Firebase Service Account JSON:</label>
+                <textarea 
+                    name="serviceAccountJson" 
+                    id="serviceAccountJson"
+                    placeholder='Вставьте здесь содержимое firebase-service-account.json&#10;&#10;{&#10;  "type": "service_account",&#10;  "project_id": "your-project-id",&#10;  "private_key_id": "...",&#10;  "private_key": "-----BEGIN PRIVATE KEY-----...",&#10;  ...&#10;}'
+                    required></textarea>
+                <div class="field-description">
+                    Вставьте полное содержимое JSON файла, полученного из Firebase Console
+                </div>
+                <div class="validation-error" id="jsonValidationError"></div>
+                
+                <div id="jsonPreview" style="display:none; margin-top: 15px;">
+                    <strong>Обнаружены данные:</strong>
+                    <div style="margin-top: 10px; font-size: 13px;">
+                        <div><strong>Project ID:</strong> <span id="projectId"></span></div>
+                        <div><strong>Client Email:</strong> <span id="clientEmail"></span></div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="button" id="validateBtn">Проверить JSON</button>
+            <button type="submit" id="submitBtn" disabled>Инициализировать Firebase</button>
+        </form>
+
+        <div id="setupResult"></div>
+    </div>
+
+    <script>
+        const form = document.getElementById('setupForm');
+        const setupResultDiv = document.getElementById('setupResult');
+        const validateBtn = document.getElementById('validateBtn');
+        const submitBtn = document.getElementById('submitBtn');
+        const jsonTextarea = document.getElementById('serviceAccountJson');
+        const jsonValidationError = document.getElementById('jsonValidationError');
+        const jsonPreview = document.getElementById('jsonPreview');
+
+        let validatedJson = null;
+
+        // Validate JSON
+        validateBtn.addEventListener('click', () => {
+            const jsonText = jsonTextarea.value.trim();
+            
+            if (!jsonText) {
+                showValidationError('JSON не может быть пустым');
+                return;
+            }
+
+            try {
+                const parsed = JSON.parse(jsonText);
+                
+                // Validate required fields
+                const requiredFields = ['type', 'project_id', 'private_key', 'client_email'];
+                const missingFields = requiredFields.filter(field => !parsed[field]);
+                
+                if (missingFields.length > 0) {
+                    showValidationError(`Отсутствуют обязательные поля: ${missingFields.join(', ')}`);
+                    return;
+                }
+
+                if (parsed.type !== 'service_account') {
+                    showValidationError('Тип должен быть "service_account"');
+                    return;
+                }
+
+                // Validation passed
+                validatedJson = parsed;
+                hideValidationError();
+                
+                // Show preview
+                document.getElementById('projectId').textContent = parsed.project_id;
+                document.getElementById('clientEmail').textContent = parsed.client_email;
+                jsonPreview.style.display = 'block';
+                
+                submitBtn.disabled = false;
+                
+                setupResultDiv.className = 'success';
+                setupResultDiv.style.display = 'block';
+                setupResultDiv.innerHTML = '✅ JSON валидный! Можете нажать "Инициализировать Firebase"';
+            } catch (err) {
+                showValidationError(`Ошибка парсинга JSON: ${err.message}`);
+                validatedJson = null;
+                submitBtn.disabled = true;
+                jsonPreview.style.display = 'none';
+            }
+        });
+
+        function showValidationError(message) {
+            jsonValidationError.textContent = message;
+            jsonValidationError.style.display = 'block';
+            setupResultDiv.className = 'error';
+            setupResultDiv.style.display = 'block';
+            setupResultDiv.innerHTML = `❌ ${message}`;
+        }
+
+        function hideValidationError() {
+            jsonValidationError.style.display = 'none';
+        }
+
+        // Submit form
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (!validatedJson) {
+                alert('Пожалуйста, сначала проверьте JSON с помощью кнопки "Проверить JSON"');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            validateBtn.disabled = true;
+            
+            setupResultDiv.className = '';
+            setupResultDiv.style.display = 'block';
+            setupResultDiv.innerHTML = '<span class="spinner"></span> Инициализация Firebase...';
+
+            try {
+                const response = await fetch('/api/messenger/setup/initialize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        serviceAccountJson: JSON.stringify(validatedJson)
+                    }),
+                });
+
+                const rawText = await response.text();
+                console.log('Raw response:', rawText);
+                console.log('Response status:', response.status);
+
+                if (response.status === 403) {
+                    setupResultDiv.className = 'error';
+                    const obj = JSON.parse(rawText);
+                    setupResultDiv.innerHTML = `❌ Ошибка 403: ${obj.message || 'System already configured'}`;
+                    return;
+                }
+
+                let data;
+                try {
+                    data = JSON.parse(rawText);
+                } catch (parseError) {
+                    setupResultDiv.className = 'error';
+                    setupResultDiv.innerHTML = `❌ JSON Parse Error: ${parseError.message}<br><pre>${rawText.substring(0, 500)}</pre>`;
+                    return;
+                }
+
+                if (!response.ok || data.success === false) {
+                    setupResultDiv.className = 'error';
+                    setupResultDiv.innerHTML = `❌ ${data.message || 'Ошибка при настройке'}`;
+                } else {
+                    setupResultDiv.className = 'success';
+                    setupResultDiv.innerHTML = `✅ ${data.message}<br><br><strong>Firebase успешно инициализирован!</strong>`;
+                    form.style.display = 'none';
+                }
+            } catch (err) {
+                setupResultDiv.className = 'error';
+                setupResultDiv.innerHTML = `❌ Fetch error: ${err.message}`;
+            } finally {
+                submitBtn.disabled = false;
+                validateBtn.disabled = false;
+            }
+        });
+
+        // Auto-resize textarea
+        jsonTextarea.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.max(300, this.scrollHeight) + 'px';
+        });
+    </script>
+</body>
+</html>

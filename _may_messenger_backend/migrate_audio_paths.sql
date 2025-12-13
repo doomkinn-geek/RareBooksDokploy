@@ -24,3 +24,4 @@ SELECT
 FROM "Messages"
 WHERE "FilePath" LIKE '/audio/%'
 ORDER BY "CreatedAt" DESC;
+

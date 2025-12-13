@@ -18,12 +18,21 @@ public class MessagesController : ControllerBase
     private readonly IUnitOfWork _unitOfWork;
     private readonly IWebHostEnvironment _environment;
     private readonly IHubContext<ChatHub> _hubContext;
+    private readonly MayMessenger.Application.Services.IFirebaseService _firebaseService;
+    private readonly ILogger<MessagesController> _logger;
     
-    public MessagesController(IUnitOfWork unitOfWork, IWebHostEnvironment environment, IHubContext<ChatHub> hubContext)
+    public MessagesController(
+        IUnitOfWork unitOfWork, 
+        IWebHostEnvironment environment, 
+        IHubContext<ChatHub> hubContext,
+        MayMessenger.Application.Services.IFirebaseService firebaseService,
+        ILogger<MessagesController> logger)
     {
         _unitOfWork = unitOfWork;
         _environment = environment;
         _hubContext = hubContext;
+        _firebaseService = firebaseService;
+        _logger = logger;
     }
     
     private Guid GetCurrentUserId()
@@ -117,6 +126,9 @@ public class MessagesController : ControllerBase
             
             // Also send to group for users currently in the chat
             await _hubContext.Clients.Group(dto.ChatId.ToString()).SendAsync("ReceiveMessage", messageDto);
+            
+            // Send push notifications to offline users
+            await SendPushNotificationsAsync(chat, sender, messageDto);
         }
         
         return Ok(messageDto);
@@ -197,9 +209,81 @@ public class MessagesController : ControllerBase
             
             // Also send to group for users currently in the chat
             await _hubContext.Clients.Group(chatId.ToString()).SendAsync("ReceiveMessage", messageDto);
+            
+            // Send push notifications to offline users
+            await SendPushNotificationsAsync(chat, sender, messageDto);
         }
         
         return Ok(messageDto);
+    }
+
+    /// <summary>
+    /// Отправка push уведомлений пользователям, которые не онлайн
+    /// </summary>
+    private async Task SendPushNotificationsAsync(Chat chat, User sender, MessageDto message)
+    {
+        if (!_firebaseService.IsInitialized)
+        {
+            _logger.LogWarning("Firebase not initialized. Cannot send push notifications.");
+            return;
+        }
+
+        try
+        {
+            var title = $"Новое сообщение от {sender.DisplayName}";
+            var body = message.Type == MessageType.Text 
+                ? (message.Content?.Length > 100 ? message.Content.Substring(0, 100) + "..." : message.Content) 
+                : "🎤 Аудио сообщение";
+
+            var data = new Dictionary<string, string>
+            {
+                { "chatId", message.ChatId.ToString() },
+                { "messageId", message.Id.ToString() },
+                { "type", message.Type.ToString() }
+            };
+
+            // Send to all participants except sender
+            foreach (var participant in chat.Participants)
+            {
+                if (participant.UserId == sender.Id)
+                    continue;
+
+                try
+                {
+                    var tokens = await _unitOfWork.FcmTokens.GetActiveTokensForUserAsync(participant.UserId);
+                    
+                    if (tokens.Any())
+                    {
+                        _logger.LogInformation($"Sending push notification to user {participant.UserId}, {tokens.Count} tokens");
+                        
+                        foreach (var token in tokens)
+                        {
+                            var sent = await _firebaseService.SendNotificationAsync(
+                                token.Token, 
+                                title, 
+                                body ?? "", 
+                                data);
+                            
+                            if (sent)
+                            {
+                                // Update last used timestamp
+                                token.LastUsedAt = DateTime.UtcNow;
+                            }
+                        }
+                        
+                        await _unitOfWork.SaveChangesAsync();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"Failed to send push to user {participant.UserId}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in SendPushNotificationsAsync");
+        }
     }
 }
 

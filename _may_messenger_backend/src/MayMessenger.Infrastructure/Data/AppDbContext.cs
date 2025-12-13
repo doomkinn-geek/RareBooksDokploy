@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<ChatParticipant> ChatParticipants { get; set; } = null!;
     public DbSet<Message> Messages { get; set; } = null!;
     public DbSet<InviteLink> InviteLinks { get; set; } = null!;
+    public DbSet<FcmToken> FcmTokens { get; set; } = null!;
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -85,6 +86,20 @@ public class AppDbContext : DbContext
                 .WithMany(u => u.CreatedInviteLinks)
                 .HasForeignKey(e => e.CreatedBy)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // FcmToken configuration
+        modelBuilder.Entity<FcmToken>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.UserId, e.Token });
+            entity.Property(e => e.Token).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.DeviceInfo).HasMaxLength(200);
+            
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

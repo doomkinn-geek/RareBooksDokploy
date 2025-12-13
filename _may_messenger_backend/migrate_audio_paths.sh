@@ -50,3 +50,4 @@ echo ""
 echo "Next steps:"
 echo "1. Reload nginx: docker compose restart proxy"
 echo "2. Test audio playback in the app"
+

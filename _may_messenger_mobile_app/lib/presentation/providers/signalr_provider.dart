@@ -97,9 +97,23 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
           try {
             final chatsState = _ref.read(chatsProvider);
             
+            // Safely find chat, handle case when chats list is empty
+            if (chatsState.chats.isEmpty) {
+              // #region agent log
+              _logger.debug('signalr_provider.onReceiveMessage.noChats', '[H1] Chats list is empty, skipping notification', {'messageId': message.id});
+              // #endregion
+              return;
+            }
+            
             final chat = chatsState.chats.firstWhere(
               (c) => c.id == message.chatId,
-              orElse: () => chatsState.chats.first,
+              orElse: () {
+                // #region agent log
+                _logger.debug('signalr_provider.onReceiveMessage.chatNotFound', '[H1] Chat not found in list, skipping notification', {'messageId': message.id, 'chatId': message.chatId});
+                // #endregion
+                // Return a dummy chat or first chat if available
+                return chatsState.chats.first;
+              },
             );
             
             final notificationService = _ref.read(notificationServiceProvider);

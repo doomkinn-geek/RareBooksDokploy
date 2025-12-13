@@ -47,3 +47,6 @@ flutter {
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }
+
+// Apply Google Services plugin for Firebase
+apply(plugin = "com.google.gms.google-services")

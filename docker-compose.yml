@@ -177,6 +177,7 @@ services:
       - Jwt__Audience=MayMessengerClients
     volumes:
       - maymessenger_audio:/app/wwwroot/audio
+      - maymessenger_firebase:/app/firebase_config
     networks:
       - rarebooks_network
     healthcheck:
@@ -212,3 +213,4 @@ volumes:
   collection_images:  # Постоянное хранилище для изображений коллекций пользователей
   db_maymessenger_data:
   maymessenger_audio:
+  maymessenger_firebase:

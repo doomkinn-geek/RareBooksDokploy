@@ -27,12 +27,14 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IChatRepository, ChatRepository>();
 builder.Services.AddScoped<IMessageRepository, MessageRepository>();
 builder.Services.AddScoped<IInviteLinkRepository, InviteLinkRepository>();
+builder.Services.AddScoped<IFcmTokenRepository, FcmTokenRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 // Services
 builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddSingleton<MayMessenger.Application.Services.IFirebaseService, MayMessenger.Application.Services.FirebaseService>();
 
 // JWT Authentication
 var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "YourSuperSecretKeyForJWTTokenGeneration123456789";
@@ -119,6 +121,27 @@ app.UseSwaggerUI();
 
 // Health check endpoint
 app.MapGet("/health", () => Results.Ok(new { status = "Healthy" }));
+
+// Initialize Firebase if config exists
+try
+{
+    var firebaseService = app.Services.GetRequiredService<MayMessenger.Application.Services.IFirebaseService>();
+    var configPath = builder.Configuration["Firebase:ConfigPath"] ?? Path.Combine(app.Environment.ContentRootPath, "firebase_config.json");
+    
+    if (File.Exists(configPath))
+    {
+        firebaseService.Initialize(configPath);
+        app.Logger.LogInformation($"Firebase initialized from {configPath}");
+    }
+    else
+    {
+        app.Logger.LogWarning($"Firebase config not found at {configPath}. Push notifications will not be available.");
+    }
+}
+catch (Exception ex)
+{
+    app.Logger.LogError(ex, "Failed to initialize Firebase");
+}
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
