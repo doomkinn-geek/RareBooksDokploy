@@ -80,9 +80,17 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.AllowAnyOrigin()
+        // Allow specific origins with credentials for security
+        // For development, you can add localhost origins
+        policy.WithOrigins(
+                "https://messenger.rare-books.ru",
+                "https://rare-books.ru",
+                "http://localhost:3000",
+                "http://localhost:5173"
+              )
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .AllowCredentials();
     });
 });
 
@@ -114,16 +122,6 @@ app.MapGet("/health", () => Results.Ok(new { status = "Healthy" }));
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
-
-// Serve audio files from uploads directory
-var uploadsPath = Path.Combine(builder.Environment.ContentRootPath, "uploads");
-Directory.CreateDirectory(uploadsPath);
-
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider(uploadsPath),
-    RequestPath = "/uploads"
-});
 
 app.UseCors("AllowAll");
 

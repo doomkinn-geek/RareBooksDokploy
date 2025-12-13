@@ -1,0 +1,4 @@
+dependency_overrides:
+  record_platform_interface: ^1.2.0
+  record_linux: ^1.0.0
+
