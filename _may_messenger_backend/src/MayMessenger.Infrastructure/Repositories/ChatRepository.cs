@@ -12,6 +12,15 @@ public class ChatRepository : Repository<Chat>, IChatRepository
     {
     }
     
+    // Override GetByIdAsync to include Participants
+    public override async Task<Chat?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await _dbSet
+            .Include(c => c.Participants)
+                .ThenInclude(p => p.User)
+            .FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+    }
+    
     public async Task<IEnumerable<Chat>> GetUserChatsAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         return await _dbSet
