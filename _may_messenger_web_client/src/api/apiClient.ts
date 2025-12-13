@@ -34,7 +34,7 @@ class ApiClient {
           // Token expired or invalid
           localStorage.removeItem('auth_token');
           localStorage.removeItem('user_profile');
-          window.location.href = '/login';
+          window.location.href = '/web/login';
         }
         return Promise.reject(error);
       }

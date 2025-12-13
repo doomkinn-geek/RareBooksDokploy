@@ -62,12 +62,12 @@ export const ChatWindow = () => {
       <div className="px-6 py-4 border-b border-gray-200 bg-white">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-semibold">
-            {selectedChat?.title[0].toUpperCase()}
+            {selectedChat?.title?.[0]?.toUpperCase() || '?'}
           </div>
           <div>
-            <h2 className="font-semibold text-gray-900">{selectedChat?.title}</h2>
+            <h2 className="font-semibold text-gray-900">{selectedChat?.title || 'Загрузка...'}</h2>
             <p className="text-sm text-gray-500">
-              {selectedChat?.participants.length} участников
+              {selectedChat?.participants?.length || 0} участников
             </p>
           </div>
         </div>

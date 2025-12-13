@@ -22,12 +22,12 @@ const ChatListItem = ({ chat, isSelected, onClick }: ChatListItemProps) => {
     >
       <div className="flex items-start gap-3">
         <div className="w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
-          {chat.title[0].toUpperCase()}
+          {chat.title?.[0]?.toUpperCase() || '?'}
         </div>
         
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-1">
-            <h3 className="font-semibold text-gray-900 truncate">{chat.title}</h3>
+            <h3 className="font-semibold text-gray-900 truncate">{chat.title || 'Без названия'}</h3>
             {chat.lastMessage && (
               <span className="text-xs text-gray-500 flex-shrink-0 ml-2">
                 {formatDate(chat.lastMessage.createdAt)}

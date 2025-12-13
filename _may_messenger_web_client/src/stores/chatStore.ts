@@ -25,6 +25,7 @@ export const useChatStore = create<ChatState>((set) => ({
     set({ isLoading: true, error: null });
     try {
       const chats = await chatApi.getChats();
+      console.log('[ChatStore] Loaded chats:', chats);
       // Sort by last message time (newest first)
       chats.sort((a, b) => {
         const aTime = a.lastMessage?.createdAt || a.createdAt;
@@ -33,6 +34,7 @@ export const useChatStore = create<ChatState>((set) => ({
       });
       set({ chats, isLoading: false });
     } catch (error: any) {
+      console.error('[ChatStore] Load error:', error);
       set({ error: 'Ошибка загрузки чатов', isLoading: false });
     }
   },

@@ -23,15 +23,17 @@ export const MessageBubble = ({ message }: MessageBubbleProps) => {
       >
         {!isOwnMessage && (
           <div className={`text-xs font-semibold mb-1 ${isOwnMessage ? 'text-white/70' : 'text-indigo-600'}`}>
-            {message.senderName}
+            {message.senderName || 'Пользователь'}
           </div>
         )}
         
         <div>
           {message.type === MessageType.Text ? (
-            <p className="whitespace-pre-wrap break-words">{message.content}</p>
+            <p className="whitespace-pre-wrap break-words">{message.content || ''}</p>
+          ) : message.filePath ? (
+            <AudioPlayer filePath={message.filePath} isOwnMessage={isOwnMessage} />
           ) : (
-            <AudioPlayer filePath={message.filePath!} isOwnMessage={isOwnMessage} />
+            <p className="text-sm opacity-70">Аудио недоступно</p>
           )}
         </div>
         

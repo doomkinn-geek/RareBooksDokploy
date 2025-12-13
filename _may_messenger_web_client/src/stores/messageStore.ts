@@ -28,6 +28,7 @@ export const useMessageStore = create<MessageState>((set) => ({
     set({ isLoading: true, error: null });
     try {
       const messages = await messageApi.getMessages(chatId);
+      console.log('[MessageStore] Loaded messages:', messages);
       set((state) => ({
         messagesByChatId: {
           ...state.messagesByChatId,
@@ -41,6 +42,7 @@ export const useMessageStore = create<MessageState>((set) => ({
         await signalRService.joinChat(chatId);
       }
     } catch (error: any) {
+      console.error('[MessageStore] Load error:', error);
       set({ error: 'Ошибка загрузки сообщений', isLoading: false });
     }
   },
