@@ -80,9 +80,10 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.SetIsOriginAllowed(_ => true)
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .AllowCredentials();
     });
 });
 
@@ -114,16 +115,6 @@ app.MapGet("/health", () => Results.Ok(new { status = "Healthy" }));
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
-
-// Serve audio files from uploads directory
-var uploadsPath = Path.Combine(builder.Environment.ContentRootPath, "uploads");
-Directory.CreateDirectory(uploadsPath);
-
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider(uploadsPath),
-    RequestPath = "/uploads"
-});
 
 app.UseCors("AllowAll");
 

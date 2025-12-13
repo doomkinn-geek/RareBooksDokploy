@@ -135,7 +135,7 @@ public class MessagesController : ControllerBase
             return BadRequest("No audio file provided");
         
         // Save audio file
-        var uploadsFolder = Path.Combine(_environment.ContentRootPath, "uploads", "audio");
+        var uploadsFolder = Path.Combine(_environment.WebRootPath, "audio");
         Directory.CreateDirectory(uploadsFolder);
         
         var fileName = $"{Guid.NewGuid()}{Path.GetExtension(audioFile.FileName)}";
@@ -147,7 +147,7 @@ public class MessagesController : ControllerBase
         }
         
         // #region agent log
-        DiagnosticsController.AddLog($"[H5] Audio file saved - Path: /uploads/audio/{fileName}");
+        DiagnosticsController.AddLog($"[H5] Audio file saved - Path: /audio/{fileName}");
         // #endregion
         
         var message = new Message
@@ -155,7 +155,7 @@ public class MessagesController : ControllerBase
             ChatId = chatId,
             SenderId = userId,
             Type = MessageType.Audio,
-            FilePath = $"/uploads/audio/{fileName}",
+            FilePath = $"/audio/{fileName}",
             Status = MessageStatus.Sent
         };
         
