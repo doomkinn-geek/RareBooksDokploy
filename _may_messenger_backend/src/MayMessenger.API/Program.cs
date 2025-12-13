@@ -80,7 +80,14 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.SetIsOriginAllowed(_ => true)
+        // Allow specific origins with credentials for security
+        // For development, you can add localhost origins
+        policy.WithOrigins(
+                "https://messenger.rare-books.ru",
+                "https://rare-books.ru",
+                "http://localhost:3000",
+                "http://localhost:5173"
+              )
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();
