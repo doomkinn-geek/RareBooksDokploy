@@ -30,6 +30,10 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
   }
 
   Future<void> _loadContacts() async {
+    // #region agent log
+    await Dio().post('${ApiConstants.baseUrl}/api/Diagnostics/logs', data: {'location': 'new_chat_screen.dart:31', 'message': '[H1,H3,H5] _loadContacts entry', 'data': {}, 'timestamp': DateTime.now().millisecondsSinceEpoch, 'sessionId': 'debug-session', 'hypothesisId': 'H1,H3,H5'}).catchError((_) {});
+    // #endregion
+    
     setState(() {
       _isLoading = true;
       _error = null;
@@ -41,6 +45,11 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
       
       // Request permission
       final hasPermission = await FlutterContacts.requestPermission();
+      
+      // #region agent log
+      await Dio().post('${ApiConstants.baseUrl}/api/Diagnostics/logs', data: {'location': 'new_chat_screen.dart:46', 'message': '[H1] Permission result', 'data': {'hasPermission': hasPermission}, 'timestamp': DateTime.now().millisecondsSinceEpoch, 'sessionId': 'debug-session', 'hypothesisId': 'H1'}).catchError((_) {});
+      // #endregion
+      
       if (!hasPermission) {
         setState(() {
           _permissionDenied = true;
@@ -53,6 +62,10 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
       final authRepo = ref.read(authRepositoryProvider);
       final token = await authRepo.getStoredToken();
       
+      // #region agent log
+      await Dio().post('${ApiConstants.baseUrl}/api/Diagnostics/logs', data: {'location': 'new_chat_screen.dart:63', 'message': '[H3] Token retrieved', 'data': {'hasToken': token != null, 'tokenLength': token?.length ?? 0}, 'timestamp': DateTime.now().millisecondsSinceEpoch, 'sessionId': 'debug-session', 'hypothesisId': 'H3'}).catchError((_) {});
+      // #endregion
+      
       if (token == null) {
         throw Exception('Not authenticated');
       }
@@ -60,11 +73,23 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
       // Sync and get registered contacts
       final contacts = await contactsService.syncContacts(token);
       
+      // #region agent log
+      await Dio().post('${ApiConstants.baseUrl}/api/Diagnostics/logs', data: {'location': 'new_chat_screen.dart:75', 'message': '[H4,H5] Contacts received', 'data': {'contactsCount': contacts.length, 'contacts': contacts.map((c) => {'userId': c.userId, 'displayName': c.displayName}).toList()}, 'timestamp': DateTime.now().millisecondsSinceEpoch, 'sessionId': 'debug-session', 'hypothesisId': 'H4,H5'}).catchError((_) {});
+      // #endregion
+      
       setState(() {
         _contacts = contacts;
         _isLoading = false;
       });
+      
+      // #region agent log
+      await Dio().post('${ApiConstants.baseUrl}/api/Diagnostics/logs', data: {'location': 'new_chat_screen.dart:84', 'message': '[H5] setState completed', 'data': {'stateContactsCount': _contacts.length}, 'timestamp': DateTime.now().millisecondsSinceEpoch, 'sessionId': 'debug-session', 'hypothesisId': 'H5'}).catchError((_) {});
+      // #endregion
     } catch (e) {
+      // #region agent log
+      await Dio().post('${ApiConstants.baseUrl}/api/Diagnostics/logs', data: {'location': 'new_chat_screen.dart:89', 'message': '[H1,H3] Error caught', 'data': {'error': e.toString(), 'errorType': e.runtimeType.toString()}, 'timestamp': DateTime.now().millisecondsSinceEpoch, 'sessionId': 'debug-session', 'hypothesisId': 'H1,H3'}).catchError((_) {});
+      // #endregion
+      
       setState(() {
         _error = e.toString();
         _isLoading = false;
