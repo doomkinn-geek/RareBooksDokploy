@@ -55,6 +55,7 @@ class SignalRService {
     await _hubConnection?.invoke('MessageRead', args: [messageId, chatId]);
   }
 
+  void onUserTyping(Function(String userId, String userName, bool isTyping) callback) {
     _hubConnection?.on('UserTyping', (arguments) {
       if (arguments != null && arguments.length >= 3) {
         final userId = arguments[0] as String;
@@ -87,11 +88,7 @@ class SignalRService {
     ]);
   }
 
-  Future<void> markMessageAsRead(String messageId, String chatId) async {
-    await _hubConnection?.invoke('MessageRead', args: [messageId, chatId]);
-  }
-
-  void onUserTyping(Function(String userId, String userName, bool isTyping) callback) {
+  Future<void> sendTypingIndicator(String chatId, bool isTyping) async {
     await _hubConnection?.invoke('TypingIndicator', args: [chatId, isTyping]);
   }
 
@@ -101,5 +98,3 @@ class SignalRService {
 
   bool get isConnected => _hubConnection?.state == HubConnectionState.Connected;
 }
-
-

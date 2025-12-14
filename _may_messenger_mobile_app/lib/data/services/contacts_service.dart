@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
-import 'package:contacts_service/contacts_service.dart' as contacts_pkg;
-import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:dio/dio.dart';
 import '../../core/constants/api_constants.dart';
 
@@ -22,17 +21,15 @@ class ContactsService {
   }
 
   Future<bool> requestPermission() async {
-    final status = await Permission.contacts.request();
-    return status.isGranted;
+    return await FlutterContacts.requestPermission();
   }
 
-  Future<List<contacts_pkg.Contact>> getAllContacts() async {
-    final hasPermission = await Permission.contacts.isGranted;
-    if (!hasPermission) {
+  Future<List<Contact>> getAllContacts() async {
+    if (!await FlutterContacts.requestPermission()) {
       throw Exception('Contacts permission not granted');
     }
 
-    return await contacts_pkg.ContactsService.getContacts();
+    return await FlutterContacts.getContacts(withProperties: true);
   }
 
   Future<List<RegisteredContact>> syncContacts(String token) async {
@@ -42,10 +39,10 @@ class ContactsService {
       
       // Prepare contacts data for sync
       final contactsData = contacts
-          .where((c) => c.phones != null && c.phones!.isNotEmpty)
+          .where((c) => c.phones.isNotEmpty)
           .map((c) {
-            final phoneNumber = c.phones!.first.value ?? '';
-            final displayName = c.displayName ?? '';
+            final phoneNumber = c.phones.first.number;
+            final displayName = c.displayName;
             
             return {
               'phoneNumberHash': hashPhoneNumber(phoneNumber),

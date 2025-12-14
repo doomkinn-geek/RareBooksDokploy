@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import '../../data/services/contacts_service.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../core/constants/api_constants.dart';
 import '../providers/chats_provider.dart';
+import '../providers/auth_provider.dart';
 
 final contactsServiceProvider = Provider((ref) => ContactsService(Dio()));
 
@@ -39,16 +40,13 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
       final contactsService = ref.read(contactsServiceProvider);
       
       // Request permission
-      final hasPermission = await Permission.contacts.isGranted;
+      final hasPermission = await FlutterContacts.requestPermission();
       if (!hasPermission) {
-        final status = await Permission.contacts.request();
-        if (!status.isGranted) {
-          setState(() {
-            _permissionDenied = true;
-            _isLoading = false;
-          });
-          return;
-        }
+        setState(() {
+          _permissionDenied = true;
+          _isLoading = false;
+        });
+        return;
       }
 
       // Get token
@@ -153,7 +151,8 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: () async {
-                  await openAppSettings();
+                  await FlutterContacts.openExternalPick();
+                  _loadContacts();
                 },
                 child: const Text('Открыть настройки'),
               ),
