@@ -1,4 +1,19 @@
-# === ВАРИАНТ 1: Миграция (сохранить данные) ===
+# === ВАРИАНТ 1: API endpoint (самый простой) ===
+
+# Через Swagger UI
+https://messenger.rare-books.ru/swagger
+# Авторизуйтесь как Admin → POST /api/admin/update-phone-hashes → Execute
+
+# Через curl
+curl -X POST "https://messenger.rare-books.ru/api/admin/update-phone-hashes" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+
+# Через PowerShell
+$token = "YOUR_ADMIN_TOKEN"
+Invoke-RestMethod -Uri "https://messenger.rare-books.ru/api/admin/update-phone-hashes" `
+  -Method POST -Headers @{"Authorization"="Bearer $token"}
+
+# === ВАРИАНТ 2: SQL миграция (сохранить данные) ===
 
 # Локально (Windows)
 scp _may_messenger_backend/migrations/update_phone_hashes.sql user@messenger.rare-books.ru:/tmp/
@@ -11,7 +26,7 @@ cd /path/to/rarebooks && chmod +x /tmp/deploy.sh && /tmp/deploy.sh
 # Или вручную
 docker cp /tmp/update_phone_hashes.sql rarebooks-postgres-1:/tmp/ && docker compose exec -T postgres psql -U postgres -d maymessenger -f /tmp/update_phone_hashes.sql && docker compose build maymessenger_backend && docker compose up -d maymessenger_backend
 
-# === ВАРИАНТ 2: Полная пересборка БД (удалить всё) ===
+# === ВАРИАНТ 3: Полная пересборка БД (удалить всё) ===
 
 # ⚠️ УДАЛИТ ВСЕ ДАННЫЕ!
 cd /path/to/rarebooks

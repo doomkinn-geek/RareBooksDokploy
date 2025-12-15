@@ -119,6 +119,45 @@ public class AdminController : ControllerBase
         
         return Ok(linkDtos);
     }
+    
+    /// <summary>
+    /// Обновляет хеши номеров телефонов для всех пользователей с применением нормализации.
+    /// Нормализация: удаляет все символы кроме цифр и +, заменяет начальную 8 на +7.
+    /// </summary>
+    /// <returns>Количество обновленных пользователей</returns>
+    [HttpPost("update-phone-hashes")]
+    public async Task<ActionResult<UpdatePhoneHashesResponse>> UpdatePhoneHashes()
+    {
+        try
+        {
+            var updatedCount = await _unitOfWork.Users.UpdatePhoneNumberHashesAsync();
+            
+            return Ok(new UpdatePhoneHashesResponse
+            {
+                Success = true,
+                UpdatedCount = updatedCount,
+                Message = updatedCount > 0 
+                    ? $"Successfully updated {updatedCount} user(s)" 
+                    : "All phone hashes are already up to date"
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new UpdatePhoneHashesResponse
+            {
+                Success = false,
+                UpdatedCount = 0,
+                Message = $"Error updating phone hashes: {ex.Message}"
+            });
+        }
+    }
+}
+
+public class UpdatePhoneHashesResponse
+{
+    public bool Success { get; set; }
+    public int UpdatedCount { get; set; }
+    public string Message { get; set; } = string.Empty;
 }
 
 

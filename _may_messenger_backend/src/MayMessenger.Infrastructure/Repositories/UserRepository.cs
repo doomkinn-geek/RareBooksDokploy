@@ -1,7 +1,10 @@
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using MayMessenger.Domain.Entities;
 using MayMessenger.Domain.Interfaces;
 using MayMessenger.Infrastructure.Data;
+using MayMessenger.Infrastructure.Utils;
 
 namespace MayMessenger.Infrastructure.Repositories;
 
@@ -21,6 +24,33 @@ public class UserRepository : Repository<User>, IUserRepository
     {
         return await _dbSet
             .AnyAsync(u => u.PhoneNumber == phoneNumber, cancellationToken);
+    }
+    
+    public async Task<int> UpdatePhoneNumberHashesAsync(CancellationToken cancellationToken = default)
+    {
+        var users = await _dbSet.ToListAsync(cancellationToken);
+        var updatedCount = 0;
+        
+        foreach (var user in users)
+        {
+            var normalized = PhoneNumberHelper.Normalize(user.PhoneNumber);
+            using var sha256 = SHA256.Create();
+            var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(normalized));
+            var newHash = Convert.ToHexString(bytes).ToLowerInvariant();
+            
+            if (user.PhoneNumberHash != newHash)
+            {
+                user.PhoneNumberHash = newHash;
+                updatedCount++;
+            }
+        }
+        
+        if (updatedCount > 0)
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        
+        return updatedCount;
     }
 }
 
