@@ -1,6 +1,4 @@
 using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MayMessenger.Domain.Interfaces;
@@ -25,49 +23,21 @@ public class ContactsController : ControllerBase
         return Guid.Parse(userIdClaim ?? throw new UnauthorizedAccessException());
     }
 
-    private string ComputePhoneNumberHash(string phoneNumber)
-    {
-        using var sha256 = SHA256.Create();
-        var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(phoneNumber));
-        return Convert.ToHexString(bytes).ToLowerInvariant();
-    }
-
     [HttpPost("sync")]
     public async Task<IActionResult> SyncContacts([FromBody] SyncContactsRequest request)
     {
-        // #region agent log
-        DiagnosticsController.AddLog($"[H3,H4] ContactsController.SyncContacts entry - ContactsCount: {request?.Contacts?.Count ?? 0}");
-        // #endregion
-        
         var userId = GetCurrentUserId();
-        
-        // #region agent log
-        DiagnosticsController.AddLog($"[H3] UserId retrieved: {userId}");
-        // #endregion
 
         // Save contacts to database
         var contactsToSync = request.Contacts
             .Select(c => (c.PhoneNumberHash, c.DisplayName))
             .ToList();
-        
-        // #region agent log
-        DiagnosticsController.AddLog($"[H3,H4] Contacts to sync: {contactsToSync.Count}, First three: {string.Join(", ", contactsToSync.Take(3).Select(c => $"{c.DisplayName}:{c.PhoneNumberHash.Substring(0, 8)}"))}");
-        // #endregion
 
         await _unitOfWork.Contacts.SyncContactsAsync(userId, contactsToSync);
 
         // Find which contacts are registered users
         var phoneHashes = request.Contacts.Select(c => c.PhoneNumberHash).ToList();
-        
-        // #region agent log
-        DiagnosticsController.AddLog($"[H4] Looking up registered users for {phoneHashes.Count} phone hashes");
-        // #endregion
-        
         var registeredUsers = await _unitOfWork.Contacts.FindUsersByPhoneHashesAsync(phoneHashes);
-        
-        // #region agent log
-        DiagnosticsController.AddLog($"[H4] Found {registeredUsers.Count} registered users: {string.Join(", ", registeredUsers.Select(u => $"{u.DisplayName}:{u.PhoneNumberHash.Substring(0, 8)}"))}");
-        // #endregion
 
         var response = registeredUsers.Select(u => new RegisteredContactDto
         {
@@ -75,10 +45,6 @@ public class ContactsController : ControllerBase
             PhoneNumberHash = u.PhoneNumberHash,
             DisplayName = u.DisplayName
         }).ToList();
-        
-        // #region agent log
-        DiagnosticsController.AddLog($"[H3,H4] Returning {response.Count} registered contacts");
-        // #endregion
 
         return Ok(response);
     }

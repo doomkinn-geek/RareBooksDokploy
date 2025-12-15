@@ -9,12 +9,39 @@ class ContactsService {
 
   ContactsService(this._dio);
 
+  /// Нормализует номер телефона перед хешированием.
+  /// Удаляет все символы кроме цифр, заменяет начальную "8" на "+7".
+  /// Примеры:
+  /// "+7 (909) 492-41-90" -> "+79094924190"
+  /// "8 (909) 492-41-90"  -> "+79094924190"
+  /// "8-909-492-41-90"    -> "+79094924190"
+  String normalizePhoneNumber(String phoneNumber) {
+    if (phoneNumber.isEmpty) {
+      return '';
+    }
+
+    // Удаляем все символы кроме цифр и +
+    var cleaned = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+    
+    // Заменяем начальную 8 на +7 (для российских номеров)
+    if (cleaned.startsWith('8') && cleaned.length == 11) {
+      cleaned = '+7${cleaned.substring(1)}';
+    }
+    
+    // Если номер начинается с 7 (без +), добавляем +
+    if (cleaned.startsWith('7') && cleaned.length == 11 && !cleaned.startsWith('+')) {
+      cleaned = '+$cleaned';
+    }
+    
+    return cleaned;
+  }
+
   String hashPhoneNumber(String phoneNumber) {
-    // Remove all non-digit characters
-    final cleaned = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+    // Normalize phone number before hashing
+    final normalized = normalizePhoneNumber(phoneNumber);
     
     // Compute SHA256 hash
-    final bytes = utf8.encode(cleaned);
+    final bytes = utf8.encode(normalized);
     final digest = sha256.convert(bytes);
     
     return digest.toString();
@@ -25,25 +52,15 @@ class ContactsService {
   }
 
   Future<List<Contact>> getAllContacts() async {
-    if (!await FlutterContacts.requestPermission()) {
-      throw Exception('Contacts permission not granted');
-    }
-
+    // Permission is already checked in the calling code using permission_handler
+    // FlutterContacts.requestPermission() has a bug and returns false even when granted
     return await FlutterContacts.getContacts(withProperties: true);
   }
 
   Future<List<RegisteredContact>> syncContacts(String token) async {
     try {
-      // #region agent log
-      await _dio.post('${ApiConstants.baseUrl}/api/Diagnostics/logs', data: {'location': 'contacts_service.dart:39', 'message': '[H1,H2] syncContacts entry', 'data': {'hasToken': token.isNotEmpty}, 'timestamp': DateTime.now().millisecondsSinceEpoch, 'sessionId': 'debug-session', 'hypothesisId': 'H1,H2'}).catchError((_) {});
-      // #endregion
-      
       // Get all contacts from phone
       final contacts = await getAllContacts();
-      
-      // #region agent log
-      await _dio.post('${ApiConstants.baseUrl}/api/Diagnostics/logs', data: {'location': 'contacts_service.dart:48', 'message': '[H1] Contacts from phone', 'data': {'totalCount': contacts.length, 'withPhones': contacts.where((c) => c.phones.isNotEmpty).length}, 'timestamp': DateTime.now().millisecondsSinceEpoch, 'sessionId': 'debug-session', 'hypothesisId': 'H1'}).catchError((_) {});
-      // #endregion
       
       // Prepare contacts data for sync
       final contactsData = contacts
@@ -53,20 +70,12 @@ class ContactsService {
             final displayName = c.displayName;
             final hash = hashPhoneNumber(phoneNumber);
             
-            // #region agent log
-            _dio.post('${ApiConstants.baseUrl}/api/Diagnostics/logs', data: {'location': 'contacts_service.dart:60', 'message': '[H2] Processing contact', 'data': {'phoneNumber': phoneNumber, 'hash': hash, 'displayName': displayName}, 'timestamp': DateTime.now().millisecondsSinceEpoch, 'sessionId': 'debug-session', 'hypothesisId': 'H2'}).catchError((_) {});
-            // #endregion
-            
             return {
               'phoneNumberHash': hash,
               'displayName': displayName,
             };
           })
           .toList();
-
-      // #region agent log
-      await _dio.post('${ApiConstants.baseUrl}/api/Diagnostics/logs', data: {'location': 'contacts_service.dart:72', 'message': '[H2,H3] Sending to backend', 'data': {'contactsToSend': contactsData.length, 'firstThree': contactsData.take(3).toList()}, 'timestamp': DateTime.now().millisecondsSinceEpoch, 'sessionId': 'debug-session', 'hypothesisId': 'H2,H3'}).catchError((_) {});
-      // #endregion
 
       // Send to backend
       final response = await _dio.post(
@@ -79,18 +88,10 @@ class ContactsService {
         ),
       );
 
-      // #region agent log
-      await _dio.post('${ApiConstants.baseUrl}/api/Diagnostics/logs', data: {'location': 'contacts_service.dart:89', 'message': '[H3,H4] Backend response', 'data': {'statusCode': response.statusCode, 'dataType': response.data.runtimeType.toString(), 'dataLength': (response.data as List?)?.length ?? 0}, 'timestamp': DateTime.now().millisecondsSinceEpoch, 'sessionId': 'debug-session', 'hypothesisId': 'H3,H4'}).catchError((_) {});
-      // #endregion
-
       // Parse response
       final List<dynamic> data = response.data;
       return data.map((json) => RegisteredContact.fromJson(json)).toList();
     } catch (e) {
-      // #region agent log
-      await _dio.post('${ApiConstants.baseUrl}/api/Diagnostics/logs', data: {'location': 'contacts_service.dart:99', 'message': '[H1,H2,H3] syncContacts error', 'data': {'error': e.toString(), 'errorType': e.runtimeType.toString()}, 'timestamp': DateTime.now().millisecondsSinceEpoch, 'sessionId': 'debug-session', 'hypothesisId': 'H1,H2,H3'}).catchError((_) {});
-      // #endregion
-      
       print('Failed to sync contacts: $e');
       rethrow;
     }

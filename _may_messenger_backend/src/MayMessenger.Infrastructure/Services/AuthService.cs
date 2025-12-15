@@ -4,6 +4,7 @@ using MayMessenger.Application.Interfaces;
 using MayMessenger.Domain.Entities;
 using MayMessenger.Domain.Enums;
 using MayMessenger.Domain.Interfaces;
+using MayMessenger.Infrastructure.Utils;
 
 namespace MayMessenger.Infrastructure.Services;
 
@@ -25,8 +26,10 @@ public class AuthService : IAuthService
     
     private string ComputePhoneNumberHash(string phoneNumber)
     {
+        // Normalize phone number before hashing
+        var normalized = PhoneNumberHelper.Normalize(phoneNumber);
         using var sha256 = SHA256.Create();
-        var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(phoneNumber));
+        var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(normalized));
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
     

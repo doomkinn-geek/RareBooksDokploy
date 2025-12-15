@@ -1,0 +1,22 @@
+# === ВАРИАНТ 1: Миграция (сохранить данные) ===
+
+# Локально (Windows)
+scp _may_messenger_backend/migrations/update_phone_hashes.sql user@messenger.rare-books.ru:/tmp/
+scp _may_messenger_backend/migrations/deploy.sh user@messenger.rare-books.ru:/tmp/
+
+# На сервере Ubuntu
+ssh user@messenger.rare-books.ru
+cd /path/to/rarebooks && chmod +x /tmp/deploy.sh && /tmp/deploy.sh
+
+# Или вручную
+docker cp /tmp/update_phone_hashes.sql rarebooks-postgres-1:/tmp/ && docker compose exec -T postgres psql -U postgres -d maymessenger -f /tmp/update_phone_hashes.sql && docker compose build maymessenger_backend && docker compose up -d maymessenger_backend
+
+# === ВАРИАНТ 2: Полная пересборка БД (удалить всё) ===
+
+# ⚠️ УДАЛИТ ВСЕ ДАННЫЕ!
+cd /path/to/rarebooks
+docker compose down && docker volume rm rarebooks_postgres_data && docker compose up -d
+
+# === Проверка ===
+docker compose logs maymessenger_backend --tail=20
+curl -k https://messenger.rare-books.ru/health
