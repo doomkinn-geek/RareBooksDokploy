@@ -69,8 +69,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   }
 
   Future<void> sendMessage(String content) async {
-    // #region agent log
-    await _logger.debug('messages_provider.sendMessage.entry', '[H3] sendMessage called', {'chatId': chatId, 'content': content.substring(0, content.length > 20 ? 20 : content.length)});
+    // #region agent log - HYPOTHESIS B
+    await _logger.debug('messages_provider.sendMessage.entry', '[HYP-B] sendMessage called', {'chatId': chatId, 'content': content.substring(0, content.length > 20 ? 20 : content.length), 'currentMessageCount': '${state.messages.length}'});
     // #endregion
     
     state = state.copyWith(isSending: true);
@@ -81,17 +81,21 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         content: content,
       );
       
-      // #region agent log
-      await _logger.debug('messages_provider.sendMessage.sent', '[H3] Message sent via REST API', {'chatId': chatId});
+      // #region agent log - HYPOTHESIS B
+      await _logger.debug('messages_provider.sendMessage.sent', '[HYP-B] Message sent via REST API, waiting for SignalR', {'chatId': chatId});
       // #endregion
       
       // НЕ добавляем локально - сообщение придёт через SignalR
       state = state.copyWith(
         isSending: false,
       );
+      
+      // #region agent log - HYPOTHESIS B
+      await _logger.debug('messages_provider.sendMessage.afterStateUpdate', '[HYP-B] State updated after send, messageCount still: ${state.messages.length}', {'chatId': chatId});
+      // #endregion
     } catch (e) {
       // #region agent log
-      await _logger.error('messages_provider.sendMessage.error', '[H3] Failed to send message', {'error': e.toString()});
+      await _logger.error('messages_provider.sendMessage.error', '[HYP-B] Failed to send message', {'error': e.toString()});
       // #endregion
       
       state = state.copyWith(
@@ -134,14 +138,21 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   }
 
   void addMessage(Message message) {
-    // #region agent log
-    _logger.debug('messages_provider.addMessage.entry', '[H1] addMessage called', {'messageId': message.id, 'chatId': message.chatId, 'currentChatId': chatId, 'currentCount': '${state.messages.length}'});
+    // #region agent log - HYPOTHESIS D
+    _logger.debug('messages_provider.addMessage.entry', '[HYP-D] addMessage called', {
+      'messageId': message.id, 
+      'chatId': message.chatId, 
+      'currentChatId': chatId, 
+      'currentCount': '${state.messages.length}',
+      'senderId': message.senderId,
+      'timestamp': DateTime.now().toIso8601String()
+    });
     // #endregion
     
     // Проверяем, что сообщение для этого чата
     if (message.chatId != chatId) {
-      // #region agent log
-      _logger.debug('messages_provider.addMessage.wrongChat', '[H1] Message for different chat, ignoring', {'messageId': message.id, 'messageChatId': message.chatId, 'currentChatId': chatId});
+      // #region agent log - HYPOTHESIS D
+      _logger.debug('messages_provider.addMessage.wrongChat', '[HYP-D] Message for different chat, ignoring', {'messageId': message.id, 'messageChatId': message.chatId, 'currentChatId': chatId});
       // #endregion
       return;
     }
@@ -149,8 +160,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     // Проверяем, нет ли уже сообщения с таким ID
     final exists = state.messages.any((m) => m.id == message.id);
     
-    // #region agent log
-    _logger.debug('messages_provider.addMessage.check', '[H1] Duplicate check', {'messageId': message.id, 'exists': '$exists'});
+    // #region agent log - HYPOTHESIS D
+    _logger.debug('messages_provider.addMessage.check', '[HYP-D] Duplicate check', {'messageId': message.id, 'exists': '$exists', 'existingIds': state.messages.map((m) => m.id).join(',')});
     // #endregion
     
     if (!exists) {
@@ -159,12 +170,16 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         messages: newMessages,
       );
       
-      // #region agent log
-      _logger.debug('messages_provider.addMessage.added', '[H1] Message added', {'messageId': message.id, 'newCount': '${state.messages.length}'});
+      // #region agent log - HYPOTHESIS D
+      _logger.debug('messages_provider.addMessage.added', '[HYP-D] Message added to state', {
+        'messageId': message.id, 
+        'newCount': '${state.messages.length}',
+        'allIds': state.messages.map((m) => m.id).join(',')
+      });
       // #endregion
     } else {
-      // #region agent log
-      _logger.debug('messages_provider.addMessage.duplicate', '[H1] Message already exists, ignoring', {'messageId': message.id});
+      // #region agent log - HYPOTHESIS D
+      _logger.debug('messages_provider.addMessage.duplicate', '[HYP-D] Message already exists, ignoring', {'messageId': message.id});
       // #endregion
     }
   }

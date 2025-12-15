@@ -72,14 +72,32 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
         // #endregion
 
         // Setup message listener
-        _signalRService.onReceiveMessage((message) {
-          // #region agent log
-          _logger.debug('signalr_provider.onReceiveMessage.entry', '[H1] Message received via SignalR', {'messageId': message.id, 'chatId': message.chatId, 'senderId': message.senderId, 'content': message.content ?? 'audio'});
+        _signalRService.onReceiveMessage((message) async {
+          // #region agent log - HYPOTHESIS A,C
+          await _logger.debug('signalr_provider.onReceiveMessage.entry', '[HYP-A,C] Message received via SignalR', {
+            'messageId': message.id, 
+            'chatId': message.chatId, 
+            'senderId': message.senderId, 
+            'content': message.content ?? 'audio',
+            'timestamp': DateTime.now().toIso8601String()
+          });
+          // #endregion
+          
+          // #region agent log - HYPOTHESIS C
+          final currentUserId = await _authRepository.getStoredToken();
+          await _logger.debug('signalr_provider.onReceiveMessage.userCheck', '[HYP-C] Checking if sender is current user', {
+            'senderId': message.senderId,
+            'hasToken': '${currentUserId != null}'
+          });
           // #endregion
           
           // Send delivery confirmation to backend
           try {
             _signalRService.markMessageAsDelivered(message.id, message.chatId);
+            
+            // #region agent log
+            await _logger.debug('signalr_provider.onReceiveMessage.deliveryMarked', '[HYP-A,C] Delivery confirmation sent', {'messageId': message.id});
+            // #endregion
           } catch (e) {
             print('Failed to send delivery confirmation: $e');
           }
@@ -90,12 +108,12 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
             // If the provider doesn't exist (chat not open), it will be loaded when user opens the chat
             _ref.read(messagesProvider(message.chatId).notifier).addMessage(message);
             
-            // #region agent log
-            _logger.debug('signalr_provider.onReceiveMessage.added', '[H1] Message added to provider', {'messageId': message.id, 'chatId': message.chatId});
+            // #region agent log - HYPOTHESIS C,D
+            await _logger.debug('signalr_provider.onReceiveMessage.added', '[HYP-C,D] Message added to provider', {'messageId': message.id, 'chatId': message.chatId});
             // #endregion
           } catch (e) {
             // #region agent log
-            _logger.error('signalr_provider.onReceiveMessage.providerError', '[H1] Error accessing messages provider', {'error': e.toString(), 'messageId': message.id, 'chatId': message.chatId});
+            await _logger.error('signalr_provider.onReceiveMessage.providerError', '[HYP-C] Error accessing messages provider', {'error': e.toString(), 'messageId': message.id, 'chatId': message.chatId});
             // #endregion
             // Provider might not be initialized yet - that's OK, message will be loaded from API when chat opens
           }

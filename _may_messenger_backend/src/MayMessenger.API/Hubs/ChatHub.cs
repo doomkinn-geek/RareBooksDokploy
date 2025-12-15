@@ -28,22 +28,22 @@ public class ChatHub : Hub
     {
         var userId = GetCurrentUserId();
         
-        // #region agent log
-        MayMessenger.API.Controllers.DiagnosticsController.AddLog($"[H2] SignalR OnConnectedAsync - UserId: {userId}, ConnectionId: {Context.ConnectionId}");
+        // #region agent log - HYPOTHESIS A
+        MayMessenger.API.Controllers.DiagnosticsController.AddLog($"[HYP-A] SignalR OnConnectedAsync - UserId: {userId}, ConnectionId: {Context.ConnectionId}");
         // #endregion
         
         // Join user's chats
         var chats = await _unitOfWork.Chats.GetUserChatsAsync(userId);
         
-        // #region agent log
-        MayMessenger.API.Controllers.DiagnosticsController.AddLog($"[H2] User has {chats.Count()} chats");
+        // #region agent log - HYPOTHESIS A
+        MayMessenger.API.Controllers.DiagnosticsController.AddLog($"[HYP-A] User {userId} has {chats.Count()} chats, adding to groups");
         // #endregion
         
         foreach (var chat in chats)
         {
             await Groups.AddToGroupAsync(Context.ConnectionId, chat.Id.ToString());
-            // #region agent log
-            MayMessenger.API.Controllers.DiagnosticsController.AddLog($"[H2] Added to group - ChatId: {chat.Id}");
+            // #region agent log - HYPOTHESIS A
+            MayMessenger.API.Controllers.DiagnosticsController.AddLog($"[HYP-A] UserId {userId} added to chat group {chat.Id}");
             // #endregion
         }
         

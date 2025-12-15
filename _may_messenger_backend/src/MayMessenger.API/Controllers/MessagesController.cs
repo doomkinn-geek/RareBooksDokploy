@@ -110,22 +110,35 @@ public class MessagesController : ControllerBase
         var chat = await _unitOfWork.Chats.GetByIdAsync(dto.ChatId);
         if (chat != null)
         {
-            // #region agent log
-            DiagnosticsController.AddLog($"[H1,H4-FIX] Chat found, participants count: {chat.Participants.Count}");
+            // #region agent log - HYPOTHESIS A
+            DiagnosticsController.AddLog($"[HYP-A] Chat found, participants count: {chat.Participants.Count}, senderId: {userId}");
             // #endregion
             
             foreach (var participant in chat.Participants)
             {
+                // #region agent log - HYPOTHESIS A
+                var isSender = participant.UserId == userId;
+                DiagnosticsController.AddLog($"[HYP-A] Sending SignalR to user {participant.UserId}, isSender: {isSender}");
+                // #endregion
+                
                 // Send to each participant's connection
                 await _hubContext.Clients.User(participant.UserId.ToString()).SendAsync("ReceiveMessage", messageDto);
                 
-                // #region agent log
-                DiagnosticsController.AddLog($"[H1,H4-FIX] SignalR notification sent to user {participant.UserId}");
+                // #region agent log - HYPOTHESIS A
+                DiagnosticsController.AddLog($"[HYP-A] SignalR .User() called for {participant.UserId}");
                 // #endregion
             }
             
+            // #region agent log - HYPOTHESIS A
+            DiagnosticsController.AddLog($"[HYP-A] Sending SignalR to group: {dto.ChatId}");
+            // #endregion
+            
             // Also send to group for users currently in the chat
             await _hubContext.Clients.Group(dto.ChatId.ToString()).SendAsync("ReceiveMessage", messageDto);
+            
+            // #region agent log - HYPOTHESIS A
+            DiagnosticsController.AddLog($"[HYP-A] SignalR .Group() called for chat {dto.ChatId}");
+            // #endregion
             
             // Send push notifications to offline users
             await SendPushNotificationsAsync(chat, sender, messageDto);
