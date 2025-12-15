@@ -312,7 +312,6 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
                         ),
                       ),
                       title: Text(contact.displayName),
-                      subtitle: Text(contact.phoneNumber),
                     );
                   },
                 ),
