@@ -20,8 +20,19 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Database
+var useSqlite = builder.Configuration.GetValue<bool>("UseSqlite", false);
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    //options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+{
+    if (useSqlite)
+    {
+        options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"));
+    }
+    else
+    {
+        options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"));
+    }
+});
 
 // Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
@@ -90,7 +101,13 @@ builder.Services.AddCors(options =>
                 "https://messenger.rare-books.ru",
                 "https://rare-books.ru",
                 "http://localhost:3000",
-                "http://localhost:5173"
+                "http://localhost:5173",
+                "http://localhost:5000",
+                "http://localhost:5001",
+                "https://localhost:5000",
+                "https://localhost:5001",
+                "http://127.0.0.1:5000",
+                "http://127.0.0.1:5001"
               )
               .AllowAnyMethod()
               .AllowAnyHeader()
@@ -168,7 +185,8 @@ catch (Exception ex)
     app.Logger.LogError(ex, "Failed to initialize Firebase");
 }
 
-app.UseHttpsRedirection();
+// Закомментировано для локальной разработки по HTTP
+// app.UseHttpsRedirection();
 app.UseStaticFiles();
 
 app.UseCors("AllowAll");

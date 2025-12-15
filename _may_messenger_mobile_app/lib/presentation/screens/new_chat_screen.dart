@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import '../../data/services/contacts_service.dart';
-import '../../data/repositories/auth_repository.dart';
 import '../../core/constants/api_constants.dart';
 import '../providers/chats_provider.dart';
 import '../providers/auth_provider.dart';

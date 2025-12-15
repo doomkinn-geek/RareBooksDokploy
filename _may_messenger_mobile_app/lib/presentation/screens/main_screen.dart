@@ -28,6 +28,14 @@ class _MainScreenState extends ConsumerState<MainScreen> with SingleTickerProvid
         setState(() {});
       }
     });
+    
+    // Загружаем чаты после того, как виджет смонтирован
+    // В этот момент токен уже точно восстановлен
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(chatsProvider.notifier).loadChats();
+      }
+    });
   }
 
   @override

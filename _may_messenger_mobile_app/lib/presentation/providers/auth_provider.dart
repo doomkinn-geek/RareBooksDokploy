@@ -150,8 +150,27 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> checkAuth() async {
-    final isAuth = await _authRepository.isAuthenticated();
-    state = state.copyWith(isAuthenticated: isAuth);
+    state = state.copyWith(isLoading: true);
+    
+    try {
+      final isAuth = await _authRepository.isAuthenticated();
+      state = state.copyWith(
+        isAuthenticated: isAuth,
+        isLoading: false,
+      );
+      
+      if (isAuth) {
+        print('Auth: User authenticated, token restored');
+      } else {
+        print('Auth: No valid token found');
+      }
+    } catch (e) {
+      print('Auth: Error checking auth: $e');
+      state = state.copyWith(
+        isAuthenticated: false,
+        isLoading: false,
+      );
+    }
   }
 
   Future<void> register({

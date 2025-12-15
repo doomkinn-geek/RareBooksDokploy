@@ -37,7 +37,8 @@ class ChatsNotifier extends StateNotifier<ChatsState> {
   final dynamic _chatRepository;
 
   ChatsNotifier(this._chatRepository) : super(ChatsState()) {
-    loadChats();
+    // НЕ загружаем чаты автоматически - они будут загружены MainScreen
+    // после того, как токен будет восстановлен
   }
 
   Future<void> loadChats({bool forceRefresh = false}) async {
