@@ -22,8 +22,8 @@ builder.Services.AddSwaggerGen();
 // Database
 var useSqlite = builder.Configuration.GetValue<bool>("UseSqlite", false);
 builder.Services.AddDbContext<AppDbContext>(options =>
-    //options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-{
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+/*{
     if (useSqlite)
     {
         options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"));
@@ -32,7 +32,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     {
         options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"));
     }
-});
+});*/
 
 // Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
