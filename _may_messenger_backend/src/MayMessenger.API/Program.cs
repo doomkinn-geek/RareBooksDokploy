@@ -41,6 +41,7 @@ builder.Services.AddScoped<IMessageRepository, MessageRepository>();
 builder.Services.AddScoped<IInviteLinkRepository, InviteLinkRepository>();
 builder.Services.AddScoped<IFcmTokenRepository, FcmTokenRepository>();
 builder.Services.AddScoped<IContactRepository, ContactRepository>();
+builder.Services.AddScoped<IDeliveryReceiptRepository, DeliveryReceiptRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 // Services

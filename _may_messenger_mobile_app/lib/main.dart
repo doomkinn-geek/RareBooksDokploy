@@ -9,8 +9,13 @@ import 'core/services/notification_service.dart';
 import 'core/services/fcm_service.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/providers/signalr_provider.dart';
+import 'presentation/providers/chats_provider.dart';
 import 'presentation/screens/auth_screen.dart';
 import 'presentation/screens/main_screen.dart';
+import 'presentation/screens/chat_screen.dart';
+
+// Global navigator key for navigation from FCM
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -82,6 +87,21 @@ class MyApp extends ConsumerWidget {
             final fcmService = ref.read(fcmServiceProvider);
             await fcmService.initialize();
             
+            // Setup FCM navigation callback
+            fcmService.onMessageTap = (chatId) async {
+              print('FCM: Opening chat $chatId');
+              
+              // First, refresh chats list to ensure chat exists
+              await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+              
+              // Navigate to chat screen
+              navigatorKey.currentState?.push(
+                MaterialPageRoute(
+                  builder: (context) => ChatScreen(chatId: chatId),
+                ),
+              );
+            };
+            
             // Register token immediately after initialization
             final authRepo = ref.read(authRepositoryProvider);
             final token = await authRepo.getStoredToken();
@@ -112,6 +132,7 @@ class MyApp extends ConsumerWidget {
     }
     
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'May Messenger',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,

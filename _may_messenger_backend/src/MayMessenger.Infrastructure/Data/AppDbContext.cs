@@ -16,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<InviteLink> InviteLinks { get; set; } = null!;
     public DbSet<FcmToken> FcmTokens { get; set; } = null!;
     public DbSet<Contact> Contacts { get; set; } = null!;
+    public DbSet<DeliveryReceipt> DeliveryReceipts { get; set; } = null!;
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -114,6 +115,24 @@ public class AppDbContext : DbContext
             entity.Property(e => e.PhoneNumberHash).IsRequired().HasMaxLength(64);
             entity.Property(e => e.DisplayName).HasMaxLength(100);
             
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // DeliveryReceipt configuration
+        modelBuilder.Entity<DeliveryReceipt>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.MessageId, e.UserId }).IsUnique();
+            entity.HasIndex(e => e.MessageId); // For quick lookup of all receipts for a message
+            
+            entity.HasOne(e => e.Message)
+                .WithMany()
+                .HasForeignKey(e => e.MessageId)
+                .OnDelete(DeleteBehavior.Cascade);
+                
             entity.HasOne(e => e.User)
                 .WithMany()
                 .HasForeignKey(e => e.UserId)

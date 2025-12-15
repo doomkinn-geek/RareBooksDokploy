@@ -2,12 +2,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/message_model.dart';
 import '../../core/services/logger_service.dart';
 import 'auth_provider.dart';
+import 'signalr_provider.dart';
+import 'profile_provider.dart';
 
 final messagesProvider = StateNotifierProvider.family<MessagesNotifier, MessagesState, String>(
   (ref, chatId) {
     // Keep the provider alive even when not used
     ref.keepAlive();
-    return MessagesNotifier(ref.read(messageRepositoryProvider), chatId);
+    return MessagesNotifier(
+      ref.read(messageRepositoryProvider),
+      chatId,
+      ref.read(signalRServiceProvider),
+      ref,
+    );
   },
 );
 
@@ -42,9 +49,16 @@ class MessagesState {
 class MessagesNotifier extends StateNotifier<MessagesState> {
   final dynamic _messageRepository;
   final String chatId;
+  final dynamic _signalRService;
+  final Ref _ref;
   final _logger = LoggerService();
 
-  MessagesNotifier(this._messageRepository, this.chatId) : super(MessagesState()) {
+  MessagesNotifier(
+    this._messageRepository,
+    this.chatId,
+    this._signalRService,
+    this._ref,
+  ) : super(MessagesState()) {
     loadMessages();
   }
 
@@ -152,6 +166,33 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       );
       
       state = state.copyWith(messages: updatedMessages);
+    }
+  }
+
+  Future<void> markMessagesAsRead() async {
+    try {
+      // Get current user ID
+      final profileState = _ref.read(profileProvider);
+      final currentUserId = profileState.profile?.id;
+      
+      if (currentUserId == null) return;
+      
+      // Find all unread messages from other users
+      final unreadMessages = state.messages.where((message) {
+        return message.senderId != currentUserId && 
+               message.status != MessageStatus.read;
+      }).toList();
+      
+      // Mark each message as read via SignalR
+      for (final message in unreadMessages) {
+        try {
+          await _signalRService.markMessageAsRead(message.id, chatId);
+        } catch (e) {
+          print('Failed to mark message ${message.id} as read: $e');
+        }
+      }
+    } catch (e) {
+      print('Failed to mark messages as read: $e');
     }
   }
 }

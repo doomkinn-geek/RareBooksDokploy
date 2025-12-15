@@ -121,6 +121,16 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
           }
         });
 
+        // Setup new chat created listener
+        _signalRService.onNewChatCreated(() {
+          // Refresh chats list when new chat is created
+          try {
+            _ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+          } catch (e) {
+            print('Failed to refresh chats on new chat created: $e');
+          }
+        });
+
         state = state.copyWith(isConnected: true);
       }
     } catch (e) {

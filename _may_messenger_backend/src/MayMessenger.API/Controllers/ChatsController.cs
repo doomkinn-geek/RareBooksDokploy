@@ -1,11 +1,13 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using MayMessenger.Application.DTOs;
 using MayMessenger.Domain.Entities;
 using MayMessenger.Domain.Enums;
 using MayMessenger.Domain.Interfaces;
 using MayMessenger.Infrastructure.Data;
+using MayMessenger.API.Hubs;
 
 namespace MayMessenger.API.Controllers;
 
@@ -16,11 +18,13 @@ public class ChatsController : ControllerBase
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly AppDbContext _context;
+    private readonly IHubContext<ChatHub> _hubContext;
     
-    public ChatsController(IUnitOfWork unitOfWork, AppDbContext context)
+    public ChatsController(IUnitOfWork unitOfWork, AppDbContext context, IHubContext<ChatHub> hubContext)
     {
         _unitOfWork = unitOfWork;
         _context = context;
+        _hubContext = hubContext;
     }
     
     private Guid GetCurrentUserId()
@@ -176,7 +180,7 @@ public class ChatsController : ControllerBase
         
         await _unitOfWork.SaveChangesAsync();
         
-        return Ok(new ChatDto
+        var chatDto = new ChatDto
         {
             Id = chat.Id,
             Type = chat.Type,
@@ -184,7 +188,16 @@ public class ChatsController : ControllerBase
             Avatar = chat.Avatar,
             CreatedAt = chat.CreatedAt,
             UnreadCount = 0
-        });
+        };
+        
+        // Notify all participants (except creator) about new chat via SignalR
+        foreach (var participantId in dto.ParticipantIds)
+        {
+            await _hubContext.Clients.User(participantId.ToString())
+                .SendAsync("NewChatCreated", chatDto);
+        }
+        
+        return Ok(chatDto);
     }
 
     [HttpPost("create-or-get")]
@@ -261,7 +274,7 @@ public class ChatsController : ControllerBase
         await _context.ChatParticipants.AddAsync(participant2);
         await _unitOfWork.SaveChangesAsync();
         
-        return Ok(new ChatDto
+        var chatDto = new ChatDto
         {
             Id = chat.Id,
             Type = chat.Type,
@@ -269,7 +282,13 @@ public class ChatsController : ControllerBase
             Avatar = chat.Avatar,
             CreatedAt = chat.CreatedAt,
             UnreadCount = 0
-        });
+        };
+        
+        // Notify target user about new chat via SignalR
+        await _hubContext.Clients.User(request.TargetUserId.ToString())
+            .SendAsync("NewChatCreated", chatDto);
+        
+        return Ok(chatDto);
     }
 
     [HttpDelete("reset-all")]

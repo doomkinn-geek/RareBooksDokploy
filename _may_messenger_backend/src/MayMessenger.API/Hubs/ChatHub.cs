@@ -86,31 +86,113 @@ public class ChatHub : Hub
     
     public async Task MessageDelivered(Guid messageId, Guid chatId)
     {
+        var userId = GetCurrentUserId();
         var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
-        if (message != null && message.Status == MessageStatus.Sent)
+        
+        if (message == null) return;
+        
+        // Don't create receipt for sender's own message
+        if (message.SenderId == userId) return;
+        
+        // Create or update delivery receipt for this user
+        var receipt = await _unitOfWork.DeliveryReceipts.GetByMessageAndUserAsync(messageId, userId);
+        
+        if (receipt == null)
+        {
+            receipt = new DeliveryReceipt
+            {
+                MessageId = messageId,
+                UserId = userId,
+                DeliveredAt = DateTime.UtcNow
+            };
+            await _unitOfWork.DeliveryReceipts.AddAsync(receipt);
+        }
+        else if (receipt.DeliveredAt == null)
+        {
+            receipt.DeliveredAt = DateTime.UtcNow;
+            await _unitOfWork.DeliveryReceipts.UpdateAsync(receipt);
+        }
+        
+        // If this is the first delivery and message status is Sent, change to Delivered
+        if (message.Status == MessageStatus.Sent)
         {
             message.Status = MessageStatus.Delivered;
             message.DeliveredAt = DateTime.UtcNow;
             await _unitOfWork.Messages.UpdateAsync(message);
             await _unitOfWork.SaveChangesAsync();
             
-            // Notify sender about delivery
-            await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, MessageStatus.Delivered);
+            // Notify all participants about status change
+            await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Delivered);
+        }
+        else
+        {
+            await _unitOfWork.SaveChangesAsync();
         }
     }
     
     public async Task MessageRead(Guid messageId, Guid chatId)
     {
+        var userId = GetCurrentUserId();
         var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
-        if (message != null && message.Status != MessageStatus.Read)
+        var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+        
+        if (message == null || chat == null) return;
+        
+        // Don't create receipt for sender's own message
+        if (message.SenderId == userId) return;
+        
+        // Create or update delivery receipt for this user
+        var receipt = await _unitOfWork.DeliveryReceipts.GetByMessageAndUserAsync(messageId, userId);
+        
+        if (receipt == null)
+        {
+            receipt = new DeliveryReceipt
+            {
+                MessageId = messageId,
+                UserId = userId,
+                DeliveredAt = DateTime.UtcNow,
+                ReadAt = DateTime.UtcNow
+            };
+            await _unitOfWork.DeliveryReceipts.AddAsync(receipt);
+        }
+        else if (receipt.ReadAt == null)
+        {
+            receipt.ReadAt = DateTime.UtcNow;
+            if (receipt.DeliveredAt == null)
+            {
+                receipt.DeliveredAt = DateTime.UtcNow;
+            }
+            await _unitOfWork.DeliveryReceipts.UpdateAsync(receipt);
+        }
+        
+        await _unitOfWork.SaveChangesAsync();
+        
+        // For private chats, mark as read immediately
+        if (chat.Type == ChatType.Private && message.Status != MessageStatus.Read)
         {
             message.Status = MessageStatus.Read;
             message.ReadAt = DateTime.UtcNow;
             await _unitOfWork.Messages.UpdateAsync(message);
             await _unitOfWork.SaveChangesAsync();
             
-            // Notify sender about read status
-            await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, MessageStatus.Read);
+            await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Read);
+        }
+        // For group chats, check if ALL participants (except sender) have read it
+        else if (chat.Type == ChatType.Group)
+        {
+            var participantsCount = chat.Participants.Count;
+            var readCount = await _unitOfWork.DeliveryReceipts.GetReadCountAsync(messageId);
+            
+            // If all participants except sender have read it, mark message as read
+            if (readCount >= participantsCount - 1 && message.Status != MessageStatus.Read)
+            {
+                message.Status = MessageStatus.Read;
+                message.ReadAt = DateTime.UtcNow;
+                await _unitOfWork.Messages.UpdateAsync(message);
+                await _unitOfWork.SaveChangesAsync();
+                
+                await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Read);
+            }
         }
     }
     

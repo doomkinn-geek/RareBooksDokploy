@@ -7,6 +7,7 @@ import '../../data/services/contacts_service.dart';
 import '../../core/constants/api_constants.dart';
 import '../providers/chats_provider.dart';
 import '../providers/auth_provider.dart';
+import 'chat_screen.dart';
 
 final contactsServiceProvider = Provider((ref) => ContactsService(Dio()));
 
@@ -99,13 +100,24 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
         ),
       );
 
-      if (response.statusCode == 200) {
-        // Refresh chats list
-        ref.read(chatsProvider.notifier).loadChats();
+      if (response.statusCode == 200 && mounted) {
+        final chatData = response.data;
+        final chatId = chatData['id'] as String;
         
-        // Navigate back
+        // Refresh chats list with force refresh and wait for completion
+        await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+        
+        // Navigate back and open the chat
         if (mounted) {
           Navigator.pop(context);
+          
+          // Open the chat screen
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => ChatScreen(chatId: chatId),
+            ),
+          );
+          
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Чат с ${contact.displayName} открыт')),
           );

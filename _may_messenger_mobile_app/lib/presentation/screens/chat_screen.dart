@@ -28,6 +28,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _logger.debug('chat_screen.initState', '[H2] ChatScreen opened', {'chatId': widget.chatId});
     // #endregion
     
+    // Add scroll listener to mark messages as read when scrolled to bottom
+    _scrollController.addListener(_onScroll);
+    
     // Join chat via SignalR
     Future.microtask(() async {
       final signalRService = ref.read(signalRServiceProvider);
@@ -45,7 +48,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       // Уведомить NotificationService что пользователь в этом чате
       final notificationService = ref.read(notificationServiceProvider);
       notificationService.setCurrentChat(widget.chatId);
+      
+      // Mark messages as read after a short delay to ensure messages are loaded
+      await Future.delayed(const Duration(milliseconds: 500));
+      ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
     });
+  }
+  
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    
+    // Check if scrolled to bottom (with small threshold)
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+    final threshold = 100.0; // pixels from bottom
+    
+    if (maxScroll - currentScroll <= threshold) {
+      // User is at the bottom, mark messages as read
+      ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
+    }
   }
 
   @override

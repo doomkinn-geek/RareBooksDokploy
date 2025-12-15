@@ -66,6 +66,13 @@ class SignalRService {
     });
   }
 
+  void onNewChatCreated(Function() callback) {
+    _hubConnection?.on('NewChatCreated', (arguments) {
+      // When a new chat is created, just trigger refresh
+      callback();
+    });
+  }
+
   Future<void> joinChat(String chatId) async {
     await _hubConnection?.invoke('JoinChat', args: [chatId]);
   }

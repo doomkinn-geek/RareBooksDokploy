@@ -42,6 +42,12 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       setState(() {
         _isPlaying = state.playing;
       });
+      
+      // Сброс при окончании воспроизведения
+      if (state.processingState == ProcessingState.completed) {
+        _audioPlayer.seek(Duration.zero);
+        _audioPlayer.pause();
+      }
     });
   }
 

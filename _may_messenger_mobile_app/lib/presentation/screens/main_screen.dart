@@ -4,7 +4,7 @@ import '../providers/chats_provider.dart';
 import '../widgets/chat_list_item.dart';
 import 'chat_screen.dart';
 import 'settings_screen.dart';
-import 'create_chat_screen.dart';
+import 'create_group_screen.dart';
 import 'new_chat_screen.dart';
 
 class MainScreen extends ConsumerStatefulWidget {
@@ -66,33 +66,31 @@ class _MainScreenState extends ConsumerState<MainScreen> with SingleTickerProvid
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(text: 'Группы', icon: Icon(Icons.group)),
             Tab(text: 'Личные', icon: Icon(Icons.person)),
+            Tab(text: 'Группы', icon: Icon(Icons.group)),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
-          // Groups Tab
-          _buildChatList(chatsState.groupChats, chatsState.isLoading, chatsState.error),
           // Private Tab
           _buildChatList(chatsState.privateChats, chatsState.isLoading, chatsState.error),
+          // Groups Tab
+          _buildChatList(chatsState.groupChats, chatsState.isLoading, chatsState.error),
         ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           // Определяем тип чата по текущей вкладке
-          // 0 = Группы, 1 = Личные
-          final isGroupChat = _tabController.index == 0;
+          // 0 = Личные, 1 = Группы
+          final isGroupChat = _tabController.index == 1;
           
           if (isGroupChat) {
-            // Для групп используем старый экран
+            // Для групп используем новый экран с контактами
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => CreateChatScreen(
-                  initialIsGroupChat: true,
-                ),
+                builder: (_) => const CreateGroupScreen(),
               ),
             );
           } else {
@@ -105,8 +103,8 @@ class _MainScreenState extends ConsumerState<MainScreen> with SingleTickerProvid
           }
         },
         tooltip: _tabController.index == 0 
-            ? 'Создать группу' 
-            : 'Создать личный чат',
+            ? 'Создать личный чат' 
+            : 'Создать группу',
         child: const Icon(Icons.add),
       ),
     );
