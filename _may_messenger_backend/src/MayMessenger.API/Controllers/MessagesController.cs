@@ -65,15 +65,7 @@ public class MessagesController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<MessageDto>> SendMessage([FromBody] SendMessageDto dto)
     {
-        // #region agent log
-        DiagnosticsController.AddLog($"[H1,H4] REST SendMessage called - ChatId: {dto.ChatId}, Type: {dto.Type}, Content: {dto.Content?.Substring(0, Math.Min(20, dto.Content?.Length ?? 0))}");
-        // #endregion
-        
         var userId = GetCurrentUserId();
-        
-        // #region agent log
-        DiagnosticsController.AddLog($"[H1,H4] SendMessage userId: {userId}");
-        // #endregion
         
         var message = new Message
         {
@@ -86,10 +78,6 @@ public class MessagesController : ControllerBase
         
         await _unitOfWork.Messages.AddAsync(message);
         await _unitOfWork.SaveChangesAsync();
-        
-        // #region agent log
-        DiagnosticsController.AddLog($"[H1,H4] Message saved to DB - Id: {message.Id}");
-        // #endregion
         
         var sender = await _unitOfWork.Users.GetByIdAsync(userId);
         
@@ -110,35 +98,14 @@ public class MessagesController : ControllerBase
         var chat = await _unitOfWork.Chats.GetByIdAsync(dto.ChatId);
         if (chat != null)
         {
-            // #region agent log - HYPOTHESIS A
-            DiagnosticsController.AddLog($"[HYP-A] Chat found, participants count: {chat.Participants.Count}, senderId: {userId}");
-            // #endregion
-            
             foreach (var participant in chat.Participants)
             {
-                // #region agent log - HYPOTHESIS A
-                var isSender = participant.UserId == userId;
-                DiagnosticsController.AddLog($"[HYP-A] Sending SignalR to user {participant.UserId}, isSender: {isSender}");
-                // #endregion
-                
                 // Send to each participant's connection
                 await _hubContext.Clients.User(participant.UserId.ToString()).SendAsync("ReceiveMessage", messageDto);
-                
-                // #region agent log - HYPOTHESIS A
-                DiagnosticsController.AddLog($"[HYP-A] SignalR .User() called for {participant.UserId}");
-                // #endregion
             }
-            
-            // #region agent log - HYPOTHESIS A
-            DiagnosticsController.AddLog($"[HYP-A] Sending SignalR to group: {dto.ChatId}");
-            // #endregion
             
             // Also send to group for users currently in the chat
             await _hubContext.Clients.Group(dto.ChatId.ToString()).SendAsync("ReceiveMessage", messageDto);
-            
-            // #region agent log - HYPOTHESIS A
-            DiagnosticsController.AddLog($"[HYP-A] SignalR .Group() called for chat {dto.ChatId}");
-            // #endregion
             
             // Send push notifications to offline users
             await SendPushNotificationsAsync(chat, sender, messageDto);
@@ -150,10 +117,6 @@ public class MessagesController : ControllerBase
     [HttpPost("audio")]
     public async Task<ActionResult<MessageDto>> SendAudioMessage([FromForm] Guid chatId, IFormFile audioFile)
     {
-        // #region agent log
-        DiagnosticsController.AddLog($"[H5] REST SendAudioMessage called - ChatId: {chatId}");
-        // #endregion
-        
         var userId = GetCurrentUserId();
         
         if (audioFile == null || audioFile.Length == 0)
@@ -170,10 +133,6 @@ public class MessagesController : ControllerBase
         {
             await audioFile.CopyToAsync(stream);
         }
-        
-        // #region agent log
-        DiagnosticsController.AddLog($"[H5] Audio file saved - Path: /audio/{fileName}");
-        // #endregion
         
         var message = new Message
         {
@@ -206,18 +165,10 @@ public class MessagesController : ControllerBase
         var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
         if (chat != null)
         {
-            // #region agent log
-            DiagnosticsController.AddLog($"[H5-FIX] Audio - Chat found, participants count: {chat.Participants.Count}");
-            // #endregion
-            
             foreach (var participant in chat.Participants)
             {
                 // Send to each participant's connection
                 await _hubContext.Clients.User(participant.UserId.ToString()).SendAsync("ReceiveMessage", messageDto);
-                
-                // #region agent log
-                DiagnosticsController.AddLog($"[H5-FIX] Audio SignalR notification sent to user {participant.UserId}");
-                // #endregion
             }
             
             // Also send to group for users currently in the chat

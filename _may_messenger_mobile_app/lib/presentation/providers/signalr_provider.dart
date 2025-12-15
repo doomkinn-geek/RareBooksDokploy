@@ -54,50 +54,16 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
 
   Future<void> _initialize() async {
     try {
-      // #region agent log
-      await _logger.debug('signalr_provider._initialize.entry', '[H5] Initializing SignalR connection', {});
-      // #endregion
-      
       final token = await _authRepository.getStoredToken();
-      
-      // #region agent log
-      await _logger.debug('signalr_provider._initialize.token', '[H5] Token retrieved', {'hasToken': '${token != null}'});
-      // #endregion
       
       if (token != null) {
         await _signalRService.connect(token);
-        
-        // #region agent log
-        await _logger.debug('signalr_provider._initialize.connected', '[H5] SignalR connected, setting up handlers', {});
-        // #endregion
 
         // Setup message listener
-        _signalRService.onReceiveMessage((message) async {
-          // #region agent log - HYPOTHESIS A,C
-          await _logger.debug('signalr_provider.onReceiveMessage.entry', '[HYP-A,C] Message received via SignalR', {
-            'messageId': message.id, 
-            'chatId': message.chatId, 
-            'senderId': message.senderId, 
-            'content': message.content ?? 'audio',
-            'timestamp': DateTime.now().toIso8601String()
-          });
-          // #endregion
-          
-          // #region agent log - HYPOTHESIS C
-          final currentUserId = await _authRepository.getStoredToken();
-          await _logger.debug('signalr_provider.onReceiveMessage.userCheck', '[HYP-C] Checking if sender is current user', {
-            'senderId': message.senderId,
-            'hasToken': '${currentUserId != null}'
-          });
-          // #endregion
-          
+        _signalRService.onReceiveMessage((message) {
           // Send delivery confirmation to backend
           try {
             _signalRService.markMessageAsDelivered(message.id, message.chatId);
-            
-            // #region agent log
-            await _logger.debug('signalr_provider.onReceiveMessage.deliveryMarked', '[HYP-A,C] Delivery confirmation sent', {'messageId': message.id});
-            // #endregion
           } catch (e) {
             print('Failed to send delivery confirmation: $e');
           }
@@ -106,15 +72,9 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
           try {
             // Try to add message to the provider
             // If the provider doesn't exist (chat not open), it will be loaded when user opens the chat
+            // addMessage() will ignore duplicate if message was already added locally
             _ref.read(messagesProvider(message.chatId).notifier).addMessage(message);
-            
-            // #region agent log - HYPOTHESIS C,D
-            await _logger.debug('signalr_provider.onReceiveMessage.added', '[HYP-C,D] Message added to provider', {'messageId': message.id, 'chatId': message.chatId});
-            // #endregion
           } catch (e) {
-            // #region agent log
-            await _logger.error('signalr_provider.onReceiveMessage.providerError', '[HYP-C] Error accessing messages provider', {'error': e.toString(), 'messageId': message.id, 'chatId': message.chatId});
-            // #endregion
             // Provider might not be initialized yet - that's OK, message will be loaded from API when chat opens
           }
           
@@ -124,18 +84,12 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
             
             // Safely find chat, handle case when chats list is empty
             if (chatsState.chats.isEmpty) {
-              // #region agent log
-              _logger.debug('signalr_provider.onReceiveMessage.noChats', '[H1] Chats list is empty, skipping notification', {'messageId': message.id});
-              // #endregion
               return;
             }
             
             final chat = chatsState.chats.firstWhere(
               (c) => c.id == message.chatId,
               orElse: () {
-                // #region agent log
-                _logger.debug('signalr_provider.onReceiveMessage.chatNotFound', '[H1] Chat not found in list, skipping notification', {'messageId': message.id, 'chatId': message.chatId});
-                // #endregion
                 // Return a dummy chat or first chat if available
                 return chatsState.chats.first;
               },
@@ -143,14 +97,8 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
             
             final notificationService = _ref.read(notificationServiceProvider);
             notificationService.showMessageNotification(message, chat.title);
-            
-            // #region agent log
-            _logger.debug('signalr_provider.onReceiveMessage.notificationShown', '[H1] Notification shown', {'messageId': message.id});
-            // #endregion
           } catch (e) {
-            // #region agent log
-            _logger.error('signalr_provider.onReceiveMessage.notificationError', '[H1] Error showing notification', {'error': e.toString(), 'messageId': message.id});
-            // #endregion
+            // Notification error, ignore
           }
         });
 
@@ -174,16 +122,8 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
         });
 
         state = state.copyWith(isConnected: true);
-        
-        // #region agent log
-        await _logger.debug('signalr_provider._initialize.complete', '[H5] SignalR initialization complete', {});
-        // #endregion
       }
     } catch (e) {
-      // #region agent log
-      await _logger.error('signalr_provider._initialize.error', '[H5] SignalR init failed', {'error': e.toString()});
-      // #endregion
-      
       state = state.copyWith(error: e.toString());
     }
   }

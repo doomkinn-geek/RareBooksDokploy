@@ -28,23 +28,12 @@ public class ChatHub : Hub
     {
         var userId = GetCurrentUserId();
         
-        // #region agent log - HYPOTHESIS A
-        MayMessenger.API.Controllers.DiagnosticsController.AddLog($"[HYP-A] SignalR OnConnectedAsync - UserId: {userId}, ConnectionId: {Context.ConnectionId}");
-        // #endregion
-        
         // Join user's chats
         var chats = await _unitOfWork.Chats.GetUserChatsAsync(userId);
-        
-        // #region agent log - HYPOTHESIS A
-        MayMessenger.API.Controllers.DiagnosticsController.AddLog($"[HYP-A] User {userId} has {chats.Count()} chats, adding to groups");
-        // #endregion
         
         foreach (var chat in chats)
         {
             await Groups.AddToGroupAsync(Context.ConnectionId, chat.Id.ToString());
-            // #region agent log - HYPOTHESIS A
-            MayMessenger.API.Controllers.DiagnosticsController.AddLog($"[HYP-A] UserId {userId} added to chat group {chat.Id}");
-            // #endregion
         }
         
         await base.OnConnectedAsync();
@@ -52,10 +41,6 @@ public class ChatHub : Hub
     
     public async Task JoinChat(string chatId)
     {
-        // #region agent log
-        MayMessenger.API.Controllers.DiagnosticsController.AddLog($"[H3] JoinChat called - ChatId: {chatId}, ConnectionId: {Context.ConnectionId}");
-        // #endregion
-        
         await Groups.AddToGroupAsync(Context.ConnectionId, chatId);
     }
     
@@ -66,10 +51,6 @@ public class ChatHub : Hub
     
     public async Task SendMessage(SendMessageDto dto)
     {
-        // #region agent log
-        MayMessenger.API.Controllers.DiagnosticsController.AddLog($"[H1] SignalR SendMessage called - ChatId: {dto.ChatId}, Type: {dto.Type}");
-        // #endregion
-        
         var userId = GetCurrentUserId();
         
         var message = new Message
@@ -83,10 +64,6 @@ public class ChatHub : Hub
         
         await _unitOfWork.Messages.AddAsync(message);
         await _unitOfWork.SaveChangesAsync();
-        
-        // #region agent log
-        MayMessenger.API.Controllers.DiagnosticsController.AddLog($"[H1] SignalR message saved - Id: {message.Id}");
-        // #endregion
         
         var sender = await _unitOfWork.Users.GetByIdAsync(userId);
         
@@ -105,10 +82,6 @@ public class ChatHub : Hub
         
         // Send to all users in the chat
         await Clients.Group(dto.ChatId.ToString()).SendAsync("ReceiveMessage", messageDto);
-        
-        // #region agent log
-        MayMessenger.API.Controllers.DiagnosticsController.AddLog($"[H1] SignalR broadcasted to group: {dto.ChatId}");
-        // #endregion
     }
     
     public async Task MessageDelivered(Guid messageId, Guid chatId)
