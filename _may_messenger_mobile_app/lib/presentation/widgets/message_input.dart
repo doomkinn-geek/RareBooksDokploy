@@ -34,13 +34,20 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
   String? _audioPath;
   Duration _recordDuration = Duration.zero;
   Timer? _timer;
-  double _dragOffset = 0;
+  Offset _dragOffset = Offset.zero;
   AnimationController? _scaleController;
+  AnimationController? _slideController;
+  bool _showCancelHint = false;
+  bool _showLockHint = false;
   
   @override
   void initState() {
     super.initState();
     _scaleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 150),
+    );
+    _slideController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 200),
     );
@@ -52,6 +59,7 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
     _timer?.cancel();
     _audioRecorder.dispose();
     _scaleController?.dispose();
+    _slideController?.dispose();
     super.dispose();
   }
 
@@ -97,9 +105,11 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
           _recordingState = RecordingState.recording;
           _audioPath = audioPath;
           _recordDuration = Duration.zero;
+          _dragOffset = Offset.zero;
         });
 
         _scaleController?.forward();
+        _slideController?.forward();
 
         _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
           if (mounted) {
@@ -124,8 +134,11 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
   }
 
   Future<void> _sendAudio() async {
+    if (_recordingState != RecordingState.recording) return;
+    
     await _stopRecording();
     _scaleController?.reverse();
+    _slideController?.reverse();
     
     if (_audioPath != null && File(_audioPath!).existsSync()) {
       widget.onSendAudio(_audioPath!);
@@ -135,13 +148,16 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
       _recordingState = RecordingState.idle;
       _audioPath = null;
       _recordDuration = Duration.zero;
-      _dragOffset = 0;
+      _dragOffset = Offset.zero;
+      _showCancelHint = false;
+      _showLockHint = false;
     });
   }
 
   Future<void> _cancelRecording() async {
     await _stopRecording();
     _scaleController?.reverse();
+    _slideController?.reverse();
     
     if (_audioPath != null && File(_audioPath!).existsSync()) {
       await File(_audioPath!).delete();
@@ -151,14 +167,20 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
       _recordingState = RecordingState.idle;
       _audioPath = null;
       _recordDuration = Duration.zero;
-      _dragOffset = 0;
+      _dragOffset = Offset.zero;
+      _showCancelHint = false;
+      _showLockHint = false;
     });
   }
 
   void _lockRecording() {
+    _scaleController?.reverse();
+    _slideController?.reverse();
     setState(() {
       _recordingState = RecordingState.locked;
-      _dragOffset = 0;
+      _dragOffset = Offset.zero;
+      _showCancelHint = false;
+      _showLockHint = false;
     });
   }
 
@@ -244,17 +266,34 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
         GestureDetector(
           onLongPressStart: (_) => _startRecording(),
           onLongPressMoveUpdate: (details) {
+            if (_recordingState != RecordingState.recording) return;
+            
             setState(() {
-              _dragOffset = details.localPosition.dx;
+              _dragOffset = Offset(
+                details.localOffsetFromOrigin.dx,
+                details.localOffsetFromOrigin.dy,
+              );
+              
+              // Show hints based on drag direction
+              _showCancelHint = _dragOffset.dx < -50;
+              _showLockHint = _dragOffset.dy < -50;
             });
-            // Lock recording if dragged left more than 100px
-            if (_dragOffset < -100) {
+            
+            // Lock if dragged up more than 100px
+            if (_dragOffset.dy < -100) {
               _lockRecording();
+            }
+            // Cancel if dragged left more than 150px
+            else if (_dragOffset.dx < -150) {
+              _cancelRecording();
             }
           },
           onLongPressEnd: (_) {
             if (_recordingState == RecordingState.recording) {
-              _sendAudio();
+              // Send if not cancelled
+              if (_dragOffset.dx > -150) {
+                _sendAudio();
+              }
             }
           },
           onLongPressCancel: () {
@@ -263,16 +302,23 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
             }
           },
           child: ScaleTransition(
-            scale: Tween<double>(begin: 1.0, end: 1.2).animate(
+            scale: Tween<double>(begin: 1.0, end: 1.3).animate(
               CurvedAnimation(
                 parent: _scaleController!,
-                curve: Curves.easeInOut,
+                curve: Curves.elasticOut,
               ),
             ),
             child: Container(
               padding: const EdgeInsets.all(12),
+              decoration: _recordingState == RecordingState.recording
+                  ? BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    )
+                  : null,
               child: Icon(
                 Icons.mic,
+                size: 28,
                 color: Theme.of(context).colorScheme.primary,
               ),
             ),
@@ -286,46 +332,127 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
     final minutes = _recordDuration.inMinutes;
     final seconds = _recordDuration.inSeconds % 60;
 
-    return Row(
+    return Stack(
+      alignment: Alignment.center,
       children: [
-        IconButton(
-          onPressed: _cancelRecording,
-          icon: const Icon(Icons.delete),
-          color: Colors.red,
+        // Main recording UI
+        Row(
+          children: [
+            // Cancel indicator (left)
+            AnimatedOpacity(
+              opacity: _showCancelHint ? 1.0 : 0.3,
+              duration: const Duration(milliseconds: 150),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                child: Icon(
+                  Icons.delete_outline,
+                  color: _showCancelHint ? Colors.red : Colors.grey,
+                  size: 28,
+                ),
+              ),
+            ),
+            
+            const SizedBox(width: 8),
+            
+            // Recording timer with red dot
+            Expanded(
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: Offset.zero,
+                  end: Offset(_dragOffset.dx / 200, 0),
+                ).animate(_slideController!),
+                child: Row(
+                  children: [
+                    // Animated red dot
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0.0, end: 1.0),
+                      duration: const Duration(milliseconds: 800),
+                      curve: Curves.easeInOut,
+                      builder: (context, value, child) {
+                        return Opacity(
+                          opacity: value,
+                          child: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.red.withOpacity(0.5),
+                                  blurRadius: 8,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                      onEnd: () {
+                        // Restart animation for blinking effect
+                        if (mounted && _recordingState == RecordingState.recording) {
+                          setState(() {});
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Text(
+                      '◀ Отмена',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-        Expanded(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 12,
-                    height: 12,
-                    decoration: const BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                    ),
-                    margin: const EdgeInsets.only(right: 8),
+        
+        // Lock indicator (top)
+        Positioned(
+          top: -60,
+          child: AnimatedOpacity(
+            opacity: _showLockHint ? 1.0 : 0.5,
+            duration: const Duration(milliseconds: 150),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.lock_outline,
+                  color: _showLockHint 
+                      ? Theme.of(context).colorScheme.primary 
+                      : Colors.grey,
+                  size: 24,
+                ),
+                const SizedBox(height: 4),
+                Icon(
+                  Icons.arrow_upward,
+                  color: _showLockHint 
+                      ? Theme.of(context).colorScheme.primary 
+                      : Colors.grey,
+                  size: 20,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Вверх',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: _showLockHint 
+                        ? Theme.of(context).colorScheme.primary 
+                        : Colors.grey[600],
                   ),
-                  Text(
-                    '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '← Сдвиньте для блокировки',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey[600],
-                    ),
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
-        const SizedBox(width: 48), // Space for balance
       ],
     );
   }
