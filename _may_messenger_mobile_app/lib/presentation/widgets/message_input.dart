@@ -222,6 +222,7 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
             ),
           ],
         ),
+        clipBehavior: Clip.none, // Allow overflow for lock indicator
         child: _recordingState == RecordingState.recording
             ? _buildRecordingUI()
             : _buildNormalUI(),
@@ -264,11 +265,14 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
           color: Theme.of(context).colorScheme.primary,
         ),
         GestureDetector(
-          onLongPressStart: (_) => _startRecording(),
+          onLongPressStart: (details) {
+            _startRecording();
+          },
           onLongPressMoveUpdate: (details) {
             if (_recordingState != RecordingState.recording) return;
             
             setState(() {
+              // Use localPosition for relative movement from press start
               _dragOffset = Offset(
                 details.localOffsetFromOrigin.dx,
                 details.localOffsetFromOrigin.dy,
@@ -337,6 +341,7 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
     final micOffsetY = _dragOffset.dy.clamp(-100.0, 0.0);
 
     return Stack(
+      clipBehavior: Clip.none, // Allow overflow
       children: [
         // Main recording UI (fixed position)
         Row(
@@ -446,26 +451,29 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
         
         // Microphone button (moves with drag)
         Positioned(
-          right: 8 + micOffsetX,
-          bottom: micOffsetY,
-          child: Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-                  blurRadius: 12,
-                  spreadRadius: 4,
-                ),
-              ],
-            ),
-            child: const Icon(
-              Icons.mic,
-              color: Colors.white,
-              size: 28,
+          right: 8 - micOffsetX, // Invert X for correct direction
+          bottom: 0 - micOffsetY, // Invert Y for correct direction
+          child: Transform.translate(
+            offset: Offset.zero,
+            child: Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                    blurRadius: 12,
+                    spreadRadius: 4,
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.mic,
+                color: Colors.white,
+                size: 28,
+              ),
             ),
           ),
         ),
