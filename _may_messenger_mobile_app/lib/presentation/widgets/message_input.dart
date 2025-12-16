@@ -272,10 +272,10 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
             if (_recordingState != RecordingState.recording) return;
             
             setState(() {
-              // Use localPosition for relative movement from press start
+              // Calculate offset from original press position
               _dragOffset = Offset(
-                details.localOffsetFromOrigin.dx,
-                details.localOffsetFromOrigin.dy,
+                details.offsetFromOrigin.dx,
+                details.offsetFromOrigin.dy,
               );
               
               // Show hints based on drag direction
@@ -292,11 +292,13 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
               _cancelRecording();
             }
           },
-          onLongPressEnd: (_) {
+          onLongPressEnd: (details) {
             if (_recordingState == RecordingState.recording) {
-              // Send if not cancelled
-              if (_dragOffset.dx > -150) {
+              // Send audio if not cancelled (not dragged too far left)
+              if (_dragOffset.dx > -150 && _dragOffset.dy > -100) {
                 _sendAudio();
+              } else if (_dragOffset.dx <= -150) {
+                // Already cancelled in onLongPressMoveUpdate
               }
             }
           },
