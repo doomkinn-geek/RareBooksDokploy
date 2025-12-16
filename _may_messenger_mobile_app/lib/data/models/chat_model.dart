@@ -13,6 +13,7 @@ class Chat {
   final Message? lastMessage;
   final int unreadCount;
   final DateTime createdAt;
+  final String? otherParticipantId; // For private chats
 
   Chat({
     required this.id,
@@ -22,6 +23,7 @@ class Chat {
     this.lastMessage,
     required this.unreadCount,
     required this.createdAt,
+    this.otherParticipantId,
   });
 
   factory Chat.fromJson(Map<String, dynamic> json) {
@@ -35,6 +37,7 @@ class Chat {
           : null,
       unreadCount: json['unreadCount'] ?? 0,
       createdAt: DateTime.parse(json['createdAt']),
+      otherParticipantId: json['otherParticipantId'],
     );
   }
 
@@ -47,6 +50,7 @@ class Chat {
       'lastMessage': lastMessage?.toJson(),
       'unreadCount': unreadCount,
       'createdAt': createdAt.toIso8601String(),
+      'otherParticipantId': otherParticipantId,
     };
   }
 }

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/messages_provider.dart';
 import '../providers/signalr_provider.dart';
+import '../providers/chats_provider.dart';
+import '../providers/contacts_names_provider.dart';
+import '../../data/models/chat_model.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/logger_service.dart';
 import '../widgets/message_bubble.dart';
@@ -92,6 +95,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final messagesState = ref.watch(messagesProvider(widget.chatId));
+    final chatsState = ref.watch(chatsProvider);
+    final contactsNames = ref.watch(contactsNamesProvider);
+
+    // Find current chat
+    final currentChat = chatsState.chats.firstWhere(
+      (chat) => chat.id == widget.chatId,
+      orElse: () => Chat(
+        id: widget.chatId,
+        type: ChatType.private,
+        title: 'Чат',
+        unreadCount: 0,
+        createdAt: DateTime.now(),
+      ),
+    );
+
+    // Get display title (use contact name for private chats)
+    String displayTitle = currentChat.title;
+    if (currentChat.type == ChatType.private && currentChat.otherParticipantId != null) {
+      final contactName = contactsNames[currentChat.otherParticipantId!];
+      if (contactName != null && contactName.isNotEmpty) {
+        displayTitle = contactName;
+      }
+    }
+    if (displayTitle.isEmpty) {
+      displayTitle = 'Чат';
+    }
 
     // Scroll to bottom when new messages arrive
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -102,7 +131,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Чат'),
+        title: Text(displayTitle),
         actions: [
           IconButton(
             icon: const Icon(Icons.info_outline),

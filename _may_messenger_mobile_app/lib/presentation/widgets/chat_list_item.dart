@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../data/models/chat_model.dart';
+import '../providers/contacts_names_provider.dart';
 
-class ChatListItem extends StatelessWidget {
+class ChatListItem extends ConsumerWidget {
   final Chat chat;
   final VoidCallback onTap;
 
@@ -13,11 +15,24 @@ class ChatListItem extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    // Handle empty title for private chats
-    final displayTitle = chat.title.isEmpty 
-        ? (chat.type == ChatType.private ? 'Приватный чат' : 'Без названия')
-        : chat.title;
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Get contacts mapping
+    final contactsNames = ref.watch(contactsNamesProvider);
+    
+    // For private chats, try to use name from phone contacts
+    String displayTitle = chat.title;
+    
+    if (chat.type == ChatType.private && chat.otherParticipantId != null) {
+      final contactName = contactsNames[chat.otherParticipantId!];
+      if (contactName != null && contactName.isNotEmpty) {
+        displayTitle = contactName;
+      }
+    }
+    
+    // Handle empty title
+    if (displayTitle.isEmpty) {
+      displayTitle = chat.type == ChatType.private ? 'Приватный чат' : 'Без названия';
+    }
     
     return ListTile(
       leading: CircleAvatar(

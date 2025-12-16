@@ -11,6 +11,10 @@ public class ChatDto
     public MessageDto? LastMessage { get; set; }
     public int UnreadCount { get; set; }
     public DateTime CreatedAt { get; set; }
+    
+    // For private chats: userId of the other participant
+    // Used by mobile app to map to local contact name
+    public Guid? OtherParticipantId { get; set; }
 }
 
 

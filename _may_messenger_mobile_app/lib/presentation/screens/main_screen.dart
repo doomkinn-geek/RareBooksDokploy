@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/chats_provider.dart';
+import '../providers/contacts_names_provider.dart';
 import '../widgets/chat_list_item.dart';
 import 'chat_screen.dart';
 import 'settings_screen.dart';
@@ -29,10 +30,13 @@ class _MainScreenState extends ConsumerState<MainScreen> with SingleTickerProvid
       }
     });
     
-    // Загружаем чаты после того, как виджет смонтирован
+    // Загружаем чаты и контакты после того, как виджет смонтирован
     // В этот момент токен уже точно восстановлен
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
+        // Load contacts mapping for displaying names from phone book
+        ref.read(contactsNamesProvider.notifier).loadContactsMapping();
+        // Load chats
         ref.read(chatsProvider.notifier).loadChats();
       }
     });

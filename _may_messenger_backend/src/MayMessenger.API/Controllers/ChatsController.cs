@@ -47,6 +47,8 @@ public class ChatsController : ControllerBase
             
             // For private chats, generate title from other participant's name
             var displayTitle = chat.Title;
+            Guid? otherParticipantId = null;
+            
             if (chat.Type == ChatType.Private)
             {
                 var otherParticipant = chat.Participants
@@ -55,6 +57,7 @@ public class ChatsController : ControllerBase
                 if (otherParticipant != null)
                 {
                     displayTitle = otherParticipant.User.DisplayName;
+                    otherParticipantId = otherParticipant.UserId;
                 }
             }
             
@@ -66,6 +69,7 @@ public class ChatsController : ControllerBase
                 Avatar = chat.Avatar,
                 CreatedAt = chat.CreatedAt,
                 UnreadCount = unreadCount,
+                OtherParticipantId = otherParticipantId,
                 LastMessage = lastMessage != null ? new MessageDto
                 {
                     Id = lastMessage.Id,
