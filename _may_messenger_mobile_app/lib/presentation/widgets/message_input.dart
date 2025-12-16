@@ -205,27 +205,56 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
 
     return SafeArea(
       bottom: true,
-      child: Container(
-        padding: EdgeInsets.only(
-          left: 8,
-          right: 8,
-          top: 8,
-          bottom: MediaQuery.of(context).padding.bottom + 8,
+      child: GestureDetector(
+        // Handle gestures globally when recording
+        onLongPressMoveUpdate: _recordingState == RecordingState.recording
+            ? (details) {
+                setState(() {
+                  _dragOffset = Offset(
+                    details.offsetFromOrigin.dx,
+                    details.offsetFromOrigin.dy,
+                  );
+                  
+                  _showCancelHint = _dragOffset.dx < -50;
+                  _showLockHint = _dragOffset.dy < -50;
+                });
+                
+                if (_dragOffset.dy < -100) {
+                  _lockRecording();
+                } else if (_dragOffset.dx < -150) {
+                  _cancelRecording();
+                }
+              }
+            : null,
+        onLongPressEnd: _recordingState == RecordingState.recording
+            ? (details) {
+                if (_dragOffset.dx > -150 && _dragOffset.dy > -100) {
+                  _sendAudio();
+                }
+              }
+            : null,
+        child: Container(
+          padding: EdgeInsets.only(
+            left: 8,
+            right: 8,
+            top: 8,
+            bottom: MediaQuery.of(context).padding.bottom + 8,
+          ),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 4,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          clipBehavior: Clip.none,
+          child: _recordingState == RecordingState.recording
+              ? _buildRecordingUI()
+              : _buildNormalUI(),
         ),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 4,
-              offset: const Offset(0, -2),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.none, // Allow overflow for lock indicator
-        child: _recordingState == RecordingState.recording
-            ? _buildRecordingUI()
-            : _buildNormalUI(),
       ),
     );
   }
@@ -267,45 +296,6 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
         GestureDetector(
           onLongPressStart: (details) {
             _startRecording();
-          },
-          onLongPressMoveUpdate: (details) {
-            if (_recordingState != RecordingState.recording) return;
-            
-            setState(() {
-              // Calculate offset from original press position
-              _dragOffset = Offset(
-                details.offsetFromOrigin.dx,
-                details.offsetFromOrigin.dy,
-              );
-              
-              // Show hints based on drag direction
-              _showCancelHint = _dragOffset.dx < -50;
-              _showLockHint = _dragOffset.dy < -50;
-            });
-            
-            // Lock if dragged up more than 100px
-            if (_dragOffset.dy < -100) {
-              _lockRecording();
-            }
-            // Cancel if dragged left more than 150px
-            else if (_dragOffset.dx < -150) {
-              _cancelRecording();
-            }
-          },
-          onLongPressEnd: (details) {
-            if (_recordingState == RecordingState.recording) {
-              // Send audio if not cancelled (not dragged too far left)
-              if (_dragOffset.dx > -150 && _dragOffset.dy > -100) {
-                _sendAudio();
-              } else if (_dragOffset.dx <= -150) {
-                // Already cancelled in onLongPressMoveUpdate
-              }
-            }
-          },
-          onLongPressCancel: () {
-            if (_recordingState == RecordingState.recording) {
-              _cancelRecording();
-            }
           },
           child: ScaleTransition(
             scale: Tween<double>(begin: 1.0, end: 1.3).animate(
