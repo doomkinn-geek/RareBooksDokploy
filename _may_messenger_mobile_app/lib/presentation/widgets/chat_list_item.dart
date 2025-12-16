@@ -14,6 +14,23 @@ class ChatListItem extends ConsumerWidget {
     required this.onTap,
   });
 
+  String _formatLastMessage(Map<String, String> contactsNames) {
+    if (chat.lastMessage == null) {
+      return 'Нет сообщений';
+    }
+    
+    final content = chat.lastMessage!.content ?? '[Голосовое сообщение]';
+    
+    // For group chats, prepend sender name
+    if (chat.type == ChatType.group) {
+      final senderName = contactsNames[chat.lastMessage!.senderId] 
+                         ?? chat.lastMessage!.senderName;
+      return '$senderName: $content';
+    }
+    
+    return content;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // Get contacts mapping
@@ -47,20 +64,18 @@ class ChatListItem extends ConsumerWidget {
         displayTitle,
         style: const TextStyle(fontWeight: FontWeight.bold),
       ),
-      subtitle: chat.lastMessage != null
-          ? Text(
-              chat.lastMessage!.content ?? '[Голосовое сообщение]',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            )
-          : const Text('Нет сообщений'),
+      subtitle: Text(
+        _formatLastMessage(contactsNames),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (chat.lastMessage != null)
             Text(
-              DateFormat('HH:mm').format(chat.lastMessage!.createdAt),
+              DateFormat('HH:mm').format(chat.lastMessage!.createdAt.toLocal()),
               style: Theme.of(context).textTheme.bodySmall,
             ),
           if (chat.unreadCount > 0)

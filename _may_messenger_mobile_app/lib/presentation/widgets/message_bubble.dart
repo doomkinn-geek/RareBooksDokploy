@@ -6,6 +6,7 @@ import '../../data/models/message_model.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/services/logger_service.dart';
 import '../providers/profile_provider.dart';
+import '../providers/contacts_names_provider.dart';
 
 class MessageBubble extends ConsumerStatefulWidget {
   final Message message;
@@ -150,6 +151,11 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     final currentUserId = profileState.profile?.id;
     final isMe = currentUserId != null && widget.message.senderId == currentUserId;
     
+    // Get display name from contacts or fallback to server name
+    final contactsNames = ref.watch(contactsNamesProvider);
+    final displayName = contactsNames[widget.message.senderId] 
+                        ?? widget.message.senderName;
+    
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -169,7 +175,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           children: [
             if (!isMe)
               Text(
-                widget.message.senderName,
+                displayName,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: isMe
@@ -231,7 +237,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  DateFormat('HH:mm').format(widget.message.createdAt),
+                  DateFormat('HH:mm').format(widget.message.createdAt.toLocal()),
                   style: TextStyle(
                     fontSize: 10,
                     color: isMe ? Colors.white70 : Colors.grey[600],
