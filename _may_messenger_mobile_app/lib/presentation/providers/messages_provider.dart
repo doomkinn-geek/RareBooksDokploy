@@ -141,7 +141,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     final exists = state.messages.any((m) => m.id == message.id);
     
     if (!exists) {
-      final newMessages = [...state.messages, message];
+      // Добавляем в НАЧАЛО списка, т.к. messages уже reversed
+      // (самые новые сообщения должны быть в начале для отображения внизу в ListView)
+      final newMessages = [message, ...state.messages];
       state = state.copyWith(
         messages: newMessages,
       );
