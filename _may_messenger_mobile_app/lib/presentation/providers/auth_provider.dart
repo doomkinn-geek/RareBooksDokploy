@@ -5,87 +5,94 @@ import '../../data/datasources/local_datasource.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/chat_repository.dart';
 import '../../data/repositories/message_repository.dart';
+import '../../data/services/audio_storage_service.dart';
 import '../../core/services/fcm_service.dart';
 
 // Утилита для форматирования ошибок
 String _formatError(dynamic error) {
   if (error is DioException) {
+    // Try to extract simple message from server response
     if (error.response?.data != null) {
-      // Пытаемся извлечь сообщение из ответа сервера
       final data = error.response!.data;
-      if (data is Map && data.containsKey('message')) {
-        return data['message'];
-      }
-      if (data is Map && data.containsKey('error')) {
-        return data['error'];
-      }
-      if (data is Map && data.containsKey('title')) {
-        return data['title'];
-      }
-      if (data is String) {
-        // Если это HTML или длинный текст, обрезаем
-        if (data.length > 200 || data.contains('<html')) {
-          return 'Ошибка сервера: ${error.response?.statusCode ?? "неизвестная ошибка"}';
+      if (data is Map) {
+        // Extract message from various fields
+        final message = data['message'] ?? data['error'] ?? data['title'];
+        if (message != null && message is String) {
+          return _simplifyMessage(message);
         }
-        return data;
+      }
+      if (data is String && !data.contains('<html') && data.length < 200) {
+        return _simplifyMessage(data);
       }
     }
     
-    // Стандартные сообщения для разных типов ошибок
+    // Simple user-friendly messages for different error types
     switch (error.type) {
       case DioExceptionType.connectionTimeout:
-        return 'Время ожидания подключения истекло';
       case DioExceptionType.sendTimeout:
-        return 'Время отправки запроса истекло';
       case DioExceptionType.receiveTimeout:
-        return 'Время получения ответа истекло';
+        return 'Сервер не отвечает. Проверьте интернет';
+      
+      case DioExceptionType.connectionError:
+        return 'Нет подключения к интернету';
+      
       case DioExceptionType.badResponse:
         final statusCode = error.response?.statusCode;
         switch (statusCode) {
           case 400:
-            return 'Неверные данные запроса';
+            return 'Неверные данные';
           case 401:
             return 'Неверный логин или пароль';
           case 403:
             return 'Доступ запрещен';
           case 404:
-            return 'Ресурс не найден';
+            return 'Данные не найдены';
           case 500:
-            return 'Внутренняя ошибка сервера';
+            return 'Ошибка сервера';
           default:
-            return 'Ошибка сервера (код: $statusCode)';
+            return 'Ошибка подключения';
         }
+      
       case DioExceptionType.cancel:
         return 'Запрос отменен';
-      case DioExceptionType.connectionError:
-        return 'Нет подключения к серверу';
+      
       default:
-        return 'Ошибка сети';
+        return 'Ошибка подключения';
     }
   }
   
-  // Для других типов ошибок
-  final errorString = error.toString();
+  // For other error types, simplify the message
+  return _simplifyMessage(error.toString());
+}
+
+String _simplifyMessage(String message) {
+  // Remove technical details
+  message = message.replaceAll(RegExp(r'Exception:.*', multiLine: true), '');
+  message = message.replaceAll(RegExp(r'Stack trace:.*', multiLine: true), '');
+  message = message.replaceAll(RegExp(r'#\d+\s+.*', multiLine: true), '');
   
-  // Убираем технические детали
-  if (errorString.contains('Exception:')) {
-    final parts = errorString.split('Exception:');
-    if (parts.length > 1) {
-      return parts[1].trim();
-    }
+  // Trim and limit length
+  message = message.trim();
+  if (message.length > 100) {
+    message = message.substring(0, 100);
   }
   
-  // Если сообщение слишком длинное, обрезаем
-  if (errorString.length > 200) {
-    return 'Произошла ошибка при выполнении запроса';
+  // If empty after cleanup, return generic message
+  if (message.isEmpty) {
+    return 'Произошла ошибка';
   }
   
-  return errorString;
+  return message;
 }
 
 // Data Sources
 final apiDataSourceProvider = Provider<ApiDataSource>((ref) => ApiDataSource());
 final localDataSourceProvider = Provider<LocalDataSource>((ref) => LocalDataSource());
+
+// Services
+final audioStorageServiceProvider = Provider<AudioStorageService>((ref) {
+  return AudioStorageService(Dio());
+});
 
 // Repositories
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
@@ -179,6 +186,47 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
     required String password,
     required String inviteCode,
   }) async {
+    // Validate input before sending to server
+    if (phoneNumber.trim().isEmpty) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Введите номер телефона',
+      );
+      return;
+    }
+    
+    if (displayName.trim().isEmpty) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Введите имя',
+      );
+      return;
+    }
+    
+    if (password.isEmpty) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Введите пароль',
+      );
+      return;
+    }
+    
+    if (password.length < 6) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Пароль должен быть не менее 6 символов',
+      );
+      return;
+    }
+    
+    if (inviteCode.trim().isEmpty) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Введите код приглашения',
+      );
+      return;
+    }
+    
     state = state.copyWith(isLoading: true, error: null);
     try {
       final response = await _authRepository.register(
@@ -214,6 +262,23 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
     required String phoneNumber,
     required String password,
   }) async {
+    // Validate input before sending to server
+    if (phoneNumber.trim().isEmpty) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Введите номер телефона',
+      );
+      return;
+    }
+    
+    if (password.isEmpty) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Введите пароль',
+      );
+      return;
+    }
+    
     state = state.copyWith(isLoading: true, error: null);
     try {
       final response = await _authRepository.login(

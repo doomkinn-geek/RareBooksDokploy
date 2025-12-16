@@ -19,6 +19,7 @@ class Message {
   final MessageType type;
   final String? content;
   final String? filePath;
+  final String? localAudioPath;
   final MessageStatus status;
   final DateTime createdAt;
 
@@ -30,6 +31,7 @@ class Message {
     required this.type,
     this.content,
     this.filePath,
+    this.localAudioPath,
     required this.status,
     required this.createdAt,
   });
@@ -43,6 +45,7 @@ class Message {
       type: MessageType.values[json['type']],
       content: json['content'],
       filePath: json['filePath'],
+      localAudioPath: json['localAudioPath'],
       status: MessageStatus.values[json['status']],
       createdAt: DateTime.parse(json['createdAt']),
     );
@@ -57,9 +60,36 @@ class Message {
       'type': type.index,
       'content': content,
       'filePath': filePath,
+      'localAudioPath': localAudioPath,
       'status': status.index,
       'createdAt': createdAt.toIso8601String(),
     };
+  }
+
+  Message copyWith({
+    String? id,
+    String? chatId,
+    String? senderId,
+    String? senderName,
+    MessageType? type,
+    String? content,
+    String? filePath,
+    String? localAudioPath,
+    MessageStatus? status,
+    DateTime? createdAt,
+  }) {
+    return Message(
+      id: id ?? this.id,
+      chatId: chatId ?? this.chatId,
+      senderId: senderId ?? this.senderId,
+      senderName: senderName ?? this.senderName,
+      type: type ?? this.type,
+      content: content ?? this.content,
+      filePath: filePath ?? this.filePath,
+      localAudioPath: localAudioPath ?? this.localAudioPath,
+      status: status ?? this.status,
+      createdAt: createdAt ?? this.createdAt,
+    );
   }
 }
 

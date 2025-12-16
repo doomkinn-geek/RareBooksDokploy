@@ -249,6 +249,119 @@ public class MessagesController : ControllerBase
             _logger.LogError(ex, "Error in SendPushNotificationsAsync");
         }
     }
+    
+    [HttpGet("audio/{messageId}/check")]
+    public async Task<IActionResult> CheckAudioAvailability(Guid messageId)
+    {
+        var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
+        
+        if (message == null)
+        {
+            return NotFound(new { message = "Сообщение не найдено" });
+        }
+        
+        if (message.Type != MessageType.Audio)
+        {
+            return BadRequest(new { message = "Это не голосовое сообщение" });
+        }
+        
+        if (string.IsNullOrEmpty(message.FilePath))
+        {
+            return NotFound(new { 
+                message = "Аудиофайл был удален",
+                isDeleted = true 
+            });
+        }
+        
+        // Check if physical file exists
+        var fileName = message.FilePath.TrimStart('/');
+        var fullPath = Path.Combine(_environment.WebRootPath, fileName);
+        
+        if (!System.IO.File.Exists(fullPath))
+        {
+            // File doesn't exist - mark message
+            message.FilePath = null;
+            message.Content = "[Аудио удалено]";
+            await _unitOfWork.SaveChangesAsync();
+            
+            return NotFound(new { 
+                message = "Аудиофайл больше не доступен",
+                isDeleted = true 
+            });
+        }
+        
+        return Ok(new { 
+            available = true,
+            filePath = message.FilePath 
+        });
+    }
+    
+    [HttpDelete("{messageId}")]
+    public async Task<IActionResult> DeleteMessage(Guid messageId)
+    {
+        var userId = GetCurrentUserId();
+        var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
+        
+        if (message == null)
+        {
+            return NotFound(new { message = "Сообщение не найдено" });
+        }
+        
+        // Only sender can delete their own message
+        if (message.SenderId != userId)
+        {
+            return Forbid();
+        }
+        
+        // Delete audio file if exists
+        if (message.Type == MessageType.Audio && !string.IsNullOrEmpty(message.FilePath))
+        {
+            var fileName = message.FilePath.TrimStart('/');
+            var fullPath = Path.Combine(_environment.WebRootPath, fileName);
+            
+            if (System.IO.File.Exists(fullPath))
+            {
+                try
+                {
+                    System.IO.File.Delete(fullPath);
+                    _logger.LogInformation($"Deleted audio file: {fullPath}");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"Failed to delete audio file: {fullPath}");
+                }
+            }
+        }
+        
+        var chatId = message.ChatId;
+        
+        // Delete message from database
+        await _unitOfWork.Messages.DeleteAsync(message);
+        await _unitOfWork.SaveChangesAsync();
+        
+        // Notify all participants via SignalR
+        var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+        if (chat != null)
+        {
+            var deleteNotification = new
+            {
+                messageId = messageId,
+                chatId = chatId,
+                deletedAt = DateTime.UtcNow
+            };
+            
+            foreach (var participant in chat.Participants)
+            {
+                await _hubContext.Clients.User(participant.UserId.ToString())
+                    .SendAsync("MessageDeleted", deleteNotification);
+            }
+            
+            await _hubContext.Clients.Group(chatId.ToString())
+                .SendAsync("MessageDeleted", deleteNotification);
+        }
+        
+        return Ok(new { message = "Сообщение удалено" });
+    }
 }
 
 

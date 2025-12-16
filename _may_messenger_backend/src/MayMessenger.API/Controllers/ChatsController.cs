@@ -295,6 +295,82 @@ public class ChatsController : ControllerBase
         return Ok(chatDto);
     }
 
+    [HttpDelete("{chatId}")]
+    public async Task<IActionResult> DeleteChat(Guid chatId)
+    {
+        var userId = GetCurrentUserId();
+        var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+        
+        if (chat == null)
+        {
+            return NotFound(new { message = "Чат не найден" });
+        }
+        
+        // Check if user is a participant
+        var isParticipant = chat.Participants.Any(p => p.UserId == userId);
+        if (!isParticipant)
+        {
+            return Forbid();
+        }
+        
+        // Get all messages to delete audio files
+        var messages = await _unitOfWork.Messages.GetChatMessagesAsync(chatId, 0, int.MaxValue);
+        var webRootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+        
+        foreach (var message in messages)
+        {
+            if (message.Type == MessageType.Audio && !string.IsNullOrEmpty(message.FilePath))
+            {
+                var fileName = message.FilePath.TrimStart('/');
+                var fullPath = Path.Combine(webRootPath, fileName);
+                
+                if (System.IO.File.Exists(fullPath))
+                {
+                    try
+                    {
+                        System.IO.File.Delete(fullPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log but continue
+                        Console.WriteLine($"Failed to delete audio: {ex.Message}");
+                    }
+                }
+            }
+            
+            _context.Remove(message);
+        }
+        
+        // Remove all participants
+        foreach (var participant in chat.Participants.ToList())
+        {
+            _context.ChatParticipants.Remove(participant);
+        }
+        
+        // Delete the chat itself
+        _context.Remove(chat);
+        await _unitOfWork.SaveChangesAsync();
+        
+        // Notify all participants via SignalR
+        var deleteNotification = new
+        {
+            chatId = chatId,
+            deletedAt = DateTime.UtcNow,
+            deletedBy = userId
+        };
+        
+        foreach (var participant in chat.Participants)
+        {
+            await _hubContext.Clients.User(participant.UserId.ToString())
+                .SendAsync("ChatDeleted", deleteNotification);
+        }
+        
+        await _hubContext.Clients.Group(chatId.ToString())
+            .SendAsync("ChatDeleted", deleteNotification);
+        
+        return Ok(new { message = "Чат удален" });
+    }
+
     [HttpDelete("reset-all")]
     public async Task<IActionResult> ResetAllChats()
     {

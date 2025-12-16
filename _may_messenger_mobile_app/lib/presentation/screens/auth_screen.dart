@@ -14,6 +14,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _phoneController = TextEditingController();
   final _nameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   final _inviteCodeController = TextEditingController();
   
   bool _isLogin = true;
@@ -25,6 +26,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     _phoneController.dispose();
     _nameController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     _inviteCodeController.dispose();
     _scannerController?.dispose();
     super.dispose();
@@ -135,6 +137,18 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               const SizedBox(height: 16),
               
               if (!_isLogin) ...[
+                TextField(
+                  controller: _confirmPasswordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Подтвердите пароль',
+                    prefixIcon: Icon(Icons.lock_outline),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+              
+              if (!_isLogin) ...[
                 Row(
                   children: [
                     Expanded(
@@ -186,6 +200,17 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                 password: _passwordController.text,
                               );
                         } else {
+                          // Validate password confirmation
+                          if (_passwordController.text != _confirmPasswordController.text) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Пароли не совпадают'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                            return;
+                          }
+                          
                           ref.read(authStateProvider.notifier).register(
                                 phoneNumber: _phoneController.text,
                                 displayName: _nameController.text,

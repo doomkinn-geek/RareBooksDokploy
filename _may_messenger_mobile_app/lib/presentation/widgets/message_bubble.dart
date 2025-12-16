@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -7,6 +8,7 @@ import '../../core/constants/api_constants.dart';
 import '../../core/services/logger_service.dart';
 import '../providers/profile_provider.dart';
 import '../providers/contacts_names_provider.dart';
+import '../providers/auth_provider.dart';
 
 class MessageBubble extends ConsumerStatefulWidget {
   final Message message;
@@ -53,48 +55,100 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   }
 
   Future<void> _playPauseAudio() async {
-    // #region agent log
-    await _logger.debug('message_bubble._playPauseAudio.entry', '[H6] Play/Pause clicked', {
-      'isPlaying': '$_isPlaying',
-      'filePath': '${widget.message.filePath}',
-      'processingState': '${_audioPlayer.processingState}'
-    });
-    // #endregion
-    
     try {
       if (_isPlaying) {
         await _audioPlayer.pause();
       } else {
         if (_audioPlayer.processingState == ProcessingState.idle) {
-          final audioUrl = '${ApiConstants.baseUrl}${widget.message.filePath}';
+          // 1. Check for local audio file first
+          final audioStorageService = ref.read(audioStorageServiceProvider);
+          String? localPath = widget.message.localAudioPath ?? 
+                              await audioStorageService.getLocalAudioPath(widget.message.id);
           
-          // #region agent log
-          await _logger.debug('message_bubble._playPauseAudio.setUrl', '[H6] Setting audio URL', {
-            'fullUrl': audioUrl
-          });
-          // #endregion
-          
-          await _audioPlayer.setUrl(audioUrl);
-          
-          // #region agent log
-          await _logger.debug('message_bubble._playPauseAudio.urlSet', '[H6] URL set successfully', {
-            'duration': '${_audioPlayer.duration}'
-          });
-          // #endregion
+          if (localPath != null && await File(localPath).exists()) {
+            // Use local file
+            await _audioPlayer.setFilePath(localPath);
+          } else {
+            // 2. Try to download from server
+            if (widget.message.filePath == null || widget.message.filePath!.isEmpty) {
+              // File was deleted on server
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Голосовое сообщение больше не доступно'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+              return;
+            }
+            
+            final audioUrl = '${ApiConstants.baseUrl}${widget.message.filePath}';
+            
+            try {
+              // Show loading indicator
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Загрузка аудио...'),
+                    duration: Duration(seconds: 1),
+                  ),
+                );
+              }
+              
+              // Download and save locally
+              localPath = await audioStorageService.saveAudioLocally(
+                widget.message.id, 
+                audioUrl
+              );
+              
+              if (localPath != null) {
+                await _audioPlayer.setFilePath(localPath);
+                
+                // Update cache with local path
+                final localDataSource = ref.read(localDataSourceProvider);
+                await localDataSource.updateMessageLocalAudioPath(
+                  widget.message.chatId,
+                  widget.message.id,
+                  localPath
+                );
+              } else {
+                // Failed to download - file may be deleted
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Голосовое сообщение больше не доступно'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+                return;
+              }
+            } catch (e) {
+              // Network error or file deleted
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Не удалось загрузить аудио'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+              return;
+            }
+          }
         }
         await _audioPlayer.play();
-        
-        // #region agent log
-        await _logger.debug('message_bubble._playPauseAudio.playing', '[H6] Audio playing', {});
-        // #endregion
       }
-    } catch (e, stackTrace) {
-      // #region agent log
-      await _logger.error('message_bubble._playPauseAudio.error', '[H6] Audio error', {
-        'error': e.toString(),
-        'stack': stackTrace.toString().split('\n').take(3).join(' | ')
-      });
-      // #endregion
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ошибка воспроизведения'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 
@@ -142,6 +196,52 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           size: 14,
           color: Colors.red,
         );
+    }
+  }
+
+  Future<void> _showDeleteDialog(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Удалить сообщение'),
+        content: const Text('Сообщение будет удалено у всех участников чата'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      try {
+        await ref.read(messagesProvider(widget.message.chatId).notifier)
+            .deleteMessage(widget.message.id);
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Сообщение удалено'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Не удалось удалить сообщение'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -251,6 +351,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

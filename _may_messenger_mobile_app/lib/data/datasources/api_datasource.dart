@@ -99,6 +99,14 @@ class ApiDataSource {
     }
   }
 
+  Future<void> deleteChat(String chatId) async {
+    try {
+      await _dio.delete('${ApiConstants.chats}/$chatId');
+    } catch (e) {
+      throw Exception('Failed to delete chat: $e');
+    }
+  }
+
   // Messages
   Future<List<Message>> getMessages({
     required String chatId,
@@ -158,6 +166,14 @@ class ApiDataSource {
       return Message.fromJson(response.data);
     } catch (e) {
       throw Exception('Failed to send audio message: $e');
+    }
+  }
+
+  Future<void> deleteMessage(String messageId) async {
+    try {
+      await _dio.delete('${ApiConstants.messages}/$messageId');
+    } catch (e) {
+      throw Exception('Failed to delete message: $e');
     }
   }
 

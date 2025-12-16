@@ -35,6 +35,7 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
   Duration _recordDuration = Duration.zero;
   Timer? _timer;
   Offset _dragOffset = Offset.zero;
+  Offset? _initialPointerPosition;
   AnimationController? _scaleController;
   AnimationController? _slideController;
   bool _showCancelHint = false;
@@ -89,6 +90,11 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
 
     try {
       if (await _audioRecorder.hasPermission()) {
+        // Reset duration BEFORE starting to avoid showing old value
+        setState(() {
+          _recordDuration = Duration.zero;
+        });
+
         final tempDir = await getTemporaryDirectory();
         final audioPath = '${tempDir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
         
@@ -104,8 +110,8 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
         setState(() {
           _recordingState = RecordingState.recording;
           _audioPath = audioPath;
-          _recordDuration = Duration.zero;
           _dragOffset = Offset.zero;
+          // Don't reset _initialPointerPosition as it was set by onPointerDown
         });
 
         _scaleController?.forward();
@@ -149,6 +155,7 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
       _audioPath = null;
       _recordDuration = Duration.zero;
       _dragOffset = Offset.zero;
+      _initialPointerPosition = null;
       _showCancelHint = false;
       _showLockHint = false;
     });
@@ -168,6 +175,7 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
       _audioPath = null;
       _recordDuration = Duration.zero;
       _dragOffset = Offset.zero;
+      _initialPointerPosition = null;
       _showCancelHint = false;
       _showLockHint = false;
     });
@@ -179,6 +187,7 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
     setState(() {
       _recordingState = RecordingState.locked;
       _dragOffset = Offset.zero;
+      _initialPointerPosition = null;
       _showCancelHint = false;
       _showLockHint = false;
     });
@@ -188,58 +197,28 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
   Widget build(BuildContext context) {
     // Show full AudioRecorderWidget when recording is locked
     if (_recordingState == RecordingState.locked) {
-      return AudioRecorderWidget(
-        onSend: (audioPath) {
-          widget.onSendAudio(audioPath);
-          setState(() {
-            _recordingState = RecordingState.idle;
-          });
-        },
-        onCancel: () {
-          setState(() {
-            _recordingState = RecordingState.idle;
-          });
-        },
+      return SafeArea(
+        bottom: true,
+        child: AudioRecorderWidget(
+          onSend: (audioPath) {
+            widget.onSendAudio(audioPath);
+            setState(() {
+              _recordingState = RecordingState.idle;
+            });
+          },
+          onCancel: () {
+            setState(() {
+              _recordingState = RecordingState.idle;
+            });
+          },
+        ),
       );
     }
 
     return SafeArea(
       bottom: true,
-      child: GestureDetector(
-        // Handle gestures globally when recording
-        onLongPressMoveUpdate: _recordingState == RecordingState.recording
-            ? (details) {
-                setState(() {
-                  _dragOffset = Offset(
-                    details.offsetFromOrigin.dx,
-                    details.offsetFromOrigin.dy,
-                  );
-                  
-                  _showCancelHint = _dragOffset.dx < -50;
-                  _showLockHint = _dragOffset.dy < -50;
-                });
-                
-                if (_dragOffset.dy < -100) {
-                  _lockRecording();
-                } else if (_dragOffset.dx < -150) {
-                  _cancelRecording();
-                }
-              }
-            : null,
-        onLongPressEnd: _recordingState == RecordingState.recording
-            ? (details) {
-                if (_dragOffset.dx > -150 && _dragOffset.dy > -100) {
-                  _sendAudio();
-                }
-              }
-            : null,
-        child: Container(
-          padding: EdgeInsets.only(
-            left: 8,
-            right: 8,
-            top: 8,
-            bottom: MediaQuery.of(context).padding.bottom + 8,
-          ),
+      child: Container(
+          padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
             boxShadow: [
@@ -251,76 +230,122 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
             ],
           ),
           clipBehavior: Clip.none,
-          child: _recordingState == RecordingState.recording
-              ? _buildRecordingUI()
-              : _buildNormalUI(),
+          child: Listener(
+            onPointerDown: (event) {
+              if (_recordingState == RecordingState.idle) {
+                // Save initial position when starting to press
+                _initialPointerPosition = event.localPosition;
+              }
+            },
+            onPointerMove: _recordingState == RecordingState.recording
+                ? (event) {
+                    if (_initialPointerPosition != null) {
+                      setState(() {
+                        // Calculate offset from the initial press position
+                        _dragOffset = Offset(
+                          event.localPosition.dx - _initialPointerPosition!.dx,
+                          event.localPosition.dy - _initialPointerPosition!.dy,
+                        );
+                        
+                        _showCancelHint = _dragOffset.dx < -50;
+                        _showLockHint = _dragOffset.dy < -50;
+                      });
+                      
+                      if (_dragOffset.dy < -100) {
+                        _lockRecording();
+                      } else if (_dragOffset.dx < -150) {
+                        _cancelRecording();
+                      }
+                    }
+                  }
+                : null,
+            onPointerUp: (event) {
+              if (_recordingState == RecordingState.recording) {
+                if (_dragOffset.dx > -150 && _dragOffset.dy > -100) {
+                  _sendAudio();
+                } else {
+                  // Already cancelled by swipe, just clean up
+                  _initialPointerPosition = null;
+                }
+              } else {
+                // Pointer up without recording, just clean up
+                _initialPointerPosition = null;
+              }
+            },
+            child: _recordingState == RecordingState.recording
+                ? _buildRecordingUI()
+                : _buildNormalUI(),
+          ),
         ),
-      ),
     );
   }
 
   Widget _buildNormalUI() {
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            controller: _textController,
-            decoration: InputDecoration(
-              hintText: 'Сообщение',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(24),
-                borderSide: BorderSide.none,
+    return SizedBox(
+      height: 56, // Fixed height to match recording UI
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _textController,
+              decoration: InputDecoration(
+                hintText: 'Сообщение',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide.none,
+                ),
+                filled: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
               ),
-              filled: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 8,
-              ),
-            ),
-            maxLines: null,
-            textCapitalization: TextCapitalization.sentences,
-          ),
-        ),
-        const SizedBox(width: 8),
-        IconButton(
-          onPressed: widget.isSending ? null : _sendMessage,
-          icon: widget.isSending
-              ? const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.send),
-          color: Theme.of(context).colorScheme.primary,
-        ),
-        GestureDetector(
-          onLongPressStart: (details) {
-            _startRecording();
-          },
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 1.0, end: 1.3).animate(
-              CurvedAnimation(
-                parent: _scaleController!,
-                curve: Curves.elasticOut,
-              ),
-            ),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: _recordingState == RecordingState.recording
-                  ? BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    )
-                  : null,
-              child: Icon(
-                Icons.mic,
-                size: 28,
-                color: Theme.of(context).colorScheme.primary,
-              ),
+              maxLines: null,
+              textCapitalization: TextCapitalization.sentences,
             ),
           ),
-        ),
-      ],
+          const SizedBox(width: 8),
+          IconButton(
+            onPressed: widget.isSending ? null : _sendMessage,
+            icon: widget.isSending
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.send),
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          GestureDetector(
+            onLongPressStart: (details) {
+              _startRecording();
+            },
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 1.0, end: 1.3).animate(
+                CurvedAnimation(
+                  parent: _scaleController!,
+                  curve: Curves.elasticOut,
+                ),
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: _recordingState == RecordingState.recording
+                    ? BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      )
+                    : null,
+                child: Icon(
+                  Icons.mic,
+                  size: 28,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -332,9 +357,11 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
     final micOffsetX = _dragOffset.dx.clamp(-150.0, 0.0);
     final micOffsetY = _dragOffset.dy.clamp(-100.0, 0.0);
 
-    return Stack(
-      clipBehavior: Clip.none, // Allow overflow
-      children: [
+    return SizedBox(
+      height: 56, // Fixed height to match normal UI
+      child: Stack(
+        clipBehavior: Clip.none, // Allow overflow
+        children: [
         // Main recording UI (fixed position)
         Row(
           children: [
@@ -469,7 +496,8 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
             ),
           ),
         ),
-      ],
+        ],
+      ),
     );
   }
 }

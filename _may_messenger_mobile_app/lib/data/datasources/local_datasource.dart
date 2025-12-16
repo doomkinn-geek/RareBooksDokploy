@@ -72,6 +72,34 @@ class LocalDataSource {
     }
   }
 
+  // Update local audio path for a message
+  Future<void> updateMessageLocalAudioPath(String chatId, String messageId, String localPath) async {
+    try {
+      final box = await Hive.openBox<Map>(_messagesBox);
+      final data = box.get(chatId);
+      if (data == null) return;
+
+      final messages = (data['messages'] as List)
+          .map((json) => Map<String, dynamic>.from(json as Map))
+          .toList();
+      
+      // Find and update the message
+      for (var message in messages) {
+        if (message['id'] == messageId) {
+          message['localAudioPath'] = localPath;
+          break;
+        }
+      }
+      
+      await box.put(chatId, {
+        'messages': messages,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      // Silently fail - not critical
+    }
+  }
+
   Future<void> clearCache() async {
     await Hive.deleteBoxFromDisk(_messagesBox);
     await Hive.deleteBoxFromDisk(_chatsBox);

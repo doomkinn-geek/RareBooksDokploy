@@ -38,6 +38,11 @@ class ChatRepository {
       participantIds: participantIds,
     );
   }
+
+  Future<void> deleteChat(String chatId) async {
+    await _apiDataSource.deleteChat(chatId);
+    // Note: Local cache will be updated via SignalR notification
+  }
 }
 
 

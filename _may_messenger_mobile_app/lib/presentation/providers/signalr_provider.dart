@@ -131,6 +131,38 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
           }
         });
 
+        // Setup message deleted listener
+        _signalRService.onMessageDeleted((data) {
+          try {
+            final messageId = data['messageId'] as String;
+            final chatId = data['chatId'] as String;
+            
+            // Remove message from the chat provider
+            try {
+              _ref.read(messagesProvider(chatId).notifier).removeMessage(messageId);
+            } catch (e) {
+              // Provider not active - that's OK
+            }
+            
+            // Refresh chats list to update last message preview
+            _ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+          } catch (e) {
+            print('[SignalR] Failed to handle MessageDeleted: $e');
+          }
+        });
+
+        // Setup chat deleted listener
+        _signalRService.onChatDeleted((data) {
+          try {
+            final chatId = data['chatId'] as String;
+            
+            // Remove chat from the chats list
+            _ref.read(chatsProvider.notifier).removeChat(chatId);
+          } catch (e) {
+            print('[SignalR] Failed to handle ChatDeleted: $e');
+          }
+        });
+
         state = state.copyWith(isConnected: true);
       }
     } catch (e) {

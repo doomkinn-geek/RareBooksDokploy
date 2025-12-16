@@ -14,6 +14,9 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure WebRootPath for background services
+builder.Configuration["WebRootPath"] = builder.Environment.WebRootPath;
+
 // Add services to the container
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -49,6 +52,9 @@ builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddSingleton<MayMessenger.Application.Services.IFirebaseService, MayMessenger.Application.Services.FirebaseService>();
+
+// Background Services
+builder.Services.AddHostedService<MayMessenger.Application.Services.AudioCleanupService>();
 
 // JWT Authentication
 var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "YourSuperSecretKeyForJWTTokenGeneration123456789";

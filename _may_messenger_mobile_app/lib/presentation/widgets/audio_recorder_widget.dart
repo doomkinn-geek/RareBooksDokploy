@@ -103,7 +103,7 @@ class _AudioRecorderWidgetState extends State<AudioRecorderWidget> {
     final seconds = _duration.inSeconds % 60;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         boxShadow: [
@@ -114,53 +114,47 @@ class _AudioRecorderWidgetState extends State<AudioRecorderWidget> {
           ),
         ],
       ),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: _cancelRecording,
-            icon: const Icon(Icons.delete),
-            color: Colors.red,
-          ),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (_isRecording)
-                      Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                        margin: const EdgeInsets.only(right: 8),
-                      ),
-                    Text(
-                      '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                LinearProgressIndicator(
-                  value: null,
-                  backgroundColor: Colors.grey[300],
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    Theme.of(context).colorScheme.primary,
-                  ),
-                ),
-              ],
+      child: SizedBox(
+        height: 56, // Fixed height to match normal UI
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            IconButton(
+              onPressed: _cancelRecording,
+              icon: const Icon(Icons.delete),
+              color: Colors.red,
             ),
-          ),
-          IconButton(
-            onPressed: _sendAudio,
-            icon: const Icon(Icons.send),
-            color: Theme.of(context).colorScheme.primary,
-          ),
-        ],
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (_isRecording)
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                      margin: const EdgeInsets.only(right: 8),
+                    ),
+                  Text(
+                    '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              onPressed: _sendAudio,
+              icon: const Icon(Icons.send),
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -55,6 +55,11 @@ class MessageRepository {
       audioPath: audioPath,
     );
   }
+
+  Future<void> deleteMessage(String messageId) async {
+    await _apiDataSource.deleteMessage(messageId);
+    // Note: Local cache will be updated via SignalR notification
+  }
 }
 
 

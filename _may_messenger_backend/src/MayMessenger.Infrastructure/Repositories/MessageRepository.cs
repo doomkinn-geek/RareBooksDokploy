@@ -39,6 +39,15 @@ public class MessageRepository : Repository<Message>, IMessageRepository
                        m.Status != MessageStatus.Read)
             .CountAsync(cancellationToken);
     }
+    
+    public async Task<IEnumerable<Message>> GetOldAudioMessagesAsync(DateTime cutoffDate, CancellationToken cancellationToken = default)
+    {
+        return await _dbSet
+            .Where(m => m.Type == MessageType.Audio && 
+                       m.CreatedAt < cutoffDate && 
+                       !string.IsNullOrEmpty(m.FilePath))
+            .ToListAsync(cancellationToken);
+    }
 }
 
 

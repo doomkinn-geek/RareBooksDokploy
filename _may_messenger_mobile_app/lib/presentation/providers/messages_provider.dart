@@ -147,6 +147,53 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       state = state.copyWith(
         messages: newMessages,
       );
+      
+      // Background download for audio messages
+      if (message.type == MessageType.audio && 
+          message.filePath != null && 
+          message.filePath!.isNotEmpty) {
+        _downloadAudioInBackground(message);
+      }
+    }
+  }
+
+  Future<void> _downloadAudioInBackground(Message message) async {
+    try {
+      final audioStorageService = _ref.read(audioStorageServiceProvider);
+      final localDataSource = _ref.read(localDataSourceProvider);
+      
+      // Check if already downloaded
+      final hasLocal = await audioStorageService.hasLocalAudio(message.id);
+      if (hasLocal) return;
+      
+      // Download audio
+      final audioUrl = '${message.filePath}';
+      final localPath = await audioStorageService.saveAudioLocally(
+        message.id,
+        audioUrl.startsWith('http') ? audioUrl : 'https://messenger.rare-books.ru${audioUrl}'
+      );
+      
+      if (localPath != null) {
+        // Update cache
+        await localDataSource.updateMessageLocalAudioPath(
+          message.chatId,
+          message.id,
+          localPath
+        );
+        
+        // Update message in state
+        final messageIndex = state.messages.indexWhere((m) => m.id == message.id);
+        if (messageIndex != -1) {
+          final updatedMessages = [...state.messages];
+          updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
+            localAudioPath: localPath
+          );
+          state = state.copyWith(messages: updatedMessages);
+        }
+      }
+    } catch (e) {
+      // Silently fail - user can download on play
+      print('[MessagesProvider] Background audio download failed: $e');
     }
   }
 
@@ -155,17 +202,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     if (messageIndex != -1) {
       final updatedMessages = [...state.messages];
       final oldMessage = updatedMessages[messageIndex];
-      updatedMessages[messageIndex] = Message(
-        id: oldMessage.id,
-        chatId: oldMessage.chatId,
-        senderId: oldMessage.senderId,
-        senderName: oldMessage.senderName,
-        type: oldMessage.type,
-        content: oldMessage.content,
-        filePath: oldMessage.filePath,
-        status: status,
-        createdAt: oldMessage.createdAt,
-      );
+      updatedMessages[messageIndex] = oldMessage.copyWith(status: status);
       
       state = state.copyWith(messages: updatedMessages);
     }
@@ -196,6 +233,21 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     } catch (e) {
       print('Failed to mark messages as read: $e');
     }
+  }
+
+  Future<void> deleteMessage(String messageId) async {
+    try {
+      await _messageRepository.deleteMessage(messageId);
+      // Message will be removed from state via SignalR notification
+    } catch (e) {
+      print('[MessagesProvider] Failed to delete message: $e');
+      rethrow;
+    }
+  }
+
+  void removeMessage(String messageId) {
+    final updatedMessages = state.messages.where((m) => m.id != messageId).toList();
+    state = state.copyWith(messages: updatedMessages);
   }
 }
 

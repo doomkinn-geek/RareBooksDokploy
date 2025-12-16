@@ -74,6 +74,38 @@ class ChatsNotifier extends StateNotifier<ChatsState> {
       return null;
     }
   }
+
+  Future<void> deleteChat(String chatId) async {
+    try {
+      await _chatRepository.deleteChat(chatId);
+      // Chat will be removed from state via SignalR notification
+    } catch (e) {
+      print('[ChatsProvider] Failed to delete chat: $e');
+      state = state.copyWith(error: e.toString());
+      rethrow;
+    }
+  }
+
+  void removeChat(String chatId) {
+    final updatedChats = state.chats.where((c) => c.id != chatId).toList();
+    state = state.copyWith(chats: updatedChats);
+  }
+
+  void addChat(Chat chat) {
+    final exists = state.chats.any((c) => c.id == chat.id);
+    if (!exists) {
+      state = state.copyWith(chats: [chat, ...state.chats]);
+    }
+  }
+
+  void updateChat(Chat updatedChat) {
+    final index = state.chats.indexWhere((c) => c.id == updatedChat.id);
+    if (index != -1) {
+      final updatedChats = [...state.chats];
+      updatedChats[index] = updatedChat;
+      state = state.copyWith(chats: updatedChats);
+    }
+  }
 }
 
 

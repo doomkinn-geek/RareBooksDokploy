@@ -99,6 +99,36 @@ class SignalRService {
     await _hubConnection?.invoke('TypingIndicator', args: [chatId, isTyping]);
   }
 
+  void onMessageDeleted(Function(Map<String, dynamic>) callback) {
+    _hubConnection?.on('MessageDeleted', (arguments) {
+      if (arguments != null && arguments.isNotEmpty) {
+        final data = arguments[0] as Map<Object?, Object?>;
+        final convertedData = <String, dynamic>{};
+        data.forEach((key, value) {
+          if (key != null) {
+            convertedData[key.toString()] = value;
+          }
+        });
+        callback(convertedData);
+      }
+    });
+  }
+
+  void onChatDeleted(Function(Map<String, dynamic>) callback) {
+    _hubConnection?.on('ChatDeleted', (arguments) {
+      if (arguments != null && arguments.isNotEmpty) {
+        final data = arguments[0] as Map<Object?, Object?>;
+        final convertedData = <String, dynamic>{};
+        data.forEach((key, value) {
+          if (key != null) {
+            convertedData[key.toString()] = value;
+          }
+        });
+        callback(convertedData);
+      }
+    });
+  }
+
   Future<void> disconnect() async {
     await _hubConnection?.stop();
   }
