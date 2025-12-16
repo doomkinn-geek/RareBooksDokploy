@@ -331,125 +331,141 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
   Widget _buildRecordingUI() {
     final minutes = _recordDuration.inMinutes;
     final seconds = _recordDuration.inSeconds % 60;
+    
+    // Calculate mic position based on drag
+    final micOffsetX = _dragOffset.dx.clamp(-150.0, 0.0);
+    final micOffsetY = _dragOffset.dy.clamp(-100.0, 0.0);
 
     return Stack(
-      alignment: Alignment.center,
       children: [
-        // Main recording UI
+        // Main recording UI (fixed position)
         Row(
           children: [
-            // Cancel indicator (left)
+            const SizedBox(width: 16),
+            
+            // Red dot with blink animation
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.0, end: 1.0),
+              duration: const Duration(milliseconds: 800),
+              curve: Curves.easeInOut,
+              builder: (context, value, child) {
+                return Opacity(
+                  opacity: value,
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.red.withOpacity(0.6),
+                          blurRadius: 6,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+              onEnd: () {
+                if (mounted && _recordingState == RecordingState.recording) {
+                  setState(() {});
+                }
+              },
+            ),
+            
+            const SizedBox(width: 12),
+            
+            // Timer
+            Text(
+              '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            
+            const Spacer(),
+            
+            // Cancel hint text
             AnimatedOpacity(
-              opacity: _showCancelHint ? 1.0 : 0.3,
+              opacity: _showCancelHint ? 1.0 : 0.7,
               duration: const Duration(milliseconds: 150),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                child: Icon(
-                  Icons.delete_outline,
-                  color: _showCancelHint ? Colors.red : Colors.grey,
-                  size: 28,
+              child: Text(
+                'Влево — отмена',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: _showCancelHint ? Colors.red : Colors.grey[600],
                 ),
               ),
             ),
             
-            const SizedBox(width: 8),
-            
-            // Recording timer with red dot
-            Expanded(
-              child: SlideTransition(
-                position: Tween<Offset>(
-                  begin: Offset.zero,
-                  end: Offset(_dragOffset.dx / 200, 0),
-                ).animate(_slideController!),
-                child: Row(
-                  children: [
-                    // Animated red dot
-                    TweenAnimationBuilder<double>(
-                      tween: Tween(begin: 0.0, end: 1.0),
-                      duration: const Duration(milliseconds: 800),
-                      curve: Curves.easeInOut,
-                      builder: (context, value, child) {
-                        return Opacity(
-                          opacity: value,
-                          child: Container(
-                            width: 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.red.withOpacity(0.5),
-                                  blurRadius: 8,
-                                  spreadRadius: 2,
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                      onEnd: () {
-                        // Restart animation for blinking effect
-                        if (mounted && _recordingState == RecordingState.recording) {
-                          setState(() {});
-                        }
-                      },
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Text(
-                      '◀ Отмена',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            const SizedBox(width: 80), // Space for mic button
           ],
         ),
         
-        // Lock indicator (top)
+        // Lock indicator (top, above the UI)
         Positioned(
-          top: -60,
+          right: 30,
+          bottom: 70,
           child: AnimatedOpacity(
-            opacity: _showLockHint ? 1.0 : 0.5,
+            opacity: _showLockHint ? 1.0 : 0.0,
             duration: const Duration(milliseconds: 150),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  Icons.lock_outline,
+                  Icons.lock_open,
                   color: _showLockHint 
                       ? Theme.of(context).colorScheme.primary 
                       : Colors.grey,
-                  size: 24,
+                  size: 28,
                 ),
-                const SizedBox(height: 4),
-                Icon(
-                  Icons.arrow_upward,
-                  color: _showLockHint 
-                      ? Theme.of(context).colorScheme.primary 
-                      : Colors.grey,
-                  size: 20,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Вверх',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: _showLockHint 
-                        ? Theme.of(context).colorScheme.primary 
-                        : Colors.grey[600],
+                const SizedBox(height: 8),
+                Container(
+                  width: 2,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        _showLockHint 
+                            ? Theme.of(context).colorScheme.primary 
+                            : Colors.grey,
+                        Colors.transparent,
+                      ],
+                    ),
                   ),
                 ),
               ],
+            ),
+          ),
+        ),
+        
+        // Microphone button (moves with drag)
+        Positioned(
+          right: 8 + micOffsetX,
+          bottom: micOffsetY,
+          child: Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                  blurRadius: 12,
+                  spreadRadius: 4,
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.mic,
+              color: Colors.white,
+              size: 28,
             ),
           ),
         ),
