@@ -9,6 +9,7 @@ import '../../core/services/logger_service.dart';
 import '../providers/profile_provider.dart';
 import '../providers/contacts_names_provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/messages_provider.dart';
 
 class MessageBubble extends ConsumerStatefulWidget {
   final Message message;
@@ -258,10 +259,12 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        constraints: BoxConstraints(
+      child: GestureDetector(
+        onLongPress: isMe ? () => _showDeleteDialog(context) : null,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.7,
         ),
         decoration: BoxDecoration(
@@ -351,7 +354,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             ),
           ],
         ),
-      ),
+        ),
       ),
     );
   }
