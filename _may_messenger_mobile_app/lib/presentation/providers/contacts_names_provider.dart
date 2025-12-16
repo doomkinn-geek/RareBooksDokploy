@@ -21,6 +21,7 @@ class ContactsNamesNotifier extends StateNotifier<Map<String, String>> {
   ContactsNamesNotifier(this._contactsService, this._ref) : super({});
 
   /// Load contacts and build userId -> displayName mapping
+  /// Safe to call - will not crash if permission denied
   Future<void> loadContactsMapping() async {
     try {
       final authRepo = _ref.read(authRepositoryProvider);
@@ -31,6 +32,7 @@ class ContactsNamesNotifier extends StateNotifier<Map<String, String>> {
       }
 
       // Sync contacts with backend and get registered contacts
+      // This may fail if permission is not granted - that's OK
       final registeredContacts = await _contactsService.syncContacts(token);
       
       // Build mapping userId -> displayName
@@ -41,7 +43,10 @@ class ContactsNamesNotifier extends StateNotifier<Map<String, String>> {
       
       state = mapping;
     } catch (e) {
-      print('Failed to load contacts mapping: $e');
+      // Silently fail if contacts permission not granted
+      // User will see server names instead of contact names
+      print('Failed to load contacts mapping (permission may be denied): $e');
+      state = {}; // Empty mapping
     }
   }
 

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:dio/dio.dart';
 import '../../core/constants/api_constants.dart';
 
@@ -59,6 +60,13 @@ class ContactsService {
 
   Future<List<RegisteredContact>> syncContacts(String token) async {
     try {
+      // Check contacts permission first
+      final permissionStatus = await Permission.contacts.status;
+      if (!permissionStatus.isGranted) {
+        print('Contacts permission not granted, skipping sync');
+        return []; // Return empty list if no permission
+      }
+      
       // Get all contacts from phone
       final contacts = await getAllContacts();
       
