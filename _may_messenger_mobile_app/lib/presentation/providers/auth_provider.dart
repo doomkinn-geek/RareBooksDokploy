@@ -5,6 +5,7 @@ import '../../data/datasources/local_datasource.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/chat_repository.dart';
 import '../../data/repositories/message_repository.dart';
+import '../../data/repositories/outbox_repository.dart';
 import '../../data/services/audio_storage_service.dart';
 import '../../core/services/fcm_service.dart';
 
@@ -112,6 +113,12 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
 final messageRepositoryProvider = Provider<MessageRepository>((ref) {
   return MessageRepository(
     ref.read(apiDataSourceProvider),
+    ref.read(localDataSourceProvider),
+  );
+});
+
+final outboxRepositoryProvider = Provider<OutboxRepository>((ref) {
+  return OutboxRepository(
     ref.read(localDataSourceProvider),
   );
 });

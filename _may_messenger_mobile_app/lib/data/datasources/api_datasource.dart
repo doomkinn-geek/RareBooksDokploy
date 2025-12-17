@@ -177,6 +177,34 @@ class ApiDataSource {
     }
   }
 
+  Future<void> batchMarkAsRead(List<String> messageIds) async {
+    try {
+      await _dio.post(
+        '${ApiConstants.messages}/mark-read',
+        data: messageIds,
+      );
+    } catch (e) {
+      throw Exception('Failed to batch mark as read: $e');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getStatusUpdates({
+    required String chatId,
+    DateTime? since,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '${ApiConstants.messages}/$chatId/status-updates',
+        queryParameters: since != null ? {'since': since.toIso8601String()} : null,
+      );
+      return (response.data as List)
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList();
+    } catch (e) {
+      throw Exception('Failed to get status updates: $e');
+    }
+  }
+
   // Users & Profile
   Future<UserProfile> getUserProfile() async {
     try {

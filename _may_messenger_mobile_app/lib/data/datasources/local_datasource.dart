@@ -2,11 +2,13 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/message_model.dart';
 import '../models/chat_model.dart';
+import '../repositories/outbox_repository.dart';
 import '../../core/constants/storage_keys.dart';
 
 class LocalDataSource {
   static const String _messagesBox = 'messages';
   static const String _chatsBox = 'chats';
+  static const String _outboxBox = 'outbox';
 
   // Auth Storage
   Future<void> saveToken(String token) async {
@@ -202,6 +204,116 @@ class LocalDataSource {
   Future<void> clearCache() async {
     await Hive.deleteBoxFromDisk(_messagesBox);
     await Hive.deleteBoxFromDisk(_chatsBox);
+  }
+
+  // ==================== OUTBOX / PENDING MESSAGES ====================
+
+  /// Add a pending message to the outbox
+  Future<void> addPendingMessage(PendingMessage message) async {
+    try {
+      final box = await Hive.openBox<Map>(_outboxBox);
+      await box.put(message.localId, message.toJson());
+    } catch (e) {
+      print('[LocalDataSource] Failed to add pending message: $e');
+      rethrow;
+    }
+  }
+
+  /// Get all pending messages for a specific chat
+  Future<List<PendingMessage>> getPendingMessagesForChat(String chatId) async {
+    try {
+      final box = await Hive.openBox<Map>(_outboxBox);
+      final allMessages = <PendingMessage>[];
+      
+      for (var key in box.keys) {
+        final data = box.get(key);
+        if (data != null) {
+          final message = PendingMessage.fromJson(Map<String, dynamic>.from(data));
+          if (message.chatId == chatId) {
+            allMessages.add(message);
+          }
+        }
+      }
+      
+      // Sort by creation time (oldest first)
+      allMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      return allMessages;
+    } catch (e) {
+      print('[LocalDataSource] Failed to get pending messages for chat: $e');
+      return [];
+    }
+  }
+
+  /// Get all pending messages across all chats
+  Future<List<PendingMessage>> getAllPendingMessages() async {
+    try {
+      final box = await Hive.openBox<Map>(_outboxBox);
+      final allMessages = <PendingMessage>[];
+      
+      for (var key in box.keys) {
+        final data = box.get(key);
+        if (data != null) {
+          final message = PendingMessage.fromJson(Map<String, dynamic>.from(data));
+          allMessages.add(message);
+        }
+      }
+      
+      // Sort by creation time (oldest first)
+      allMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      return allMessages;
+    } catch (e) {
+      print('[LocalDataSource] Failed to get all pending messages: $e');
+      return [];
+    }
+  }
+
+  /// Get a specific pending message by local ID
+  Future<PendingMessage?> getPendingMessageById(String localId) async {
+    try {
+      final box = await Hive.openBox<Map>(_outboxBox);
+      final data = box.get(localId);
+      
+      if (data != null) {
+        return PendingMessage.fromJson(Map<String, dynamic>.from(data));
+      }
+      return null;
+    } catch (e) {
+      print('[LocalDataSource] Failed to get pending message by ID: $e');
+      return null;
+    }
+  }
+
+  /// Update a pending message
+  Future<void> updatePendingMessage(PendingMessage message) async {
+    try {
+      final box = await Hive.openBox<Map>(_outboxBox);
+      await box.put(message.localId, message.toJson());
+    } catch (e) {
+      print('[LocalDataSource] Failed to update pending message: $e');
+      rethrow;
+    }
+  }
+
+  /// Remove a pending message from outbox
+  Future<void> removePendingMessage(String localId) async {
+    try {
+      final box = await Hive.openBox<Map>(_outboxBox);
+      await box.delete(localId);
+    } catch (e) {
+      print('[LocalDataSource] Failed to remove pending message: $e');
+      rethrow;
+    }
+  }
+
+  /// Clear all pending messages (use with caution)
+  Future<void> clearAllPendingMessages() async {
+    try {
+      final box = await Hive.openBox<Map>(_outboxBox);
+      await box.clear();
+      print('[LocalDataSource] Cleared all pending messages');
+    } catch (e) {
+      print('[LocalDataSource] Failed to clear pending messages: $e');
+    }
   }
 }
 

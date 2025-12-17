@@ -61,6 +61,17 @@ class MessageRepository {
     await _apiDataSource.deleteMessage(messageId);
     // Note: Local cache will be updated via SignalR notification
   }
+
+  Future<void> batchMarkAsRead(List<String> messageIds) async {
+    await _apiDataSource.batchMarkAsRead(messageIds);
+  }
+
+  Future<List<Map<String, dynamic>>> getStatusUpdates({
+    required String chatId,
+    DateTime? since,
+  }) async {
+    return await _apiDataSource.getStatusUpdates(chatId: chatId, since: since);
+  }
 }
 
 

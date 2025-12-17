@@ -76,25 +76,52 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
     
     // Setup message listener
         _signalRService.onReceiveMessage((message) {
-          print('[SignalR] Message received: ${message.id} for chat ${message.chatId}');
+          print('[MSG_RECV] Message received via SignalR: ${message.id} for chat ${message.chatId}');
           
-          // Send delivery confirmation to backend
-          try {
-            _signalRService.markMessageAsDelivered(message.id, message.chatId);
-          } catch (e) {
-            print('[SignalR] Failed to send delivery confirmation: $e');
-          }
+          // Check if this message is from us (ignore delivery confirmation for our own messages)
+          final profileState = _ref.read(profileProvider);
+          final currentUserId = profileState.profile?.id;
+          final isFromMe = currentUserId != null && message.senderId == currentUserId;
           
-          // Add message to appropriate chat provider
+          // Add message to appropriate chat provider first
           try {
             // Try to add message to the provider
             // If the provider doesn't exist (chat not open), it will be loaded when user opens the chat
             // addMessage() will ignore duplicate if message was already added locally
             _ref.read(messagesProvider(message.chatId).notifier).addMessage(message);
-            print('[SignalR] Message added to provider for chat ${message.chatId}');
+            print('[MSG_RECV] Message added to provider for chat ${message.chatId}');
           } catch (e) {
             // Provider might not be initialized yet - that's OK, message will be loaded from API when chat opens
-            print('[SignalR] Message provider not initialized for chat ${message.chatId}: $e');
+            print('[MSG_RECV] Message provider not initialized for chat ${message.chatId}: $e');
+          }
+          
+          // Send delivery confirmation to backend (only for messages from others)
+          if (!isFromMe) {
+            try {
+              _signalRService.markMessageAsDelivered(message.id, message.chatId);
+              print('[MSG_RECV] Delivery confirmation sent for message: ${message.id}');
+              
+              // Update local message status to delivered immediately
+              try {
+                _ref.read(messagesProvider(message.chatId).notifier)
+                    .updateMessageStatus(message.id, MessageStatus.delivered);
+              } catch (e) {
+                print('[MSG_RECV] Failed to update local status to delivered: $e');
+              }
+            } catch (e) {
+              print('[MSG_RECV] Failed to send delivery confirmation: $e');
+              // Retry after a delay
+              Future.delayed(const Duration(seconds: 2), () {
+                try {
+                  _signalRService.markMessageAsDelivered(message.id, message.chatId);
+                  print('[MSG_RECV] Delivery confirmation sent (retry): ${message.id}');
+                } catch (retryError) {
+                  print('[MSG_RECV] Delivery confirmation retry failed: $retryError');
+                }
+              });
+            }
+          } else {
+            print('[MSG_RECV] Skipping delivery confirmation for own message: ${message.id}');
           }
           
           // Update chat preview with last message

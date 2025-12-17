@@ -22,6 +22,8 @@ class Message {
   final String? localAudioPath;
   final MessageStatus status;
   final DateTime createdAt;
+  final String? localId; // Client-side UUID for tracking before server confirms
+  final bool isLocalOnly; // True if message hasn't been synced to server yet
 
   Message({
     required this.id,
@@ -34,6 +36,8 @@ class Message {
     this.localAudioPath,
     required this.status,
     required this.createdAt,
+    this.localId,
+    this.isLocalOnly = false,
   });
 
   factory Message.fromJson(Map<String, dynamic> json) {
@@ -48,6 +52,8 @@ class Message {
       localAudioPath: json['localAudioPath'],
       status: MessageStatus.values[json['status']],
       createdAt: DateTime.parse(json['createdAt']),
+      localId: json['localId'],
+      isLocalOnly: json['isLocalOnly'] ?? false,
     );
   }
 
@@ -63,6 +69,8 @@ class Message {
       'localAudioPath': localAudioPath,
       'status': status.index,
       'createdAt': createdAt.toIso8601String(),
+      'localId': localId,
+      'isLocalOnly': isLocalOnly,
     };
   }
 
@@ -77,6 +85,8 @@ class Message {
     String? localAudioPath,
     MessageStatus? status,
     DateTime? createdAt,
+    String? localId,
+    bool? isLocalOnly,
   }) {
     return Message(
       id: id ?? this.id,
@@ -89,6 +99,8 @@ class Message {
       localAudioPath: localAudioPath ?? this.localAudioPath,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
+      localId: localId ?? this.localId,
+      isLocalOnly: isLocalOnly ?? this.isLocalOnly,
     );
   }
 }

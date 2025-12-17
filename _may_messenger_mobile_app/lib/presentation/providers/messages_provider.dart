@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import '../../data/models/message_model.dart';
+import '../../data/services/message_sync_service.dart';
 import '../../core/services/logger_service.dart';
 import 'auth_provider.dart';
 import 'signalr_provider.dart';
@@ -11,6 +13,7 @@ final messagesProvider = StateNotifierProvider.family<MessagesNotifier, Messages
     ref.keepAlive();
     return MessagesNotifier(
       ref.read(messageRepositoryProvider),
+      ref.read(outboxRepositoryProvider),
       chatId,
       ref.read(signalRServiceProvider),
       ref,
@@ -48,31 +51,111 @@ class MessagesState {
 
 class MessagesNotifier extends StateNotifier<MessagesState> {
   final dynamic _messageRepository;
+  final dynamic _outboxRepository;
   final String chatId;
   final dynamic _signalRService;
   final Ref _ref;
-  final _logger = LoggerService();
+  final _uuid = const Uuid();
+  late final MessageSyncService _syncService;
+  bool _isSignalRConnected = true;
 
   MessagesNotifier(
     this._messageRepository,
+    this._outboxRepository,
     this.chatId,
     this._signalRService,
     this._ref,
   ) : super(MessagesState()) {
+    _syncService = MessageSyncService(_messageRepository);
     loadMessages();
+    _monitorSignalRConnection();
+  }
+
+  /// Monitor SignalR connection state and start/stop polling as needed
+  void _monitorSignalRConnection() {
+    // Check connection state periodically
+    Future.delayed(const Duration(seconds: 2), () {
+      if (!mounted) return;
+      
+      final isConnected = _signalRService.isConnected;
+      
+      if (isConnected != _isSignalRConnected) {
+        _isSignalRConnected = isConnected;
+        
+        if (!isConnected) {
+          print('[SYNC] SignalR disconnected, starting status polling for chat: $chatId');
+          _syncService.startPolling(
+            chatId: chatId,
+            onStatusUpdate: (messageId, status) {
+              updateMessageStatus(messageId, status);
+            },
+          );
+        } else {
+          print('[SYNC] SignalR connected, stopping status polling for chat: $chatId');
+          _syncService.stopPolling();
+          // Trigger a final sync to catch any missed updates
+          _syncService.syncNow(
+            chatId: chatId,
+            onStatusUpdate: (messageId, status) {
+              updateMessageStatus(messageId, status);
+            },
+          );
+        }
+      }
+      
+      // Continue monitoring
+      _monitorSignalRConnection();
+    });
+  }
+
+  @override
+  void dispose() {
+    _syncService.dispose();
+    super.dispose();
   }
 
   Future<void> loadMessages({bool forceRefresh = false}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final List<Message> messages = await _messageRepository.getMessages(
+      // Load synced messages from repository (cache or API)
+      final List<Message> syncedMessages = await _messageRepository.getMessages(
         chatId: chatId,
         forceRefresh: forceRefresh,
       );
       
-      // Сортируем сообщения по дате создания (от старых к новым)
-      // ListView без reverse отобразит старые вверху, новые внизу
+      // Load pending messages from outbox
+      final pendingMessages = await _outboxRepository.getPendingMessagesForChat(chatId);
+      final profileState = _ref.read(profileProvider);
+      final currentUser = profileState.profile;
+      
+      // Convert pending messages to Message objects
+      final List<Message> localMessages = pendingMessages
+          .map((pm) => pm.toMessage(
+                currentUser?.id ?? '',
+                currentUser?.displayName ?? 'Me',
+              ))
+          .toList();
+      
+      // Merge synced and local messages, removing duplicates
+      final allMessages = <String, Message>{};
+      
+      // Add synced messages first
+      for (final msg in syncedMessages) {
+        allMessages[msg.id] = msg;
+      }
+      
+      // Add local messages (they won't override synced ones with same ID)
+      for (final msg in localMessages) {
+        if (!allMessages.containsKey(msg.id)) {
+          allMessages[msg.id] = msg;
+        }
+      }
+      
+      // Convert to list and sort by date
+      final messages = allMessages.values.toList();
       messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      
+      print('[MSG_SEND] Loaded ${messages.length} messages (${syncedMessages.length} synced + ${localMessages.length} local)');
       
       state = state.copyWith(
         messages: messages,
@@ -82,7 +165,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       // Гарантируем сохранение в кэш (на случай если репозиторий не сохранил)
       try {
         final localDataSource = _ref.read(localDataSourceProvider);
-        await localDataSource.cacheMessages(chatId, messages);
+        await localDataSource.cacheMessages(chatId, syncedMessages);
       } catch (e) {
         print('[MessagesProvider] Failed to cache messages: $e');
       }
@@ -96,45 +179,168 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   }
 
   Future<void> sendMessage(String content) async {
+    print('[MSG_SEND] Starting local-first send for text message');
     state = state.copyWith(isSending: true);
     
-    // Оптимистичный UI: отправляем запрос асинхронно, не блокируя интерфейс
-    // Сообщение придёт через SignalR (~150ms), не нужно ждать API (~2000ms)
-    _messageRepository.sendMessage(
-      chatId: chatId,
-      type: MessageType.text,
-      content: content,
-    ).then((message) {
-      // SignalR уже добавил сообщение, но на всякий случай добавим и здесь (addMessage проверит дубликат)
-      addMessage(message);
-    }).catchError((e) {
-      print('[MessagesProvider] Send failed: $e');
-      // Показываем ошибку только если сообщение не пришло через SignalR
-      state = state.copyWith(error: e.toString());
-    });
-    
-    // Сразу снимаем индикатор отправки - сообщение будет добавлено через SignalR
-    // Это даёт моментальный отклик пользователю
-    state = state.copyWith(isSending: false);
+    try {
+      final profileState = _ref.read(profileProvider);
+      final currentUser = profileState.profile;
+      
+      if (currentUser == null) {
+        throw Exception('User not authenticated');
+      }
+      
+      // STEP 1: Create message locally with temporary ID
+      final localId = _uuid.v4();
+      final now = DateTime.now();
+      
+      final localMessage = Message(
+        id: localId, // Temporary local ID
+        chatId: chatId,
+        senderId: currentUser.id,
+        senderName: currentUser.displayName,
+        type: MessageType.text,
+        content: content,
+        status: MessageStatus.sending,
+        createdAt: now,
+        localId: localId,
+        isLocalOnly: true,
+      );
+      
+      // STEP 2: Add to UI immediately (optimistic update)
+      final updatedMessages = [...state.messages, localMessage];
+      updatedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      state = state.copyWith(messages: updatedMessages, isSending: false);
+      print('[MSG_SEND] Message added to UI with local ID: $localId');
+      
+      // STEP 3: Add to outbox queue for persistence
+      await _outboxRepository.addToOutbox(
+        chatId: chatId,
+        type: MessageType.text,
+        content: content,
+      );
+      
+      // STEP 4: Send to backend asynchronously
+      _syncMessageToBackend(localId, MessageType.text, content: content);
+      
+    } catch (e) {
+      print('[MSG_SEND] Failed to create local message: $e');
+      state = state.copyWith(
+        isSending: false,
+        error: e.toString(),
+      );
+    }
+  }
+  
+  /// Sync a local message to the backend
+  Future<void> _syncMessageToBackend(String localId, MessageType type, {String? content, String? audioPath}) async {
+    try {
+      print('[MSG_SEND] Syncing message to backend: $localId');
+      await _outboxRepository.markAsSyncing(localId);
+      
+      // Send via API
+      final Message serverMessage;
+      if (type == MessageType.text) {
+        serverMessage = await _messageRepository.sendMessage(
+          chatId: chatId,
+          type: type,
+          content: content,
+        );
+      } else {
+        serverMessage = await _messageRepository.sendAudioMessage(
+          chatId: chatId,
+          audioPath: audioPath!,
+        );
+      }
+      
+      print('[MSG_SEND] Message synced successfully. Server ID: ${serverMessage.id}');
+      
+      // Mark as synced in outbox
+      await _outboxRepository.markAsSynced(localId, serverMessage.id);
+      
+      // Update message in UI: replace local ID with server ID and update status
+      final messageIndex = state.messages.indexWhere((m) => m.id == localId);
+      if (messageIndex != -1) {
+        final updatedMessages = [...state.messages];
+        updatedMessages[messageIndex] = serverMessage.copyWith(
+          localId: localId,
+          isLocalOnly: false,
+        );
+        state = state.copyWith(messages: updatedMessages);
+        print('[MSG_SEND] Message updated in UI with server ID: ${serverMessage.id}');
+      }
+      
+      // Clean up outbox after a delay (keep for retry capability)
+      Future.delayed(const Duration(minutes: 1), () {
+        _outboxRepository.removePendingMessage(localId);
+      });
+      
+    } catch (e) {
+      print('[MSG_SEND] Failed to sync message to backend: $e');
+      
+      // Mark as failed in outbox
+      await _outboxRepository.markAsFailed(localId, e.toString());
+      
+      // Update message status to failed in UI
+      final messageIndex = state.messages.indexWhere((m) => m.id == localId);
+      if (messageIndex != -1) {
+        final updatedMessages = [...state.messages];
+        updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
+          status: MessageStatus.failed,
+        );
+        state = state.copyWith(messages: updatedMessages);
+        print('[MSG_SEND] Message marked as failed in UI: $localId');
+      }
+    }
   }
 
   Future<void> sendAudioMessage(String audioPath) async {
+    print('[MSG_SEND] Starting local-first send for audio message');
     state = state.copyWith(isSending: true);
+    
     try {
-      // Send via REST API and get the message back
-      final message = await _messageRepository.sendAudioMessage(
+      final profileState = _ref.read(profileProvider);
+      final currentUser = profileState.profile;
+      
+      if (currentUser == null) {
+        throw Exception('User not authenticated');
+      }
+      
+      // STEP 1: Create message locally with temporary ID
+      final localId = _uuid.v4();
+      final now = DateTime.now();
+      
+      final localMessage = Message(
+        id: localId, // Temporary local ID
         chatId: chatId,
-        audioPath: audioPath,
+        senderId: currentUser.id,
+        senderName: currentUser.displayName,
+        type: MessageType.audio,
+        localAudioPath: audioPath,
+        status: MessageStatus.sending,
+        createdAt: now,
+        localId: localId,
+        isLocalOnly: true,
       );
       
-      // Add message locally immediately
-      // If SignalR also sends it, addMessage() will ignore duplicate
-      addMessage(message);
+      // STEP 2: Add to UI immediately (optimistic update)
+      final updatedMessages = [...state.messages, localMessage];
+      updatedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      state = state.copyWith(messages: updatedMessages, isSending: false);
+      print('[MSG_SEND] Audio message added to UI with local ID: $localId');
       
-      state = state.copyWith(
-        isSending: false,
+      // STEP 3: Add to outbox queue for persistence
+      await _outboxRepository.addToOutbox(
+        chatId: chatId,
+        type: MessageType.audio,
+        localAudioPath: audioPath,
       );
+      
+      // STEP 4: Send to backend asynchronously
+      _syncMessageToBackend(localId, MessageType.audio, audioPath: audioPath);
+      
     } catch (e) {
+      print('[MSG_SEND] Failed to create local audio message: $e');
       state = state.copyWith(
         isSending: false,
         error: e.toString(),
@@ -148,25 +354,72 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       return;
     }
     
-    // Проверяем, нет ли уже сообщения с таким ID
+    print('[MSG_RECV] Received message via SignalR: ${message.id}');
+    
+    // Check if this is a replacement for a local message
+    // (when our own message comes back from server via SignalR)
+    final profileState = _ref.read(profileProvider);
+    final currentUserId = profileState.profile?.id;
+    final isFromMe = currentUserId != null && message.senderId == currentUserId;
+    
+    // If message is from me, check if we have a local version to replace
+    if (isFromMe) {
+      // Look for a pending local message with same content/time
+      final localIndex = state.messages.indexWhere((m) => 
+        m.isLocalOnly && 
+        m.chatId == message.chatId &&
+        m.content == message.content &&
+        m.type == message.type &&
+        m.createdAt.difference(message.createdAt).abs().inSeconds < 5
+      );
+      
+      if (localIndex != -1) {
+        // Replace local message with server message
+        final updatedMessages = [...state.messages];
+        final localMessage = updatedMessages[localIndex];
+        updatedMessages[localIndex] = message.copyWith(
+          localId: localMessage.localId,
+          isLocalOnly: false,
+        );
+        state = state.copyWith(messages: updatedMessages);
+        print('[MSG_RECV] Replaced local message with server message: ${message.id}');
+        
+        // Clean up outbox if we have a local ID
+        if (localMessage.localId != null) {
+          _outboxRepository.markAsSynced(localMessage.localId!, message.id);
+        }
+        
+        // Cache the server message
+        try {
+          final localDataSource = _ref.read(localDataSourceProvider);
+          localDataSource.addMessageToCache(chatId, message);
+        } catch (e) {
+          print('[MSG_RECV] Failed to cache message: $e');
+        }
+        return;
+      }
+    }
+    
+    // Check if message already exists by ID
     final exists = state.messages.any((m) => m.id == message.id);
     
     if (!exists) {
-      // Добавляем новое сообщение и сортируем по дате
+      // Add new message and sort by date
       final newMessages = [...state.messages, message];
-      // Сортируем по дате создания (от старых к новым)
       newMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       
       state = state.copyWith(
         messages: newMessages,
       );
       
-      // Сохраняем сообщение в кэш для персистентности
+      print('[MSG_RECV] Added new message to state: ${message.id}');
+      
+      // Save message to cache for persistence
       try {
         final localDataSource = _ref.read(localDataSourceProvider);
         localDataSource.addMessageToCache(chatId, message);
       } catch (e) {
-        print('[MessagesProvider] Failed to cache message: $e');
+        print('[MSG_RECV] Failed to cache message: $e');
       }
       
       // Background download for audio messages
@@ -175,6 +428,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
           message.filePath!.isNotEmpty) {
         _downloadAudioInBackground(message);
       }
+    } else {
+      print('[MSG_RECV] Message already exists, ignoring: ${message.id}');
     }
   }
 
@@ -262,16 +517,32 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
                message.status != MessageStatus.read;
       }).toList();
       
-      // Mark each message as read via SignalR
+      if (unreadMessages.isEmpty) return;
+      
+      print('[STATUS_UPDATE] Marking ${unreadMessages.length} messages as read');
+      
+      // Batch mark via SignalR (for real-time)
       for (final message in unreadMessages) {
         try {
           await _signalRService.markMessageAsRead(message.id, chatId);
+          
+          // Update local status immediately
+          updateMessageStatus(message.id, MessageStatus.read);
         } catch (e) {
-          print('Failed to mark message ${message.id} as read: $e');
+          print('[STATUS_UPDATE] Failed to mark message ${message.id} as read via SignalR: $e');
         }
       }
+      
+      // Also send batch request via REST API as fallback
+      try {
+        final messageIds = unreadMessages.map((m) => m.id).toList();
+        await _messageRepository.batchMarkAsRead(messageIds);
+        print('[STATUS_UPDATE] Batch read confirmation sent via REST API');
+      } catch (e) {
+        print('[STATUS_UPDATE] Failed to send batch read via REST API: $e');
+      }
     } catch (e) {
-      print('Failed to mark messages as read: $e');
+      print('[STATUS_UPDATE] Failed to mark messages as read: $e');
     }
   }
 

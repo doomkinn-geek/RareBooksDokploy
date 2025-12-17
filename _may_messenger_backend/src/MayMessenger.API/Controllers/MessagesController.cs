@@ -44,7 +44,54 @@ public class MessagesController : ControllerBase
     [HttpGet("{chatId}")]
     public async Task<ActionResult<IEnumerable<MessageDto>>> GetMessages(Guid chatId, [FromQuery] int skip = 0, [FromQuery] int take = 50)
     {
+        var userId = GetCurrentUserId();
         var messages = await _unitOfWork.Messages.GetChatMessagesAsync(chatId, skip, take);
+        
+        // Mark messages as delivered when retrieved (automatic delivery tracking)
+        var undeliveredMessages = messages.Where(m => 
+            m.SenderId != userId && 
+            m.Status == MessageStatus.Sent
+        ).ToList();
+        
+        if (undeliveredMessages.Any())
+        {
+            _logger.LogInformation($"Auto-marking {undeliveredMessages.Count} messages as delivered for user {userId}");
+            
+            foreach (var message in undeliveredMessages)
+            {
+                // Create or update delivery receipt
+                var receipt = await _unitOfWork.DeliveryReceipts.GetByMessageAndUserAsync(message.Id, userId);
+                if (receipt == null)
+                {
+                    receipt = new DeliveryReceipt
+                    {
+                        MessageId = message.Id,
+                        UserId = userId,
+                        DeliveredAt = DateTime.UtcNow
+                    };
+                    await _unitOfWork.DeliveryReceipts.AddAsync(receipt);
+                }
+                else if (receipt.DeliveredAt == null)
+                {
+                    receipt.DeliveredAt = DateTime.UtcNow;
+                    await _unitOfWork.DeliveryReceipts.UpdateAsync(receipt);
+                }
+                
+                // Update message status to delivered
+                if (message.Status == MessageStatus.Sent)
+                {
+                    message.Status = MessageStatus.Delivered;
+                    message.DeliveredAt = DateTime.UtcNow;
+                    await _unitOfWork.Messages.UpdateAsync(message);
+                    
+                    // Notify via SignalR
+                    await _hubContext.Clients.Group(chatId.ToString())
+                        .SendAsync("MessageStatusUpdated", message.Id, (int)MessageStatus.Delivered);
+                }
+            }
+            
+            await _unitOfWork.SaveChangesAsync();
+        }
         
         var messageDtos = messages.Select(m => new MessageDto
         {
@@ -60,6 +107,33 @@ public class MessagesController : ControllerBase
         });
         
         return Ok(messageDtos);
+    }
+    
+    /// <summary>
+    /// Get status updates for messages in a chat (for polling fallback)
+    /// </summary>
+    [HttpGet("{chatId}/status-updates")]
+    public async Task<ActionResult<IEnumerable<object>>> GetStatusUpdates(Guid chatId, [FromQuery] DateTime? since = null)
+    {
+        var sinceTime = since ?? DateTime.UtcNow.AddHours(-1);
+        var messages = await _unitOfWork.Messages.GetChatMessagesAsync(chatId, 0, 100);
+        
+        // Filter messages that have status updates after 'since' time
+        var updates = messages
+            .Where(m => m.DeliveredAt > sinceTime || m.ReadAt > sinceTime)
+            .Select(m => new
+            {
+                messageId = m.Id,
+                status = (int)m.Status,
+                deliveredAt = m.DeliveredAt,
+                readAt = m.ReadAt,
+                updatedAt = m.ReadAt ?? m.DeliveredAt ?? m.CreatedAt
+            })
+            .OrderBy(u => u.updatedAt)
+            .ToList();
+        
+        _logger.LogInformation($"Returning {updates.Count} status updates for chat {chatId} since {sinceTime}");
+        return Ok(updates);
     }
     
     [HttpPost]
@@ -294,6 +368,81 @@ public class MessagesController : ControllerBase
             available = true,
             filePath = message.FilePath 
         });
+    }
+    
+    /// <summary>
+    /// Batch mark messages as read
+    /// </summary>
+    [HttpPost("mark-read")]
+    public async Task<IActionResult> BatchMarkAsRead([FromBody] List<Guid> messageIds)
+    {
+        var userId = GetCurrentUserId();
+        _logger.LogInformation($"Batch marking {messageIds.Count} messages as read for user {userId}");
+        
+        foreach (var messageId in messageIds)
+        {
+            var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
+            if (message == null) continue;
+            
+            // Don't mark own messages as read
+            if (message.SenderId == userId) continue;
+            
+            var chat = await _unitOfWork.Chats.GetByIdAsync(message.ChatId);
+            if (chat == null) continue;
+            
+            // Create or update delivery receipt
+            var receipt = await _unitOfWork.DeliveryReceipts.GetByMessageAndUserAsync(messageId, userId);
+            if (receipt == null)
+            {
+                receipt = new DeliveryReceipt
+                {
+                    MessageId = messageId,
+                    UserId = userId,
+                    DeliveredAt = DateTime.UtcNow,
+                    ReadAt = DateTime.UtcNow
+                };
+                await _unitOfWork.DeliveryReceipts.AddAsync(receipt);
+            }
+            else if (receipt.ReadAt == null)
+            {
+                receipt.ReadAt = DateTime.UtcNow;
+                if (receipt.DeliveredAt == null)
+                {
+                    receipt.DeliveredAt = DateTime.UtcNow;
+                }
+                await _unitOfWork.DeliveryReceipts.UpdateAsync(receipt);
+            }
+            
+            // For private chats, mark as read immediately
+            if (chat.Type == ChatType.Private && message.Status != MessageStatus.Read)
+            {
+                message.Status = MessageStatus.Read;
+                message.ReadAt = DateTime.UtcNow;
+                await _unitOfWork.Messages.UpdateAsync(message);
+                
+                await _hubContext.Clients.Group(message.ChatId.ToString())
+                    .SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Read);
+            }
+            // For group chats, check if all participants have read it
+            else if (chat.Type == ChatType.Group)
+            {
+                var participantsCount = chat.Participants.Count;
+                var readCount = await _unitOfWork.DeliveryReceipts.GetReadCountAsync(messageId);
+                
+                if (readCount >= participantsCount - 1 && message.Status != MessageStatus.Read)
+                {
+                    message.Status = MessageStatus.Read;
+                    message.ReadAt = DateTime.UtcNow;
+                    await _unitOfWork.Messages.UpdateAsync(message);
+                    
+                    await _hubContext.Clients.Group(message.ChatId.ToString())
+                        .SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Read);
+                }
+            }
+        }
+        
+        await _unitOfWork.SaveChangesAsync();
+        return Ok(new { message = $"Marked {messageIds.Count} messages as read" });
     }
     
     [HttpDelete("{messageId}")]

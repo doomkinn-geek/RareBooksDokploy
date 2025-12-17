@@ -83,24 +83,39 @@ class MyApp extends ConsumerWidget {
         
         // Setup local notification navigation callback
         notificationService.onNotificationTap = (chatId) async {
-          print('Local notification: Opening chat $chatId');
+          print('[NOTIFICATION] Local notification tapped for chat: $chatId');
           
-          // First, refresh chats list to ensure chat exists
-          await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
-          
-          // Force refresh messages for this chat to show new message
           try {
+            // STEP 1: Refresh chats list to ensure chat exists
+            print('[NOTIFICATION] Refreshing chats list...');
+            await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+            
+            // STEP 2: Force refresh messages for this chat to show new message
+            print('[NOTIFICATION] Loading messages for chat $chatId...');
             await ref.read(messagesProvider(chatId).notifier).loadMessages(forceRefresh: true);
+            
+            // STEP 3: Wait a bit to ensure messages are loaded
+            await Future.delayed(const Duration(milliseconds: 300));
+            
+            // STEP 4: Navigate to chat screen
+            print('[NOTIFICATION] Navigating to chat screen...');
+            navigatorKey.currentState?.pushAndRemoveUntil(
+              MaterialPageRoute(
+                builder: (context) => ChatScreen(chatId: chatId),
+              ),
+              (route) => route.isFirst, // Keep only the main screen in stack
+            );
+            
+            print('[NOTIFICATION] Navigation completed');
           } catch (e) {
-            print('Error loading messages for chat $chatId: $e');
+            print('[NOTIFICATION] Error handling notification tap: $e');
+            // Try to navigate anyway
+            navigatorKey.currentState?.push(
+              MaterialPageRoute(
+                builder: (context) => ChatScreen(chatId: chatId),
+              ),
+            );
           }
-          
-          // Navigate to chat screen
-          navigatorKey.currentState?.push(
-            MaterialPageRoute(
-              builder: (context) => ChatScreen(chatId: chatId),
-            ),
-          );
         };
         
         // Initialize FCM and register token (только на мобильных платформах и web)
@@ -112,24 +127,39 @@ class MyApp extends ConsumerWidget {
             
             // Setup FCM navigation callback
             fcmService.onMessageTap = (chatId) async {
-              print('FCM: Opening chat $chatId');
+              print('[FCM] Push notification tapped for chat: $chatId');
               
-              // First, refresh chats list to ensure chat exists
-              await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
-              
-              // Force refresh messages for this chat to show new message
               try {
+                // STEP 1: Refresh chats list to ensure chat exists
+                print('[FCM] Refreshing chats list...');
+                await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+                
+                // STEP 2: Force refresh messages for this chat to show new message
+                print('[FCM] Loading messages for chat $chatId...');
                 await ref.read(messagesProvider(chatId).notifier).loadMessages(forceRefresh: true);
+                
+                // STEP 3: Wait a bit to ensure messages are loaded
+                await Future.delayed(const Duration(milliseconds: 300));
+                
+                // STEP 4: Navigate to chat screen
+                print('[FCM] Navigating to chat screen...');
+                navigatorKey.currentState?.pushAndRemoveUntil(
+                  MaterialPageRoute(
+                    builder: (context) => ChatScreen(chatId: chatId),
+                  ),
+                  (route) => route.isFirst, // Keep only the main screen in stack
+                );
+                
+                print('[FCM] Navigation completed');
               } catch (e) {
-                print('Error loading messages for chat $chatId: $e');
+                print('[FCM] Error handling notification tap: $e');
+                // Try to navigate anyway
+                navigatorKey.currentState?.push(
+                  MaterialPageRoute(
+                    builder: (context) => ChatScreen(chatId: chatId),
+                  ),
+                );
               }
-              
-              // Navigate to chat screen
-              navigatorKey.currentState?.push(
-                MaterialPageRoute(
-                  builder: (context) => ChatScreen(chatId: chatId),
-                ),
-              );
             };
             
             // Register token immediately after initialization
