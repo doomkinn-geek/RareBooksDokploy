@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { UserProfile } from '../../types/auth';
-import { Search, User } from 'lucide-react';
+import { Search } from 'lucide-react';
 
 interface UserSelectProps {
   users: UserProfile[];
