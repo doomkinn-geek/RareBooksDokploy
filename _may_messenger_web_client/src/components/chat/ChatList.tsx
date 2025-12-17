@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { useChatStore } from '../../stores/chatStore';
-import { MessageCircle } from 'lucide-react';
+import { MessageCircle, Users, User } from 'lucide-react';
 import { formatDate } from '../../utils/formatters';
+import { ChatType } from '../../types/chat';
 
 interface ChatListItemProps {
   chat: any;
@@ -13,6 +14,8 @@ const ChatListItem = ({ chat, isSelected, onClick }: ChatListItemProps) => {
   const lastMessageText = chat.lastMessage?.content || 
     (chat.lastMessage?.type === 1 ? '🎤 Голосовое сообщение' : 'Нет сообщений');
   
+  const isGroupChat = chat.type === ChatType.Group;
+  
   return (
     <div
       onClick={onClick}
@@ -21,13 +24,20 @@ const ChatListItem = ({ chat, isSelected, onClick }: ChatListItemProps) => {
       }`}
     >
       <div className="flex items-start gap-3">
-        <div className="w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
+        <div className="w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0 relative">
           {chat.title?.[0]?.toUpperCase() || '?'}
+          {isGroupChat && (
+            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center border-2 border-white">
+              <Users className="w-3 h-3 text-white" />
+            </div>
+          )}
         </div>
         
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-1">
-            <h3 className="font-semibold text-gray-900 truncate">{chat.title || 'Без названия'}</h3>
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <h3 className="font-semibold text-gray-900 truncate">{chat.title || 'Без названия'}</h3>
+            </div>
             {chat.lastMessage && (
               <span className="text-xs text-gray-500 flex-shrink-0 ml-2">
                 {formatDate(chat.lastMessage.createdAt)}
@@ -42,14 +52,23 @@ const ChatListItem = ({ chat, isSelected, onClick }: ChatListItemProps) => {
   );
 };
 
-export const ChatList = () => {
-  const { chats, selectedChatId, selectChat, loadChats, isLoading } = useChatStore();
+interface ChatListProps {
+  filterType?: 'all' | 'private' | 'group';
+}
+
+export const ChatList = ({ filterType = 'all' }: ChatListProps) => {
+  const { chats, selectedChatId, selectChat, loadChats, isLoading, privateChats, groupChats } = useChatStore();
 
   useEffect(() => {
     loadChats();
   }, []);
 
-  if (isLoading && chats.length === 0) {
+  // Get filtered chats based on filterType
+  const displayChats = filterType === 'private' ? privateChats : 
+                       filterType === 'group' ? groupChats : 
+                       chats;
+
+  if (isLoading && displayChats.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
@@ -60,13 +79,17 @@ export const ChatList = () => {
     );
   }
 
-  if (chats.length === 0) {
+  if (displayChats.length === 0) {
+    const message = filterType === 'private' ? 'Нет личных чатов' :
+                    filterType === 'group' ? 'Нет групповых чатов' :
+                    'Нет чатов';
+    
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center p-8">
           <MessageCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-700 mb-2">
-            Нет чатов
+            {message}
           </h3>
           <p className="text-gray-500">
             Создайте новый чат или дождитесь приглашения
@@ -78,7 +101,7 @@ export const ChatList = () => {
 
   return (
     <div className="h-full overflow-y-auto">
-      {chats.map((chat) => (
+      {displayChats.map((chat) => (
         <ChatListItem
           key={chat.id}
           chat={chat}

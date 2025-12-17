@@ -12,10 +12,12 @@ export const ENDPOINTS = {
   USERS: '/users',
   CREATE_INVITE: '/users/invite-link',
   MY_INVITES: '/users/my-invite-links',
+  VALIDATE_INVITE: '/users/validate-invite',
   
   // Chats
   CHATS: '/chats',
   CHAT_BY_ID: (id: string) => `/chats/${id}`,
+  CREATE_OR_GET_CHAT: '/chats/create-or-get',
   
   // Messages
   MESSAGES: '/messages',

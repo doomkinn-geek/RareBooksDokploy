@@ -70,10 +70,22 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         forceRefresh: forceRefresh,
       );
       
+      // Сортируем сообщения по дате создания (от старых к новым)
+      // ListView без reverse отобразит старые вверху, новые внизу
+      messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      
       state = state.copyWith(
-        messages: messages.reversed.toList(),
+        messages: messages,
         isLoading: false,
       );
+      
+      // Гарантируем сохранение в кэш (на случай если репозиторий не сохранил)
+      try {
+        final localDataSource = _ref.read(localDataSourceProvider);
+        await localDataSource.cacheMessages(chatId, messages);
+      } catch (e) {
+        print('[MessagesProvider] Failed to cache messages: $e');
+      }
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -141,12 +153,22 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     final exists = state.messages.any((m) => m.id == message.id);
     
     if (!exists) {
-      // Добавляем в НАЧАЛО списка, т.к. messages уже reversed
-      // (самые новые сообщения должны быть в начале для отображения внизу в ListView)
-      final newMessages = [message, ...state.messages];
+      // Добавляем новое сообщение и сортируем по дате
+      final newMessages = [...state.messages, message];
+      // Сортируем по дате создания (от старых к новым)
+      newMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      
       state = state.copyWith(
         messages: newMessages,
       );
+      
+      // Сохраняем сообщение в кэш для персистентности
+      try {
+        final localDataSource = _ref.read(localDataSourceProvider);
+        localDataSource.addMessageToCache(chatId, message);
+      } catch (e) {
+        print('[MessagesProvider] Failed to cache message: $e');
+      }
       
       // Background download for audio messages
       if (message.type == MessageType.audio && 

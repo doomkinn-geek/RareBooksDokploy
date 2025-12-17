@@ -20,6 +20,8 @@ export interface UserProfile {
   phoneNumber: string;
   displayName: string;
   role: UserRole;
+  avatar?: string;
+  isAdmin: boolean;
   createdAt: string;
 }
 

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Chat } from '../types/chat';
+import { Chat, ChatType } from '../types/chat';
 import { chatApi } from '../api/chatApi';
 
 interface ChatState {
@@ -11,11 +11,16 @@ interface ChatState {
   loadChats: () => Promise<void>;
   selectChat: (chatId: string) => void;
   createChat: (title: string, participantIds: string[]) => Promise<Chat>;
+  createOrGetPrivateChat: (targetUserId: string) => Promise<Chat>;
   updateChat: (chat: Chat) => void;
   clearError: () => void;
+  
+  // Computed properties
+  privateChats: Chat[];
+  groupChats: Chat[];
 }
 
-export const useChatStore = create<ChatState>((set) => ({
+export const useChatStore = create<ChatState>((set, get) => ({
   chats: [],
   selectedChatId: null,
   isLoading: false,
@@ -56,6 +61,23 @@ export const useChatStore = create<ChatState>((set) => ({
     }
   },
 
+  createOrGetPrivateChat: async (targetUserId: string) => {
+    set({ error: null });
+    try {
+      const chat = await chatApi.createOrGetPrivateChat(targetUserId);
+      // Check if chat already exists in store
+      const existingChat = get().chats.find(c => c.id === chat.id);
+      if (!existingChat) {
+        set((state) => ({ chats: [chat, ...state.chats] }));
+      }
+      return chat;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'Ошибка создания чата';
+      set({ error: errorMessage });
+      throw error;
+    }
+  },
+
   updateChat: (updatedChat: Chat) => {
     set((state) => ({
       chats: state.chats.map((chat) =>
@@ -65,4 +87,13 @@ export const useChatStore = create<ChatState>((set) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  // Computed properties
+  get privateChats() {
+    return get().chats.filter(chat => chat.type === ChatType.Private);
+  },
+
+  get groupChats() {
+    return get().chats.filter(chat => chat.type === ChatType.Group);
+  },
 }));

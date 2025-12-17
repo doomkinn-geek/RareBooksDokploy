@@ -4,6 +4,7 @@ import { useAuthStore } from './stores/authStore';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ChatPage } from './pages/ChatPage';
+import { SettingsPage } from './pages/SettingsPage';
 
 function App() {
   const { token, loadUserProfile } = useAuthStore();
@@ -29,6 +30,10 @@ function App() {
         <Route
           path="/"
           element={token ? <ChatPage /> : <Navigate to="/login" replace />}
+        />
+        <Route
+          path="/settings"
+          element={token ? <SettingsPage /> : <Navigate to="/login" replace />}
         />
       </Routes>
     </BrowserRouter>

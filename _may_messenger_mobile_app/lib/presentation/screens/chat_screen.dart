@@ -153,7 +153,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ? const Center(child: Text('Нет сообщений'))
                     : ListView.builder(
                         controller: _scrollController,
-                        reverse: true,
                         padding: const EdgeInsets.all(16),
                         itemCount: messagesState.messages.length,
                         itemBuilder: (context, index) {

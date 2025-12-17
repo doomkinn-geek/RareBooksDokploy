@@ -44,6 +44,36 @@ class LocalDataSource {
     return messages;
   }
 
+  // Add single message to cache
+  Future<void> addMessageToCache(String chatId, Message message) async {
+    try {
+      final box = await Hive.openBox<Map>(_messagesBox);
+      final data = box.get(chatId);
+      
+      List<Message> messages = [];
+      if (data != null) {
+        messages = (data['messages'] as List)
+            .map((json) => Message.fromJson(Map<String, dynamic>.from(json as Map)))
+            .toList();
+      }
+      
+      // Check if message already exists
+      final exists = messages.any((m) => m.id == message.id);
+      if (!exists) {
+        messages.add(message);
+        // Sort by date (ascending - oldest first, newest last)
+        messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        
+        await box.put(chatId, {
+          'messages': messages.map((m) => m.toJson()).toList(),
+          'timestamp': DateTime.now().toIso8601String(),
+        });
+      }
+    } catch (e) {
+      print('Failed to add message to cache: $e');
+    }
+  }
+
   // Chats Cache
   Future<void> cacheChats(List<Chat> chats) async {
     final box = await Hive.openBox<Map>(_chatsBox);

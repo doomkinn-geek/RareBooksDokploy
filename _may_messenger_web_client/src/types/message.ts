@@ -7,4 +7,10 @@ export interface InviteLink {
   isUsed: boolean;
   usedAt?: string;
   usedById?: string;
+  inviteLink?: string;
+}
+
+export interface InviteLinkResponse {
+  code: string;
+  inviteLink: string;
 }

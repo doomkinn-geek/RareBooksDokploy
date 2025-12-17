@@ -1,0 +1,1 @@
+cd D:\_SOURCES\source\RareBooksServicePublic\_may_messenger_mobile_app ; flutter pub run flutter_launcher_icons

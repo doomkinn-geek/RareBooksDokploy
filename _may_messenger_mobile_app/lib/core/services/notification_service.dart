@@ -9,7 +9,7 @@ final notificationServiceProvider = Provider<NotificationService>((ref) {
 class NotificationService {
   final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
   String? _currentChatId;
-  Function(String chatId)? onNotificationTap;
+  Future<void> Function(String chatId)? onNotificationTap;
 
   Future<void> initialize() async {
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -26,9 +26,9 @@ class NotificationService {
 
     await _notifications.initialize(
       initSettings,
-      onDidReceiveNotificationResponse: (NotificationResponse response) {
+      onDidReceiveNotificationResponse: (NotificationResponse response) async {
         if (response.payload != null && onNotificationTap != null) {
-          onNotificationTap!(response.payload!);
+          await onNotificationTap!(response.payload!);
         }
       },
     );

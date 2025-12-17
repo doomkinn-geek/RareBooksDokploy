@@ -17,4 +17,9 @@ export const chatApi = {
     const response = await apiClient.post<Chat>(ENDPOINTS.CHATS, data);
     return response.data;
   },
+
+  async createOrGetPrivateChat(targetUserId: string): Promise<Chat> {
+    const response = await apiClient.post<Chat>(ENDPOINTS.CREATE_OR_GET_CHAT, { targetUserId });
+    return response.data;
+  },
 };

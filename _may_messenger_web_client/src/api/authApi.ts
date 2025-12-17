@@ -32,4 +32,9 @@ export const authApi = {
     const response = await apiClient.get(ENDPOINTS.MY_INVITES);
     return response.data;
   },
+
+  async validateInviteCode(code: string): Promise<{ isValid: boolean; message?: string }> {
+    const response = await apiClient.post(ENDPOINTS.VALIDATE_INVITE, { code });
+    return response.data;
+  },
 };

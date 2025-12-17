@@ -10,6 +10,7 @@ import 'core/services/fcm_service.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/providers/signalr_provider.dart';
 import 'presentation/providers/chats_provider.dart';
+import 'presentation/providers/messages_provider.dart';
 import 'presentation/screens/auth_screen.dart';
 import 'presentation/screens/main_screen.dart';
 import 'presentation/screens/chat_screen.dart';
@@ -80,6 +81,28 @@ class MyApp extends ConsumerWidget {
         final notificationService = ref.read(notificationServiceProvider);
         await notificationService.initialize();
         
+        // Setup local notification navigation callback
+        notificationService.onNotificationTap = (chatId) async {
+          print('Local notification: Opening chat $chatId');
+          
+          // First, refresh chats list to ensure chat exists
+          await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+          
+          // Force refresh messages for this chat to show new message
+          try {
+            await ref.read(messagesProvider(chatId).notifier).loadMessages(forceRefresh: true);
+          } catch (e) {
+            print('Error loading messages for chat $chatId: $e');
+          }
+          
+          // Navigate to chat screen
+          navigatorKey.currentState?.push(
+            MaterialPageRoute(
+              builder: (context) => ChatScreen(chatId: chatId),
+            ),
+          );
+        };
+        
         // Initialize FCM and register token (только на мобильных платформах и web)
         final shouldInitFcm = kIsWeb || Platform.isAndroid || Platform.isIOS;
         if (shouldInitFcm) {
@@ -93,6 +116,13 @@ class MyApp extends ConsumerWidget {
               
               // First, refresh chats list to ensure chat exists
               await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+              
+              // Force refresh messages for this chat to show new message
+              try {
+                await ref.read(messagesProvider(chatId).notifier).loadMessages(forceRefresh: true);
+              } catch (e) {
+                print('Error loading messages for chat $chatId: $e');
+              }
               
               // Navigate to chat screen
               navigatorKey.currentState?.push(
