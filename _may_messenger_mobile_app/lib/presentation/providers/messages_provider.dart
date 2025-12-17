@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../data/models/message_model.dart';
 import '../../data/services/message_sync_service.dart';
-import '../../core/services/logger_service.dart';
 import 'auth_provider.dart';
 import 'signalr_provider.dart';
 import 'profile_provider.dart';
@@ -137,17 +136,22 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
           .toList();
       
       // Merge synced and local messages, removing duplicates
+      // Use localId as key since it's always unique
       final allMessages = <String, Message>{};
       
-      // Add synced messages first
+      // Add synced messages first (use localId if available, fallback to id)
       for (final msg in syncedMessages) {
-        allMessages[msg.id] = msg;
+        final key = (msg.localId?.isNotEmpty ?? false) ? msg.localId! : msg.id;
+        if (key.isNotEmpty) {
+          allMessages[key] = msg;
+        }
       }
       
-      // Add local messages (they won't override synced ones with same ID)
+      // Add local messages (they won't override synced ones with same localId)
       for (final msg in localMessages) {
-        if (!allMessages.containsKey(msg.id)) {
-          allMessages[msg.id] = msg;
+        final key = (msg.localId?.isNotEmpty ?? false) ? msg.localId! : msg.id;
+        if (key.isNotEmpty && !allMessages.containsKey(key)) {
+          allMessages[key] = msg;
         }
       }
       
@@ -400,8 +404,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
     }
     
-    // Check if message already exists by ID
-    final exists = state.messages.any((m) => m.id == message.id);
+    // Check if message already exists by ID or localId
+    final exists = state.messages.any((m) => 
+      (message.id.isNotEmpty && m.id == message.id) || 
+      ((message.localId?.isNotEmpty ?? false) && m.localId == message.localId)
+    );
     
     if (!exists) {
       // Add new message and sort by date
@@ -412,7 +419,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         messages: newMessages,
       );
       
-      print('[MSG_RECV] Added new message to state: ${message.id}');
+      print('[MSG_RECV] Added new message to state: ${message.id} (localId: ${message.localId ?? 'none'})');
       
       // Save message to cache for persistence
       try {
@@ -429,7 +436,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         _downloadAudioInBackground(message);
       }
     } else {
-      print('[MSG_RECV] Message already exists, ignoring: ${message.id}');
+      print('[MSG_RECV] Message already exists, ignoring: ${message.id} (localId: ${message.localId ?? 'none'})');
     }
   }
 

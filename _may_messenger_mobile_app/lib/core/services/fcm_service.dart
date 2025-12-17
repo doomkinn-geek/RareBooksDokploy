@@ -5,22 +5,57 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../constants/api_constants.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 final fcmServiceProvider = Provider<FcmService>((ref) {
   return FcmService();
 });
 
+// Global instance for background handler
+final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Handle background message
-  print('Handling background message: ${message.messageId}');
+  print('[FCM_BG] Handling background message: ${message.messageId}');
+  print('[FCM_BG] Title: ${message.notification?.title}');
+  print('[FCM_BG] Body: ${message.notification?.body}');
+  print('[FCM_BG] Data: ${message.data}');
+  
+  // Show local notification
+  try {
+    const androidDetails = AndroidNotificationDetails(
+      'messages_channel',
+      'Messages',
+      channelDescription: 'Notifications for new messages',
+      importance: Importance.high,
+      priority: Priority.high,
+      showWhen: true,
+    );
+    
+    const notificationDetails = NotificationDetails(android: androidDetails);
+    
+    final chatId = message.data['chatId'] as String?;
+    await _localNotifications.show(
+      chatId.hashCode, // Use chatId hash as notification ID
+      message.notification?.title ?? 'New Message',
+      message.notification?.body ?? '',
+      notificationDetails,
+      payload: chatId,
+    );
+    
+    print('[FCM_BG] Local notification shown');
+  } catch (e) {
+    print('[FCM_BG] Error showing notification: $e');
+  }
 }
 
 class FcmService {
   FirebaseMessaging? _messaging;
   final Dio _dio = Dio();
+  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
   
   String? _fcmToken;
+  String? _currentChatId; // Track current open chat to suppress notifications
   Function(String chatId)? onMessageTap;
   
   // Проверка поддержки Firebase на текущей платформе
@@ -33,23 +68,65 @@ class FcmService {
     }
     return _messaging;
   }
+  
+  void setCurrentChat(String? chatId) {
+    _currentChatId = chatId;
+    print('[FCM] Current chat set to: $chatId');
+  }
 
   Future<void> initialize() async {
     // Пропускаем инициализацию на Desktop платформах
     if (!_isFirebaseSupported) {
-      print('FCM not supported on this platform (Desktop), skipping initialization');
+      print('[FCM] Not supported on this platform (Desktop), skipping initialization');
       return;
     }
+    
+    // Initialize local notifications first
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosSettings = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+    
+    const initSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+
+    await _localNotifications.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: (NotificationResponse response) async {
+        print('[FCM] Notification tapped with payload: ${response.payload}');
+        if (response.payload != null && onMessageTap != null) {
+          onMessageTap!(response.payload!);
+        }
+      },
+    );
+    
+    // Create Android notification channel
+    const androidChannel = AndroidNotificationChannel(
+      'messages_channel',
+      'Messages',
+      description: 'Notifications for new messages',
+      importance: Importance.high,
+    );
+    
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(androidChannel);
+    
+    print('[FCM] Local notifications initialized');
     
     // Инициализируем FirebaseMessaging через геттер
     final messaging = _messagingInstance;
     if (messaging == null) {
-      print('Failed to initialize FirebaseMessaging');
+      print('[FCM] Failed to initialize FirebaseMessaging');
       return;
     }
     
-    // Request permission - используем non-null assertion после проверки
-    final settings = await messaging!.requestPermission(
+    // Request permission
+    final settings = await messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
@@ -57,11 +134,11 @@ class FcmService {
     );
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      print('User granted permission');
+      print('[FCM] User granted permission');
       
       // Get FCM token
-      _fcmToken = await messaging!.getToken();
-      print('FCM Token: $_fcmToken');
+      _fcmToken = await messaging.getToken();
+      print('[FCM] Token: $_fcmToken');
       
       // Register background message handler
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
@@ -73,12 +150,12 @@ class FcmService {
       FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpenedApp);
       
       // Check if app was opened from notification
-      final initialMessage = await messaging!.getInitialMessage();
+      final initialMessage = await messaging.getInitialMessage();
       if (initialMessage != null) {
         _handleMessageOpenedApp(initialMessage);
       }
     } else {
-      print('User declined or has not accepted permission');
+      print('[FCM] User declined or has not accepted permission');
     }
   }
 
@@ -132,12 +209,47 @@ class FcmService {
     }
   }
 
-  void _handleForegroundMessage(RemoteMessage message) {
-    print('Foreground message: ${message.notification?.title}');
-    // Notification will be handled by NotificationService through SignalR
+  void _handleForegroundMessage(RemoteMessage message) async {
+    print('[FCM_FG] Foreground message: ${message.notification?.title}');
+    print('[FCM_FG] Data: ${message.data}');
+    
+    final chatId = message.data['chatId'] as String?;
+    
+    // Don't show notification if user is currently in this chat
+    if (chatId != null && chatId == _currentChatId) {
+      print('[FCM_FG] User in current chat, not showing notification');
+      return;
+    }
+    
+    // Show local notification
+    try {
+      const androidDetails = AndroidNotificationDetails(
+        'messages_channel',
+        'Messages',
+        channelDescription: 'Notifications for new messages',
+        importance: Importance.high,
+        priority: Priority.high,
+        showWhen: true,
+      );
+      
+      const notificationDetails = NotificationDetails(android: androidDetails);
+      
+      await _localNotifications.show(
+        chatId.hashCode, // Use chatId hash as notification ID
+        message.notification?.title ?? 'New Message',
+        message.notification?.body ?? '',
+        notificationDetails,
+        payload: chatId,
+      );
+      
+      print('[FCM_FG] Local notification shown');
+    } catch (e) {
+      print('[FCM_FG] Error showing notification: $e');
+    }
   }
 
   void _handleMessageOpenedApp(RemoteMessage message) {
+    print('[FCM] Message opened app: ${message.data}');
     final chatId = message.data['chatId'] as String?;
     if (chatId != null && onMessageTap != null) {
       onMessageTap!(chatId);

@@ -6,6 +6,7 @@ import '../providers/chats_provider.dart';
 import '../providers/contacts_names_provider.dart';
 import '../../data/models/chat_model.dart';
 import '../../core/services/notification_service.dart';
+import '../../core/services/fcm_service.dart';
 import '../../core/services/logger_service.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/message_input.dart';
@@ -48,9 +49,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       await _logger.debug('chat_screen.initState.afterJoin', '[H2] After JoinChat', {'chatId': widget.chatId});
       // #endregion
       
-      // Уведомить NotificationService что пользователь в этом чате
+      // Уведомить NotificationService и FCM что пользователь в этом чате
       final notificationService = ref.read(notificationServiceProvider);
       notificationService.setCurrentChat(widget.chatId);
+      
+      final fcmService = ref.read(fcmServiceProvider);
+      fcmService.setCurrentChat(widget.chatId);
       
       // Обнуляем счетчик непрочитанных сообщений
       ref.read(chatsProvider.notifier).clearUnreadCount(widget.chatId);
@@ -83,6 +87,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // Очистить текущий чат при выходе
     final notificationService = ref.read(notificationServiceProvider);
     notificationService.setCurrentChat(null);
+    
+    final fcmService = ref.read(fcmServiceProvider);
+    fcmService.setCurrentChat(null);
     
     _scrollController.dispose();
     super.dispose();
