@@ -7,7 +7,7 @@ import { PendingMessage } from './indexedDBStorage';
  * Background service for syncing pending messages from outbox
  */
 class OfflineSyncService {
-  private syncTimer: NodeJS.Timeout | null = null;
+  private syncTimer: number | null = null;
   private isSyncing = false;
   
   onMessageSynced?: (localId: string, serverId: string) => void;
@@ -24,7 +24,7 @@ class OfflineSyncService {
     window.addEventListener('offline', this.handleOffline);
     
     // Periodic sync every 30 seconds
-    this.syncTimer = setInterval(() => {
+    this.syncTimer = window.setInterval(() => {
       this.syncNow();
     }, 30000);
     
@@ -213,7 +213,7 @@ class OfflineSyncService {
     console.log('[SYNC] Stopping offline sync service');
     
     if (this.syncTimer) {
-      clearInterval(this.syncTimer);
+      window.clearInterval(this.syncTimer);
       this.syncTimer = null;
     }
     

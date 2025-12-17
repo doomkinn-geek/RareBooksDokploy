@@ -5,7 +5,7 @@ import { MessageStatus } from '../types/chat';
  * Service for syncing message status when SignalR is unavailable
  */
 class StatusSyncService {
-  private pollTimer: NodeJS.Timeout | null = null;
+  private pollTimer: number | null = null;
   private lastSync: Date | null = null;
   private isPolling = false;
 
@@ -26,7 +26,7 @@ class StatusSyncService {
     this.isPolling = true;
     this.lastSync = new Date(Date.now() - 5 * 60 * 1000); // Start from 5 minutes ago
 
-    this.pollTimer = setInterval(async () => {
+    this.pollTimer = window.setInterval(async () => {
       try {
         await this.pollStatusUpdates(chatId, onStatusUpdate);
       } catch (error) {
@@ -71,7 +71,7 @@ class StatusSyncService {
   stopPolling(): void {
     if (this.pollTimer) {
       console.log('[SYNC] Stopping status polling');
-      clearInterval(this.pollTimer);
+      window.clearInterval(this.pollTimer);
       this.pollTimer = null;
       this.isPolling = false;
     }
