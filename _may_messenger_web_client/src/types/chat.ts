@@ -33,6 +33,8 @@ export interface Message {
   filePath?: string;
   status: MessageStatus;
   createdAt: string;
+  localId?: string; // Client-side UUID for tracking before server confirms
+  isLocalOnly?: boolean; // True if message hasn't been synced to server yet
 }
 
 export enum MessageType {
@@ -45,6 +47,7 @@ export enum MessageStatus {
   Sent = 1,
   Delivered = 2,
   Read = 3,
+  Failed = 4,
 }
 
 export interface SendMessageRequest {

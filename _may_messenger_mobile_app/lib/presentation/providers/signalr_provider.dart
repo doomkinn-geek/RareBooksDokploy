@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/datasources/signalr_service.dart';
+import '../../data/models/message_model.dart';
 import '../../core/services/logger_service.dart';
 import 'auth_provider.dart';
 import 'messages_provider.dart';

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Chat, ChatType } from '../types/chat';
 import { chatApi } from '../api/chatApi';
+import { indexedDBStorage } from '../services/indexedDBStorage';
 
 interface ChatState {
   chats: Chat[];
@@ -28,16 +29,41 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   loadChats: async () => {
     set({ isLoading: true, error: null });
+    
     try {
+      // STEP 1: Load from cache first (instant display)
+      const cachedChats = await indexedDBStorage.getCachedChats();
+      if (cachedChats && cachedChats.length > 0) {
+        console.log('[ChatStore] Loaded cached chats:', cachedChats.length);
+        // Sort by last message time (newest first)
+        cachedChats.sort((a, b) => {
+          const aTime = a.lastMessage?.createdAt || a.createdAt;
+          const bTime = b.lastMessage?.createdAt || b.createdAt;
+          return new Date(bTime).getTime() - new Date(aTime).getTime();
+        });
+        set({ chats: cachedChats, isLoading: false });
+      }
+      
+      // STEP 2: Fetch from API in background
       const chats = await chatApi.getChats();
-      console.log('[ChatStore] Loaded chats:', chats);
+      console.log('[ChatStore] Loaded chats from API:', chats.length);
+      
       // Sort by last message time (newest first)
       chats.sort((a, b) => {
         const aTime = a.lastMessage?.createdAt || a.createdAt;
         const bTime = b.lastMessage?.createdAt || b.createdAt;
         return new Date(bTime).getTime() - new Date(aTime).getTime();
       });
+      
+      // STEP 3: Update state and cache
       set({ chats, isLoading: false });
+      
+      // Save to cache
+      try {
+        await indexedDBStorage.cacheChats(chats);
+      } catch (cacheError) {
+        console.error('[ChatStore] Failed to cache chats:', cacheError);
+      }
     } catch (error: any) {
       console.error('[ChatStore] Load error:', error);
       set({ error: 'Ошибка загрузки чатов', isLoading: false });

@@ -29,7 +29,30 @@ class SignalRService {
 
     // Set up event handlers
     this.connection.on('ReceiveMessage', (message: Message) => {
-      console.log('[SignalR] ReceiveMessage', message);
+      console.log('[MSG_RECV] Message received via SignalR:', message.id, 'for chat', message.chatId);
+      
+      // Send delivery confirmation (skip for own messages)
+      const currentUserId = localStorage.getItem('userId'); // Assuming userId is stored
+      const isFromMe = currentUserId && message.senderId === currentUserId;
+      
+      if (!isFromMe) {
+        this.markMessageAsDelivered(message.id, message.chatId)
+          .then(() => {
+            console.log('[MSG_RECV] Delivery confirmation sent for message:', message.id);
+          })
+          .catch((error) => {
+            console.error('[MSG_RECV] Failed to send delivery confirmation:', error);
+            // Retry after a delay
+            setTimeout(() => {
+              this.markMessageAsDelivered(message.id, message.chatId)
+                .then(() => console.log('[MSG_RECV] Delivery confirmation sent (retry):', message.id))
+                .catch((err) => console.error('[MSG_RECV] Delivery confirmation retry failed:', err));
+            }, 2000);
+          });
+      } else {
+        console.log('[MSG_RECV] Skipping delivery confirmation for own message:', message.id);
+      }
+      
       this.messageCallbacks.forEach((callback) => callback(message));
     });
 
@@ -86,6 +109,14 @@ class SignalRService {
     }
     await this.connection.invoke('LeaveChat', chatId);
     console.log('[SignalR] Left chat', chatId);
+  }
+
+  async markMessageAsDelivered(messageId: string, chatId: string): Promise<void> {
+    if (!this.connection) {
+      throw new Error('SignalR connection not established');
+    }
+    await this.connection.invoke('MessageDelivered', messageId, chatId);
+    console.log('[SignalR] Message marked as delivered:', messageId);
   }
 
   async markMessageAsRead(messageId: string, chatId: string): Promise<void> {

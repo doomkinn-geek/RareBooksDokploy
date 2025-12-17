@@ -30,4 +30,14 @@ export const messageApi = {
     });
     return response.data;
   },
+
+  async batchMarkAsRead(messageIds: string[]): Promise<void> {
+    await apiClient.post('/api/messages/mark-read', messageIds);
+  },
+
+  async getStatusUpdates(chatId: string, since?: Date): Promise<any[]> {
+    const params = since ? { since: since.toISOString() } : {};
+    const response = await apiClient.get(`/api/messages/${chatId}/status-updates`, { params });
+    return response.data;
+  },
 };
