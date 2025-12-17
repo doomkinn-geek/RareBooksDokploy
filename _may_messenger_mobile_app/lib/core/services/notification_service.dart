@@ -53,6 +53,8 @@ class NotificationService {
       return;
     }
 
+    // Используем chatId как ID уведомления для группировки сообщений из одного чата
+    // Это заменит предыдущее уведомление из того же чата
     const androidDetails = AndroidNotificationDetails(
       'messages_channel',
       'Messages',
@@ -60,6 +62,7 @@ class NotificationService {
       importance: Importance.high,
       priority: Priority.high,
       showWhen: true,
+      groupKey: 'messages_group', // Группировка для Android
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -77,8 +80,10 @@ class NotificationService {
         ? message.content
         : '🎤 Голосовое сообщение';
 
+    // Используем chatId.hashCode вместо message.id.hashCode
+    // Это приведет к тому, что новые сообщения из одного чата будут заменять предыдущие
     await _notifications.show(
-      message.id.hashCode,
+      message.chatId.hashCode,
       chatTitle,
       body,
       notificationDetails,

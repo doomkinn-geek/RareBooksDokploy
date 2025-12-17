@@ -16,6 +16,7 @@ class MessageRepository {
   }) async {
     if (!forceRefresh && skip == 0) {
       final cachedMessages = await _localDataSource.getCachedMessages(chatId);
+      
       if (cachedMessages != null && cachedMessages.isNotEmpty) {
         return cachedMessages;
       }

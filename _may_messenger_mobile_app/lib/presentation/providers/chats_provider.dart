@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/chat_model.dart';
+import '../../data/models/message_model.dart';
 import 'auth_provider.dart';
 
 final chatsProvider = StateNotifierProvider<ChatsNotifier, ChatsState>((ref) {
@@ -104,6 +105,69 @@ class ChatsNotifier extends StateNotifier<ChatsState> {
       final updatedChats = [...state.chats];
       updatedChats[index] = updatedChat;
       state = state.copyWith(chats: updatedChats);
+    }
+  }
+
+  void updateChatLastMessage(String chatId, Message message, {bool incrementUnread = false}) {
+    final index = state.chats.indexWhere((c) => c.id == chatId);
+    if (index != -1) {
+      final chat = state.chats[index];
+      final newUnreadCount = incrementUnread ? chat.unreadCount + 1 : chat.unreadCount;
+      
+      final updatedChat = Chat(
+        id: chat.id,
+        type: chat.type,
+        title: chat.title,
+        avatar: chat.avatar,
+        lastMessage: message,
+        unreadCount: newUnreadCount,
+        createdAt: chat.createdAt,
+        otherParticipantId: chat.otherParticipantId,
+      );
+      
+      final updatedChats = [...state.chats];
+      updatedChats[index] = updatedChat;
+      
+      // Сортируем чаты по времени последнего сообщения (новые вверху)
+      updatedChats.sort((a, b) {
+        final aTime = a.lastMessage?.createdAt ?? a.createdAt;
+        final bTime = b.lastMessage?.createdAt ?? b.createdAt;
+        return bTime.compareTo(aTime);
+      });
+      
+      state = state.copyWith(chats: updatedChats);
+      
+      // Сохраняем в кэш
+      try {
+        _chatRepository.updateChatLastMessageInCache(chatId, message);
+      } catch (e) {
+        print('[ChatsProvider] Failed to update last message in cache: $e');
+      }
+    }
+  }
+
+  void clearUnreadCount(String chatId) {
+    final index = state.chats.indexWhere((c) => c.id == chatId);
+    if (index != -1) {
+      final chat = state.chats[index];
+      if (chat.unreadCount > 0) {
+        final updatedChat = Chat(
+          id: chat.id,
+          type: chat.type,
+          title: chat.title,
+          avatar: chat.avatar,
+          lastMessage: chat.lastMessage,
+          unreadCount: 0,
+          createdAt: chat.createdAt,
+          otherParticipantId: chat.otherParticipantId,
+        );
+        
+        final updatedChats = [...state.chats];
+        updatedChats[index] = updatedChat;
+        state = state.copyWith(chats: updatedChats);
+        
+        print('[ChatsProvider] Cleared unread count for chat $chatId');
+      }
     }
   }
 }

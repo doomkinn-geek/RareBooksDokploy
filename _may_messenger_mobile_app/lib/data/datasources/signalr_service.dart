@@ -6,8 +6,12 @@ import '../../core/services/logger_service.dart';
 class SignalRService {
   HubConnection? _hubConnection;
   final _logger = LoggerService();
+  String? _currentToken;
+  bool _isReconnecting = false;
 
   Future<void> connect(String token) async {
+    _currentToken = token;
+    
     _hubConnection = HubConnectionBuilder()
         .withUrl(
           ApiConstants.hubUrl,
@@ -16,13 +20,69 @@ class SignalRService {
             transport: HttpTransportType.WebSockets,
           ),
         )
-        .withAutomaticReconnect()
+        .withAutomaticReconnect(retryDelays: [0, 2000, 5000, 10000, 30000])
         .build();
 
-    await _hubConnection?.start();
+    // Обработчик разрыва соединения
+    _hubConnection?.onclose(({error}) {
+      print('[SignalR] Connection closed. Error: $error');
+      if (!_isReconnecting && _currentToken != null) {
+        print('[SignalR] Attempting to reconnect...');
+        _attemptReconnect();
+      }
+    });
+    
+    // Обработчик начала переподключения
+    _hubConnection?.onreconnecting(({error}) {
+      print('[SignalR] Reconnecting... Error: $error');
+      _isReconnecting = true;
+    });
+    
+    // Обработчик успешного переподключения
+    _hubConnection?.onreconnected(({connectionId}) {
+      print('[SignalR] Reconnected! Connection ID: $connectionId');
+      _isReconnecting = false;
+    });
+
+    try {
+      await _hubConnection?.start();
+      print('[SignalR] Connected successfully');
+    } catch (e) {
+      print('[SignalR] Failed to connect: $e');
+      rethrow;
+    }
   }
+  
+  Future<void> _attemptReconnect() async {
+    if (_currentToken == null || _isReconnecting) return;
+    
+    _isReconnecting = true;
+    
+    try {
+      await Future.delayed(const Duration(seconds: 2));
+      
+      if (_hubConnection?.state != HubConnectionState.Connected) {
+        print('[SignalR] Reconnecting...');
+        await _hubConnection?.stop();
+        await connect(_currentToken!);
+      }
+    } catch (e) {
+      print('[SignalR] Reconnect failed: $e');
+      // Попробуем еще раз через 5 секунд
+      await Future.delayed(const Duration(seconds: 5));
+      _isReconnecting = false;
+      _attemptReconnect();
+    } finally {
+      _isReconnecting = false;
+    }
+  }
+  
+  HubConnectionState? get connectionState => _hubConnection?.state;
 
   void onReceiveMessage(Function(Message) callback) {
+    // Отписываемся от предыдущего обработчика, если был
+    _hubConnection?.off('ReceiveMessage');
+    
     _hubConnection?.on('ReceiveMessage', (arguments) {
       if (arguments != null && arguments.isNotEmpty) {
         final messageJson = arguments[0] as Map<String, dynamic>;
@@ -33,6 +93,9 @@ class SignalRService {
   }
 
   void onMessageStatusUpdated(Function(String messageId, MessageStatus status) callback) {
+    // Отписываемся от предыдущего обработчика, если был
+    _hubConnection?.off('MessageStatusUpdated');
+    
     _hubConnection?.on('MessageStatusUpdated', (arguments) {
       if (arguments != null && arguments.length >= 2) {
         final messageId = arguments[0] as String;
@@ -44,18 +107,36 @@ class SignalRService {
   }
 
   Future<void> markMessageAsDelivered(String messageId, String chatId) async {
+    if (!isConnected) {
+      print('[SignalR] Cannot mark as delivered - not connected');
+      return;
+    }
+    
     try {
       await _hubConnection?.invoke('MessageDelivered', args: [messageId, chatId]);
+      print('[SignalR] Message marked as delivered: $messageId');
     } catch (e) {
-      print('Failed to send delivery confirmation: $e');
+      print('[SignalR] Failed to send delivery confirmation: $e');
     }
   }
 
   Future<void> markMessageAsRead(String messageId, String chatId) async {
-    await _hubConnection?.invoke('MessageRead', args: [messageId, chatId]);
+    if (!isConnected) {
+      print('[SignalR] Cannot mark as read - not connected');
+      return;
+    }
+    
+    try {
+      await _hubConnection?.invoke('MessageRead', args: [messageId, chatId]);
+      print('[SignalR] Message marked as read: $messageId');
+    } catch (e) {
+      print('[SignalR] Failed to mark as read: $e');
+    }
   }
 
   void onUserTyping(Function(String userId, String userName, bool isTyping) callback) {
+    _hubConnection?.off('UserTyping');
+    
     _hubConnection?.on('UserTyping', (arguments) {
       if (arguments != null && arguments.length >= 3) {
         final userId = arguments[0] as String;
@@ -67,6 +148,8 @@ class SignalRService {
   }
 
   void onNewChatCreated(Function() callback) {
+    _hubConnection?.off('NewChatCreated');
+    
     _hubConnection?.on('NewChatCreated', (arguments) {
       // When a new chat is created, just trigger refresh
       callback();
@@ -74,11 +157,31 @@ class SignalRService {
   }
 
   Future<void> joinChat(String chatId) async {
-    await _hubConnection?.invoke('JoinChat', args: [chatId]);
+    if (!isConnected) {
+      print('[SignalR] Cannot join chat - not connected');
+      return;
+    }
+    
+    try {
+      await _hubConnection?.invoke('JoinChat', args: [chatId]);
+      print('[SignalR] Joined chat: $chatId');
+    } catch (e) {
+      print('[SignalR] Failed to join chat: $e');
+    }
   }
 
   Future<void> leaveChat(String chatId) async {
-    await _hubConnection?.invoke('LeaveChat', args: [chatId]);
+    if (!isConnected) {
+      print('[SignalR] Cannot leave chat - not connected');
+      return;
+    }
+    
+    try {
+      await _hubConnection?.invoke('LeaveChat', args: [chatId]);
+      print('[SignalR] Left chat: $chatId');
+    } catch (e) {
+      print('[SignalR] Failed to leave chat: $e');
+    }
   }
 
   Future<void> sendMessage({
@@ -96,10 +199,20 @@ class SignalRService {
   }
 
   Future<void> sendTypingIndicator(String chatId, bool isTyping) async {
-    await _hubConnection?.invoke('TypingIndicator', args: [chatId, isTyping]);
+    if (!isConnected) {
+      return; // Не логируем - это не критично
+    }
+    
+    try {
+      await _hubConnection?.invoke('TypingIndicator', args: [chatId, isTyping]);
+    } catch (e) {
+      // Игнорируем ошибки typing indicator
+    }
   }
 
   void onMessageDeleted(Function(Map<String, dynamic>) callback) {
+    _hubConnection?.off('MessageDeleted');
+    
     _hubConnection?.on('MessageDeleted', (arguments) {
       if (arguments != null && arguments.isNotEmpty) {
         final data = arguments[0] as Map<Object?, Object?>;
@@ -115,6 +228,8 @@ class SignalRService {
   }
 
   void onChatDeleted(Function(Map<String, dynamic>) callback) {
+    _hubConnection?.off('ChatDeleted');
+    
     _hubConnection?.on('ChatDeleted', (arguments) {
       if (arguments != null && arguments.isNotEmpty) {
         final data = arguments[0] as Map<Object?, Object?>;

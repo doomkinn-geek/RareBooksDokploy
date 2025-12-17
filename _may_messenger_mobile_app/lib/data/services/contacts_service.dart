@@ -60,11 +60,17 @@ class ContactsService {
 
   Future<List<RegisteredContact>> syncContacts(String token) async {
     try {
-      // Check contacts permission first
+      // Check and request contacts permission if needed
       final permissionStatus = await Permission.contacts.status;
+      
       if (!permissionStatus.isGranted) {
-        print('Contacts permission not granted, skipping sync');
-        return []; // Return empty list if no permission
+        print('[ContactsService] Contacts permission not granted, requesting...');
+        final requested = await Permission.contacts.request();
+        if (!requested.isGranted) {
+          print('[ContactsService] User denied contacts permission');
+          return []; // Return empty list if permission denied
+        }
+        print('[ContactsService] Contacts permission granted');
       }
       
       // Get all contacts from phone
@@ -76,11 +82,14 @@ class ContactsService {
           .map((c) {
             final phoneNumber = c.phones.first.number;
             final displayName = c.displayName;
+            final normalized = normalizePhoneNumber(phoneNumber);
             final hash = hashPhoneNumber(phoneNumber);
             
             return {
               'phoneNumberHash': hash,
               'displayName': displayName,
+              'originalPhone': phoneNumber,
+              'normalized': normalized,
             };
           })
           .toList();
@@ -89,7 +98,10 @@ class ContactsService {
       final response = await _dio.post(
         '${ApiConstants.baseUrl}/api/contacts/sync',
         data: {
-          'contacts': contactsData,
+          'contacts': contactsData.map((c) => {
+            'phoneNumberHash': c['phoneNumberHash'],
+            'displayName': c['displayName'],
+          }).toList(),
         },
         options: Options(
           headers: {'Authorization': 'Bearer $token'},
@@ -98,7 +110,9 @@ class ContactsService {
 
       // Parse response
       final List<dynamic> data = response.data;
-      return data.map((json) => RegisteredContact.fromJson(json)).toList();
+      final result = data.map((json) => RegisteredContact.fromJson(json)).toList();
+      
+      return result;
     } catch (e) {
       print('Failed to sync contacts: $e');
       rethrow;

@@ -20,6 +20,7 @@ class NewChatScreen extends ConsumerStatefulWidget {
 
 class _NewChatScreenState extends ConsumerState<NewChatScreen> {
   List<RegisteredContact> _contacts = [];
+  Map<String, String> _phoneBookNames = {}; // Mapping userId -> phone book name
   bool _isLoading = false;
   bool _permissionDenied = false;
   String? _error;
@@ -67,8 +68,29 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
       // Sync and get registered contacts
       final contacts = await contactsService.syncContacts(token);
       
+      // Get local contacts to build name mapping
+      final localContacts = await contactsService.getAllContacts();
+      final phoneBookNames = <String, String>{};
+      
+      // Build mapping: for each registered contact, find their name in phone book
+      for (final registered in contacts) {
+        for (final local in localContacts) {
+          if (local.phones.isNotEmpty) {
+            final normalized = contactsService.normalizePhoneNumber(local.phones.first.number);
+            final hash = contactsService.hashPhoneNumber(local.phones.first.number);
+            
+            if (hash == registered.phoneNumberHash) {
+              // Found match - use phone book name
+              phoneBookNames[registered.userId] = local.displayName;
+              break;
+            }
+          }
+        }
+      }
+      
       setState(() {
         _contacts = contacts;
+        _phoneBookNames = phoneBookNames;
         _isLoading = false;
       });
     } catch (e) {
@@ -118,8 +140,9 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
             ),
           );
           
+          final displayName = _phoneBookNames[contact.userId] ?? contact.displayName;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Чат с ${contact.displayName} открыт')),
+            SnackBar(content: Text('Чат с $displayName открыт')),
           );
         }
       }
@@ -245,11 +268,17 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
       itemCount: _contacts.length,
       itemBuilder: (context, index) {
         final contact = _contacts[index];
+        // Use phone book name if available, otherwise use server name
+        final displayName = _phoneBookNames[contact.userId] ?? contact.displayName;
+        
         return ListTile(
           leading: CircleAvatar(
-            child: Text(contact.displayName[0].toUpperCase()),
+            child: Text(displayName[0].toUpperCase()),
           ),
-          title: Text(contact.displayName),
+          title: Text(displayName),
+          subtitle: contact.displayName != displayName 
+              ? Text(contact.displayName, style: const TextStyle(fontSize: 12, color: Colors.grey))
+              : null,
           trailing: const Icon(Icons.chat_bubble_outline),
           onTap: () => _createOrOpenChat(contact),
         );

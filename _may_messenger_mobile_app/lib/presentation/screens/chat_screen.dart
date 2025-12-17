@@ -52,6 +52,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final notificationService = ref.read(notificationServiceProvider);
       notificationService.setCurrentChat(widget.chatId);
       
+      // Обнуляем счетчик непрочитанных сообщений
+      ref.read(chatsProvider.notifier).clearUnreadCount(widget.chatId);
+      
       // Mark messages as read after a short delay to ensure messages are loaded
       await Future.delayed(const Duration(milliseconds: 500));
       ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();

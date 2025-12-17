@@ -65,7 +65,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   Future<void> loadMessages({bool forceRefresh = false}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final messages = await _messageRepository.getMessages(
+      final List<Message> messages = await _messageRepository.getMessages(
         chatId: chatId,
         forceRefresh: forceRefresh,
       );
@@ -87,6 +87,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         print('[MessagesProvider] Failed to cache messages: $e');
       }
     } catch (e) {
+      print('[MessagesProvider] Load messages error: $e');
       state = state.copyWith(
         isLoading: false,
         error: e.toString(),
@@ -96,27 +97,25 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
 
   Future<void> sendMessage(String content) async {
     state = state.copyWith(isSending: true);
-    try {
-      // Send via REST API and get the message back
-      final message = await _messageRepository.sendMessage(
-        chatId: chatId,
-        type: MessageType.text,
-        content: content,
-      );
-      
-      // Add message locally immediately
-      // If SignalR also sends it, addMessage() will ignore duplicate
+    
+    // Оптимистичный UI: отправляем запрос асинхронно, не блокируя интерфейс
+    // Сообщение придёт через SignalR (~150ms), не нужно ждать API (~2000ms)
+    _messageRepository.sendMessage(
+      chatId: chatId,
+      type: MessageType.text,
+      content: content,
+    ).then((message) {
+      // SignalR уже добавил сообщение, но на всякий случай добавим и здесь (addMessage проверит дубликат)
       addMessage(message);
-      
-      state = state.copyWith(
-        isSending: false,
-      );
-    } catch (e) {
-      state = state.copyWith(
-        isSending: false,
-        error: e.toString(),
-      );
-    }
+    }).catchError((e) {
+      print('[MessagesProvider] Send failed: $e');
+      // Показываем ошибку только если сообщение не пришло через SignalR
+      state = state.copyWith(error: e.toString());
+    });
+    
+    // Сразу снимаем индикатор отправки - сообщение будет добавлено через SignalR
+    // Это даёт моментальный отклик пользователю
+    state = state.copyWith(isSending: false);
   }
 
   Future<void> sendAudioMessage(String audioPath) async {
@@ -224,9 +223,28 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     if (messageIndex != -1) {
       final updatedMessages = [...state.messages];
       final oldMessage = updatedMessages[messageIndex];
+      final oldStatus = oldMessage.status;
+      
+      if (oldStatus != status) {
       updatedMessages[messageIndex] = oldMessage.copyWith(status: status);
       
       state = state.copyWith(messages: updatedMessages);
+        
+        print('[MessagesProvider] Message status updated in chatId=$chatId: messageId=$messageId, $oldStatus -> $status');
+        
+        // Сохраняем обновленный статус в кэш
+        try {
+          final localDataSource = _ref.read(localDataSourceProvider);
+          localDataSource.updateMessageStatus(chatId, messageId, status);
+          print('[MessagesProvider] Message status cached: $messageId -> $status');
+        } catch (e) {
+          print('[MessagesProvider] Failed to cache message status: $e');
+        }
+      } else {
+        print('[MessagesProvider] Message status unchanged for messageId=$messageId: $status');
+      }
+    } else {
+      print('[MessagesProvider] Message not found for status update: messageId=$messageId in chatId=$chatId');
     }
   }
 

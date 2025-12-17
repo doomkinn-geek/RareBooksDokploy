@@ -27,6 +27,7 @@ class LocalDataSource {
   // Messages Cache
   Future<void> cacheMessages(String chatId, List<Message> messages) async {
     final box = await Hive.openBox<Map>(_messagesBox);
+    
     await box.put(chatId, {
       'messages': messages.map((m) => m.toJson()).toList(),
       'timestamp': DateTime.now().toIso8601String(),
@@ -35,12 +36,16 @@ class LocalDataSource {
 
   Future<List<Message>?> getCachedMessages(String chatId) async {
     final box = await Hive.openBox<Map>(_messagesBox);
+    
     final data = box.get(chatId);
-    if (data == null) return null;
+    if (data == null) {
+      return null;
+    }
 
     final messages = (data['messages'] as List)
         .map((json) => Message.fromJson(Map<String, dynamic>.from(json as Map)))
         .toList();
+    
     return messages;
   }
 
@@ -127,6 +132,70 @@ class LocalDataSource {
       });
     } catch (e) {
       // Silently fail - not critical
+    }
+  }
+
+  // Update message status in cache
+  Future<void> updateMessageStatus(String chatId, String messageId, MessageStatus status) async {
+    try {
+      final box = await Hive.openBox<Map>(_messagesBox);
+      final data = box.get(chatId);
+      if (data == null) return;
+
+      final messages = (data['messages'] as List)
+          .map((json) => Map<String, dynamic>.from(json as Map))
+          .toList();
+      
+      // Find and update the message status
+      bool updated = false;
+      for (var message in messages) {
+        if (message['id'] == messageId) {
+          message['status'] = status.index;
+          updated = true;
+          break;
+        }
+      }
+      
+      if (updated) {
+        await box.put(chatId, {
+          'messages': messages,
+          'timestamp': DateTime.now().toIso8601String(),
+        });
+      }
+    } catch (e) {
+      print('[LocalDataSource] Failed to update message status: $e');
+    }
+  }
+
+  // Update chat last message in cache
+  Future<void> updateChatLastMessage(String chatId, Message message) async {
+    try {
+      final box = await Hive.openBox<Map>(_chatsBox);
+      final data = box.get('chats');
+      if (data == null) return;
+
+      final chats = (data['chats'] as List)
+          .map((json) => Map<String, dynamic>.from(json as Map))
+          .toList();
+      
+      // Find and update the chat
+      bool updated = false;
+      for (var chat in chats) {
+        if (chat['id'] == chatId) {
+          chat['lastMessage'] = message.toJson();
+          updated = true;
+          break;
+        }
+      }
+      
+      if (updated) {
+        await box.put('chats', {
+          'chats': chats,
+          'timestamp': DateTime.now().toIso8601String(),
+        });
+      }
+    } catch (e) {
+      print('[LocalDataSource] Failed to update chat last message: $e');
     }
   }
 

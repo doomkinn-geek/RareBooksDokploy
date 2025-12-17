@@ -1,6 +1,7 @@
 import '../datasources/api_datasource.dart';
 import '../datasources/local_datasource.dart';
 import '../models/chat_model.dart';
+import '../models/message_model.dart';
 
 class ChatRepository {
   final ApiDataSource _apiDataSource;
@@ -42,6 +43,10 @@ class ChatRepository {
   Future<void> deleteChat(String chatId) async {
     await _apiDataSource.deleteChat(chatId);
     // Note: Local cache will be updated via SignalR notification
+  }
+
+  Future<void> updateChatLastMessageInCache(String chatId, Message message) async {
+    await _localDataSource.updateChatLastMessage(chatId, message);
   }
 }
 

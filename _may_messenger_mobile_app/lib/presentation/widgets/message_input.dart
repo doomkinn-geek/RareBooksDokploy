@@ -306,16 +306,20 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
             ),
           ),
           const SizedBox(width: 8),
-          IconButton(
-            onPressed: widget.isSending ? null : _sendMessage,
-            icon: widget.isSending
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.send),
-            color: Theme.of(context).colorScheme.primary,
+          Builder(
+            builder: (context) {
+              return IconButton(
+                onPressed: widget.isSending ? null : _sendMessage,
+                icon: widget.isSending
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.send),
+                color: Theme.of(context).colorScheme.primary,
+              );
+            },
           ),
           GestureDetector(
             onLongPressStart: (details) {

@@ -20,6 +20,7 @@ class CreateGroupScreen extends ConsumerStatefulWidget {
 class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
   final TextEditingController _groupNameController = TextEditingController();
   List<RegisteredContact> _contacts = [];
+  Map<String, String> _phoneBookNames = {}; // Mapping userId -> phone book name
   final Set<String> _selectedUserIds = {};
   bool _isLoading = false;
   bool _permissionDenied = false;
@@ -74,8 +75,28 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
       // Sync and get registered contacts
       final contacts = await contactsService.syncContacts(token);
       
+      // Get local contacts to build name mapping
+      final localContacts = await contactsService.getAllContacts();
+      final phoneBookNames = <String, String>{};
+      
+      // Build mapping: for each registered contact, find their name in phone book
+      for (final registered in contacts) {
+        for (final local in localContacts) {
+          if (local.phones.isNotEmpty) {
+            final hash = contactsService.hashPhoneNumber(local.phones.first.number);
+            
+            if (hash == registered.phoneNumberHash) {
+              // Found match - use phone book name
+              phoneBookNames[registered.userId] = local.displayName;
+              break;
+            }
+          }
+        }
+      }
+      
       setState(() {
         _contacts = contacts;
+        _phoneBookNames = phoneBookNames;
         _isLoading = false;
       });
     } catch (e) {
@@ -293,6 +314,9 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
                     final contact = _contacts[index];
                     final isSelected = _selectedUserIds.contains(contact.userId);
                     
+                    // Use phone book name if available, otherwise use server name
+                    final displayName = _phoneBookNames[contact.userId] ?? contact.displayName;
+                    
                     return CheckboxListTile(
                       value: isSelected,
                       onChanged: (bool? selected) {
@@ -307,11 +331,14 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
                       secondary: CircleAvatar(
                         backgroundColor: Theme.of(context).colorScheme.primary,
                         child: Text(
-                          contact.displayName[0].toUpperCase(),
+                          displayName[0].toUpperCase(),
                           style: const TextStyle(color: Colors.white),
                         ),
                       ),
-                      title: Text(contact.displayName),
+                      title: Text(displayName),
+                      subtitle: contact.displayName != displayName 
+                          ? Text(contact.displayName, style: const TextStyle(fontSize: 12, color: Colors.grey))
+                          : null,
                     );
                   },
                 ),
