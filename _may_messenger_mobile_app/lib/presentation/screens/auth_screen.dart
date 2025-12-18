@@ -206,6 +206,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                               const SnackBar(
                                 content: Text('Пароли не совпадают'),
                                 duration: Duration(seconds: 2),
+                                behavior: SnackBarBehavior.floating,
+                                margin: EdgeInsets.only(top: 80, left: 16, right: 16),
                               ),
                             );
                             return;

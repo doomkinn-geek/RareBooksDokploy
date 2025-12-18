@@ -17,6 +17,11 @@ class AppTheme {
       ),
       filled: true,
     ),
+    snackBarTheme: const SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      // Показывать snackbar вверху экрана, чтобы не мешать вводу текста
+      showCloseIcon: true,
+    ),
   );
 
   static ThemeData darkTheme = ThemeData(
@@ -34,6 +39,11 @@ class AppTheme {
         borderRadius: BorderRadius.circular(12),
       ),
       filled: true,
+    ),
+    snackBarTheme: const SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      // Показывать snackbar вверху экрана, чтобы не мешать вводу текста
+      showCloseIcon: true,
     ),
   );
 }

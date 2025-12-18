@@ -114,6 +114,8 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
         const SnackBar(
           content: Text('Выберите хотя бы одного участника'),
           backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(top: 80, left: 16, right: 16),
         ),
       );
       return;
@@ -124,6 +126,8 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
         const SnackBar(
           content: Text('Введите название группы'),
           backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(top: 80, left: 16, right: 16),
         ),
       );
       return;
@@ -171,6 +175,8 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Группа "${_groupNameController.text.trim()}" создана'),
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.only(top: 80, left: 16, right: 16),
             ),
           );
         }
@@ -178,7 +184,11 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка создания группы: $e')),
+          SnackBar(
+            content: Text('Ошибка создания группы: $e'),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.only(top: 80, left: 16, right: 16),
+          ),
         );
       }
     }

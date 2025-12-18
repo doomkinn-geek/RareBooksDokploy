@@ -64,9 +64,11 @@ class ApiDataSource {
   Future<List<Chat>> getChats() async {
     try {
       final response = await _dio.get(ApiConstants.chats);
-      return (response.data as List)
-          .map((json) => Chat.fromJson(json))
-          .toList();
+      final List<Chat> chats = (response.data as List)
+          .map((json) => Chat.fromJson(json as Map<String, dynamic>))
+          .toList()
+          .cast<Chat>();
+      return chats;
     } catch (e) {
       throw Exception('Failed to get chats: $e');
     }
@@ -121,9 +123,11 @@ class ApiDataSource {
           'take': take,
         },
       );
-      return (response.data as List)
-          .map((json) => Message.fromJson(json))
-          .toList();
+      final List<Message> messages = (response.data as List)
+          .map((json) => Message.fromJson(json as Map<String, dynamic>))
+          .toList()
+          .cast<Message>();
+      return messages;
     } catch (e) {
       throw Exception('Failed to get messages: $e');
     }
@@ -219,9 +223,11 @@ class ApiDataSource {
           'take': take,
         },
       );
-      return (response.data as List)
-          .map((json) => Message.fromJson(json))
-          .toList();
+      final List<Message> messages = (response.data as List)
+          .map((json) => Message.fromJson(json as Map<String, dynamic>))
+          .toList()
+          .cast<Message>();
+      return messages;
     } catch (e) {
       throw Exception('Failed to get message updates: $e');
     }
@@ -243,9 +249,11 @@ class ApiDataSource {
         '${ApiConstants.messages}/$chatId/cursor',
         queryParameters: queryParams,
       );
-      return (response.data as List)
-          .map((json) => Message.fromJson(json))
-          .toList();
+      final List<Message> messages = (response.data as List)
+          .map((json) => Message.fromJson(json as Map<String, dynamic>))
+          .toList()
+          .cast<Message>();
+      return messages;
     } catch (e) {
       throw Exception('Failed to get messages with cursor: $e');
     }
@@ -264,9 +272,11 @@ class ApiDataSource {
   Future<List<UserProfile>> getUsers() async {
     try {
       final response = await _dio.get('/users');
-      return (response.data as List)
-          .map((json) => UserProfile.fromJson(json))
-          .toList();
+      final List<UserProfile> users = (response.data as List)
+          .map((json) => UserProfile.fromJson(json as Map<String, dynamic>))
+          .toList()
+          .cast<UserProfile>();
+      return users;
     } catch (e) {
       throw Exception('Failed to get users: $e');
     }
@@ -285,9 +295,11 @@ class ApiDataSource {
   Future<List<InviteLink>> getMyInviteLinks() async {
     try {
       final response = await _dio.get('/users/my-invite-links');
-      return (response.data as List)
-          .map((json) => InviteLink.fromJson(json))
-          .toList();
+      final List<InviteLink> inviteLinks = (response.data as List)
+          .map((json) => InviteLink.fromJson(json as Map<String, dynamic>))
+          .toList()
+          .cast<InviteLink>();
+      return inviteLinks;
     } catch (e) {
       throw Exception('Failed to get invite links: $e');
     }

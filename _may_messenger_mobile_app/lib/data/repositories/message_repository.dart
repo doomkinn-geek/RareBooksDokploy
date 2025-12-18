@@ -14,42 +14,22 @@ class MessageRepository {
     int take = 200,
     bool forceRefresh = false,
   }) async {
-    // #region agent log H10
-    print('[H10-Repo] getMessages: chatId=$chatId, skip=$skip, take=$take, forceRefresh=$forceRefresh');
-    // #endregion
-    
     if (!forceRefresh && skip == 0) {
       final cachedMessages = await _localDataSource.getCachedMessages(chatId);
-      
-      // #region agent log H10
-      print('[H10-Repo] Hive cache result: ${cachedMessages?.length ?? 0} messages');
-      // #endregion
       
       if (cachedMessages != null && cachedMessages.isNotEmpty) {
         return cachedMessages;
       }
     }
 
-    // #region agent log H10
-    print('[H10-Repo] Calling API getMessages...');
-    // #endregion
-    
     final messages = await _apiDataSource.getMessages(
       chatId: chatId,
       skip: skip,
       take: take,
     );
 
-    // #region agent log H10
-    print('[H10-Repo] API returned ${messages.length} messages');
-    // #endregion
-
     if (skip == 0) {
       await _localDataSource.cacheMessages(chatId, messages);
-      
-      // #region agent log H10
-      print('[H10-Repo] Cached ${messages.length} messages in Hive');
-      // #endregion
     }
 
     return messages;

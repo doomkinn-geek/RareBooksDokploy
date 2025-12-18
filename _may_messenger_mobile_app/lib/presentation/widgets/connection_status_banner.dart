@@ -14,8 +14,9 @@ class ConnectionStatusBanner extends ConsumerWidget {
     // Keep SignalR connection alive
     ref.watch(signalRConnectionProvider);
 
-    // Only show banner when not connected
-    if (connectionState == HubConnectionState.Connected) {
+    // Only show banner when not connected or connecting
+    // Hide banner when connected or when state is null (initial state)
+    if (connectionState == HubConnectionState.Connected || connectionState == null) {
       return const SizedBox.shrink();
     }
 

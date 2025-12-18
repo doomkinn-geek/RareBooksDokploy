@@ -317,6 +317,10 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
 
   Future<void> _registerFcmToken() async {
     try {
+      // Initialize FCM service to request permissions and get token
+      await _fcmService.initialize();
+      print('FCM service initialized after auth');
+      
       final token = await _authRepository.getStoredToken();
       
       if (token != null) {
@@ -324,7 +328,7 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
         print('FCM token registered after auth');
       }
     } catch (e) {
-      print('Failed to register FCM token after auth: $e');
+      print('Failed to initialize/register FCM after auth: $e');
       // Don't fail the auth flow if FCM registration fails
     }
   }

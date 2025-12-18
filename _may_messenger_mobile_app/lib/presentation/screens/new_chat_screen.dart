@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../data/services/contacts_service.dart';
 import '../../core/constants/api_constants.dart';
@@ -76,7 +75,6 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
       for (final registered in contacts) {
         for (final local in localContacts) {
           if (local.phones.isNotEmpty) {
-            final normalized = contactsService.normalizePhoneNumber(local.phones.first.number);
             final hash = contactsService.hashPhoneNumber(local.phones.first.number);
             
             if (hash == registered.phoneNumberHash) {
@@ -142,14 +140,22 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
           
           final displayName = _phoneBookNames[contact.userId] ?? contact.displayName;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Чат с $displayName открыт')),
+            SnackBar(
+              content: Text('Чат с $displayName открыт'),
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.only(top: 80, left: 16, right: 16),
+            ),
           );
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка создания чата: $e')),
+          SnackBar(
+            content: Text('Ошибка создания чата: $e'),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.only(top: 80, left: 16, right: 16),
+          ),
         );
       }
     }

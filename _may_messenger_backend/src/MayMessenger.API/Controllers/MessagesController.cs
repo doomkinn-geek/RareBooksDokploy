@@ -44,20 +44,8 @@ public class MessagesController : ControllerBase
     [HttpGet("{chatId}")]
     public async Task<ActionResult<IEnumerable<MessageDto>>> GetMessages(Guid chatId, [FromQuery] int skip = 0, [FromQuery] int take = 50)
     {
-        // #region agent log H10
-        DiagnosticsController.AddLog($"[H10-API] GetMessages: chatId={chatId}, skip={skip}, take={take}");
-        // #endregion
-        
         var userId = GetCurrentUserId();
         var messages = await _unitOfWork.Messages.GetChatMessagesAsync(chatId, skip, take);
-        
-        // #region agent log H10
-        DiagnosticsController.AddLog($"[H10-API] Database returned {messages.Count()} messages");
-        if (messages.Any())
-        {
-            DiagnosticsController.AddLog($"[H10-API] First: {messages.First().Content}, Last: {messages.Last().Content}");
-        }
-        // #endregion
         
         // Mark messages as delivered when retrieved (automatic delivery tracking)
         foreach (var message in messages)
@@ -72,7 +60,7 @@ public class MessagesController : ControllerBase
         
         await _unitOfWork.SaveChangesAsync();
         
-        var result = messages.Select(m => new MessageDto
+        return Ok(messages.Select(m => new MessageDto
         {
             Id = m.Id,
             ChatId = m.ChatId,
@@ -83,13 +71,7 @@ public class MessagesController : ControllerBase
             FilePath = m.FilePath,
             Status = m.Status,
             CreatedAt = m.CreatedAt
-        }).ToList();
-        
-        // #region agent log H10
-        DiagnosticsController.AddLog($"[H10-API] Returning {result.Count} message DTOs");
-        // #endregion
-        
-        return Ok(result);
+        }));
     }
     
     /// <summary>

@@ -166,7 +166,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
       if (hasChanges) {
         // Update state with merged messages
-        final mergedMessages = messageMap.values.toList();
+        final List<Message> mergedMessages = messageMap.values.toList().cast<Message>();
         mergedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
         
         state = state.copyWith(messages: mergedMessages);
@@ -196,18 +196,10 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   bool _isLoadingOlder = false;
 
   Future<void> loadMessages({bool forceRefresh = false}) async {
-    // #region agent log H10
-    print('[H10-Messages] loadMessages START: chatId=$chatId, forceRefresh=$forceRefresh');
-    // #endregion
-    
     state = state.copyWith(isLoading: true, error: null);
     try {
       // STEP 1: Try LRU cache first for instant loading
       final cachedMessages = _cache.getChatMessages(chatId);
-      
-      // #region agent log H10
-      print('[H10-Messages] LRU cache: ${cachedMessages.length} messages');
-      // #endregion
       
       if (cachedMessages.isNotEmpty && !forceRefresh) {
         print('[MSG_LOAD] Found ${cachedMessages.length} messages in LRU cache');
@@ -219,31 +211,15 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
       
       // STEP 2: Load synced messages from repository (Hive cache or API)
-      // #region agent log H10
-      print('[H10-Messages] Calling repository.getMessages...');
-      // #endregion
-      
       final List<Message> syncedMessages = await _messageRepository.getMessages(
         chatId: chatId,
         forceRefresh: forceRefresh,
       );
       
-      // #region agent log H10
-      print('[H10-Messages] Repository returned ${syncedMessages.length} synced messages');
-      if (syncedMessages.isNotEmpty) {
-        print('[H10-Messages] First message: id=${syncedMessages.first.id}, content=${syncedMessages.first.content}');
-        print('[H10-Messages] Last message: id=${syncedMessages.last.id}, content=${syncedMessages.last.content}');
-      }
-      // #endregion
-      
       // STEP 3: Load pending messages from outbox
       final pendingMessages = await _outboxRepository.getPendingMessagesForChat(chatId);
       final profileState = _ref.read(profileProvider);
       final currentUser = profileState.profile;
-      
-      // #region agent log H10
-      print('[H10-Messages] Pending messages from outbox: ${pendingMessages.length}');
-      // #endregion
       
       // Convert pending messages to Message objects
       final List<Message> localMessages = pendingMessages
@@ -251,11 +227,12 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
                 currentUser?.id ?? '',
                 currentUser?.displayName ?? 'Me',
               ))
+          .cast<Message>()
           .toList();
       
       // STEP 4: Merge synced and local messages, removing duplicates
       // Use localId as key since it's always unique
-      final allMessages = <String, Message>{};
+      final Map<String, Message> allMessages = <String, Message>{};
       
       // Add synced messages first (use localId if available, fallback to id)
       for (final msg in syncedMessages) {
@@ -274,12 +251,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
       
       // Convert to list and sort by date
-      final messages = allMessages.values.toList();
+      final List<Message> messages = List<Message>.from(allMessages.values);
       messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      
-      // #region agent log H10
-      print('[H10-Messages] FINAL: ${messages.length} messages (${syncedMessages.length} synced + ${localMessages.length} local)');
-      // #endregion
       
       print('[MSG_LOAD] Loaded ${messages.length} messages (${syncedMessages.length} synced + ${localMessages.length} local)');
       
@@ -300,10 +273,6 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         print('[MSG_LOAD] Failed to cache messages in Hive: $e');
       }
     } catch (e) {
-      // #region agent log H10
-      print('[H10-Messages] ERROR: $e');
-      // #endregion
-      
       print('[MSG_LOAD] Load messages error: $e');
       state = state.copyWith(
         isLoading: false,

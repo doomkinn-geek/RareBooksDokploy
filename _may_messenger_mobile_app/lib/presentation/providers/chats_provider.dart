@@ -45,28 +45,13 @@ class ChatsNotifier extends StateNotifier<ChatsState> {
   Future<void> loadChats({bool forceRefresh = false}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      // #region agent log H10
-      print('[H10-Chats] loadChats called: forceRefresh=$forceRefresh');
-      // #endregion
-      
       final chats = await _chatRepository.getChats(forceRefresh: forceRefresh);
-      
-      // #region agent log H10
-      print('[H10-Chats] Loaded ${chats.length} chats');
-      for (var chat in chats) {
-        print('[H10-Chats] Chat ${chat.id}: title=${chat.title}, lastMessage=${chat.lastMessage?.content ?? "NULL"}, lastMessageTime=${chat.lastMessageTime}');
-      }
-      // #endregion
       
       state = state.copyWith(
         chats: chats,
         isLoading: false,
       );
     } catch (e) {
-      // #region agent log H10
-      print('[H10-Chats] ERROR loading chats: $e');
-      // #endregion
-      
       state = state.copyWith(
         isLoading: false,
         error: e.toString(),

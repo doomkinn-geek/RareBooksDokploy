@@ -180,6 +180,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SnackBar(
           content: Text('Не удалось создать код приглашения'),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(top: 80, left: 16, right: 16),
         ),
       );
     }
@@ -198,6 +200,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       SnackBar(
         content: Text('Код "$code" скопирован'),
         duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.only(top: 80, left: 16, right: 16),
       ),
     );
   }
