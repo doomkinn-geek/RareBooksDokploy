@@ -23,6 +23,11 @@ public class SendMessageDtoValidator : AbstractValidator<SendMessageDto>
             .MaximumLength(10000)
             .WithMessage("Message content must not exceed 10000 characters")
             .When(x => x.Type == MessageType.Text && !string.IsNullOrEmpty(x.Content));
+
+        RuleFor(x => x.ClientMessageId)
+            .MaximumLength(50)
+            .WithMessage("ClientMessageId must not exceed 50 characters")
+            .When(x => !string.IsNullOrEmpty(x.ClientMessageId));
     }
 }
 

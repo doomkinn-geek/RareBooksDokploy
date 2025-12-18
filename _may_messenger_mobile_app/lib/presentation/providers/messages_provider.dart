@@ -65,6 +65,10 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   final _uuid = const Uuid();
   late final MessageSyncService _syncService;
   bool _isSignalRConnected = true;
+  
+  // Throttling: track pending sends to prevent spam
+  final Set<String> _pendingSends = {};
+  DateTime? _lastSendTime;
 
   MessagesNotifier(
     this._messageRepository,
@@ -283,6 +287,15 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
 
   Future<void> sendMessage(String content) async {
     print('[MSG_SEND] Starting local-first send for text message');
+    
+    // Throttling: prevent too frequent sends (max 10 per second per user)
+    final now = DateTime.now();
+    if (_lastSendTime != null && now.difference(_lastSendTime!).inMilliseconds < 100) {
+      print('[MSG_SEND] Throttling: too frequent sends, waiting...');
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    _lastSendTime = now;
+    
     state = state.copyWith(isSending: true);
     
     try {
@@ -295,7 +308,15 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
       // STEP 1: Create message locally with temporary ID
       final localId = _uuid.v4();
-      final now = DateTime.now();
+      
+      // Check if this message is already being sent (double-tap prevention)
+      if (_pendingSends.contains(localId)) {
+        print('[MSG_SEND] Message already being sent, skipping: $localId');
+        state = state.copyWith(isSending: false);
+        return;
+      }
+      
+      _pendingSends.add(localId);
       
       final localMessage = Message(
         id: localId, // Temporary local ID
@@ -326,11 +347,12 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         content: content,
       );
       
-      // STEP 4: Send to backend asynchronously
-      _syncMessageToBackend(localId, MessageType.text, content: content);
+      // STEP 4: Send to backend asynchronously with clientMessageId
+      _syncMessageToBackend(localId, MessageType.text, content: content, clientMessageId: localId);
       
     } catch (e) {
       print('[MSG_SEND] Failed to create local message: $e');
+      _pendingSends.remove(localId);
       state = state.copyWith(
         isSending: false,
         error: e.toString(),
@@ -339,7 +361,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   }
   
   /// Sync a local message to the backend with exponential backoff
-  Future<void> _syncMessageToBackend(String localId, MessageType type, {String? content, String? audioPath, int attemptNumber = 0}) async {
+  Future<void> _syncMessageToBackend(String localId, MessageType type, {String? content, String? audioPath, String? clientMessageId, int attemptNumber = 0}) async {
     const maxAttempts = 5;
     final backoffDelays = [1, 2, 4, 8, 16, 30]; // seconds
     
@@ -347,13 +369,14 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       print('[MSG_SEND] Syncing message to backend: $localId (attempt ${attemptNumber + 1}/$maxAttempts)');
       await _outboxRepository.markAsSyncing(localId);
       
-      // Send via API
+      // Send via API with clientMessageId for idempotency
       final Message serverMessage;
       if (type == MessageType.text) {
         serverMessage = await _messageRepository.sendMessage(
           chatId: chatId,
           type: type,
           content: content,
+          clientMessageId: clientMessageId,
         );
       } else {
         serverMessage = await _messageRepository.sendAudioMessage(
@@ -363,6 +386,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
       
       print('[MSG_SEND] Message synced successfully. Server ID: ${serverMessage.id}');
+      
+      // Remove from pending sends
+      _pendingSends.remove(localId);
       
       // Mark as synced in outbox
       await _outboxRepository.markAsSynced(localId, serverMessage.id);
@@ -402,12 +428,13 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         // Schedule retry with exponential backoff
         Future.delayed(Duration(seconds: delaySeconds), () {
           if (mounted) {
-            _syncMessageToBackend(localId, type, content: content, audioPath: audioPath, attemptNumber: attemptNumber + 1);
+            _syncMessageToBackend(localId, type, content: content, audioPath: audioPath, clientMessageId: clientMessageId, attemptNumber: attemptNumber + 1);
           }
         });
       } else {
         // Max attempts reached, mark as permanently failed
         print('[MSG_SEND] Max retry attempts reached for message: $localId');
+        _pendingSends.remove(localId);
         await _outboxRepository.markAsFailed(localId, 'Failed after $maxAttempts attempts: ${e.toString()}');
         
         // Update message status to failed in UI
@@ -426,6 +453,15 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
 
   Future<void> sendAudioMessage(String audioPath) async {
     print('[MSG_SEND] Starting local-first send for audio message');
+    
+    // Throttling: prevent too frequent sends
+    final now = DateTime.now();
+    if (_lastSendTime != null && now.difference(_lastSendTime!).inMilliseconds < 100) {
+      print('[MSG_SEND] Throttling: too frequent sends, waiting...');
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    _lastSendTime = now;
+    
     state = state.copyWith(isSending: true);
     
     try {
@@ -438,7 +474,15 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
       // STEP 1: Create message locally with temporary ID
       final localId = _uuid.v4();
-      final now = DateTime.now();
+      
+      // Check if this message is already being sent
+      if (_pendingSends.contains(localId)) {
+        print('[MSG_SEND] Message already being sent, skipping: $localId');
+        state = state.copyWith(isSending: false);
+        return;
+      }
+      
+      _pendingSends.add(localId);
       
       final localMessage = Message(
         id: localId, // Temporary local ID
@@ -469,11 +513,12 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         localAudioPath: audioPath,
       );
       
-      // STEP 4: Send to backend asynchronously
-      _syncMessageToBackend(localId, MessageType.audio, audioPath: audioPath);
+      // STEP 4: Send to backend asynchronously with clientMessageId
+      _syncMessageToBackend(localId, MessageType.audio, audioPath: audioPath, clientMessageId: localId);
       
     } catch (e) {
       print('[MSG_SEND] Failed to create local audio message: $e');
+      _pendingSends.remove(localId);
       state = state.copyWith(
         isSending: false,
         error: e.toString(),
@@ -537,10 +582,17 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
     }
     
-    // Check if message already exists by ID or localId
+    // Enhanced deduplication: check by ID, localId, and content+timestamp for robustness
     final exists = state.messages.any((m) => 
+      // Check by server ID
       (message.id.isNotEmpty && m.id == message.id) || 
-      ((message.localId?.isNotEmpty ?? false) && m.localId == message.localId)
+      // Check by localId (client-side ID)
+      ((message.localId?.isNotEmpty ?? false) && m.localId == message.localId) ||
+      // Check by content+sender+time (for messages that might come via different paths)
+      (m.senderId == message.senderId && 
+       m.content == message.content && 
+       m.type == message.type &&
+       m.createdAt.difference(message.createdAt).abs().inSeconds < 2)
     );
     
     if (!exists) {
@@ -737,6 +789,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         pendingMessage.type,
         content: pendingMessage.content,
         audioPath: pendingMessage.localAudioPath,
+        clientMessageId: localId, // Use localId as clientMessageId
         attemptNumber: 0, // Reset attempt counter
       );
     } catch (e) {

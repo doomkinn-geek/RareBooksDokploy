@@ -67,6 +67,7 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.ChatId, e.CreatedAt });
+            entity.HasIndex(e => e.ClientMessageId); // For idempotency check
             
             entity.HasOne(e => e.Chat)
                 .WithMany(c => c.Messages)

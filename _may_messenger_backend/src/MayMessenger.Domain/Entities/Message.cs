@@ -13,6 +13,9 @@ public class Message : BaseEntity
     public DateTime? DeliveredAt { get; set; }
     public DateTime? ReadAt { get; set; }
     
+    // Client-side generated ID for idempotency
+    public string? ClientMessageId { get; set; }
+    
     // Navigation properties
     public Chat Chat { get; set; } = null!;
     public User Sender { get; set; } = null!;

@@ -12,9 +12,9 @@ public class RateLimitingMiddleware
     // Rate limiting configuration
     private static readonly ConcurrentDictionary<string, RateLimitRule> _rules = new()
     {
-        // Messages endpoint: 10 requests per second, 100 per minute
-        ["POST:/api/messages"] = new RateLimitRule(10, TimeSpan.FromSeconds(1)),
-        ["POST:/api/messages:minute"] = new RateLimitRule(100, TimeSpan.FromMinutes(1)),
+        // Messages endpoint: 20 requests per second, 200 per minute
+        ["POST:/api/messages"] = new RateLimitRule(20, TimeSpan.FromSeconds(1)),
+        ["POST:/api/messages:minute"] = new RateLimitRule(200, TimeSpan.FromMinutes(1)),
         
         // Audio messages: 5 requests per second
         ["POST:/api/messages/audio"] = new RateLimitRule(5, TimeSpan.FromSeconds(1)),

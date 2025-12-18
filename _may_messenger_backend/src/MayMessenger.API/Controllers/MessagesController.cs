@@ -298,12 +298,39 @@ public class MessagesController : ControllerBase
     {
         var userId = GetCurrentUserId();
         
+        // Idempotency check: if clientMessageId is provided, check if message already exists
+        if (!string.IsNullOrEmpty(dto.ClientMessageId))
+        {
+            var existingMessage = await _unitOfWork.Messages.GetByClientMessageIdAsync(dto.ClientMessageId);
+            if (existingMessage != null)
+            {
+                _logger.LogInformation($"Message with ClientMessageId {dto.ClientMessageId} already exists, returning existing message {existingMessage.Id}");
+                
+                var existingMessageDto = new MessageDto
+                {
+                    Id = existingMessage.Id,
+                    ChatId = existingMessage.ChatId,
+                    SenderId = existingMessage.SenderId,
+                    SenderName = existingMessage.Sender?.DisplayName ?? "Unknown",
+                    Type = existingMessage.Type,
+                    Content = existingMessage.Content,
+                    FilePath = existingMessage.FilePath,
+                    Status = existingMessage.Status,
+                    CreatedAt = existingMessage.CreatedAt
+                };
+                
+                return Ok(existingMessageDto);
+            }
+        }
+        
+        // Create new message
         var message = new Message
         {
             ChatId = dto.ChatId,
             SenderId = userId,
             Type = dto.Type,
             Content = dto.Content,
+            ClientMessageId = dto.ClientMessageId,
             Status = MessageStatus.Sent
         };
         
@@ -311,13 +338,18 @@ public class MessagesController : ControllerBase
         await _unitOfWork.SaveChangesAsync();
         
         var sender = await _unitOfWork.Users.GetByIdAsync(userId);
+        if (sender == null)
+        {
+            _logger.LogError($"User {userId} not found after sending message");
+            return StatusCode(500, "Internal server error: User not found");
+        }
         
         var messageDto = new MessageDto
         {
             Id = message.Id,
             ChatId = message.ChatId,
             SenderId = message.SenderId,
-            SenderName = sender?.DisplayName ?? "Unknown",
+            SenderName = sender.DisplayName,
             Type = message.Type,
             Content = message.Content,
             FilePath = message.FilePath,
@@ -325,17 +357,10 @@ public class MessagesController : ControllerBase
             CreatedAt = message.CreatedAt
         };
         
-        // Send SignalR notification to all participants of the chat
+        // Send SignalR notification ONLY to group (not to individual users to avoid duplicates)
         var chat = await _unitOfWork.Chats.GetByIdAsync(dto.ChatId);
         if (chat != null)
         {
-            foreach (var participant in chat.Participants)
-            {
-                // Send to each participant's connection
-                await _hubContext.Clients.User(participant.UserId.ToString()).SendAsync("ReceiveMessage", messageDto);
-            }
-            
-            // Also send to group for users currently in the chat
             await _hubContext.Clients.Group(dto.ChatId.ToString()).SendAsync("ReceiveMessage", messageDto);
             
             // Send push notifications to offline users
@@ -378,13 +403,18 @@ public class MessagesController : ControllerBase
         await _unitOfWork.SaveChangesAsync();
         
         var sender = await _unitOfWork.Users.GetByIdAsync(userId);
+        if (sender == null)
+        {
+            _logger.LogError($"User {userId} not found after sending audio message");
+            return StatusCode(500, "Internal server error: User not found");
+        }
         
         var messageDto = new MessageDto
         {
             Id = message.Id,
             ChatId = message.ChatId,
             SenderId = message.SenderId,
-            SenderName = sender?.DisplayName ?? "Unknown",
+            SenderName = sender.DisplayName,
             Type = message.Type,
             Content = message.Content,
             FilePath = message.FilePath,
@@ -392,17 +422,10 @@ public class MessagesController : ControllerBase
             CreatedAt = message.CreatedAt
         };
         
-        // Send SignalR notification to all participants of the chat
+        // Send SignalR notification ONLY to group (not to individual users to avoid duplicates)
         var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
         if (chat != null)
         {
-            foreach (var participant in chat.Participants)
-            {
-                // Send to each participant's connection
-                await _hubContext.Clients.User(participant.UserId.ToString()).SendAsync("ReceiveMessage", messageDto);
-            }
-            
-            // Also send to group for users currently in the chat
             await _hubContext.Clients.Group(chatId.ToString()).SendAsync("ReceiveMessage", messageDto);
             
             // Send push notifications to offline users

@@ -39,11 +39,13 @@ class MessageRepository {
     required String chatId,
     required MessageType type,
     String? content,
+    String? clientMessageId,
   }) async {
     return await _apiDataSource.sendMessage(
       chatId: chatId,
       type: type,
       content: content,
+      clientMessageId: clientMessageId,
     );
   }
 

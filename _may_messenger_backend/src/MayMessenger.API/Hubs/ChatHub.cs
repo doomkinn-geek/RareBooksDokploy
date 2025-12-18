@@ -49,39 +49,18 @@ public class ChatHub : Hub
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, chatId);
     }
     
-    public async Task SendMessage(SendMessageDto dto)
+    /// <summary>
+    /// DEPRECATED: Use REST API POST /api/messages instead for better reliability and idempotency
+    /// This method is kept for backward compatibility but should not be used
+    /// </summary>
+    [Obsolete("Use REST API POST /api/messages instead. This method will be removed in future versions.")]
+    public Task SendMessage(SendMessageDto dto)
     {
-        var userId = GetCurrentUserId();
+        // Log warning that deprecated method is being used
+        Console.WriteLine($"[WARNING] Deprecated SendMessage method called via SignalR. Client should use REST API instead.");
         
-        var message = new Message
-        {
-            ChatId = dto.ChatId,
-            SenderId = userId,
-            Type = dto.Type,
-            Content = dto.Content,
-            Status = MessageStatus.Sent
-        };
-        
-        await _unitOfWork.Messages.AddAsync(message);
-        await _unitOfWork.SaveChangesAsync();
-        
-        var sender = await _unitOfWork.Users.GetByIdAsync(userId);
-        
-        var messageDto = new MessageDto
-        {
-            Id = message.Id,
-            ChatId = message.ChatId,
-            SenderId = message.SenderId,
-            SenderName = sender?.DisplayName ?? "Unknown",
-            Type = message.Type,
-            Content = message.Content,
-            FilePath = message.FilePath,
-            Status = message.Status,
-            CreatedAt = message.CreatedAt
-        };
-        
-        // Send to all users in the chat
-        await Clients.Group(dto.ChatId.ToString()).SendAsync("ReceiveMessage", messageDto);
+        // Return error to client
+        throw new InvalidOperationException("SendMessage via SignalR is deprecated. Please use REST API POST /api/messages instead.");
     }
     
     public async Task MessageDelivered(Guid messageId, Guid chatId)

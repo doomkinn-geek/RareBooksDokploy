@@ -88,6 +88,16 @@ public class MessageRepository : Repository<Message>, IMessageRepository
             .Take(take)
             .ToListAsync(cancellationToken);
     }
+    
+    public async Task<Message?> GetByClientMessageIdAsync(string clientMessageId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(clientMessageId))
+            return null;
+            
+        return await _dbSet
+            .Include(m => m.Sender)
+            .FirstOrDefaultAsync(m => m.ClientMessageId == clientMessageId, cancellationToken);
+    }
 }
 
 

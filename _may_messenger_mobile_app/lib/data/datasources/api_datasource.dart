@@ -137,6 +137,7 @@ class ApiDataSource {
     required String chatId,
     required MessageType type,
     String? content,
+    String? clientMessageId,
   }) async {
     try {
       final response = await _dio.post(
@@ -145,6 +146,7 @@ class ApiDataSource {
           'chatId': chatId,
           'type': type.index,
           'content': content,
+          'clientMessageId': clientMessageId,
         },
       );
       return Message.fromJson(response.data);
