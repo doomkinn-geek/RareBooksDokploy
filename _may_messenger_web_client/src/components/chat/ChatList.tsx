@@ -16,50 +16,36 @@ const ChatListItem = ({ chat, isSelected, onClick }: ChatListItemProps) => {
   
   const isGroupChat = chat.type === ChatType.Group;
   
-  // Selection style
-  const activeClass = isSelected 
-    ? 'bg-indigo-50 border-l-4 border-l-indigo-600' 
-    : 'border-l-4 border-l-transparent hover:bg-gray-50';
-
   return (
     <div
       onClick={onClick}
-      className={`p-4 cursor-pointer border-b border-gray-100 transition-all duration-200 ${activeClass}`}
+      className={`p-4 cursor-pointer border-b border-gray-200 hover:bg-gray-50 transition ${
+        isSelected ? 'bg-indigo-50 border-l-4 border-l-indigo-600' : ''
+      }`}
     >
       <div className="flex items-start gap-3">
-        <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg flex-shrink-0 relative shadow-sm ${
-          isSelected ? 'bg-indigo-600' : 'bg-gradient-to-br from-indigo-500 to-purple-600'
-        }`}>
+        <div className="w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0 relative">
           {chat.title?.[0]?.toUpperCase() || '?'}
           {isGroupChat && (
-            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center">
-               <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
-                 <Users className="w-2.5 h-2.5 text-white" />
-               </div>
+            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center border-2 border-white">
+              <Users className="w-3 h-3 text-white" />
             </div>
           )}
         </div>
         
-        <div className="flex-1 min-w-0 pt-0.5">
+        <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-1">
-            <h3 className={`font-semibold truncate ${isSelected ? 'text-indigo-900' : 'text-gray-900'}`}>
-              {chat.title || 'Без названия'}
-            </h3>
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <h3 className="font-semibold text-gray-900 truncate">{chat.title || 'Без названия'}</h3>
+            </div>
             {chat.lastMessage && (
-              <span className={`text-xs flex-shrink-0 ml-2 ${isSelected ? 'text-indigo-500 font-medium' : 'text-gray-400'}`}>
+              <span className="text-xs text-gray-500 flex-shrink-0 ml-2">
                 {formatDate(chat.lastMessage.createdAt)}
               </span>
             )}
           </div>
           
-          <p className={`text-sm truncate ${isSelected ? 'text-indigo-600/80' : 'text-gray-500'}`}>
-            {chat.lastMessage?.senderId && (
-              <span className="font-medium mr-1 text-xs opacity-80">
-                {chat.lastMessage.senderName ? `${chat.lastMessage.senderName}:` : 'Вы:'}
-              </span>
-            )}
-            {lastMessageText}
-          </p>
+          <p className="text-sm text-gray-600 truncate">{lastMessageText}</p>
         </div>
       </div>
     </div>

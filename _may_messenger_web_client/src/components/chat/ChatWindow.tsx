@@ -3,8 +3,7 @@ import { useChatStore } from '../../stores/chatStore';
 import { useMessageStore } from '../../stores/messageStore';
 import { MessageBubble } from '../message/MessageBubble';
 import { MessageInput } from '../message/MessageInput';
-import { MessageCircle, MoreVertical, Phone, Video } from 'lucide-react';
-import { ChatType } from '../../types/chat';
+import { MessageCircle } from 'lucide-react';
 
 export const ChatWindow = () => {
   const { selectedChatId, chats } = useChatStore();
@@ -58,41 +57,24 @@ export const ChatWindow = () => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50/50">
+    <div className="h-full flex flex-col">
       {/* Chat Header */}
-      <div className="px-6 py-3 border-b border-gray-200 bg-white shadow-sm z-10">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-lg shadow-sm">
-              {selectedChat?.title?.[0]?.toUpperCase() || '?'}
-            </div>
-            <div>
-              <h2 className="font-bold text-gray-900 leading-tight">{selectedChat?.title || 'Загрузка...'}</h2>
-              <p className="text-sm text-gray-500">
-                {selectedChat?.type === ChatType.Group 
-                  ? `${selectedChat?.participants?.length || 0} участников`
-                  : 'В сети' // TODO: Real presence status
-                }
-              </p>
-            </div>
+      <div className="px-6 py-4 border-b border-gray-200 bg-white">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-semibold">
+            {selectedChat?.title?.[0]?.toUpperCase() || '?'}
           </div>
-          
-          <div className="flex items-center gap-2 text-gray-400">
-             <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-               <Phone className="w-5 h-5" />
-             </button>
-             <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-               <Video className="w-5 h-5" />
-             </button>
-             <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-               <MoreVertical className="w-5 h-5" />
-             </button>
+          <div>
+            <h2 className="font-semibold text-gray-900">{selectedChat?.title || 'Загрузка...'}</h2>
+            <p className="text-sm text-gray-500">
+              {selectedChat?.participants?.length || 0} участников
+            </p>
           </div>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 bg-[#f0f2f5]">
+      <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-gray-500">Нет сообщений</p>

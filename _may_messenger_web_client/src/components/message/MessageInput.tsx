@@ -38,32 +38,32 @@ export const MessageInput = ({ onSendText, onSendAudio, disabled }: MessageInput
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex items-center gap-3 px-6 py-4 border-t border-gray-200 bg-white">
+    <form onSubmit={handleSubmit} className="flex items-center gap-2 px-4 py-3 border-t border-gray-200 bg-white">
       <input
         type="text"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="Напишите сообщение..."
+        placeholder="Введите сообщение..."
         disabled={disabled}
-        className="flex-1 px-5 py-3 border border-gray-200 bg-gray-50 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:bg-white focus:border-indigo-200 transition-all placeholder:text-gray-400 disabled:opacity-50"
+        className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
       />
       
       {text.trim() ? (
         <button
           type="submit"
           disabled={disabled}
-          className="p-3 rounded-full bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-md disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed transform hover:scale-105 transition-all duration-200"
+          className="p-2 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition"
         >
-          <Send className="w-5 h-5" />
+          <Send className="w-6 h-6" />
         </button>
       ) : (
         <button
           type="button"
           onClick={handleStartRecording}
           disabled={disabled}
-          className="p-3 rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-600 shadow-sm hover:shadow-md disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed transform hover:scale-105 transition-all duration-200"
+          className="p-2 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition"
         >
-          <Mic className="w-5 h-5" />
+          <Mic className="w-6 h-6" />
         </button>
       )}
     </form>
