@@ -234,7 +234,7 @@ class ApiDataSource {
     int take = 50,
   }) async {
     try {
-      final queryParams = {'take': take};
+      final queryParams = <String, dynamic>{'take': take};
       if (cursor != null) {
         queryParams['cursor'] = cursor;
       }

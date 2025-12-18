@@ -3,12 +3,12 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
-# Copy package files first for better Docker layer caching
-COPY package*.json ./
+    # Copy package files first for better Docker layer caching
+    COPY package.json ./
 
-# Install dependencies
-# Using npm install instead of npm ci because lock file may not be in sync
-RUN npm install --legacy-peer-deps
+    # Install dependencies
+    # Using npm install to generate fresh lock file
+    RUN npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .

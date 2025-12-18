@@ -791,7 +791,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
       
       // Prepend older messages to current list
-      final allMessages = [...newMessages, ...state.messages];
+      final List<Message> allMessages = [...newMessages, ...state.messages];
       allMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       
       // Update LRU cache
