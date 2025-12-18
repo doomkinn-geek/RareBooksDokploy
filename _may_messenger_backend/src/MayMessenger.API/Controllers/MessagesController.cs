@@ -52,7 +52,7 @@ public class MessagesController : ControllerBase
         var messages = await _unitOfWork.Messages.GetChatMessagesAsync(chatId, skip, take);
         
         // #region agent log H10
-        DiagnosticsController.AddLog($"[H10-API] Database returned {messages.Count} messages");
+        DiagnosticsController.AddLog($"[H10-API] Database returned {messages.Count()} messages");
         if (messages.Any())
         {
             DiagnosticsController.AddLog($"[H10-API] First: {messages.First().Content}, Last: {messages.Last().Content}");
