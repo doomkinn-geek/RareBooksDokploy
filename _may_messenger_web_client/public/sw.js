@@ -1,14 +1,51 @@
-// Service Worker for Web Push Notifications
-const CACHE_NAME = 'may-messenger-v1';
+// Service Worker for Web Push Notifications and Offline Support
+const CACHE_NAME = 'may-messenger-v1.1';
+const RUNTIME_CACHE = 'may-messenger-runtime';
+
+// Assets to cache on install
+const PRECACHE_ASSETS = [
+  '/web/',
+  '/web/index.html',
+  // Icons
+  '/icon-192.png',
+  '/icon-96.png',
+];
 
 self.addEventListener('install', (event) => {
   console.log('[SW] Service Worker installing...');
-  self.skipWaiting();
+  
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      console.log('[SW] Caching app shell');
+      return cache.addAll(PRECACHE_ASSETS.map(url => 
+        new Request(url, { cache: 'reload' })
+      )).catch((err) => {
+        console.error('[SW] Failed to cache assets:', err);
+      });
+    }).then(() => {
+      return self.skipWaiting();
+    })
+  );
 });
 
 self.addEventListener('activate', (event) => {
   console.log('[SW] Service Worker activating...');
-  event.waitUntil(clients.claim());
+  
+  event.waitUntil(
+    // Clean up old caches
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME && cacheName !== RUNTIME_CACHE) {
+            console.log('[SW] Deleting old cache:', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    }).then(() => {
+      return clients.claim();
+    })
+  );
 });
 
 // Handle push notifications (FCM Data Messages)
@@ -98,5 +135,85 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
+});
+
+// Network strategies for different request types
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  const url = new URL(request.url);
+  
+  // Skip non-GET requests and external URLs
+  if (request.method !== 'GET' || !url.origin.includes(self.location.origin)) {
+    return;
+  }
+
+  // Skip API calls (let them go through network)
+  if (url.pathname.includes('/api/')) {
+    return;
+  }
+
+  // HTML files - Network first, fallback to cache
+  if (request.headers.get('accept').includes('text/html')) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          // Cache successful responses
+          if (response.ok) {
+            const responseClone = response.clone();
+            caches.open(RUNTIME_CACHE).then((cache) => {
+              cache.put(request, responseClone);
+            });
+          }
+          return response;
+        })
+        .catch(() => {
+          // Fallback to cache
+          return caches.match(request).then((cachedResponse) => {
+            return cachedResponse || caches.match('/web/index.html');
+          });
+        })
+    );
+    return;
+  }
+
+  // Static assets - Cache first, fallback to network
+  if (request.url.match(/\.(js|css|png|jpg|jpeg|gif|svg|woff|woff2|ttf|ico)$/)) {
+    event.respondWith(
+      caches.match(request).then((cachedResponse) => {
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        
+        return fetch(request).then((response) => {
+          // Cache for future use
+          if (response.ok) {
+            const responseClone = response.clone();
+            caches.open(RUNTIME_CACHE).then((cache) => {
+              cache.put(request, responseClone);
+            });
+          }
+          return response;
+        });
+      })
+    );
+    return;
+  }
+
+  // Default - Network first
+  event.respondWith(
+    fetch(request)
+      .then((response) => {
+        if (response.ok) {
+          const responseClone = response.clone();
+          caches.open(RUNTIME_CACHE).then((cache) => {
+            cache.put(request, responseClone);
+          });
+        }
+        return response;
+      })
+      .catch(() => {
+        return caches.match(request);
+      })
+  );
 });
 
