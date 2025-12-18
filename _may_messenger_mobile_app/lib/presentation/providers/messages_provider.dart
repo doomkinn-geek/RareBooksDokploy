@@ -6,6 +6,7 @@ import '../../data/repositories/message_cache_repository.dart';
 import 'auth_provider.dart';
 import 'signalr_provider.dart';
 import 'profile_provider.dart';
+import 'chats_provider.dart';
 
 // LRU Cache provider - singleton для всего приложения
 final messageCacheProvider = Provider<MessageCacheRepository>((ref) {
@@ -298,6 +299,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     
     state = state.copyWith(isSending: true);
     
+    // Declare localId outside try block so it's accessible in catch
+    String? localId;
+    
     try {
       final profileState = _ref.read(profileProvider);
       final currentUser = profileState.profile;
@@ -307,7 +311,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
       
       // STEP 1: Create message locally with temporary ID
-      final localId = _uuid.v4();
+      localId = _uuid.v4();
       
       // Check if this message is already being sent (double-tap prevention)
       if (_pendingSends.contains(localId)) {
@@ -340,6 +344,17 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       // Add to LRU cache
       _cache.put(localMessage);
       
+      // Update chat preview immediately for better UX
+      try {
+        _ref.read(chatsProvider.notifier).updateChatLastMessage(
+          chatId, 
+          localMessage, 
+          incrementUnread: false,
+        );
+      } catch (e) {
+        print('[MSG_SEND] Failed to update chat preview: $e');
+      }
+      
       // STEP 3: Add to outbox queue for persistence
       await _outboxRepository.addToOutbox(
         chatId: chatId,
@@ -352,7 +367,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
     } catch (e) {
       print('[MSG_SEND] Failed to create local message: $e');
-      _pendingSends.remove(localId);
+      if (localId != null) {
+        _pendingSends.remove(localId);
+      }
       state = state.copyWith(
         isSending: false,
         error: e.toString(),
@@ -397,12 +414,24 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final messageIndex = state.messages.indexWhere((m) => m.id == localId);
       if (messageIndex != -1) {
         final updatedMessages = [...state.messages];
-        updatedMessages[messageIndex] = serverMessage.copyWith(
+        final finalServerMessage = serverMessage.copyWith(
           localId: localId,
           isLocalOnly: false,
         );
+        updatedMessages[messageIndex] = finalServerMessage;
         state = state.copyWith(messages: updatedMessages);
         print('[MSG_SEND] Message updated in UI with server ID: ${serverMessage.id}');
+        
+        // Update chat preview with server message (has correct server ID now)
+        try {
+          _ref.read(chatsProvider.notifier).updateChatLastMessage(
+            chatId, 
+            finalServerMessage, 
+            incrementUnread: false,
+          );
+        } catch (e) {
+          print('[MSG_SEND] Failed to update chat preview with server message: $e');
+        }
       }
       
       // Clean up outbox after a delay (keep for retry capability)
@@ -464,6 +493,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     
     state = state.copyWith(isSending: true);
     
+    // Declare localId outside try block so it's accessible in catch
+    String? localId;
+    
     try {
       final profileState = _ref.read(profileProvider);
       final currentUser = profileState.profile;
@@ -473,7 +505,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
       
       // STEP 1: Create message locally with temporary ID
-      final localId = _uuid.v4();
+      localId = _uuid.v4();
       
       // Check if this message is already being sent
       if (_pendingSends.contains(localId)) {
@@ -506,6 +538,17 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       // Add to LRU cache
       _cache.put(localMessage);
       
+      // Update chat preview immediately for better UX
+      try {
+        _ref.read(chatsProvider.notifier).updateChatLastMessage(
+          chatId, 
+          localMessage, 
+          incrementUnread: false,
+        );
+      } catch (e) {
+        print('[MSG_SEND] Failed to update chat preview: $e');
+      }
+      
       // STEP 3: Add to outbox queue for persistence
       await _outboxRepository.addToOutbox(
         chatId: chatId,
@@ -518,7 +561,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
     } catch (e) {
       print('[MSG_SEND] Failed to create local audio message: $e');
-      _pendingSends.remove(localId);
+      if (localId != null) {
+        _pendingSends.remove(localId);
+      }
       state = state.copyWith(
         isSending: false,
         error: e.toString(),
@@ -582,18 +627,49 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
     }
     
-    // Enhanced deduplication: check by ID, localId, and content+timestamp for robustness
-    final exists = state.messages.any((m) => 
-      // Check by server ID
-      (message.id.isNotEmpty && m.id == message.id) || 
-      // Check by localId (client-side ID)
-      ((message.localId?.isNotEmpty ?? false) && m.localId == message.localId) ||
-      // Check by content+sender+time (for messages that might come via different paths)
-      (m.senderId == message.senderId && 
-       m.content == message.content && 
-       m.type == message.type &&
-       m.createdAt.difference(message.createdAt).abs().inSeconds < 2)
-    );
+    // Enhanced deduplication: check by ID, localId, and content/file for robustness
+    final exists = state.messages.any((m) {
+      // Check by server ID (most reliable)
+      if (message.id.isNotEmpty && m.id == message.id) {
+        print('[MSG_RECV] Duplicate detected by server ID: ${message.id}');
+        return true;
+      }
+      
+      // Check by localId (client-side ID for pending messages)
+      if ((message.localId?.isNotEmpty ?? false) && m.localId == message.localId) {
+        print('[MSG_RECV] Duplicate detected by localId: ${message.localId}');
+        return true;
+      }
+      
+      // Check by content+sender+time for text messages
+      if (m.type == MessageType.text && message.type == MessageType.text &&
+          m.senderId == message.senderId && 
+          m.content == message.content && 
+          m.createdAt.difference(message.createdAt).abs().inSeconds < 2) {
+        print('[MSG_RECV] Duplicate detected by text content+time');
+        return true;
+      }
+      
+      // Check by filePath for audio messages (same file = same message)
+      if (m.type == MessageType.audio && message.type == MessageType.audio &&
+          m.senderId == message.senderId &&
+          m.filePath != null && message.filePath != null &&
+          m.filePath == message.filePath) {
+        print('[MSG_RECV] Duplicate detected by audio filePath: ${message.filePath}');
+        return true;
+      }
+      
+      // Check by localAudioPath for locally created audio messages
+      if (m.type == MessageType.audio && message.type == MessageType.audio &&
+          m.senderId == message.senderId &&
+          m.localAudioPath != null && message.localAudioPath != null &&
+          m.localAudioPath == message.localAudioPath) {
+        print('[MSG_RECV] Duplicate detected by localAudioPath');
+        return true;
+      }
+      
+      return false;
+    });
     
     if (!exists) {
       // Add new message and sort by date
@@ -608,6 +684,17 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
       // Add to LRU cache
       _cache.put(message);
+      
+      // Update chat preview with this message
+      try {
+        _ref.read(chatsProvider.notifier).updateChatLastMessage(
+          chatId, 
+          message, 
+          incrementUnread: false, // Don't increment as it's already handled by SignalR
+        );
+      } catch (e) {
+        print('[MSG_RECV] Failed to update chat preview: $e');
+      }
       
       // Save message to Hive cache for persistence
       try {
