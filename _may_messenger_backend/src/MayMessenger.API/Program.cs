@@ -22,6 +22,11 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Health Checks
+builder.Services.AddHealthChecks()
+    .AddCheck<MayMessenger.API.HealthChecks.DatabaseHealthCheck>("database")
+    .AddCheck<MayMessenger.API.HealthChecks.FirebaseHealthCheck>("firebase");
+
 // Database
 var useSqlite = builder.Configuration.GetValue<bool>("UseSqlite", false);
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -55,6 +60,7 @@ builder.Services.AddSingleton<MayMessenger.Application.Services.IFirebaseService
 
 // Background Services
 builder.Services.AddHostedService<MayMessenger.Application.Services.AudioCleanupService>();
+builder.Services.AddHostedService<MayMessenger.Application.Services.CleanupInvalidTokensService>();
 
 // JWT Authentication
 var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "YourSuperSecretKeyForJWTTokenGeneration123456789";
@@ -147,20 +153,43 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-// Initialize database and seed data
+// Apply pending migrations automatically on startup
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
+    var logger = services.GetRequiredService<ILogger<Program>>();
+    
     try
     {
         var context = services.GetRequiredService<AppDbContext>();
+        
+        // Check for pending migrations
+        var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
+        if (pendingMigrations.Any())
+        {
+            logger.LogInformation("Applying {Count} pending database migrations...", pendingMigrations.Count());
+            foreach (var migration in pendingMigrations)
+            {
+                logger.LogInformation("  - {MigrationName}", migration);
+            }
+            
+            // Apply migrations
+            await context.Database.MigrateAsync();
+            logger.LogInformation("Database migrations applied successfully");
+        }
+        else
+        {
+            logger.LogInformation("Database is up to date. No pending migrations.");
+        }
+        
+        // Initialize database and seed data
         var passwordHasher = services.GetRequiredService<IPasswordHasher>();
         await DbInitializer.InitializeAsync(context, passwordHasher);
     }
     catch (Exception ex)
     {
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred while initializing the database.");
+        logger.LogError(ex, "An error occurred while migrating or initializing the database.");
+        throw; // Re-throw to prevent app startup with broken database
     }
 }
 
@@ -168,8 +197,35 @@ using (var scope = app.Services.CreateScope())
 app.UseSwagger();
 app.UseSwaggerUI();
 
-// Health check endpoint
-app.MapGet("/health", () => Results.Ok(new { status = "Healthy" }));
+// Health check endpoints
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        
+        var result = new
+        {
+            status = report.Status.ToString(),
+            timestamp = DateTime.UtcNow,
+            duration = report.TotalDuration,
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                description = e.Value.Description,
+                duration = e.Value.Duration,
+                data = e.Value.Data,
+                exception = e.Value.Exception?.Message
+            })
+        };
+        
+        await context.Response.WriteAsJsonAsync(result);
+    }
+});
+
+// Simple health check for load balancers
+app.MapGet("/health/ready", () => Results.Ok(new { status = "Ready" }));
 
 // Initialize Firebase if config exists
 try
@@ -197,6 +253,9 @@ catch (Exception ex)
 app.UseStaticFiles();
 
 app.UseCors("AllowAll");
+
+// Rate limiting middleware
+app.UseMiddleware<MayMessenger.API.Middleware.RateLimitingMiddleware>();
 
 app.UseAuthentication();
 app.UseAuthorization();

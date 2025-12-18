@@ -18,17 +18,28 @@ class SignalRService {
           options: HttpConnectionOptions(
             accessTokenFactory: () async => token,
             transport: HttpTransportType.WebSockets,
+            // Connection timeout
+            requestTimeout: 30000, // 30 seconds
           ),
         )
-        .withAutomaticReconnect(retryDelays: [0, 2000, 5000, 10000, 30000])
+        // Exponential backoff: 0s, 2s, 5s, 10s, 30s, 60s
+        .withAutomaticReconnect(retryDelays: [0, 2000, 5000, 10000, 30000, 60000])
         .build();
 
     // Обработчик разрыва соединения
     _hubConnection?.onclose(({error}) {
       print('[SignalR] Connection closed. Error: $error');
-      if (!_isReconnecting && _currentToken != null) {
-        print('[SignalR] Attempting to reconnect...');
-        _attemptReconnect();
+      _isReconnecting = false;
+      
+      // Automatic reconnect will be handled by withAutomaticReconnect
+      // But if that fails completely, try manual reconnect
+      if (_currentToken != null) {
+        print('[SignalR] Scheduling manual reconnect attempt...');
+        Future.delayed(const Duration(seconds: 5), () {
+          if (_hubConnection?.state != HubConnectionState.Connected && !_isReconnecting) {
+            _attemptReconnect();
+          }
+        });
       }
     });
     
@@ -40,7 +51,7 @@ class SignalRService {
     
     // Обработчик успешного переподключения
     _hubConnection?.onreconnected(({connectionId}) {
-      print('[SignalR] Reconnected! Connection ID: $connectionId');
+      print('[SignalR] Reconnected successfully! Connection ID: $connectionId');
       _isReconnecting = false;
     });
 
@@ -54,26 +65,47 @@ class SignalRService {
   }
   
   Future<void> _attemptReconnect() async {
-    if (_currentToken == null || _isReconnecting) return;
+    if (_currentToken == null || _isReconnecting) {
+      print('[SignalR] Reconnect skipped - already reconnecting or no token');
+      return;
+    }
     
     _isReconnecting = true;
+    print('[SignalR] Manual reconnect attempt started');
     
     try {
+      // Stop existing connection
+      try {
+        await _hubConnection?.stop();
+      } catch (e) {
+        print('[SignalR] Error stopping connection: $e');
+      }
+      
+      // Wait a bit before reconnecting
       await Future.delayed(const Duration(seconds: 2));
       
+      // Check if still disconnected
       if (_hubConnection?.state != HubConnectionState.Connected) {
-        print('[SignalR] Reconnecting...');
-        await _hubConnection?.stop();
+        print('[SignalR] Attempting to establish new connection...');
         await connect(_currentToken!);
+        print('[SignalR] Manual reconnect successful');
       }
     } catch (e) {
-      print('[SignalR] Reconnect failed: $e');
-      // Попробуем еще раз через 5 секунд
-      await Future.delayed(const Duration(seconds: 5));
+      print('[SignalR] Manual reconnect failed: $e');
       _isReconnecting = false;
-      _attemptReconnect();
+      
+      // Schedule another attempt with exponential backoff
+      print('[SignalR] Scheduling retry in 10 seconds...');
+      await Future.delayed(const Duration(seconds: 10));
+      
+      // Only retry if still disconnected
+      if (_hubConnection?.state != HubConnectionState.Connected) {
+        _attemptReconnect();
+      }
     } finally {
-      _isReconnecting = false;
+      if (_hubConnection?.state == HubConnectionState.Connected) {
+        _isReconnecting = false;
+      }
     }
   }
   

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/chats_provider.dart';
 import '../providers/contacts_names_provider.dart';
 import '../widgets/chat_list_item.dart';
+import '../widgets/connection_status_banner.dart';
 import 'chat_screen.dart';
 import 'settings_screen.dart';
 import 'create_group_screen.dart';
@@ -75,13 +76,20 @@ class _MainScreenState extends ConsumerState<MainScreen> with SingleTickerProvid
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Column(
         children: [
-          // Private Tab
-          _buildChatList(chatsState.privateChats, chatsState.isLoading, chatsState.error),
-          // Groups Tab
-          _buildChatList(chatsState.groupChats, chatsState.isLoading, chatsState.error),
+          const ConnectionStatusBanner(),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                // Private Tab
+                _buildChatList(chatsState.privateChats, chatsState.isLoading, chatsState.error),
+                // Groups Tab
+                _buildChatList(chatsState.groupChats, chatsState.isLoading, chatsState.error),
+              ],
+            ),
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton(

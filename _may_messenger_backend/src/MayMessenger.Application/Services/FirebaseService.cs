@@ -7,8 +7,8 @@ namespace MayMessenger.Application.Services;
 
 public interface IFirebaseService
 {
-    Task<bool> SendNotificationAsync(string fcmToken, string title, string body, Dictionary<string, string>? data = null);
-    Task<bool> SendToMultipleAsync(List<string> tokens, string title, string body, Dictionary<string, string>? data = null);
+    Task<(bool success, bool shouldDeactivateToken)> SendNotificationAsync(string fcmToken, string title, string body, Dictionary<string, string>? data = null);
+    Task<(int successCount, List<string> tokensToDeactivate)> SendToMultipleAsync(List<string> tokens, string title, string body, Dictionary<string, string>? data = null);
     void Initialize(string configPath);
     bool IsInitialized { get; }
 }
@@ -57,7 +57,7 @@ public class FirebaseService : IFirebaseService
         }
     }
 
-    public async Task<bool> SendNotificationAsync(
+    public async Task<(bool success, bool shouldDeactivateToken)> SendNotificationAsync(
         string fcmToken,
         string title,
         string body,
@@ -66,7 +66,7 @@ public class FirebaseService : IFirebaseService
         if (!_isInitialized)
         {
             _logger.LogWarning("Firebase not initialized. Cannot send notification.");
-            return false;
+            return (false, false);
         }
 
         try
@@ -95,21 +95,32 @@ public class FirebaseService : IFirebaseService
 
             var response = await FirebaseMessaging.DefaultInstance.SendAsync(message);
             _logger.LogInformation($"Successfully sent FCM message: {response}");
-            return true;
+            return (true, false);
         }
         catch (FirebaseMessagingException ex)
         {
             _logger.LogError(ex, $"Failed to send FCM message to token {fcmToken}. Error: {ex.MessagingErrorCode}");
-            return false;
+            
+            // Check if token should be deactivated
+            var shouldDeactivate = ex.MessagingErrorCode == MessagingErrorCode.InvalidArgument ||
+                                   ex.MessagingErrorCode == MessagingErrorCode.Unregistered ||
+                                   ex.MessagingErrorCode == MessagingErrorCode.SenderIdMismatch;
+            
+            if (shouldDeactivate)
+            {
+                _logger.LogWarning($"Token {fcmToken} should be deactivated. ErrorCode: {ex.MessagingErrorCode}");
+            }
+            
+            return (false, shouldDeactivate);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, $"Unexpected error sending FCM message to token {fcmToken}");
-            return false;
+            return (false, false);
         }
     }
 
-    public async Task<bool> SendToMultipleAsync(
+    public async Task<(int successCount, List<string> tokensToDeactivate)> SendToMultipleAsync(
         List<string> tokens,
         string title,
         string body,
@@ -118,13 +129,13 @@ public class FirebaseService : IFirebaseService
         if (!_isInitialized)
         {
             _logger.LogWarning("Firebase not initialized. Cannot send notifications.");
-            return false;
+            return (0, new List<string>());
         }
 
         if (tokens == null || tokens.Count == 0)
         {
             _logger.LogWarning("No tokens provided for multicast message");
-            return false;
+            return (0, new List<string>());
         }
 
         try
@@ -152,12 +163,35 @@ public class FirebaseService : IFirebaseService
             var response = await FirebaseMessaging.DefaultInstance.SendEachForMulticastAsync(message);
             _logger.LogInformation($"Multicast sent. Success: {response.SuccessCount}, Failed: {response.FailureCount}");
             
-            return response.SuccessCount > 0;
+            // Collect tokens that should be deactivated
+            var tokensToDeactivate = new List<string>();
+            
+            if (response.FailureCount > 0)
+            {
+                for (int i = 0; i < response.Responses.Count; i++)
+                {
+                    var sendResponse = response.Responses[i];
+                    if (!sendResponse.IsSuccess && sendResponse.Exception is FirebaseMessagingException fcmEx)
+                    {
+                        var shouldDeactivate = fcmEx.MessagingErrorCode == MessagingErrorCode.InvalidArgument ||
+                                               fcmEx.MessagingErrorCode == MessagingErrorCode.Unregistered ||
+                                               fcmEx.MessagingErrorCode == MessagingErrorCode.SenderIdMismatch;
+                        
+                        if (shouldDeactivate && i < tokens.Count)
+                        {
+                            tokensToDeactivate.Add(tokens[i]);
+                            _logger.LogWarning($"Token {tokens[i]} should be deactivated. ErrorCode: {fcmEx.MessagingErrorCode}");
+                        }
+                    }
+                }
+            }
+            
+            return (response.SuccessCount, tokensToDeactivate);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send multicast FCM message");
-            return false;
+            return (0, new List<string>());
         }
     }
 }

@@ -296,16 +296,22 @@ public class MessagesController : ControllerBase
                         
                         foreach (var token in tokens)
                         {
-                            var sent = await _firebaseService.SendNotificationAsync(
+                            var (success, shouldDeactivate) = await _firebaseService.SendNotificationAsync(
                                 token.Token, 
                                 title, 
                                 body ?? "", 
                                 data);
                             
-                            if (sent)
+                            if (success)
                             {
                                 // Update last used timestamp
                                 token.LastUsedAt = DateTime.UtcNow;
+                            }
+                            else if (shouldDeactivate)
+                            {
+                                // Deactivate invalid token
+                                _logger.LogWarning($"Deactivating invalid FCM token for user {participant.UserId}");
+                                await _unitOfWork.FcmTokens.DeactivateTokenAsync(token.Token);
                             }
                         }
                         

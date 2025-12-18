@@ -236,10 +236,13 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     }
   }
   
-  /// Sync a local message to the backend
-  Future<void> _syncMessageToBackend(String localId, MessageType type, {String? content, String? audioPath}) async {
+  /// Sync a local message to the backend with exponential backoff
+  Future<void> _syncMessageToBackend(String localId, MessageType type, {String? content, String? audioPath, int attemptNumber = 0}) async {
+    const maxAttempts = 5;
+    final backoffDelays = [1, 2, 4, 8, 16, 30]; // seconds
+    
     try {
-      print('[MSG_SEND] Syncing message to backend: $localId');
+      print('[MSG_SEND] Syncing message to backend: $localId (attempt ${attemptNumber + 1}/$maxAttempts)');
       await _outboxRepository.markAsSyncing(localId);
       
       // Send via API
@@ -280,20 +283,41 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       });
       
     } catch (e) {
-      print('[MSG_SEND] Failed to sync message to backend: $e');
+      print('[MSG_SEND] Failed to sync message to backend (attempt ${attemptNumber + 1}): $e');
       
-      // Mark as failed in outbox
-      await _outboxRepository.markAsFailed(localId, e.toString());
-      
-      // Update message status to failed in UI
-      final messageIndex = state.messages.indexWhere((m) => m.id == localId);
-      if (messageIndex != -1) {
-        final updatedMessages = [...state.messages];
-        updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
-          status: MessageStatus.failed,
-        );
-        state = state.copyWith(messages: updatedMessages);
-        print('[MSG_SEND] Message marked as failed in UI: $localId');
+      // Check if we should retry
+      if (attemptNumber < maxAttempts - 1) {
+        // Calculate backoff delay
+        final delaySeconds = attemptNumber < backoffDelays.length 
+            ? backoffDelays[attemptNumber] 
+            : backoffDelays.last;
+        
+        print('[MSG_SEND] Will retry in $delaySeconds seconds...');
+        
+        // Mark as failed temporarily but will retry
+        await _outboxRepository.markAsFailed(localId, 'Retrying... (${attemptNumber + 1}/$maxAttempts)');
+        
+        // Schedule retry with exponential backoff
+        Future.delayed(Duration(seconds: delaySeconds), () {
+          if (mounted) {
+            _syncMessageToBackend(localId, type, content: content, audioPath: audioPath, attemptNumber: attemptNumber + 1);
+          }
+        });
+      } else {
+        // Max attempts reached, mark as permanently failed
+        print('[MSG_SEND] Max retry attempts reached for message: $localId');
+        await _outboxRepository.markAsFailed(localId, 'Failed after $maxAttempts attempts: ${e.toString()}');
+        
+        // Update message status to failed in UI
+        final messageIndex = state.messages.indexWhere((m) => m.id == localId);
+        if (messageIndex != -1) {
+          final updatedMessages = [...state.messages];
+          updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
+            status: MessageStatus.failed,
+          );
+          state = state.copyWith(messages: updatedMessages);
+          print('[MSG_SEND] Message marked as permanently failed in UI: $localId');
+        }
       }
     }
   }
@@ -566,6 +590,42 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   void removeMessage(String messageId) {
     final updatedMessages = state.messages.where((m) => m.id != messageId).toList();
     state = state.copyWith(messages: updatedMessages);
+  }
+
+  /// Manually retry a failed message
+  Future<void> retryFailedMessage(String localId) async {
+    try {
+      print('[MSG_RETRY] Manually retrying failed message: $localId');
+      
+      // Get pending message from outbox
+      final pendingMessage = await _outboxRepository.getAllPendingMessages()
+          .then((messages) => messages.firstWhere((m) => m.localId == localId));
+      
+      // Reset retry count and mark for sync
+      await _outboxRepository.retryMessage(localId);
+      
+      // Update UI status to sending
+      final messageIndex = state.messages.indexWhere((m) => 
+          m.id == localId || m.localId == localId);
+      if (messageIndex != -1) {
+        final updatedMessages = [...state.messages];
+        updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
+          status: MessageStatus.sending,
+        );
+        state = state.copyWith(messages: updatedMessages);
+      }
+      
+      // Trigger sync
+      _syncMessageToBackend(
+        localId, 
+        pendingMessage.type,
+        content: pendingMessage.content,
+        audioPath: pendingMessage.localAudioPath,
+        attemptNumber: 0, // Reset attempt counter
+      );
+    } catch (e) {
+      print('[MSG_RETRY] Failed to retry message: $e');
+    }
   }
 }
 

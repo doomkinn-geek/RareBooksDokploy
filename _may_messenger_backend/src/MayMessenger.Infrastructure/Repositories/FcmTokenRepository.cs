@@ -27,6 +27,15 @@ public class FcmTokenRepository : IFcmTokenRepository
             .ToListAsync();
     }
 
+    public async Task<List<FcmToken>> GetTokensOlderThanAsync(DateTime cutoffDate)
+    {
+        return await _context.FcmTokens
+            .Where(t => t.IsActive && 
+                       (t.LastUsedAt == null || t.LastUsedAt < cutoffDate) &&
+                       t.RegisteredAt < cutoffDate)
+            .ToListAsync();
+    }
+
     public async Task RegisterOrUpdateAsync(Guid userId, string token, string deviceInfo)
     {
         var existingToken = await _context.FcmTokens

@@ -24,7 +24,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   final body = message.data['body'] ?? message.notification?.body ?? '';
   final chatId = message.data['chatId'] as String?;
   
-  // Show local notification
+  // Show local notification with grouping support
   try {
     const androidDetails = AndroidNotificationDetails(
       'messages_channel',
@@ -33,6 +33,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       importance: Importance.high,
       priority: Priority.high,
       showWhen: true,
+      groupKey: 'messages_group', // Group all messages together
       actions: [
         AndroidNotificationAction(
           'reply_action',
@@ -45,7 +46,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     const notificationDetails = NotificationDetails(android: androidDetails);
     
     await _localNotifications.show(
-      chatId.hashCode, // Use chatId hash as notification ID
+      chatId.hashCode, // Use chatId hash as notification ID (one per chat)
       title,
       body,
       notificationDetails,
@@ -68,6 +69,10 @@ class FcmService {
   Function(String chatId)? onMessageTap;
   Function(String chatId, String text)? onMessageReply;
   
+  // Track notifications per chat for grouping
+  final Map<String, List<String>> _notificationsByChat = {};
+  final Map<String, int> _unreadCountByChat = {};
+  
   // Проверка поддержки Firebase на текущей платформе
   bool get _isFirebaseSupported => kIsWeb || Platform.isAndroid || Platform.isIOS;
   
@@ -82,6 +87,13 @@ class FcmService {
   void setCurrentChat(String? chatId) {
     _currentChatId = chatId;
     print('[FCM] Current chat set to: $chatId');
+    
+    // Clear notifications for this chat when user enters it
+    if (chatId != null && _notificationsByChat.containsKey(chatId)) {
+      _localNotifications.cancel(chatId.hashCode);
+      _notificationsByChat.remove(chatId);
+      _unreadCountByChat.remove(chatId);
+    }
   }
 
   Future<void> initialize() async {
@@ -237,15 +249,43 @@ class FcmService {
       return;
     }
     
-    // Show local notification
+    if (chatId != null) {
+      await _showGroupedNotification(chatId, title, body);
+    }
+  }
+
+  Future<void> _showGroupedNotification(String chatId, String title, String body) async {
     try {
-      const androidDetails = AndroidNotificationDetails(
+      // Track this notification
+      if (!_notificationsByChat.containsKey(chatId)) {
+        _notificationsByChat[chatId] = [];
+        _unreadCountByChat[chatId] = 0;
+      }
+      
+      _notificationsByChat[chatId]!.add(body);
+      _unreadCountByChat[chatId] = (_unreadCountByChat[chatId] ?? 0) + 1;
+      
+      final messageCount = _unreadCountByChat[chatId] ?? 1;
+      final messages = _notificationsByChat[chatId] ?? [];
+      
+      // Create InboxStyle notification with all messages
+      final inboxLines = messages.take(5).map((msg) => msg).toList();
+      
+      final androidDetails = AndroidNotificationDetails(
         'messages_channel',
         'Messages',
         channelDescription: 'Notifications for new messages',
         importance: Importance.high,
         priority: Priority.high,
         showWhen: true,
+        groupKey: 'messages_group',
+        styleInformation: InboxStyleInformation(
+          inboxLines,
+          contentTitle: messageCount > 1 
+              ? '$messageCount new messages' 
+              : title,
+          summaryText: title,
+        ),
         actions: [
           AndroidNotificationAction(
             'reply_action',
@@ -255,19 +295,54 @@ class FcmService {
         ],
       );
       
-      const notificationDetails = NotificationDetails(android: androidDetails);
+      final notificationDetails = NotificationDetails(android: androidDetails);
       
       await _localNotifications.show(
-        chatId.hashCode, // Use chatId hash as notification ID
-        title,
-        body,
+        chatId.hashCode, // Use chatId hash as notification ID (replaces previous)
+        messageCount > 1 ? '$messageCount new messages' : title,
+        messageCount > 1 ? messages.last : body,
         notificationDetails,
         payload: chatId,
       );
       
-      print('[FCM_FG] Local notification shown');
+      // Show summary notification if multiple chats have unread messages
+      if (_unreadCountByChat.length > 1) {
+        await _showSummaryNotification();
+      }
+      
+      print('[FCM_FG] Grouped notification shown for chat $chatId ($messageCount messages)');
     } catch (e) {
-      print('[FCM_FG] Error showing notification: $e');
+      print('[FCM_FG] Error showing grouped notification: $e');
+    }
+  }
+
+  Future<void> _showSummaryNotification() async {
+    try {
+      final totalUnread = _unreadCountByChat.values.fold(0, (sum, count) => sum + count);
+      final chatCount = _unreadCountByChat.length;
+      
+      final androidDetails = const AndroidNotificationDetails(
+        'messages_channel',
+        'Messages',
+        channelDescription: 'Notifications for new messages',
+        importance: Importance.high,
+        priority: Priority.high,
+        groupKey: 'messages_group',
+        setAsGroupSummary: true,
+      );
+      
+      final notificationDetails = NotificationDetails(android: androidDetails);
+      
+      await _localNotifications.show(
+        0, // Summary notification ID
+        'May Messenger',
+        '$totalUnread new messages from $chatCount chats',
+        notificationDetails,
+      );
+      
+      print('[FCM] Summary notification shown: $totalUnread messages from $chatCount chats');
+    } catch (e) {
+      print('[FCM] Error showing summary notification: $e');
     }
   }
 

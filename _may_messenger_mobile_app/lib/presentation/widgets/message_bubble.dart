@@ -192,11 +192,61 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           color: Colors.green,
         );
       case MessageStatus.failed:
-        return const Icon(
-          Icons.error_outline,
-          size: 14,
-          color: Colors.red,
+        // Red error icon with retry functionality
+        return GestureDetector(
+          onTap: _handleRetry,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 16,
+                color: Colors.red[300],
+              ),
+              const SizedBox(width: 2),
+              Text(
+                'Retry',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.red[300],
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
         );
+    }
+  }
+
+  Future<void> _handleRetry() async {
+    try {
+      // Show loading indicator
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Повторная отправка...'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+
+      // Use localId if available, otherwise use message id
+      final messageId = widget.message.localId ?? widget.message.id;
+      
+      await ref.read(messagesProvider(widget.message.chatId).notifier)
+          .retryFailedMessage(messageId);
+      
+      print('[MESSAGE_BUBBLE] Retry initiated for message: $messageId');
+    } catch (e) {
+      print('[MESSAGE_BUBBLE] Error retrying message: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Не удалось повторить отправку'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 
