@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Send, Mic } from 'lucide-react';
 import { AudioRecorder } from './AudioRecorder';
+import { signalRService } from '../../services/signalRService';
+import { useChatStore } from '../../stores/chatStore';
 
 interface MessageInputProps {
   onSendText: (text: string) => void;
@@ -11,12 +13,46 @@ interface MessageInputProps {
 export const MessageInput = ({ onSendText, onSendAudio, disabled }: MessageInputProps) => {
   const [text, setText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isTypingRef = useRef(false);
+  const { selectedChatId } = useChatStore();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (text.trim() && !disabled) {
       onSendText(text.trim());
       setText('');
+      
+      // Stop typing indicator
+      if (isTypingRef.current && selectedChatId) {
+        signalRService.sendTypingIndicator(selectedChatId, false);
+        isTypingRef.current = false;
+      }
+    }
+  };
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setText(e.target.value);
+
+    // Send typing indicator
+    if (selectedChatId && signalRService.isConnected) {
+      if (!isTypingRef.current) {
+        signalRService.sendTypingIndicator(selectedChatId, true);
+        isTypingRef.current = true;
+      }
+
+      // Clear existing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      // Set new timeout to stop typing indicator after 2 seconds of inactivity
+      typingTimeoutRef.current = setTimeout(() => {
+        if (isTypingRef.current) {
+          signalRService.sendTypingIndicator(selectedChatId, false);
+          isTypingRef.current = false;
+        }
+      }, 2000);
     }
   };
 
@@ -42,7 +78,7 @@ export const MessageInput = ({ onSendText, onSendAudio, disabled }: MessageInput
       <input
         type="text"
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={handleTextChange}
         placeholder="Введите сообщение..."
         disabled={disabled}
         className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
