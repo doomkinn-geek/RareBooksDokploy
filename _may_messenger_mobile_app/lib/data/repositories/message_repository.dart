@@ -11,25 +11,51 @@ class MessageRepository {
   Future<List<Message>> getMessages({
     required String chatId,
     int skip = 0,
-    int take = 50,
+    int take = 200,
     bool forceRefresh = false,
   }) async {
+    // #region agent log H6-H8
+    print('[H6-H8-Repo] getMessages: chatId=$chatId, skip=$skip, take=$take, forceRefresh=$forceRefresh');
+    // #endregion
+    
     if (!forceRefresh && skip == 0) {
       final cachedMessages = await _localDataSource.getCachedMessages(chatId);
       
       if (cachedMessages != null && cachedMessages.isNotEmpty) {
+        // #region agent log H6-H8
+        print('[H6-H8-Repo] Returning ${cachedMessages.length} messages from CACHE');
+        // #endregion
         return cachedMessages;
+      } else {
+        // #region agent log H6-H8
+        print('[H6-H8-Repo] Cache is EMPTY or NULL, loading from API');
+        // #endregion
       }
+    } else {
+      // #region agent log H6-H8
+      print('[H6-H8-Repo] Skipping cache (forceRefresh=$forceRefresh or skip=$skip)');
+      // #endregion
     }
 
+    // #region agent log H6-H8
+    print('[H6-H8-Repo] Calling API getMessages: take=$take, skip=$skip');
+    // #endregion
+    
     final messages = await _apiDataSource.getMessages(
       chatId: chatId,
       skip: skip,
       take: take,
     );
 
+    // #region agent log H6-H8
+    print('[H6-H8-Repo] API returned ${messages.length} messages');
+    // #endregion
+
     if (skip == 0) {
       await _localDataSource.cacheMessages(chatId, messages);
+      // #region agent log H6-H8
+      print('[H6-H8-Repo] Cached ${messages.length} messages');
+      // #endregion
     }
 
     return messages;

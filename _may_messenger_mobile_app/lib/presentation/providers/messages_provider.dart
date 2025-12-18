@@ -114,10 +114,6 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
 
   /// Perform incremental sync after SignalR reconnection
   Future<void> _performIncrementalSync() async {
-    // #region agent log H3
-    print('[H3-Mobile] _performIncrementalSync START: chatId=$chatId');
-    // #endregion
-    
     try {
       final localDataSource = _ref.read(localDataSourceProvider);
       
@@ -125,24 +121,14 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final lastSync = await localDataSource.getLastSyncTimestamp(chatId);
       final sinceTimestamp = lastSync ?? DateTime.now().subtract(const Duration(hours: 1));
       
-      // #region agent log H3
-      print('[H3-Mobile] Incremental sync: lastSync=$lastSync, sinceTimestamp=$sinceTimestamp');
-      // #endregion
+      print('[SYNC] Incremental sync since: $sinceTimestamp');
       
       // Fetch updates from backend
-      // #region agent log H3
-      print('[H3-Mobile] Calling _messageRepository.getMessageUpdates...');
-      // #endregion
-      
       final updates = await _messageRepository.getMessageUpdates(
         chatId: chatId,
         since: sinceTimestamp,
         take: 100,
       );
-      
-      // #region agent log H3
-      print('[H3-Mobile] Received message updates: count=${updates.length}');
-      // #endregion
       
       if (updates.isEmpty) {
         print('[SYNC] No new messages since last sync');
@@ -210,19 +196,10 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   bool _isLoadingOlder = false;
 
   Future<void> loadMessages({bool forceRefresh = false}) async {
-    // #region agent log H3
-    print('[H3-Mobile] loadMessages START: chatId=$chatId, forceRefresh=$forceRefresh');
-    // #endregion
-    
     state = state.copyWith(isLoading: true, error: null);
     try {
       // STEP 1: Try LRU cache first for instant loading
       final cachedMessages = _cache.getChatMessages(chatId);
-      
-      // #region agent log H3
-      print('[H3-Mobile] LRU cache check: cachedCount=${cachedMessages.length}');
-      // #endregion
-      
       if (cachedMessages.isNotEmpty && !forceRefresh) {
         print('[MSG_LOAD] Found ${cachedMessages.length} messages in LRU cache');
         state = state.copyWith(
@@ -233,25 +210,13 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
       
       // STEP 2: Load synced messages from repository (Hive cache or API)
-      // #region agent log H3
-      print('[H3-Mobile] Calling _messageRepository.getMessages...');
-      // #endregion
-      
       final List<Message> syncedMessages = await _messageRepository.getMessages(
         chatId: chatId,
         forceRefresh: forceRefresh,
       );
       
-      // #region agent log H3
-      print('[H3-Mobile] Received syncedMessages: count=${syncedMessages.length}');
-      // #endregion
-      
       // STEP 3: Load pending messages from outbox
       final pendingMessages = await _outboxRepository.getPendingMessagesForChat(chatId);
-      
-      // #region agent log H3
-      print('[H3-Mobile] Pending messages from outbox: count=${pendingMessages.length}');
-      // #endregion
       final profileState = _ref.read(profileProvider);
       final currentUser = profileState.profile;
       
@@ -684,25 +649,12 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   }
 
   Future<void> markMessagesAsRead() async {
-    // #region agent log H5
-    print('[H5-Mobile] markMessagesAsRead called: chatId=$chatId');
-    // #endregion
-    
     try {
       // Get current user ID
       final profileState = _ref.read(profileProvider);
       final currentUserId = profileState.profile?.id;
       
-      // #region agent log H5
-      print('[H5-Mobile] currentUserId=$currentUserId');
-      // #endregion
-      
-      if (currentUserId == null) {
-        // #region agent log H5
-        print('[H5-Mobile] currentUserId is NULL, skipping markMessagesAsRead');
-        // #endregion
-        return;
-      }
+      if (currentUserId == null) return;
       
       // Find all unread messages from other users
       final unreadMessages = state.messages.where((message) {
@@ -710,41 +662,21 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
                message.status != MessageStatus.read;
       }).toList();
       
-      // #region agent log H5
-      print('[H5-Mobile] Found ${unreadMessages.length} unread messages (total messages: ${state.messages.length})');
-      // #endregion
-      
       if (unreadMessages.isEmpty) return;
       
       print('[STATUS_UPDATE] Marking ${unreadMessages.length} messages as read');
       
       // Batch mark via SignalR (for real-time)
-      int successCount = 0;
       for (final message in unreadMessages) {
         try {
-          // #region agent log H5
-          print('[H5-Mobile] Calling markMessageAsRead via SignalR: messageId=${message.id}');
-          // #endregion
-          
           await _signalRService.markMessageAsRead(message.id, chatId);
           
           // Update local status immediately
           updateMessageStatus(message.id, MessageStatus.read);
-          successCount++;
-          
-          // #region agent log H5
-          print('[H5-Mobile] Message marked as read SUCCESS: messageId=${message.id}');
-          // #endregion
         } catch (e) {
-          // #region agent log H5
-          print('[H5-Mobile] Failed to mark message ${message.id} as read via SignalR: $e');
-          // #endregion
+          print('[STATUS_UPDATE] Failed to mark message ${message.id} as read via SignalR: $e');
         }
       }
-      
-      // #region agent log H5
-      print('[H5-Mobile] markMessagesAsRead completed: success=$successCount, failed=${unreadMessages.length - successCount}');
-      // #endregion
       
       // Also send batch request via REST API as fallback
       try {

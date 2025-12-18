@@ -63,11 +63,9 @@ public class FirebaseService : IFirebaseService
         string body,
         Dictionary<string, string>? data = null)
     {
-        _logger.LogInformation($"[H2-Firebase] SendNotificationAsync called: token_length={fcmToken?.Length ?? 0}, title={title}");
-        
         if (!_isInitialized)
         {
-            _logger.LogWarning("[H2-Firebase] Firebase not initialized. Cannot send notification.");
+            _logger.LogWarning("Firebase not initialized. Cannot send notification.");
             return (false, false);
         }
 
@@ -81,8 +79,6 @@ public class FirebaseService : IFirebaseService
             // Add title and body to data payload for custom handling on client
             messageData["title"] = title;
             messageData["body"] = body;
-            
-            _logger.LogInformation($"[H2-Firebase] Prepared message data: keys={string.Join(",", messageData.Keys)}");
 
             var message = new Message
             {
@@ -97,14 +93,13 @@ public class FirebaseService : IFirebaseService
                 }
             };
 
-            _logger.LogInformation($"[H2-Firebase] Calling FirebaseMessaging.SendAsync...");
             var response = await FirebaseMessaging.DefaultInstance.SendAsync(message);
-            _logger.LogInformation($"[H2-Firebase] Successfully sent FCM message: {response}");
+            _logger.LogInformation($"Successfully sent FCM message: {response}");
             return (true, false);
         }
         catch (FirebaseMessagingException ex)
         {
-            _logger.LogError(ex, $"[H2-Firebase] Failed to send FCM message to token {fcmToken}. Error: {ex.MessagingErrorCode}");
+            _logger.LogError(ex, $"Failed to send FCM message to token {fcmToken}. Error: {ex.MessagingErrorCode}");
             
             // Check if token should be deactivated
             var shouldDeactivate = ex.MessagingErrorCode == MessagingErrorCode.InvalidArgument ||
@@ -113,14 +108,14 @@ public class FirebaseService : IFirebaseService
             
             if (shouldDeactivate)
             {
-                _logger.LogWarning($"[H2-Firebase] Token {fcmToken} should be deactivated. ErrorCode: {ex.MessagingErrorCode}");
+                _logger.LogWarning($"Token {fcmToken} should be deactivated. ErrorCode: {ex.MessagingErrorCode}");
             }
             
             return (false, shouldDeactivate);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"[H2-Firebase] Unexpected error sending FCM message to token {fcmToken}");
+            _logger.LogError(ex, $"Unexpected error sending FCM message to token {fcmToken}");
             return (false, false);
         }
     }

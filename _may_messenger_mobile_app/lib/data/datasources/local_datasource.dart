@@ -28,25 +28,54 @@ class LocalDataSource {
 
   // Messages Cache
   Future<void> cacheMessages(String chatId, List<Message> messages) async {
-    final box = await Hive.openBox<Map>(_messagesBox);
+    // #region agent log H6
+    print('[H6-Cache] cacheMessages: chatId=$chatId, count=${messages.length}');
+    // #endregion
     
-    await box.put(chatId, {
-      'messages': messages.map((m) => m.toJson()).toList(),
-      'timestamp': DateTime.now().toIso8601String(),
-    });
+    try {
+      final box = await Hive.openBox<Map>(_messagesBox);
+      
+      await box.put(chatId, {
+        'messages': messages.map((m) => m.toJson()).toList(),
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+      
+      // Force flush to disk to ensure persistence
+      await box.flush();
+      
+      // #region agent log H6
+      print('[H6-Cache] Messages cached successfully: chatId=$chatId, flushed to disk');
+      // #endregion
+    } catch (e) {
+      // #region agent log H6
+      print('[H6-Cache] ERROR caching messages: $e');
+      // #endregion
+      rethrow;
+    }
   }
 
   Future<List<Message>?> getCachedMessages(String chatId) async {
+    // #region agent log H6
+    print('[H6-Cache] getCachedMessages: chatId=$chatId');
+    // #endregion
+    
     final box = await Hive.openBox<Map>(_messagesBox);
     
     final data = box.get(chatId);
     if (data == null) {
+      // #region agent log H6
+      print('[H6-Cache] No cached data found for chatId=$chatId');
+      // #endregion
       return null;
     }
 
     final messages = (data['messages'] as List)
         .map((json) => Message.fromJson(Map<String, dynamic>.from(json as Map)))
         .toList();
+    
+    // #region agent log H6
+    print('[H6-Cache] Loaded ${messages.length} messages from cache for chatId=$chatId');
+    // #endregion
     
     return messages;
   }

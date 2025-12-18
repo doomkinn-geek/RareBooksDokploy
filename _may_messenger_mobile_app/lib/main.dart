@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'core/themes/app_theme.dart';
@@ -18,6 +20,56 @@ import 'presentation/screens/chat_screen.dart';
 // Global navigator key for navigation from FCM
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+// Global instance for background handler
+final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+
+// CRITICAL: Background handler MUST be top-level function
+// Must be registered in main() BEFORE runApp()
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  print('[FCM_BG] Handling background message: ${message.messageId}');
+  print('[FCM_BG] Data: ${message.data}');
+  
+  // Parse content from data payload (Data-only message)
+  final title = message.data['title'] ?? message.notification?.title ?? 'New Message';
+  final body = message.data['body'] ?? message.notification?.body ?? '';
+  final chatId = message.data['chatId'] as String?;
+  
+  // Show local notification with grouping support
+  try {
+    const androidDetails = AndroidNotificationDetails(
+      'messages_channel',
+      'Messages',
+      channelDescription: 'Notifications for new messages',
+      importance: Importance.high,
+      priority: Priority.high,
+      showWhen: true,
+      groupKey: 'messages_group', // Group all messages together
+      actions: [
+        AndroidNotificationAction(
+          'reply_action',
+          'Ответить',
+          inputs: [AndroidNotificationActionInput(label: 'Введите сообщение')],
+        ),
+      ],
+    );
+    
+    const notificationDetails = NotificationDetails(android: androidDetails);
+    
+    await _localNotifications.show(
+      chatId.hashCode, // Use chatId hash as notification ID (one per chat)
+      title,
+      body,
+      notificationDetails,
+      payload: chatId,
+    );
+    
+    print('[FCM_BG] Local notification shown');
+  } catch (e) {
+    print('[FCM_BG] Error showing notification: $e');
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -32,6 +84,11 @@ void main() async {
     try {
       await Firebase.initializeApp();
       print('Firebase initialized successfully');
+      
+      // CRITICAL: Register background message handler BEFORE runApp()
+      // This MUST be done here, not in FcmService.initialize()
+      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+      print('[FCM] Background handler registered in main()');
     } catch (e) {
       print('Firebase initialization failed (may be not configured): $e');
     }

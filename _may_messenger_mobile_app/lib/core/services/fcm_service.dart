@@ -11,53 +11,8 @@ final fcmServiceProvider = Provider<FcmService>((ref) {
   return FcmService();
 });
 
-// Global instance for background handler
-final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
-
-@pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  print('[FCM_BG] Handling background message: ${message.messageId}');
-  print('[FCM_BG] Data: ${message.data}');
-  
-  // Parse content from data payload (Data-only message)
-  final title = message.data['title'] ?? message.notification?.title ?? 'New Message';
-  final body = message.data['body'] ?? message.notification?.body ?? '';
-  final chatId = message.data['chatId'] as String?;
-  
-  // Show local notification with grouping support
-  try {
-    const androidDetails = AndroidNotificationDetails(
-      'messages_channel',
-      'Messages',
-      channelDescription: 'Notifications for new messages',
-      importance: Importance.high,
-      priority: Priority.high,
-      showWhen: true,
-      groupKey: 'messages_group', // Group all messages together
-      actions: [
-        AndroidNotificationAction(
-          'reply_action',
-          'Ответить',
-          inputs: [AndroidNotificationActionInput(label: 'Введите сообщение')],
-        ),
-      ],
-    );
-    
-    const notificationDetails = NotificationDetails(android: androidDetails);
-    
-    await _localNotifications.show(
-      chatId.hashCode, // Use chatId hash as notification ID (one per chat)
-      title,
-      body,
-      notificationDetails,
-      payload: chatId,
-    );
-    
-    print('[FCM_BG] Local notification shown');
-  } catch (e) {
-    print('[FCM_BG] Error showing notification: $e');
-  }
-}
+// Background handler has been moved to main.dart
+// It MUST be registered in main() before runApp() per Flutter Firebase Messaging docs
 
 class FcmService {
   FirebaseMessaging? _messaging;
@@ -66,6 +21,7 @@ class FcmService {
   
   String? _fcmToken;
   String? _currentChatId; // Track current open chat to suppress notifications
+  String? _jwtToken; // Store JWT token for auto-registration
   Function(String chatId)? onMessageTap;
   Function(String chatId, String text)? onMessageReply;
   
@@ -162,12 +118,26 @@ class FcmService {
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
       print('[FCM] User granted permission');
       
-      // Get FCM token
+      // Get FCM token (may be null on first app launch)
       _fcmToken = await messaging.getToken();
-      print('[FCM] Token: $_fcmToken');
+      print('[FCM] Initial token: $_fcmToken');
       
-      // Register background message handler
-      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+      // Listen for token refresh/updates
+      messaging.onTokenRefresh.listen((newToken) {
+        print('[FCM] Token refreshed: $newToken');
+        _fcmToken = newToken;
+        
+        // Auto-register new token if we have JWT token
+        if (_jwtToken != null) {
+          print('[FCM] Auto-registering refreshed token');
+          registerToken(_jwtToken!).catchError((e) {
+            print('[FCM] Failed to auto-register token: $e');
+          });
+        }
+      });
+      
+      // Background handler is now registered in main.dart (before runApp)
+      // This is required by Flutter Firebase Messaging documentation
       
       // Handle foreground messages
       FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
@@ -186,23 +156,40 @@ class FcmService {
   }
 
   Future<void> registerToken(String token) async {
-    // #region agent log H1
-    print('[H1-Mobile] registerToken called: firebaseSupported=$_isFirebaseSupported, fcmToken_length=${_fcmToken?.length ?? 0}, jwt_length=${token.length}');
-    // #endregion
+    print('[FCM] registerToken called');
     
-    if (!_isFirebaseSupported || _fcmToken == null) {
-      // #region agent log H1
-      print('[H1-Mobile] registerToken SKIPPED: firebaseSupported=$_isFirebaseSupported, fcmToken=$_fcmToken');
-      // #endregion
+    // Store JWT token for later auto-registration
+    _jwtToken = token;
+    
+    if (!_isFirebaseSupported) {
+      print('[FCM] registerToken skipped: Firebase not supported on this platform');
       return;
+    }
+    
+    // If FCM token is not available yet, wait for it
+    if (_fcmToken == null) {
+      print('[FCM] FCM token not available yet, waiting for onTokenRefresh...');
+      
+      // Try to get token again (in case it's available now)
+      final messaging = _messagingInstance;
+      if (messaging != null) {
+        try {
+          _fcmToken = await messaging.getToken();
+          print('[FCM] Retry getToken result: ${_fcmToken != null ? 'success' : 'still null'}');
+        } catch (e) {
+          print('[FCM] Retry getToken failed: $e');
+        }
+      }
+      
+      // If still null, token will be registered automatically when onTokenRefresh fires
+      if (_fcmToken == null) {
+        print('[FCM] FCM token still null, will auto-register when available via onTokenRefresh');
+        return;
+      }
     }
     
     try {
       final deviceInfo = await _getDeviceInfo();
-      
-      // #region agent log H1
-      print('[H1-Mobile] Calling API register-token: url=${ApiConstants.baseUrl}/api/notifications/register-token, deviceInfo=$deviceInfo');
-      // #endregion
       
       final response = await _dio.post(
         '${ApiConstants.baseUrl}/api/notifications/register-token',
@@ -215,13 +202,9 @@ class FcmService {
         ),
       );
       
-      // #region agent log H1
-      print('[H1-Mobile] FCM token registered SUCCESS: statusCode=${response.statusCode}, response=${response.data}');
-      // #endregion
+      print('[FCM] Token registered successfully: ${response.data}');
     } catch (e) {
-      // #region agent log H1
-      print('[H1-Mobile] Failed to register FCM token: error=$e, fcmToken=${_fcmToken?.substring(0, 20)}...');
-      // #endregion
+      print('[FCM] Failed to register FCM token: $e');
     }
   }
 
@@ -254,36 +237,21 @@ class FcmService {
   }
 
   void _handleForegroundMessage(RemoteMessage message) async {
-    // #region agent log H2
-    print('[H2-Mobile] _handleForegroundMessage: messageId=${message.messageId}, data=${message.data}, notification=${message.notification}');
-    // #endregion
+    print('[FCM_FG] Foreground message data: ${message.data}');
     
     // Parse content from data payload
     final title = message.data['title'] ?? message.notification?.title ?? 'New Message';
     final body = message.data['body'] ?? message.notification?.body ?? '';
     final chatId = message.data['chatId'] as String?;
     
-    // #region agent log H2
-    print('[H2-Mobile] Parsed: title=$title, body=$body, chatId=$chatId, currentChatId=$_currentChatId');
-    // #endregion
-    
     // Don't show notification if user is currently in this chat
     if (chatId != null && chatId == _currentChatId) {
-      // #region agent log H2
-      print('[H2-Mobile] User in current chat, NOT showing notification');
-      // #endregion
+      print('[FCM_FG] User in current chat, not showing notification');
       return;
     }
     
     if (chatId != null) {
-      // #region agent log H2
-      print('[H2-Mobile] Calling _showGroupedNotification for chatId=$chatId');
-      // #endregion
       await _showGroupedNotification(chatId, title, body);
-    } else {
-      // #region agent log H2
-      print('[H2-Mobile] chatId is NULL, cannot show notification');
-      // #endregion
     }
   }
 

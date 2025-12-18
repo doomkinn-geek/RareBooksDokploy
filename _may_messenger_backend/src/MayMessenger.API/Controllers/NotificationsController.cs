@@ -22,41 +22,22 @@ public class NotificationsController : ControllerBase
     [HttpPost("register-token")]
     public async Task<IActionResult> RegisterToken([FromBody] RegisterTokenRequest request)
     {
-        // #region agent log H1
-        DiagnosticsController.AddLog($"[H1] register-token called: userId={User.FindFirst(ClaimTypes.NameIdentifier)?.Value}, token_length={request.Token?.Length ?? 0}, deviceInfo={request.DeviceInfo}");
-        // #endregion
-        
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (userId == null || !Guid.TryParse(userId, out var userGuid))
         {
-            // #region agent log H1
-            DiagnosticsController.AddLog($"[H1] register-token UNAUTHORIZED: userId={userId}");
-            // #endregion
             return Unauthorized();
         }
 
         try
         {
-            // #region agent log H1
-            DiagnosticsController.AddLog($"[H1] Calling RegisterOrUpdateAsync: userId={userGuid}, token={request.Token?.Substring(0, Math.Min(20, request.Token?.Length ?? 0))}...");
-            // #endregion
-            
             await _unitOfWork.FcmTokens.RegisterOrUpdateAsync(userGuid, request.Token, request.DeviceInfo ?? "Unknown");
             _logger.LogInformation($"FCM token registered for user {userGuid}");
-            
-            // #region agent log H1
-            var tokens = await _unitOfWork.FcmTokens.GetActiveTokensForUserAsync(userGuid);
-            DiagnosticsController.AddLog($"[H1] FCM token registered SUCCESS: userId={userGuid}, active_tokens_count={tokens.Count}");
-            // #endregion
             
             return Ok(new { success = true, message = "Token registered successfully" });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, $"Failed to register FCM token for user {userGuid}");
-            // #region agent log H1
-            DiagnosticsController.AddLog($"[H1] FCM token registration FAILED: userId={userGuid}, error={ex.Message}");
-            // #endregion
             return StatusCode(500, new { success = false, message = "Failed to register token" });
         }
     }
