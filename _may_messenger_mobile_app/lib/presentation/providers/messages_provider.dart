@@ -2,9 +2,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../data/models/message_model.dart';
 import '../../data/services/message_sync_service.dart';
+import '../../data/repositories/message_cache_repository.dart';
 import 'auth_provider.dart';
 import 'signalr_provider.dart';
 import 'profile_provider.dart';
+
+// LRU Cache provider - singleton для всего приложения
+final messageCacheProvider = Provider<MessageCacheRepository>((ref) {
+  return MessageCacheRepository();
+});
 
 final messagesProvider = StateNotifierProvider.family<MessagesNotifier, MessagesState, String>(
   (ref, chatId) {
@@ -15,6 +21,7 @@ final messagesProvider = StateNotifierProvider.family<MessagesNotifier, Messages
       ref.read(outboxRepositoryProvider),
       chatId,
       ref.read(signalRServiceProvider),
+      ref.read(messageCacheProvider),
       ref,
     );
   },
@@ -53,6 +60,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   final dynamic _outboxRepository;
   final String chatId;
   final dynamic _signalRService;
+  final MessageCacheRepository _cache;
   final Ref _ref;
   final _uuid = const Uuid();
   late final MessageSyncService _syncService;
@@ -63,6 +71,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     this._outboxRepository,
     this.chatId,
     this._signalRService,
+    this._cache,
     this._ref,
   ) : super(MessagesState()) {
     _syncService = MessageSyncService(_messageRepository);
@@ -116,13 +125,24 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   Future<void> loadMessages({bool forceRefresh = false}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      // Load synced messages from repository (cache or API)
+      // STEP 1: Try LRU cache first for instant loading
+      final cachedMessages = _cache.getChatMessages(chatId);
+      if (cachedMessages.isNotEmpty && !forceRefresh) {
+        print('[MSG_LOAD] Found ${cachedMessages.length} messages in LRU cache');
+        state = state.copyWith(
+          messages: cachedMessages,
+          isLoading: false, // Show cached data immediately
+        );
+        // Continue loading from repository in background to get updates
+      }
+      
+      // STEP 2: Load synced messages from repository (Hive cache or API)
       final List<Message> syncedMessages = await _messageRepository.getMessages(
         chatId: chatId,
         forceRefresh: forceRefresh,
       );
       
-      // Load pending messages from outbox
+      // STEP 3: Load pending messages from outbox
       final pendingMessages = await _outboxRepository.getPendingMessagesForChat(chatId);
       final profileState = _ref.read(profileProvider);
       final currentUser = profileState.profile;
@@ -135,7 +155,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
               ))
           .toList();
       
-      // Merge synced and local messages, removing duplicates
+      // STEP 4: Merge synced and local messages, removing duplicates
       // Use localId as key since it's always unique
       final allMessages = <String, Message>{};
       
@@ -159,22 +179,26 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final messages = allMessages.values.toList();
       messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       
-      print('[MSG_SEND] Loaded ${messages.length} messages (${syncedMessages.length} synced + ${localMessages.length} local)');
+      print('[MSG_LOAD] Loaded ${messages.length} messages (${syncedMessages.length} synced + ${localMessages.length} local)');
+      
+      // STEP 5: Update LRU cache with fresh data
+      _cache.putAll(messages);
+      print('[MSG_LOAD] Updated LRU cache with ${messages.length} messages');
       
       state = state.copyWith(
         messages: messages,
         isLoading: false,
       );
       
-      // Гарантируем сохранение в кэш (на случай если репозиторий не сохранил)
+      // STEP 6: Гарантируем сохранение в Hive кэш (на случай если репозиторий не сохранил)
       try {
         final localDataSource = _ref.read(localDataSourceProvider);
         await localDataSource.cacheMessages(chatId, syncedMessages);
       } catch (e) {
-        print('[MessagesProvider] Failed to cache messages: $e');
+        print('[MSG_LOAD] Failed to cache messages in Hive: $e');
       }
     } catch (e) {
-      print('[MessagesProvider] Load messages error: $e');
+      print('[MSG_LOAD] Load messages error: $e');
       state = state.copyWith(
         isLoading: false,
         error: e.toString(),
@@ -405,24 +429,28 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         // Replace local message with server message
         final updatedMessages = [...state.messages];
         final localMessage = updatedMessages[localIndex];
-        updatedMessages[localIndex] = message.copyWith(
+        final serverMessage = message.copyWith(
           localId: localMessage.localId,
           isLocalOnly: false,
         );
+        updatedMessages[localIndex] = serverMessage;
         state = state.copyWith(messages: updatedMessages);
         print('[MSG_RECV] Replaced local message with server message: ${message.id}');
+        
+        // Update LRU cache
+        _cache.update(serverMessage);
         
         // Clean up outbox if we have a local ID
         if (localMessage.localId != null) {
           _outboxRepository.markAsSynced(localMessage.localId!, message.id);
         }
         
-        // Cache the server message
+        // Cache the server message in Hive
         try {
           final localDataSource = _ref.read(localDataSourceProvider);
-          localDataSource.addMessageToCache(chatId, message);
+          localDataSource.addMessageToCache(chatId, serverMessage);
         } catch (e) {
-          print('[MSG_RECV] Failed to cache message: $e');
+          print('[MSG_RECV] Failed to cache message in Hive: $e');
         }
         return;
       }
@@ -445,12 +473,15 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
       print('[MSG_RECV] Added new message to state: ${message.id} (localId: ${message.localId ?? 'none'})');
       
-      // Save message to cache for persistence
+      // Add to LRU cache
+      _cache.put(message);
+      
+      // Save message to Hive cache for persistence
       try {
         final localDataSource = _ref.read(localDataSourceProvider);
         localDataSource.addMessageToCache(chatId, message);
       } catch (e) {
-        print('[MSG_RECV] Failed to cache message: $e');
+        print('[MSG_RECV] Failed to cache message in Hive: $e');
       }
       
       // Background download for audio messages

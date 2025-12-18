@@ -6,9 +6,9 @@ WORKDIR /app
 # Copy package files first for better Docker layer caching
 COPY package*.json ./
 
-# Install dependencies with clean install for reproducible builds
-# npm ci installs all dependencies (production + dev) by default
-RUN npm ci
+# Install dependencies
+# Using npm install instead of npm ci because lock file may not be in sync
+RUN npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
