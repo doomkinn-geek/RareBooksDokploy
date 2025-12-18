@@ -1,11 +1,22 @@
 /**
  * Firebase Cloud Messaging Service for Web
  * Handles FCM token registration and push notification setup
+ * 
+ * NOTE: Firebase is optional. To enable:
+ * 1. Install: npm install firebase
+ * 2. Uncomment the imports below
+ * 3. Set your Firebase config
  */
 
-import { initializeApp, FirebaseApp } from 'firebase/app';
-import { getMessaging, getToken, onMessage, Messaging, MessagePayload } from 'firebase/messaging';
+// Uncomment these imports when Firebase is installed:
+// import { initializeApp, FirebaseApp } from 'firebase/app';
+// import { getMessaging, getToken, onMessage, Messaging, MessagePayload } from 'firebase/messaging';
 import { apiClient } from '../api/apiClient';
+
+// Temporary types until Firebase is installed
+type FirebaseApp = any;
+type Messaging = any;
+type MessagePayload = any;
 
 // Firebase configuration - should match your Firebase project
 const firebaseConfig = {
@@ -58,6 +69,12 @@ class FCMService {
       return;
     }
 
+    console.warn('[FCM] Firebase not installed. Install with: npm install firebase');
+    console.warn('[FCM] Then uncomment Firebase imports in fcmService.ts');
+    return;
+
+    // Uncomment when Firebase is installed:
+    /*
     try {
       // Check if config is set
       if (firebaseConfig.apiKey === "YOUR_API_KEY") {
@@ -84,12 +101,18 @@ class FCMService {
       console.error('[FCM] Initialization failed:', error);
       throw error;
     }
+    */
   }
 
   /**
    * Request notification permission and get FCM token
    */
   async requestPermissionAndGetToken(): Promise<string | null> {
+    console.warn('[FCM] Firebase not installed. Install with: npm install firebase');
+    return null;
+
+    // Uncomment when Firebase is installed:
+    /*
     if (!this.isInitialized || !this.messaging) {
       console.warn('[FCM] Not initialized');
       return null;
@@ -130,6 +153,7 @@ class FCMService {
       console.error('[FCM] Failed to get token:', error);
       return null;
     }
+    */
   }
 
   /**
