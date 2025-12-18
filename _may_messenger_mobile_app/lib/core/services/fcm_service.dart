@@ -186,12 +186,25 @@ class FcmService {
   }
 
   Future<void> registerToken(String token) async {
-    if (!_isFirebaseSupported || _fcmToken == null) return;
+    // #region agent log H1
+    print('[H1-Mobile] registerToken called: firebaseSupported=$_isFirebaseSupported, fcmToken_length=${_fcmToken?.length ?? 0}, jwt_length=${token.length}');
+    // #endregion
+    
+    if (!_isFirebaseSupported || _fcmToken == null) {
+      // #region agent log H1
+      print('[H1-Mobile] registerToken SKIPPED: firebaseSupported=$_isFirebaseSupported, fcmToken=$_fcmToken');
+      // #endregion
+      return;
+    }
     
     try {
       final deviceInfo = await _getDeviceInfo();
       
-      await _dio.post(
+      // #region agent log H1
+      print('[H1-Mobile] Calling API register-token: url=${ApiConstants.baseUrl}/api/notifications/register-token, deviceInfo=$deviceInfo');
+      // #endregion
+      
+      final response = await _dio.post(
         '${ApiConstants.baseUrl}/api/notifications/register-token',
         data: {
           'token': _fcmToken,
@@ -201,9 +214,14 @@ class FcmService {
           headers: {'Authorization': 'Bearer $token'},
         ),
       );
-      print('FCM token registered successfully');
+      
+      // #region agent log H1
+      print('[H1-Mobile] FCM token registered SUCCESS: statusCode=${response.statusCode}, response=${response.data}');
+      // #endregion
     } catch (e) {
-      print('Failed to register FCM token: $e');
+      // #region agent log H1
+      print('[H1-Mobile] Failed to register FCM token: error=$e, fcmToken=${_fcmToken?.substring(0, 20)}...');
+      // #endregion
     }
   }
 
@@ -236,21 +254,36 @@ class FcmService {
   }
 
   void _handleForegroundMessage(RemoteMessage message) async {
-    print('[FCM_FG] Foreground message data: ${message.data}');
+    // #region agent log H2
+    print('[H2-Mobile] _handleForegroundMessage: messageId=${message.messageId}, data=${message.data}, notification=${message.notification}');
+    // #endregion
     
     // Parse content from data payload
     final title = message.data['title'] ?? message.notification?.title ?? 'New Message';
     final body = message.data['body'] ?? message.notification?.body ?? '';
     final chatId = message.data['chatId'] as String?;
     
+    // #region agent log H2
+    print('[H2-Mobile] Parsed: title=$title, body=$body, chatId=$chatId, currentChatId=$_currentChatId');
+    // #endregion
+    
     // Don't show notification if user is currently in this chat
     if (chatId != null && chatId == _currentChatId) {
-      print('[FCM_FG] User in current chat, not showing notification');
+      // #region agent log H2
+      print('[H2-Mobile] User in current chat, NOT showing notification');
+      // #endregion
       return;
     }
     
     if (chatId != null) {
+      // #region agent log H2
+      print('[H2-Mobile] Calling _showGroupedNotification for chatId=$chatId');
+      // #endregion
       await _showGroupedNotification(chatId, title, body);
+    } else {
+      // #region agent log H2
+      print('[H2-Mobile] chatId is NULL, cannot show notification');
+      // #endregion
     }
   }
 

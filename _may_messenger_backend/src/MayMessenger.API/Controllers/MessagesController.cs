@@ -417,9 +417,16 @@ public class MessagesController : ControllerBase
     /// </summary>
     private async Task SendPushNotificationsAsync(Chat chat, User sender, MessageDto message)
     {
+        // #region agent log H2
+        DiagnosticsController.AddLog($"[H2] SendPushNotificationsAsync START: chatId={chat.Id}, senderId={sender.Id}, messageId={message.Id}, participantsCount={chat.Participants.Count}");
+        // #endregion
+        
         if (!_firebaseService.IsInitialized)
         {
             _logger.LogWarning("Firebase not initialized. Cannot send push notifications.");
+            // #region agent log H2
+            DiagnosticsController.AddLog($"[H2] Firebase NOT INITIALIZED - push notifications skipped");
+            // #endregion
             return;
         }
 
@@ -438,29 +445,49 @@ public class MessagesController : ControllerBase
             };
 
             // Send to all participants except sender
+            int recipientCount = 0;
+            int tokensFoundCount = 0;
+            int pushSentCount = 0;
+            
             foreach (var participant in chat.Participants)
             {
                 if (participant.UserId == sender.Id)
                     continue;
 
+                recipientCount++;
+
                 try
                 {
                     var tokens = await _unitOfWork.FcmTokens.GetActiveTokensForUserAsync(participant.UserId);
                     
+                    // #region agent log H2
+                    DiagnosticsController.AddLog($"[H2] Recipient userId={participant.UserId}: found {tokens.Count} active FCM tokens");
+                    // #endregion
+                    
                     if (tokens.Any())
                     {
+                        tokensFoundCount++;
                         _logger.LogInformation($"Sending push notification to user {participant.UserId}, {tokens.Count} tokens");
                         
                         foreach (var token in tokens)
                         {
+                            // #region agent log H2
+                            DiagnosticsController.AddLog($"[H2] Calling FirebaseService.SendNotificationAsync: userId={participant.UserId}, token={token.Token.Substring(0, Math.Min(20, token.Token.Length))}...");
+                            // #endregion
+                            
                             var (success, shouldDeactivate) = await _firebaseService.SendNotificationAsync(
                                 token.Token, 
                                 title, 
                                 body ?? "", 
                                 data);
                             
+                            // #region agent log H2
+                            DiagnosticsController.AddLog($"[H2] Firebase send result: success={success}, shouldDeactivate={shouldDeactivate}");
+                            // #endregion
+                            
                             if (success)
                             {
+                                pushSentCount++;
                                 // Update last used timestamp
                                 token.LastUsedAt = DateTime.UtcNow;
                             }
@@ -468,22 +495,41 @@ public class MessagesController : ControllerBase
                             {
                                 // Deactivate invalid token
                                 _logger.LogWarning($"Deactivating invalid FCM token for user {participant.UserId}");
+                                // #region agent log H2
+                                DiagnosticsController.AddLog($"[H2] Deactivating invalid token for userId={participant.UserId}");
+                                // #endregion
                                 await _unitOfWork.FcmTokens.DeactivateTokenAsync(token.Token);
                             }
                         }
                         
                         await _unitOfWork.SaveChangesAsync();
                     }
+                    else
+                    {
+                        // #region agent log H2
+                        DiagnosticsController.AddLog($"[H2] NO TOKENS found for userId={participant.UserId} - PUSH SKIPPED");
+                        // #endregion
+                    }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, $"Failed to send push to user {participant.UserId}");
+                    // #region agent log H2
+                    DiagnosticsController.AddLog($"[H2] Exception sending push to userId={participant.UserId}: {ex.Message}");
+                    // #endregion
                 }
             }
+            
+            // #region agent log H2
+            DiagnosticsController.AddLog($"[H2] SendPushNotificationsAsync COMPLETE: recipients={recipientCount}, tokensFound={tokensFoundCount}, pushSent={pushSentCount}");
+            // #endregion
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in SendPushNotificationsAsync");
+            // #region agent log H2
+            DiagnosticsController.AddLog($"[H2] SendPushNotificationsAsync FAILED: {ex.Message}");
+            // #endregion
         }
     }
     
