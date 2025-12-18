@@ -9,6 +9,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { notificationService } from './services/notificationService';
 import { fcmService } from './services/fcmService';
 import { signalRService } from './services/signalRService';
+import { MessageType } from './types/chat';
 
 function App() {
   const { token, loadUserProfile } = useAuthStore();
@@ -102,7 +103,7 @@ function App() {
           if (message.senderId !== currentUserId) {
             notificationService.showMessageNotification(
               `Message from ${message.senderName}`,
-              message.type === 'text' ? message.content || '' : '🎤 Voice message',
+              message.type === MessageType.Text ? message.content || '' : '🎤 Voice message',
               message.chatId,
               () => {
                 selectChat(message.chatId);

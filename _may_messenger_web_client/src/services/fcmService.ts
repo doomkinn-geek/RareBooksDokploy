@@ -5,7 +5,7 @@
 
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getMessaging, getToken, onMessage, Messaging, MessagePayload } from 'firebase/messaging';
-import apiClient from '../api/apiClient';
+import { apiClient } from '../api/apiClient';
 
 // Firebase configuration - should match your Firebase project
 const firebaseConfig = {
@@ -160,7 +160,6 @@ class FCMService {
    * Get device information
    */
   private getDeviceInfo(): string {
-    const ua = navigator.userAgent;
     const browser = this.getBrowserName();
     const os = this.getOSName();
     
