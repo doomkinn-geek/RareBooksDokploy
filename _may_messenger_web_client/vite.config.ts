@@ -19,14 +19,8 @@ export default defineConfig({
     // Generate sourcemaps for debugging (can disable in production)
     sourcemap: false,
     
-    // Minification
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: true, // Remove console.logs in production
-        drop_debugger: true,
-      },
-    },
+    // Minification using esbuild (faster and built-in with Vite)
+    minify: 'esbuild',
     
     // Chunk splitting strategy for better caching
     rollupOptions: {
