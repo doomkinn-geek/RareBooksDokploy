@@ -29,10 +29,13 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Copy built assets from build stage
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Create directory for nginx pid and temp files
+# Create directories for nginx with proper permissions
 RUN mkdir -p /var/cache/nginx/client_temp \
+    /var/run/nginx \
     && chown -R nginx:nginx /var/cache/nginx \
-    && chown -R nginx:nginx /usr/share/nginx/html
+    && chown -R nginx:nginx /usr/share/nginx/html \
+    && chown -R nginx:nginx /var/run/nginx \
+    && chmod -R 755 /var/run/nginx
 
 # Add healthcheck
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
@@ -41,7 +44,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 # Expose port 80
 EXPOSE 80
 
-# Run nginx as non-root user for security
-USER nginx
-
+# Run nginx (as root to bind to port 80)
 CMD ["nginx", "-g", "daemon off;"]
