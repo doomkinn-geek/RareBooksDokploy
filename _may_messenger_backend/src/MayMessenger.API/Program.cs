@@ -22,6 +22,9 @@ builder.Configuration["WebRootPath"] = builder.Environment.WebRootPath;
 // Add services to the container
 builder.Services.AddControllers();
 
+// Memory Cache (required for rate limiting and other features)
+builder.Services.AddMemoryCache();
+
 // FluentValidation
 builder.Services.AddValidatorsFromAssemblyContaining<MayMessenger.Application.Validators.RegisterRequestDtoValidator>();
 builder.Services.AddFluentValidationAutoValidation();
