@@ -44,8 +44,20 @@ public class MessagesController : ControllerBase
     [HttpGet("{chatId}")]
     public async Task<ActionResult<IEnumerable<MessageDto>>> GetMessages(Guid chatId, [FromQuery] int skip = 0, [FromQuery] int take = 50)
     {
+        // #region agent log H10
+        DiagnosticsController.AddLog($"[H10-API] GetMessages: chatId={chatId}, skip={skip}, take={take}");
+        // #endregion
+        
         var userId = GetCurrentUserId();
         var messages = await _unitOfWork.Messages.GetChatMessagesAsync(chatId, skip, take);
+        
+        // #region agent log H10
+        DiagnosticsController.AddLog($"[H10-API] Database returned {messages.Count} messages");
+        if (messages.Any())
+        {
+            DiagnosticsController.AddLog($"[H10-API] First: {messages.First().Content}, Last: {messages.Last().Content}");
+        }
+        // #endregion
         
         // Mark messages as delivered when retrieved (automatic delivery tracking)
         foreach (var message in messages)
@@ -60,7 +72,7 @@ public class MessagesController : ControllerBase
         
         await _unitOfWork.SaveChangesAsync();
         
-        return Ok(messages.Select(m => new MessageDto
+        var result = messages.Select(m => new MessageDto
         {
             Id = m.Id,
             ChatId = m.ChatId,
@@ -71,7 +83,13 @@ public class MessagesController : ControllerBase
             FilePath = m.FilePath,
             Status = m.Status,
             CreatedAt = m.CreatedAt
-        }));
+        }).ToList();
+        
+        // #region agent log H10
+        DiagnosticsController.AddLog($"[H10-API] Returning {result.Count} message DTOs");
+        // #endregion
+        
+        return Ok(result);
     }
     
     /// <summary>
@@ -417,16 +435,9 @@ public class MessagesController : ControllerBase
     /// </summary>
     private async Task SendPushNotificationsAsync(Chat chat, User sender, MessageDto message)
     {
-        // #region agent log H7
-        DiagnosticsController.AddLog($"[H7] SendPushNotifications: chatId={chat.Id}, messageId={message.Id}, sender={sender.DisplayName}");
-        // #endregion
-        
         if (!_firebaseService.IsInitialized)
         {
             _logger.LogWarning("Firebase not initialized. Cannot send push notifications.");
-            // #region agent log H7
-            DiagnosticsController.AddLog($"[H7] Firebase NOT initialized - skipping");
-            // #endregion
             return;
         }
 
@@ -453,10 +464,6 @@ public class MessagesController : ControllerBase
                 try
                 {
                     var tokens = await _unitOfWork.FcmTokens.GetActiveTokensForUserAsync(participant.UserId);
-                    
-                    // #region agent log H7
-                    DiagnosticsController.AddLog($"[H7] User {participant.UserId}: found {tokens.Count} active tokens");
-                    // #endregion
                     
                     if (tokens.Any())
                     {
@@ -485,25 +492,12 @@ public class MessagesController : ControllerBase
                             }
                         }
                         
-                        // #region agent log H7
-                        DiagnosticsController.AddLog($"[H7] Push sent: success={successCount}/{tokens.Count}");
-                        // #endregion
-                        
                         await _unitOfWork.SaveChangesAsync();
-                    }
-                    else
-                    {
-                        // #region agent log H7
-                        DiagnosticsController.AddLog($"[H7] NO TOKENS for user {participant.UserId} - PUSH SKIPPED");
-                        // #endregion
                     }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, $"Failed to send push to user {participant.UserId}");
-                    // #region agent log H7
-                    DiagnosticsController.AddLog($"[H7] Exception: {ex.Message}");
-                    // #endregion
                 }
             }
         }

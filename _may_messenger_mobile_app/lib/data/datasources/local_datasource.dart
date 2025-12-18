@@ -28,10 +28,6 @@ class LocalDataSource {
 
   // Messages Cache
   Future<void> cacheMessages(String chatId, List<Message> messages) async {
-    // #region agent log H6
-    print('[H6-Cache] cacheMessages: chatId=$chatId, count=${messages.length}');
-    // #endregion
-    
     try {
       final box = await Hive.openBox<Map>(_messagesBox);
       
@@ -42,42 +38,30 @@ class LocalDataSource {
       
       // Force flush to disk to ensure persistence
       await box.flush();
-      
-      // #region agent log H6
-      print('[H6-Cache] Messages cached successfully: chatId=$chatId, flushed to disk');
-      // #endregion
     } catch (e) {
-      // #region agent log H6
-      print('[H6-Cache] ERROR caching messages: $e');
-      // #endregion
+      print('[Cache] ERROR caching messages: $e');
       rethrow;
     }
   }
 
   Future<List<Message>?> getCachedMessages(String chatId) async {
-    // #region agent log H6
-    print('[H6-Cache] getCachedMessages: chatId=$chatId');
-    // #endregion
-    
-    final box = await Hive.openBox<Map>(_messagesBox);
-    
-    final data = box.get(chatId);
-    if (data == null) {
-      // #region agent log H6
-      print('[H6-Cache] No cached data found for chatId=$chatId');
-      // #endregion
+    try {
+      final box = await Hive.openBox<Map>(_messagesBox);
+      
+      final data = box.get(chatId);
+      if (data == null) {
+        return null;
+      }
+
+      final messages = (data['messages'] as List)
+          .map((json) => Message.fromJson(Map<String, dynamic>.from(json as Map)))
+          .toList();
+      
+      return messages;
+    } catch (e) {
+      print('[Cache] ERROR loading from cache: $e');
       return null;
     }
-
-    final messages = (data['messages'] as List)
-        .map((json) => Message.fromJson(Map<String, dynamic>.from(json as Map)))
-        .toList();
-    
-    // #region agent log H6
-    print('[H6-Cache] Loaded ${messages.length} messages from cache for chatId=$chatId');
-    // #endregion
-    
-    return messages;
   }
 
   // Add single message to cache

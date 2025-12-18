@@ -14,31 +14,24 @@ class MessageRepository {
     int take = 200,
     bool forceRefresh = false,
   }) async {
-    // #region agent log H6-H8
-    print('[H6-H8-Repo] getMessages: chatId=$chatId, skip=$skip, take=$take, forceRefresh=$forceRefresh');
+    // #region agent log H10
+    print('[H10-Repo] getMessages: chatId=$chatId, skip=$skip, take=$take, forceRefresh=$forceRefresh');
     // #endregion
     
     if (!forceRefresh && skip == 0) {
       final cachedMessages = await _localDataSource.getCachedMessages(chatId);
       
-      if (cachedMessages != null && cachedMessages.isNotEmpty) {
-        // #region agent log H6-H8
-        print('[H6-H8-Repo] Returning ${cachedMessages.length} messages from CACHE');
-        // #endregion
-        return cachedMessages;
-      } else {
-        // #region agent log H6-H8
-        print('[H6-H8-Repo] Cache is EMPTY or NULL, loading from API');
-        // #endregion
-      }
-    } else {
-      // #region agent log H6-H8
-      print('[H6-H8-Repo] Skipping cache (forceRefresh=$forceRefresh or skip=$skip)');
+      // #region agent log H10
+      print('[H10-Repo] Hive cache result: ${cachedMessages?.length ?? 0} messages');
       // #endregion
+      
+      if (cachedMessages != null && cachedMessages.isNotEmpty) {
+        return cachedMessages;
+      }
     }
 
-    // #region agent log H6-H8
-    print('[H6-H8-Repo] Calling API getMessages: take=$take, skip=$skip');
+    // #region agent log H10
+    print('[H10-Repo] Calling API getMessages...');
     // #endregion
     
     final messages = await _apiDataSource.getMessages(
@@ -47,14 +40,15 @@ class MessageRepository {
       take: take,
     );
 
-    // #region agent log H6-H8
-    print('[H6-H8-Repo] API returned ${messages.length} messages');
+    // #region agent log H10
+    print('[H10-Repo] API returned ${messages.length} messages');
     // #endregion
 
     if (skip == 0) {
       await _localDataSource.cacheMessages(chatId, messages);
-      // #region agent log H6-H8
-      print('[H6-H8-Repo] Cached ${messages.length} messages');
+      
+      // #region agent log H10
+      print('[H10-Repo] Cached ${messages.length} messages in Hive');
       // #endregion
     }
 
