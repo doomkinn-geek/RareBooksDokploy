@@ -36,8 +36,6 @@ export default defineConfig({
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           // SignalR
           'signalr': ['@microsoft/signalr'],
-          // Firebase
-          'firebase': ['firebase'],
           // UI libraries
           'ui-vendor': ['lucide-react', 'qrcode.react'],
           // State management
@@ -69,7 +67,6 @@ export default defineConfig({
       'react-dom',
       'react-router-dom',
       '@microsoft/signalr',
-      'firebase',
       'axios',
       'zustand',
     ],
