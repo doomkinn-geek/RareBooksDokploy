@@ -44,35 +44,36 @@ export const MessageBubble = ({ message }: MessageBubbleProps) => {
   };
 
   return (
-    <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mb-4`}>
-      <div className="flex flex-col items-end gap-1">
+    <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mb-4 px-2`}>
+      <div className={`flex flex-col gap-1 max-w-[70%] ${isOwnMessage ? 'items-end' : 'items-start'}`}>
         <div
-          className={`max-w-[70%] rounded-2xl px-4 py-2 ${
+          className={`relative px-4 py-2 shadow-sm break-words ${
             isOwnMessage
               ? message.status === MessageStatus.Failed
-                ? 'bg-red-600 text-white'
-                : 'bg-indigo-600 text-white'
-              : 'bg-gray-200 text-gray-900'
+                ? 'bg-red-600 text-white rounded-2xl rounded-tr-sm'
+                : 'bg-indigo-600 text-white rounded-2xl rounded-tr-sm'
+              : 'bg-white text-gray-900 rounded-2xl rounded-tl-sm border border-gray-100'
           }`}
+          style={{ minWidth: '4rem' }}
         >
           {!isOwnMessage && (
-            <div className={`text-xs font-semibold mb-1 ${isOwnMessage ? 'text-white/70' : 'text-indigo-600'}`}>
+            <div className="text-xs font-bold text-indigo-600 mb-1">
               {message.senderName || 'Пользователь'}
             </div>
           )}
           
-          <div>
+          <div className="text-[15px] leading-relaxed">
             {message.type === MessageType.Text ? (
-              <p className="whitespace-pre-wrap break-words">{message.content || ''}</p>
+              <p className="whitespace-pre-wrap">{message.content || ''}</p>
             ) : message.filePath ? (
               <AudioPlayer filePath={message.filePath} isOwnMessage={isOwnMessage} />
             ) : (
-              <p className="text-sm opacity-70">Аудио недоступно</p>
+              <p className="text-sm opacity-70 italic">Аудио недоступно</p>
             )}
           </div>
           
-          <div className={`flex items-center gap-1 justify-end mt-1 text-xs ${
-            isOwnMessage ? 'text-white/70' : 'text-gray-500'
+          <div className={`flex items-center gap-1 justify-end mt-1 text-[10px] select-none ${
+            isOwnMessage ? 'text-white/80' : 'text-gray-400'
           }`}>
             <span>{formatTime(message.createdAt)}</span>
             {renderStatusIcon()}
@@ -83,7 +84,7 @@ export const MessageBubble = ({ message }: MessageBubbleProps) => {
         {isOwnMessage && message.status === MessageStatus.Failed && (
           <button
             onClick={handleRetry}
-            className="flex items-center gap-1 px-3 py-1 text-xs text-red-600 bg-red-50 hover:bg-red-100 rounded-full transition-colors"
+            className="flex items-center gap-1 px-3 py-1 text-xs text-red-600 bg-red-50 hover:bg-red-100 rounded-full transition-colors shadow-sm"
             title="Повторить отправку"
           >
             <RotateCw className="w-3 h-3" />

@@ -71,23 +71,25 @@ public class FirebaseService : IFirebaseService
 
         try
         {
+            // Prepare data payload (merging provided data with title/body)
+            var messageData = data != null 
+                ? new Dictionary<string, string>(data) 
+                : new Dictionary<string, string>();
+            
+            // Add title and body to data payload for custom handling on client
+            messageData["title"] = title;
+            messageData["body"] = body;
+
             var message = new Message
             {
                 Token = fcmToken,
-                Notification = new Notification
-                {
-                    Title = title,
-                    Body = body,
-                },
-                Data = data,
+                // We don't send Notification payload anymore to give full control to the app
+                // This makes it a "Data Message" which triggers background handler even when app is killed
+                Data = messageData,
                 Android = new AndroidConfig
                 {
                     Priority = Priority.High,
-                    Notification = new AndroidNotification
-                    {
-                        Sound = "default",
-                        ChannelId = "messages"
-                    }
+                    // No Notification object here either
                 }
             };
 
@@ -127,23 +129,23 @@ public class FirebaseService : IFirebaseService
 
         try
         {
+            // Prepare data payload (merging provided data with title/body)
+            var messageData = data != null 
+                ? new Dictionary<string, string>(data) 
+                : new Dictionary<string, string>();
+            
+            // Add title and body to data payload
+            messageData["title"] = title;
+            messageData["body"] = body;
+
             var message = new MulticastMessage
             {
                 Tokens = tokens,
-                Notification = new Notification
-                {
-                    Title = title,
-                    Body = body,
-                },
-                Data = data,
+                // Data-only message
+                Data = messageData,
                 Android = new AndroidConfig
                 {
-                    Priority = Priority.High,
-                    Notification = new AndroidNotification
-                    {
-                        Sound = "default",
-                        ChannelId = "messages"
-                    }
+                    Priority = Priority.High
                 }
             };
 

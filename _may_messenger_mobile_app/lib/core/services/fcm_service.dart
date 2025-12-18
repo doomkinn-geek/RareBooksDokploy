@@ -17,9 +17,12 @@ final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotifica
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   print('[FCM_BG] Handling background message: ${message.messageId}');
-  print('[FCM_BG] Title: ${message.notification?.title}');
-  print('[FCM_BG] Body: ${message.notification?.body}');
   print('[FCM_BG] Data: ${message.data}');
+  
+  // Parse content from data payload (Data-only message)
+  final title = message.data['title'] ?? message.notification?.title ?? 'New Message';
+  final body = message.data['body'] ?? message.notification?.body ?? '';
+  final chatId = message.data['chatId'] as String?;
   
   // Show local notification
   try {
@@ -30,15 +33,21 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       importance: Importance.high,
       priority: Priority.high,
       showWhen: true,
+      actions: [
+        AndroidNotificationAction(
+          'reply_action',
+          'Ответить',
+          inputs: [AndroidNotificationActionInput(label: 'Введите сообщение')],
+        ),
+      ],
     );
     
     const notificationDetails = NotificationDetails(android: androidDetails);
     
-    final chatId = message.data['chatId'] as String?;
     await _localNotifications.show(
       chatId.hashCode, // Use chatId hash as notification ID
-      message.notification?.title ?? 'New Message',
-      message.notification?.body ?? '',
+      title,
+      body,
       notificationDetails,
       payload: chatId,
     );
@@ -57,6 +66,7 @@ class FcmService {
   String? _fcmToken;
   String? _currentChatId; // Track current open chat to suppress notifications
   Function(String chatId)? onMessageTap;
+  Function(String chatId, String text)? onMessageReply;
   
   // Проверка поддержки Firebase на текущей платформе
   bool get _isFirebaseSupported => kIsWeb || Platform.isAndroid || Platform.isIOS;
@@ -98,8 +108,12 @@ class FcmService {
       initSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) async {
         print('[FCM] Notification tapped with payload: ${response.payload}');
-        if (response.payload != null && onMessageTap != null) {
-          onMessageTap!(response.payload!);
+        if (response.payload != null) {
+          if (response.input != null && response.input!.isNotEmpty && onMessageReply != null) {
+             onMessageReply!(response.payload!, response.input!);
+          } else if (onMessageTap != null) {
+             onMessageTap!(response.payload!);
+          }
         }
       },
     );
@@ -210,9 +224,11 @@ class FcmService {
   }
 
   void _handleForegroundMessage(RemoteMessage message) async {
-    print('[FCM_FG] Foreground message: ${message.notification?.title}');
-    print('[FCM_FG] Data: ${message.data}');
+    print('[FCM_FG] Foreground message data: ${message.data}');
     
+    // Parse content from data payload
+    final title = message.data['title'] ?? message.notification?.title ?? 'New Message';
+    final body = message.data['body'] ?? message.notification?.body ?? '';
     final chatId = message.data['chatId'] as String?;
     
     // Don't show notification if user is currently in this chat
@@ -230,14 +246,21 @@ class FcmService {
         importance: Importance.high,
         priority: Priority.high,
         showWhen: true,
+        actions: [
+          AndroidNotificationAction(
+            'reply_action',
+            'Ответить',
+            inputs: [AndroidNotificationActionInput(label: 'Введите сообщение')],
+          ),
+        ],
       );
       
       const notificationDetails = NotificationDetails(android: androidDetails);
       
       await _localNotifications.show(
         chatId.hashCode, // Use chatId hash as notification ID
-        message.notification?.title ?? 'New Message',
-        message.notification?.body ?? '',
+        title,
+        body,
         notificationDetails,
         payload: chatId,
       );

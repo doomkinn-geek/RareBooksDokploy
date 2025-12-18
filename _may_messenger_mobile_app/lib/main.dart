@@ -117,6 +117,21 @@ class MyApp extends ConsumerWidget {
             );
           }
         };
+
+        notificationService.onNotificationReply = (chatId, text) async {
+          print('[NOTIFICATION] Reply received for chat $chatId: $text');
+          try {
+             await ref.read(messagesProvider(chatId).notifier).sendMessage(text);
+             // Optionally navigate to chat to show the sent message
+             navigatorKey.currentState?.push(
+              MaterialPageRoute(
+                builder: (context) => ChatScreen(chatId: chatId),
+              ),
+            );
+          } catch (e) {
+            print('[NOTIFICATION] Error handling reply: $e');
+          }
+        };
         
         // Initialize FCM and register token (только на мобильных платформах и web)
         final shouldInitFcm = kIsWeb || Platform.isAndroid || Platform.isIOS;
@@ -159,6 +174,21 @@ class MyApp extends ConsumerWidget {
                     builder: (context) => ChatScreen(chatId: chatId),
                   ),
                 );
+              }
+            };
+
+            fcmService.onMessageReply = (chatId, text) async {
+              print('[FCM] Reply received for chat $chatId: $text');
+              try {
+                await ref.read(messagesProvider(chatId).notifier).sendMessage(text);
+                // Optionally navigate to chat
+                navigatorKey.currentState?.push(
+                  MaterialPageRoute(
+                    builder: (context) => ChatScreen(chatId: chatId),
+                  ),
+                );
+              } catch (e) {
+                print('[FCM] Error handling reply: $e');
               }
             };
             

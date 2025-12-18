@@ -10,6 +10,7 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
   String? _currentChatId;
   Future<void> Function(String chatId)? onNotificationTap;
+  Future<void> Function(String chatId, String text)? onNotificationReply;
 
   Future<void> initialize() async {
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -27,8 +28,12 @@ class NotificationService {
     await _notifications.initialize(
       initSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) async {
-        if (response.payload != null && onNotificationTap != null) {
-          await onNotificationTap!(response.payload!);
+        if (response.payload != null) {
+          if (response.input != null && response.input!.isNotEmpty && onNotificationReply != null) {
+            await onNotificationReply!(response.payload!, response.input!);
+          } else if (onNotificationTap != null) {
+            await onNotificationTap!(response.payload!);
+          }
         }
       },
     );
@@ -63,6 +68,13 @@ class NotificationService {
       priority: Priority.high,
       showWhen: true,
       groupKey: 'messages_group', // Группировка для Android
+      actions: [
+        AndroidNotificationAction(
+          'reply_action',
+          'Ответить',
+          inputs: [AndroidNotificationActionInput(label: 'Введите сообщение')],
+        ),
+      ],
     );
 
     const iosDetails = DarwinNotificationDetails(
