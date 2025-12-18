@@ -7,7 +7,8 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies with clean install for reproducible builds
-RUN npm ci --only=production=false
+# npm ci installs all dependencies (production + dev) by default
+RUN npm ci
 
 # Copy source code
 COPY . .
