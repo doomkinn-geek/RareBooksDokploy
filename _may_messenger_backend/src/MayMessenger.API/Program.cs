@@ -161,35 +161,52 @@ using (var scope = app.Services.CreateScope())
     
     try
     {
+        logger.LogInformation("Checking database connection...");
         var context = services.GetRequiredService<AppDbContext>();
         
-        // Check for pending migrations
-        var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
-        if (pendingMigrations.Any())
+        // Test database connection with timeout
+        var canConnect = await context.Database.CanConnectAsync();
+        if (!canConnect)
         {
-            logger.LogInformation("Applying {Count} pending database migrations...", pendingMigrations.Count());
-            foreach (var migration in pendingMigrations)
-            {
-                logger.LogInformation("  - {MigrationName}", migration);
-            }
-            
-            // Apply migrations
-            await context.Database.MigrateAsync();
-            logger.LogInformation("Database migrations applied successfully");
+            logger.LogError("Cannot connect to database. Please check connection string and ensure database is running.");
+            logger.LogWarning("Application will continue to start, but database features will not work.");
         }
         else
         {
-            logger.LogInformation("Database is up to date. No pending migrations.");
+            logger.LogInformation("Database connection successful");
+            
+            // Check for pending migrations
+            var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
+            if (pendingMigrations.Any())
+            {
+                logger.LogInformation("Applying {Count} pending database migrations...", pendingMigrations.Count());
+                foreach (var migration in pendingMigrations)
+                {
+                    logger.LogInformation("  - {MigrationName}", migration);
+                }
+                
+                // Apply migrations
+                await context.Database.MigrateAsync();
+                logger.LogInformation("Database migrations applied successfully");
+            }
+            else
+            {
+                logger.LogInformation("Database is up to date. No pending migrations.");
+            }
+            
+            // Initialize database and seed data
+            var passwordHasher = services.GetRequiredService<IPasswordHasher>();
+            await DbInitializer.InitializeAsync(context, passwordHasher);
+            logger.LogInformation("Database initialization completed");
         }
-        
-        // Initialize database and seed data
-        var passwordHasher = services.GetRequiredService<IPasswordHasher>();
-        await DbInitializer.InitializeAsync(context, passwordHasher);
     }
     catch (Exception ex)
     {
         logger.LogError(ex, "An error occurred while migrating or initializing the database.");
-        throw; // Re-throw to prevent app startup with broken database
+        logger.LogError("Connection string: {ConnectionString}", 
+            builder.Configuration.GetConnectionString("DefaultConnection")?.Replace("Password=", "Password=***"));
+        logger.LogWarning("Application will continue to start, but database features may not work properly.");
+        // Don't throw - allow app to start so health check can report the issue
     }
 }
 
