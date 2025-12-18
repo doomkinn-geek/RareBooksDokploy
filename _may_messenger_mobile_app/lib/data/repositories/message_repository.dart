@@ -72,6 +72,56 @@ class MessageRepository {
   }) async {
     return await _apiDataSource.getStatusUpdates(chatId: chatId, since: since);
   }
+
+  /// Получить обновления сообщений с определенного времени (incremental sync)
+  Future<List<Message>> getMessageUpdates({
+    required String chatId,
+    required DateTime since,
+    int take = 100,
+  }) async {
+    try {
+      final messages = await _apiDataSource.getMessageUpdates(
+        chatId: chatId,
+        since: since,
+        take: take,
+      );
+
+      // Cache the updates
+      if (messages.isNotEmpty) {
+        await _localDataSource.mergeMessagesToCache(chatId, messages);
+      }
+
+      return messages;
+    } catch (e) {
+      print('[MessageRepository] Failed to get message updates: $e');
+      rethrow;
+    }
+  }
+
+  /// Получить старые сообщения с курсорной пагинацией (для "загрузить ещё")
+  Future<List<Message>> getOlderMessagesWithCursor({
+    required String chatId,
+    String? cursor,
+    int take = 50,
+  }) async {
+    try {
+      final messages = await _apiDataSource.getMessagesWithCursor(
+        chatId: chatId,
+        cursor: cursor,
+        take: take,
+      );
+
+      // Merge with cache
+      if (messages.isNotEmpty) {
+        await _localDataSource.mergeMessagesToCache(chatId, messages);
+      }
+
+      return messages;
+    } catch (e) {
+      print('[MessageRepository] Failed to get messages with cursor: $e');
+      rethrow;
+    }
+  }
 }
 
 

@@ -48,6 +48,163 @@ public class MessagesController : ControllerBase
         var messages = await _unitOfWork.Messages.GetChatMessagesAsync(chatId, skip, take);
         
         // Mark messages as delivered when retrieved (automatic delivery tracking)
+        foreach (var message in messages)
+        {
+            if (message.SenderId != userId && message.Status == MessageStatus.Sent)
+            {
+                message.Status = MessageStatus.Delivered;
+                message.DeliveredAt = DateTime.UtcNow;
+                await _unitOfWork.Messages.UpdateAsync(message);
+            }
+        }
+        
+        await _unitOfWork.SaveChangesAsync();
+        
+        return Ok(messages.Select(m => new MessageDto
+        {
+            Id = m.Id,
+            ChatId = m.ChatId,
+            SenderId = m.SenderId,
+            SenderName = m.Sender?.DisplayName ?? "Unknown",
+            Type = m.Type,
+            Content = m.Content,
+            FilePath = m.FilePath,
+            Status = m.Status,
+            CreatedAt = m.CreatedAt
+        }));
+    }
+    
+    /// <summary>
+    /// Получить обновления сообщений с определенного времени (для incremental sync)
+    /// </summary>
+    [HttpGet("{chatId}/updates")]
+    public async Task<ActionResult<IEnumerable<MessageDto>>> GetMessageUpdates(
+        Guid chatId, 
+        [FromQuery] DateTime since, 
+        [FromQuery] int take = 100)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            
+            // Check if user has access to this chat
+            var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+            if (chat == null)
+            {
+                return NotFound("Chat not found");
+            }
+            
+            // Get messages created or updated after 'since' timestamp
+            var messages = await _unitOfWork.Messages.GetMessagesAfterTimestampAsync(chatId, since, take);
+            
+            _logger.LogInformation(
+                "Incremental sync for chat {ChatId}: found {Count} messages since {Since}", 
+                chatId, 
+                messages.Count(), 
+                since);
+            
+            // Mark messages as delivered when retrieved
+            foreach (var message in messages)
+            {
+                if (message.SenderId != userId && message.Status == MessageStatus.Sent)
+                {
+                    message.Status = MessageStatus.Delivered;
+                    message.DeliveredAt = DateTime.UtcNow;
+                    await _unitOfWork.Messages.UpdateAsync(message);
+                }
+            }
+            
+            await _unitOfWork.SaveChangesAsync();
+            
+            return Ok(messages.Select(m => new MessageDto
+            {
+                Id = m.Id,
+                ChatId = m.ChatId,
+                SenderId = m.SenderId,
+                SenderName = m.Sender?.DisplayName ?? "Unknown",
+                Type = m.Type,
+                Content = m.Content,
+                FilePath = m.FilePath,
+                Status = m.Status,
+                CreatedAt = m.CreatedAt
+            }));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during incremental sync for chat {ChatId}", chatId);
+            return StatusCode(500, "Error fetching message updates");
+        }
+    }
+    
+    /// <summary>
+    /// Получить сообщения чата с курсорной пагинацией (более эффективно, чем offset-based)
+    /// </summary>
+    [HttpGet("{chatId}/cursor")]
+    public async Task<ActionResult<IEnumerable<MessageDto>>> GetMessagesWithCursor(
+        Guid chatId, 
+        [FromQuery] Guid? cursor = null, 
+        [FromQuery] int take = 50)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            
+            // Check if user has access to this chat
+            var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+            if (chat == null)
+            {
+                return NotFound("Chat not found");
+            }
+            
+            // Get messages with cursor pagination
+            var messages = await _unitOfWork.Messages.GetChatMessagesWithCursorAsync(chatId, cursor, take);
+            
+            _logger.LogInformation(
+                "Cursor pagination for chat {ChatId}: cursor={Cursor}, returned {Count} messages", 
+                chatId, 
+                cursor?.ToString() ?? "null", 
+                messages.Count());
+            
+            // Mark messages as delivered when retrieved
+            foreach (var message in messages)
+            {
+                if (message.SenderId != userId && message.Status == MessageStatus.Sent)
+                {
+                    message.Status = MessageStatus.Delivered;
+                    message.DeliveredAt = DateTime.UtcNow;
+                    await _unitOfWork.Messages.UpdateAsync(message);
+                }
+            }
+            
+            await _unitOfWork.SaveChangesAsync();
+            
+            return Ok(messages.Select(m => new MessageDto
+            {
+                Id = m.Id,
+                ChatId = m.ChatId,
+                SenderId = m.SenderId,
+                SenderName = m.Sender?.DisplayName ?? "Unknown",
+                Type = m.Type,
+                Content = m.Content,
+                FilePath = m.FilePath,
+                Status = m.Status,
+                CreatedAt = m.CreatedAt
+            }));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during cursor pagination for chat {ChatId}", chatId);
+            return StatusCode(500, "Error fetching messages");
+        }
+    }
+    
+    [HttpGet("{chatId}/old")]
+    public async Task<ActionResult<IEnumerable<MessageDto>>> GetOldMessages(Guid chatId, [FromQuery] int skip = 0, [FromQuery] int take = 50)
+    {
+        var userId = GetCurrentUserId();
+        var messages = await _unitOfWork.Messages.GetChatMessagesAsync(chatId, skip, take);
+        
+        // Mark messages as delivered when retrieved (automatic delivery tracking)
         var undeliveredMessages = messages.Where(m => 
             m.SenderId != userId && 
             m.Status == MessageStatus.Sent

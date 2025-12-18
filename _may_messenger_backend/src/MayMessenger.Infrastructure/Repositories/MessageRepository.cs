@@ -48,6 +48,46 @@ public class MessageRepository : Repository<Message>, IMessageRepository
                        !string.IsNullOrEmpty(m.FilePath))
             .ToListAsync(cancellationToken);
     }
+    
+    public async Task<IEnumerable<Message>> GetMessagesAfterTimestampAsync(Guid chatId, DateTime since, int take, CancellationToken cancellationToken = default)
+    {
+        return await _dbSet
+            .Include(m => m.Sender)
+            .Where(m => m.ChatId == chatId && 
+                       (m.CreatedAt > since || m.UpdatedAt > since))
+            .OrderBy(m => m.CreatedAt) // Ascending для incremental sync (старые первыми)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+    }
+    
+    public async Task<IEnumerable<Message>> GetChatMessagesWithCursorAsync(Guid chatId, Guid? cursor, int take, CancellationToken cancellationToken = default)
+    {
+        var query = _dbSet
+            .Include(m => m.Sender)
+            .Where(m => m.ChatId == chatId);
+        
+        // If cursor is provided, get messages older than the cursor message
+        if (cursor.HasValue)
+        {
+            // Find the cursor message to get its creation date
+            var cursorMessage = await _dbSet
+                .Where(m => m.Id == cursor.Value)
+                .Select(m => new { m.CreatedAt })
+                .FirstOrDefaultAsync(cancellationToken);
+            
+            if (cursorMessage != null)
+            {
+                // Get messages older than cursor (for loading history)
+                query = query.Where(m => m.CreatedAt < cursorMessage.CreatedAt);
+            }
+        }
+        
+        // Order by descending (newest first) and take N messages
+        return await query
+            .OrderByDescending(m => m.CreatedAt)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+    }
 }
 
 

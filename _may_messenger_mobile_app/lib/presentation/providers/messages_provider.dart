@@ -79,7 +79,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     _monitorSignalRConnection();
   }
 
-  /// Monitor SignalR connection state and start/stop polling as needed
+  /// Monitor SignalR connection state and perform incremental sync on reconnect
   void _monitorSignalRConnection() {
     // Check connection state periodically
     Future.delayed(const Duration(seconds: 2), () {
@@ -99,15 +99,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
             },
           );
         } else {
-          print('[SYNC] SignalR connected, stopping status polling for chat: $chatId');
+          print('[SYNC] SignalR reconnected, performing incremental sync for chat: $chatId');
           _syncService.stopPolling();
-          // Trigger a final sync to catch any missed updates
-          _syncService.syncNow(
-            chatId: chatId,
-            onStatusUpdate: (messageId, status) {
-              updateMessageStatus(messageId, status);
-            },
-          );
+          
+          // Perform incremental sync to catch missed messages
+          _performIncrementalSync();
         }
       }
       
@@ -116,11 +112,88 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     });
   }
 
+  /// Perform incremental sync after SignalR reconnection
+  Future<void> _performIncrementalSync() async {
+    try {
+      final localDataSource = _ref.read(localDataSourceProvider);
+      
+      // Get last sync timestamp from cache
+      final lastSync = await localDataSource.getLastSyncTimestamp(chatId);
+      final sinceTimestamp = lastSync ?? DateTime.now().subtract(const Duration(hours: 1));
+      
+      print('[SYNC] Incremental sync since: $sinceTimestamp');
+      
+      // Fetch updates from backend
+      final updates = await _messageRepository.getMessageUpdates(
+        chatId: chatId,
+        since: sinceTimestamp,
+        take: 100,
+      );
+      
+      if (updates.isEmpty) {
+        print('[SYNC] No new messages since last sync');
+        return;
+      }
+      
+      print('[SYNC] Received ${updates.length} message updates');
+      
+      // Merge updates with current state
+      final currentMessages = state.messages;
+      final messageMap = <String, Message>{
+        for (var msg in currentMessages) msg.id: msg
+      };
+      
+      // Add or update messages
+      var hasChanges = false;
+      for (var update in updates) {
+        if (messageMap.containsKey(update.id)) {
+          // Update existing message (e.g., status changed)
+          final existing = messageMap[update.id]!;
+          if (existing.status != update.status || 
+              existing.content != update.content) {
+            messageMap[update.id] = update;
+            hasChanges = true;
+          }
+        } else {
+          // New message
+          messageMap[update.id] = update;
+          hasChanges = true;
+        }
+        
+        // Add to LRU cache
+        _cache.put(update);
+      }
+      
+      if (hasChanges) {
+        // Update state with merged messages
+        final mergedMessages = messageMap.values.toList();
+        mergedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        
+        state = state.copyWith(messages: mergedMessages);
+        print('[SYNC] Incremental sync completed: merged ${updates.length} updates');
+      }
+      
+      // Trigger final status sync
+      _syncService.syncNow(
+        chatId: chatId,
+        onStatusUpdate: (messageId, status) {
+          updateMessageStatus(messageId, status);
+        },
+      );
+    } catch (e) {
+      print('[SYNC] Incremental sync failed: $e');
+      // Fall back to full reload on error
+      loadMessages(forceRefresh: true);
+    }
+  }
+
   @override
   void dispose() {
     _syncService.dispose();
     super.dispose();
   }
+
+  bool _isLoadingOlder = false;
 
   Future<void> loadMessages({bool forceRefresh = false}) async {
     state = state.copyWith(isLoading: true, error: null);
@@ -240,6 +313,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       updatedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       state = state.copyWith(messages: updatedMessages, isSending: false);
       print('[MSG_SEND] Message added to UI with local ID: $localId');
+      
+      // Add to LRU cache
+      _cache.put(localMessage);
       
       // STEP 3: Add to outbox queue for persistence
       await _outboxRepository.addToOutbox(
@@ -380,6 +456,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       updatedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       state = state.copyWith(messages: updatedMessages, isSending: false);
       print('[MSG_SEND] Audio message added to UI with local ID: $localId');
+      
+      // Add to LRU cache
+      _cache.put(localMessage);
       
       // STEP 3: Add to outbox queue for persistence
       await _outboxRepository.addToOutbox(
@@ -543,25 +622,29 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final oldStatus = oldMessage.status;
       
       if (oldStatus != status) {
-      updatedMessages[messageIndex] = oldMessage.copyWith(status: status);
-      
-      state = state.copyWith(messages: updatedMessages);
+        final updatedMessage = oldMessage.copyWith(status: status);
+        updatedMessages[messageIndex] = updatedMessage;
         
-        print('[MessagesProvider] Message status updated in chatId=$chatId: messageId=$messageId, $oldStatus -> $status');
+        state = state.copyWith(messages: updatedMessages);
         
-        // Сохраняем обновленный статус в кэш
+        print('[MSG_STATUS] Message status updated in chatId=$chatId: messageId=$messageId, $oldStatus -> $status');
+        
+        // Update LRU cache
+        _cache.update(updatedMessage);
+        
+        // Сохраняем обновленный статус в Hive кэш
         try {
           final localDataSource = _ref.read(localDataSourceProvider);
           localDataSource.updateMessageStatus(chatId, messageId, status);
-          print('[MessagesProvider] Message status cached: $messageId -> $status');
+          print('[MSG_STATUS] Message status cached in Hive: $messageId -> $status');
         } catch (e) {
-          print('[MessagesProvider] Failed to cache message status: $e');
+          print('[MSG_STATUS] Failed to cache message status in Hive: $e');
         }
       } else {
-        print('[MessagesProvider] Message status unchanged for messageId=$messageId: $status');
+        print('[MSG_STATUS] Message status unchanged for messageId=$messageId: $status');
       }
     } else {
-      print('[MessagesProvider] Message not found for status update: messageId=$messageId in chatId=$chatId');
+      print('[MSG_STATUS] Message not found for status update: messageId=$messageId in chatId=$chatId');
     }
   }
 
@@ -658,6 +741,75 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       print('[MSG_RETRY] Failed to retry message: $e');
     }
   }
+
+  /// Load older messages using cursor pagination (for "Load More")
+  Future<void> loadOlderMessages() async {
+    // Prevent concurrent loads
+    if (_isLoadingOlder || state.isLoading) {
+      print('[MSG_LOAD] Already loading, skipping...');
+      return;
+    }
+
+    _isLoadingOlder = true;
+    
+    try {
+      // Get the oldest message as cursor
+      if (state.messages.isEmpty) {
+        print('[MSG_LOAD] No messages to use as cursor');
+        _isLoadingOlder = false;
+        return;
+      }
+
+      final oldestMessage = state.messages.first;
+      final cursor = oldestMessage.id;
+      
+      print('[MSG_LOAD] Loading older messages with cursor: $cursor');
+      
+      // Fetch older messages
+      final olderMessages = await _messageRepository.getOlderMessagesWithCursor(
+        chatId: chatId,
+        cursor: cursor,
+        take: 30,
+      );
+      
+      if (olderMessages.isEmpty) {
+        print('[MSG_LOAD] No more older messages');
+        _isLoadingOlder = false;
+        return;
+      }
+      
+      print('[MSG_LOAD] Loaded ${olderMessages.length} older messages');
+      
+      // Merge with current messages (avoid duplicates)
+      final existingIds = state.messages.map((m) => m.id).toSet();
+      final newMessages = olderMessages.where((m) => !existingIds.contains(m.id)).toList();
+      
+      if (newMessages.isEmpty) {
+        print('[MSG_LOAD] All loaded messages were duplicates');
+        _isLoadingOlder = false;
+        return;
+      }
+      
+      // Prepend older messages to current list
+      final allMessages = [...newMessages, ...state.messages];
+      allMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      
+      // Update LRU cache
+      _cache.putAll(newMessages);
+      
+      state = state.copyWith(messages: allMessages);
+      
+      print('[MSG_LOAD] Cursor pagination completed: added ${newMessages.length} messages');
+    } catch (e) {
+      print('[MSG_LOAD] Failed to load older messages: $e');
+      state = state.copyWith(error: e.toString());
+    } finally {
+      _isLoadingOlder = false;
+    }
+  }
+
+  /// Check if there are potentially more older messages to load
+  bool get canLoadMore => state.messages.length >= 30; // Arbitrary threshold
 }
 
 

@@ -81,6 +81,69 @@ class LocalDataSource {
     }
   }
 
+  // Merge multiple messages to cache (for incremental sync)
+  Future<void> mergeMessagesToCache(String chatId, List<Message> newMessages) async {
+    try {
+      final box = await Hive.openBox<Map>(_messagesBox);
+      final data = box.get(chatId);
+      
+      // Get existing messages
+      List<Message> existingMessages = [];
+      if (data != null) {
+        existingMessages = (data['messages'] as List)
+            .map((json) => Message.fromJson(Map<String, dynamic>.from(json as Map)))
+            .toList();
+      }
+      
+      // Create a map of existing messages by ID for quick lookup
+      final existingMap = <String, Message>{
+        for (var msg in existingMessages) msg.id: msg
+      };
+      
+      // Merge: add new messages or update existing ones
+      for (var newMessage in newMessages) {
+        if (existingMap.containsKey(newMessage.id)) {
+          // Update existing message (e.g., status changed)
+          existingMap[newMessage.id] = newMessage;
+        } else {
+          // Add new message
+          existingMap[newMessage.id] = newMessage;
+        }
+      }
+      
+      // Convert back to list and sort
+      final mergedMessages = existingMap.values.toList();
+      mergedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      
+      await box.put(chatId, {
+        'messages': mergedMessages.map((m) => m.toJson()).toList(),
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+      
+      print('[LocalDataSource] Merged ${newMessages.length} messages to cache for chat $chatId');
+    } catch (e) {
+      print('[LocalDataSource] Failed to merge messages to cache: $e');
+    }
+  }
+
+  // Get last sync timestamp for a chat
+  Future<DateTime?> getLastSyncTimestamp(String chatId) async {
+    try {
+      final box = await Hive.openBox<Map>(_messagesBox);
+      final data = box.get(chatId);
+      if (data == null) return null;
+      
+      final timestampStr = data['timestamp'] as String?;
+      if (timestampStr != null) {
+        return DateTime.parse(timestampStr);
+      }
+      return null;
+    } catch (e) {
+      print('[LocalDataSource] Failed to get last sync timestamp: $e');
+      return null;
+    }
+  }
+
   // Chats Cache
   Future<void> cacheChats(List<Chat> chats) async {
     final box = await Hive.openBox<Map>(_chatsBox);

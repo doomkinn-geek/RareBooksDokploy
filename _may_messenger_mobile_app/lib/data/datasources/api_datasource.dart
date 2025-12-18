@@ -205,6 +205,52 @@ class ApiDataSource {
     }
   }
 
+  /// Get message updates since a specific timestamp (for incremental sync)
+  Future<List<Message>> getMessageUpdates({
+    required String chatId,
+    required DateTime since,
+    int take = 100,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '${ApiConstants.messages}/$chatId/updates',
+        queryParameters: {
+          'since': since.toIso8601String(),
+          'take': take,
+        },
+      );
+      return (response.data as List)
+          .map((json) => Message.fromJson(json))
+          .toList();
+    } catch (e) {
+      throw Exception('Failed to get message updates: $e');
+    }
+  }
+
+  /// Get messages with cursor-based pagination (more efficient than offset-based)
+  Future<List<Message>> getMessagesWithCursor({
+    required String chatId,
+    String? cursor,
+    int take = 50,
+  }) async {
+    try {
+      final queryParams = {'take': take};
+      if (cursor != null) {
+        queryParams['cursor'] = cursor;
+      }
+      
+      final response = await _dio.get(
+        '${ApiConstants.messages}/$chatId/cursor',
+        queryParameters: queryParams,
+      );
+      return (response.data as List)
+          .map((json) => Message.fromJson(json))
+          .toList();
+    } catch (e) {
+      throw Exception('Failed to get messages with cursor: $e');
+    }
+  }
+
   // Users & Profile
   Future<UserProfile> getUserProfile() async {
     try {

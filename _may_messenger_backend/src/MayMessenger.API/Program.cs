@@ -1,4 +1,6 @@
 using System.Text;
+using FluentValidation;
+using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +21,11 @@ builder.Configuration["WebRootPath"] = builder.Environment.WebRootPath;
 
 // Add services to the container
 builder.Services.AddControllers();
+
+// FluentValidation
+builder.Services.AddValidatorsFromAssemblyContaining<MayMessenger.Application.Validators.RegisterRequestDtoValidator>();
+builder.Services.AddFluentValidationAutoValidation();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 

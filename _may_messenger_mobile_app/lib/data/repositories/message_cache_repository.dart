@@ -1,6 +1,6 @@
 import 'dart:collection';
 import 'package:logging/logging.dart';
-import '../../domain/models/message.dart';
+import '../models/message_model.dart';
 
 /// LRU (Least Recently Used) кэш для сообщений
 /// Хранит последние N сообщений в памяти для быстрого доступа
