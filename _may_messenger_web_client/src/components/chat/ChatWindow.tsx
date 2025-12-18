@@ -12,7 +12,7 @@ export const ChatWindow = () => {
   const { messagesByChatId, loadMessages, sendTextMessage, sendAudioMessage, isSending } = useMessageStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map());
-  const typingTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const typingTimeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const selectedChat = chats.find((c) => c.id === selectedChatId);
   const messages = selectedChatId ? messagesByChatId[selectedChatId] || [] : [];

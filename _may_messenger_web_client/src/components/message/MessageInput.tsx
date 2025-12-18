@@ -13,7 +13,7 @@ interface MessageInputProps {
 export const MessageInput = ({ onSendText, onSendAudio, disabled }: MessageInputProps) => {
   const [text, setText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
   const { selectedChatId } = useChatStore();
 

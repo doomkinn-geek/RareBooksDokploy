@@ -19,25 +19,29 @@ type Messaging = any;
 type MessagePayload = any;
 
 // Firebase configuration - should match your Firebase project
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY", // Replace with your actual values
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID",
-};
+// Uncomment when Firebase is installed:
+// const firebaseConfig = {
+//   apiKey: "YOUR_API_KEY", // Replace with your actual values
+//   authDomain: "YOUR_AUTH_DOMAIN",
+//   projectId: "YOUR_PROJECT_ID",
+//   storageBucket: "YOUR_STORAGE_BUCKET",
+//   messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+//   appId: "YOUR_APP_ID",
+// };
 
 // VAPID key for web push
-const VAPID_KEY = "YOUR_VAPID_KEY"; // Replace with your actual VAPID key
+// Uncomment when Firebase is installed:
+// const VAPID_KEY = "YOUR_VAPID_KEY"; // Replace with your actual VAPID key
 
 class FCMService {
   private static instance: FCMService;
-  private app: FirebaseApp | null = null;
-  private messaging: Messaging | null = null;
+  // Uncomment when Firebase is installed:
+  // private app: FirebaseApp | null = null;
+  // private messaging: Messaging | null = null;
   private fcmToken: string | null = null;
   private isInitialized = false;
-  private onMessageCallback?: (payload: MessagePayload) => void;
+  // Uncomment when Firebase is installed:
+  // private onMessageCallback?: (payload: MessagePayload) => void;
 
   private constructor() {}
 
@@ -212,8 +216,10 @@ class FCMService {
   /**
    * Set callback for foreground messages
    */
-  setOnMessageCallback(callback: (payload: MessagePayload) => void): void {
-    this.onMessageCallback = callback;
+  setOnMessageCallback(_callback: (payload: MessagePayload) => void): void {
+    // Uncomment when Firebase is installed:
+    // this.onMessageCallback = callback;
+    console.warn('[FCM] Firebase not installed. setOnMessageCallback disabled.');
   }
 
   /**
