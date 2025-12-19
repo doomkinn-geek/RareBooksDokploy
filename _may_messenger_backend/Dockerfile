@@ -26,8 +26,9 @@ FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 
-# Create wwwroot/audio directory for audio files (matches volume mount)
-RUN mkdir -p /app/wwwroot/audio
+# Create wwwroot directories for media files (matches volume mounts)
+RUN mkdir -p /app/wwwroot/audio && \
+    mkdir -p /app/wwwroot/images
 
 ENTRYPOINT ["dotnet", "MayMessenger.API.dll"]
 

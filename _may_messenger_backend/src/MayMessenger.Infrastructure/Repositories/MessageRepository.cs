@@ -49,6 +49,15 @@ public class MessageRepository : Repository<Message>, IMessageRepository
             .ToListAsync(cancellationToken);
     }
     
+    public async Task<IEnumerable<Message>> GetOldMediaMessagesAsync(DateTime cutoffDate, CancellationToken cancellationToken = default)
+    {
+        return await _dbSet
+            .Where(m => (m.Type == MessageType.Audio || m.Type == MessageType.Image) && 
+                       m.CreatedAt < cutoffDate && 
+                       !string.IsNullOrEmpty(m.FilePath))
+            .ToListAsync(cancellationToken);
+    }
+    
     public async Task<IEnumerable<Message>> GetMessagesAfterTimestampAsync(Guid chatId, DateTime since, int take, CancellationToken cancellationToken = default)
     {
         return await _dbSet

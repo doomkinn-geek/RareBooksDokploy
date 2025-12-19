@@ -434,6 +434,81 @@ public class MessagesController : ControllerBase
         
         return Ok(messageDto);
     }
+    
+    [HttpPost("image")]
+    public async Task<ActionResult<MessageDto>> SendImageMessage([FromForm] Guid chatId, IFormFile imageFile)
+    {
+        var userId = GetCurrentUserId();
+        
+        if (imageFile == null || imageFile.Length == 0)
+            return BadRequest("No image file provided");
+        
+        // Validate image type
+        var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
+        var extension = Path.GetExtension(imageFile.FileName).ToLowerInvariant();
+        if (!allowedExtensions.Contains(extension))
+            return BadRequest("Invalid image format. Allowed: jpg, jpeg, png, gif, webp");
+        
+        // Validate image size (10MB max)
+        if (imageFile.Length > 10 * 1024 * 1024)
+            return BadRequest("Image size must be less than 10MB");
+        
+        // Save image file
+        var uploadsFolder = Path.Combine(_environment.WebRootPath, "images");
+        Directory.CreateDirectory(uploadsFolder);
+        
+        var fileName = $"{Guid.NewGuid()}{extension}";
+        var filePath = Path.Combine(uploadsFolder, fileName);
+        
+        using (var stream = new FileStream(filePath, FileMode.Create))
+        {
+            await imageFile.CopyToAsync(stream);
+        }
+        
+        var message = new Message
+        {
+            ChatId = chatId,
+            SenderId = userId,
+            Type = MessageType.Image,
+            FilePath = $"/images/{fileName}",
+            Status = MessageStatus.Sent
+        };
+        
+        await _unitOfWork.Messages.AddAsync(message);
+        await _unitOfWork.SaveChangesAsync();
+        
+        var sender = await _unitOfWork.Users.GetByIdAsync(userId);
+        if (sender == null)
+        {
+            _logger.LogError($"User {userId} not found after sending image message");
+            return StatusCode(500, "Internal server error: User not found");
+        }
+        
+        var messageDto = new MessageDto
+        {
+            Id = message.Id,
+            ChatId = message.ChatId,
+            SenderId = message.SenderId,
+            SenderName = sender.DisplayName,
+            Type = message.Type,
+            Content = message.Content,
+            FilePath = message.FilePath,
+            Status = message.Status,
+            CreatedAt = message.CreatedAt
+        };
+        
+        // Send SignalR notification ONLY to group
+        var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+        if (chat != null)
+        {
+            await _hubContext.Clients.Group(chatId.ToString()).SendAsync("ReceiveMessage", messageDto);
+            
+            // Send push notifications to offline users
+            await SendPushNotificationsAsync(chat, sender, messageDto);
+        }
+        
+        return Ok(messageDto);
+    }
 
     /// <summary>
     /// Отправка push уведомлений пользователям, которые не онлайн
@@ -449,9 +524,13 @@ public class MessagesController : ControllerBase
         try
         {
             var title = $"Новое сообщение от {sender.DisplayName}";
-            var body = message.Type == MessageType.Text 
-                ? (message.Content?.Length > 100 ? message.Content.Substring(0, 100) + "..." : message.Content) 
-                : "🎤 Аудио сообщение";
+            var body = message.Type switch
+            {
+                MessageType.Text => message.Content?.Length > 100 ? message.Content.Substring(0, 100) + "..." : message.Content,
+                MessageType.Audio => "🎤 Аудио сообщение",
+                MessageType.Image => "📷 Изображение",
+                _ => "Новое сообщение"
+            };
 
             var data = new Dictionary<string, string>
             {

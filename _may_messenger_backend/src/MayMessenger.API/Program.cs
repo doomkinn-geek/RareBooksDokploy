@@ -69,7 +69,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddSingleton<MayMessenger.Application.Services.IFirebaseService, MayMessenger.Application.Services.FirebaseService>();
 
 // Background Services
-builder.Services.AddHostedService<MayMessenger.Application.Services.AudioCleanupService>();
+builder.Services.AddHostedService<MayMessenger.Application.Services.MediaCleanupService>(); // Audio + Images cleanup
 builder.Services.AddHostedService<MayMessenger.Application.Services.CleanupInvalidTokensService>();
 
 // JWT Authentication
