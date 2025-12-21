@@ -1,28 +1,42 @@
+import 'message_model.dart';
+
 class MessageSearchResult {
-  final String messageId;
+  final String id;
   final String chatId;
   final String chatTitle;
-  final String messageContent;
+  final String? chatAvatar;
+  final String senderId;
   final String senderName;
+  final MessageType type;
+  final String? content;
   final DateTime createdAt;
+  final String? snippet;
 
   MessageSearchResult({
-    required this.messageId,
+    required this.id,
     required this.chatId,
     required this.chatTitle,
-    required this.messageContent,
+    this.chatAvatar,
+    required this.senderId,
     required this.senderName,
+    required this.type,
+    this.content,
     required this.createdAt,
+    this.snippet,
   });
 
   factory MessageSearchResult.fromJson(Map<String, dynamic> json) {
     return MessageSearchResult(
-      messageId: json['messageId'],
+      id: json['id'],
       chatId: json['chatId'],
       chatTitle: json['chatTitle'],
-      messageContent: json['messageContent'],
+      chatAvatar: json['chatAvatar'],
+      senderId: json['senderId'],
       senderName: json['senderName'],
+      type: MessageType.values[json['type']],
+      content: json['content'],
       createdAt: DateTime.parse(json['createdAt']),
+      snippet: json['snippet'],
     );
   }
 }

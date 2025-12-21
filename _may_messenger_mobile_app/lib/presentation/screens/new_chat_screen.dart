@@ -7,6 +7,7 @@ import '../../core/constants/api_constants.dart';
 import '../providers/chats_provider.dart';
 import '../providers/auth_provider.dart';
 import 'chat_screen.dart';
+import '../../core/utils/snackbar_helper.dart';
 
 final contactsServiceProvider = Provider((ref) => ContactsService(Dio()));
 
@@ -139,24 +140,14 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
           );
           
           final displayName = _phoneBookNames[contact.userId] ?? contact.displayName;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Чат с $displayName открыт'),
-              behavior: SnackBarBehavior.floating,
-              margin: const EdgeInsets.only(top: 80, left: 16, right: 16),
-            ),
-          );
+          if (mounted) {
+            showTopSnackBar(context, 'Чат с $displayName открыт');
+          }
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка создания чата: $e'),
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.only(top: 80, left: 16, right: 16),
-          ),
-        );
+        showTopSnackBar(context, 'Ошибка создания чата: $e', isError: true);
       }
     }
   }

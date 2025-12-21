@@ -1,10 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
-import 'dart:convert';
-import 'dart:io';
 import '../../data/models/message_model.dart';
 import '../../data/services/message_sync_service.dart';
 import '../../data/repositories/message_cache_repository.dart';
+import '../../data/repositories/outbox_repository.dart';
 import 'auth_provider.dart';
 import 'signalr_provider.dart';
 import 'profile_provider.dart';
@@ -214,6 +213,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   Future<void> loadMessages({bool forceRefresh = false}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
+      print('[MSG_LOAD] ========== STARTING LOAD MESSAGES ========== forceRefresh=$forceRefresh');
+      
       // STEP 1: Try LRU cache first for instant loading
       final cachedMessages = _cache.getChatMessages(chatId);
       
@@ -227,15 +228,57 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
       
       // STEP 2: Load synced messages from repository (Hive cache or API)
+      print('[MSG_LOAD] Loading synced messages from repository...');
       final List<Message> syncedMessages = await _messageRepository.getMessages(
         chatId: chatId,
         forceRefresh: forceRefresh,
       );
+      print('[MSG_LOAD] Loaded ${syncedMessages.length} synced messages from repository');
+      for (final msg in syncedMessages.take(5)) {
+        print('[MSG_LOAD]   - Synced: id=${msg.id}, localId=${msg.localId}, content="${msg.content}", isLocalOnly=${msg.isLocalOnly}');
+      }
       
       // STEP 3: Load pending messages from outbox
+      // All messages in outbox should be truly pending (not synced),
+      // since we now immediately delete synced messages
+      print('[MSG_LOAD] Loading pending messages from outbox...');
       final pendingMessages = await _outboxRepository.getPendingMessagesForChat(chatId);
+      
+      print('[MSG_LOAD] Found ${pendingMessages.length} pending messages in outbox');
+      for (final pm in pendingMessages) {
+        print('[MSG_LOAD]   - Outbox: localId=${pm.localId}, serverId=${pm.serverId}, state=${pm.syncState}, content="${pm.content}"');
+      }
+      
+      // Safety cleanup: Remove any old synced/failed messages that somehow remained
+      // This is a defensive measure to prevent duplicates
+      final oneHourAgo = DateTime.now().subtract(const Duration(hours: 1));
+      final toRemove = <PendingMessage>[];
+      for (final pm in pendingMessages) {
+        // Remove synced messages (shouldn't exist, but defensive cleanup)
+        if (pm.syncState == SyncState.synced) {
+          print('[MSG_LOAD] ⚠️ FOUND synced message in outbox (should not happen): ${pm.localId}');
+          toRemove.add(pm);
+        }
+        // Remove very old failed messages (> 1 hour)
+        else if (pm.syncState == SyncState.failed && pm.createdAt.isBefore(oneHourAgo)) {
+          print('[MSG_LOAD] Removing old failed message: ${pm.localId}');
+          toRemove.add(pm);
+        }
+      }
+      
+      // Remove identified messages
+      for (final pm in toRemove) {
+        await _outboxRepository.removePendingMessage(pm.localId);
+        pendingMessages.remove(pm);
+        print('[MSG_LOAD] Cleaned up message from outbox: ${pm.localId}');
+      }
+      
+      print('[MSG_LOAD] After cleanup: ${pendingMessages.length} pending messages remain');
+      
       final profileState = _ref.read(profileProvider);
       final currentUser = profileState.profile;
+      
+      print('[MSG_LOAD] Current user: ${currentUser?.id} (${currentUser?.displayName})');
       
       // Convert pending messages to Message objects
       final List<Message> localMessages = pendingMessages
@@ -246,31 +289,49 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
           .cast<Message>()
           .toList();
       
+      print('[MSG_LOAD] Converted ${localMessages.length} pending messages to Message objects');
+      for (final msg in localMessages) {
+        print('[MSG_LOAD]   - Local: id=${msg.id}, senderId=${msg.senderId}, content="${msg.content}", isLocalOnly=${msg.isLocalOnly}');
+      }
+      
       // STEP 4: Merge synced and local messages, removing duplicates
       // Use localId as key since it's always unique
       final Map<String, Message> allMessages = <String, Message>{};
+      
+      print('[MSG_LOAD] Merging messages...');
       
       // Add synced messages first (use localId if available, fallback to id)
       for (final msg in syncedMessages) {
         final key = (msg.localId?.isNotEmpty ?? false) ? msg.localId! : msg.id;
         if (key.isNotEmpty) {
           allMessages[key] = msg;
+          print('[MSG_LOAD]   + Added synced message with key=$key, id=${msg.id}');
         }
       }
       
+      print('[MSG_LOAD] After adding synced: ${allMessages.length} unique messages');
+      
       // Add local messages (they won't override synced ones with same localId)
+      int skipped = 0;
       for (final msg in localMessages) {
         final key = (msg.localId?.isNotEmpty ?? false) ? msg.localId! : msg.id;
         if (key.isNotEmpty && !allMessages.containsKey(key)) {
           allMessages[key] = msg;
+          print('[MSG_LOAD]   + Added local message with key=$key, id=${msg.id}');
+        } else {
+          skipped++;
+          print('[MSG_LOAD]   - Skipped duplicate local message with key=$key (already exists)');
         }
       }
+      
+      print('[MSG_LOAD] After adding local: ${allMessages.length} unique messages, skipped=$skipped duplicates');
       
       // Convert to list and sort by date
       final List<Message> messages = List<Message>.from(allMessages.values);
       messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       
-      print('[MSG_LOAD] Loaded ${messages.length} messages (${syncedMessages.length} synced + ${localMessages.length} local)');
+      print('[MSG_LOAD] Final result: ${messages.length} messages total');
+      print('[MSG_LOAD] ========== LOAD MESSAGES COMPLETE ==========');
       
       // STEP 5: Update LRU cache with fresh data
       _cache.putAll(messages);
@@ -323,12 +384,6 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
       // STEP 1: Create message locally with temporary ID
       localId = _uuid.v4();
-      // #region agent log
-      try {
-        final logFile = File('c:\\rarebooks\\.cursor\\debug.log');
-        await logFile.writeAsString(json.encode({'location':'messages_provider.dart:335','message':'H1,H4: Created localId','data':{'localId':localId,'content':content,'pendingSendsCount':_pendingSends.length},'timestamp':DateTime.now().millisecondsSinceEpoch,'sessionId':'debug-session','hypothesisId':'H1,H4'}) + '\n', mode: FileMode.append);
-      } catch (e) {}
-      // #endregion
       
       // Check if this message is already being sent (double-tap prevention)
       if (_pendingSends.contains(localId)) {
@@ -357,12 +412,6 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       updatedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       state = state.copyWith(messages: updatedMessages, isSending: false);
       print('[MSG_SEND] Message added to UI with local ID: $localId');
-      // #region agent log
-      try {
-        final logFile = File('c:\\rarebooks\\.cursor\\debug.log');
-        await logFile.writeAsString(json.encode({'location':'messages_provider.dart:363','message':'H4: Added local message to UI','data':{'localId':localId,'messageCount':updatedMessages.length,'isLocalOnly':localMessage.isLocalOnly,'clientMessageId':localMessage.clientMessageId},'timestamp':DateTime.now().millisecondsSinceEpoch,'sessionId':'debug-session','hypothesisId':'H4'}) + '\n', mode: FileMode.append);
-      } catch (e) {}
-      // #endregion
       
       // Add to LRU cache
       _cache.put(localMessage);
@@ -379,20 +428,15 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
       
       // STEP 3: Add to outbox queue for persistence
-      await _outboxRepository.addToOutbox(
+      final outboxEntry = await _outboxRepository.addToOutbox(
         chatId: chatId,
         type: MessageType.text,
         content: content,
       );
+      final outboxId = outboxEntry.localId; // Save outbox ID for later cleanup
       
       // STEP 4: Send to backend asynchronously with clientMessageId
-      // #region agent log
-      try {
-        final logFile = File('c:\\rarebooks\\.cursor\\debug.log');
-        await logFile.writeAsString(json.encode({'location':'messages_provider.dart:387','message':'H1: Calling _syncMessageToBackend','data':{'localId':localId,'clientMessageId':localId,'content':content},'timestamp':DateTime.now().millisecondsSinceEpoch,'sessionId':'debug-session','hypothesisId':'H1'}) + '\n', mode: FileMode.append);
-      } catch (e) {}
-      // #endregion
-      _syncMessageToBackend(localId, MessageType.text, content: content, clientMessageId: localId);
+      _syncMessageToBackend(localId, MessageType.text, outboxId: outboxId, content: content, clientMessageId: localId);
       
     } catch (e) {
       print('[MSG_SEND] Failed to create local message: $e');
@@ -407,13 +451,15 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   }
   
   /// Sync a local message to the backend with exponential backoff
-  Future<void> _syncMessageToBackend(String localId, MessageType type, {String? content, String? audioPath, String? clientMessageId, int attemptNumber = 0}) async {
+  Future<void> _syncMessageToBackend(String localId, MessageType type, {String? outboxId, String? content, String? audioPath, String? clientMessageId, int attemptNumber = 0}) async {
     const maxAttempts = 5;
     final backoffDelays = [1, 2, 4, 8, 16, 30]; // seconds
     
     try {
-      print('[MSG_SEND] Syncing message to backend: $localId (attempt ${attemptNumber + 1}/$maxAttempts)');
-      await _outboxRepository.markAsSyncing(localId);
+      print('[MSG_SEND] Syncing message to backend: localId=$localId, outboxId=$outboxId (attempt ${attemptNumber + 1}/$maxAttempts)');
+      if (outboxId != null) {
+        await _outboxRepository.markAsSyncing(outboxId);
+      }
       
       // Send via API with clientMessageId for idempotency
       final Message serverMessage;
@@ -432,18 +478,20 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
       
       print('[MSG_SEND] Message synced successfully. Server ID: ${serverMessage.id}');
-      // #region agent log
-      try {
-        final logFile = File('c:\\rarebooks\\.cursor\\debug.log');
-        await logFile.writeAsString(json.encode({'location':'messages_provider.dart:435','message':'H1: Server returned message','data':{'localId':localId,'serverId':serverMessage.id,'serverClientMessageId':serverMessage.clientMessageId,'content':serverMessage.content},'timestamp':DateTime.now().millisecondsSinceEpoch,'sessionId':'debug-session','hypothesisId':'H1'}) + '\n', mode: FileMode.append);
-      } catch (e) {}
-      // #endregion
       
       // Remove from pending sends
       _pendingSends.remove(localId);
       
-      // Mark as synced in outbox
-      await _outboxRepository.markAsSynced(localId, serverMessage.id);
+      // IMMEDIATELY remove from outbox after successful sync using correct outboxId
+      // Don't wait - this prevents duplicates on app restart
+      if (outboxId != null) {
+        await _outboxRepository.removePendingMessage(outboxId);
+        print('[MSG_SEND] ✅ Removed message from outbox using outboxId: $outboxId');
+      } else {
+        // Fallback: try to remove by message localId (for backwards compatibility)
+        await _outboxRepository.removePendingMessage(localId);
+        print('[MSG_SEND] ⚠️ Removed message from outbox using localId (no outboxId): $localId');
+      }
       
       // Update message in UI: replace local ID with server ID and update status
       final messageIndex = state.messages.indexWhere((m) => m.id == localId);
@@ -468,11 +516,6 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
           print('[MSG_SEND] Failed to update chat preview with server message: $e');
         }
       }
-      
-      // Clean up outbox after a delay (keep for retry capability)
-      Future.delayed(const Duration(minutes: 1), () {
-        _outboxRepository.removePendingMessage(localId);
-      });
       
     } catch (e) {
       print('[MSG_SEND] Failed to sync message to backend (attempt ${attemptNumber + 1}): $e');
@@ -532,6 +575,10 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
       // Remove from pending sends
       _pendingSends.remove(localId);
+      
+      // IMMEDIATELY remove from outbox after successful sync
+      await _outboxRepository.removePendingMessage(localId);
+      print('[MSG_SEND] Removed image message from outbox: $localId');
       
       // Update message in UI: replace local ID with server ID and update status
       final messageIndex = state.messages.indexWhere((m) => m.id == localId);
@@ -663,14 +710,15 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
       
       // STEP 3: Add to outbox queue for persistence
-      await _outboxRepository.addToOutbox(
+      final outboxEntry = await _outboxRepository.addToOutbox(
         chatId: chatId,
         type: MessageType.audio,
         localAudioPath: audioPath,
       );
+      final outboxId = outboxEntry.localId; // Save outbox ID for later cleanup
       
       // STEP 4: Send to backend asynchronously with clientMessageId
-      _syncMessageToBackend(localId, MessageType.audio, audioPath: audioPath, clientMessageId: localId);
+      _syncMessageToBackend(localId, MessageType.audio, outboxId: outboxId, audioPath: audioPath, clientMessageId: localId);
       
     } catch (e) {
       print('[MSG_SEND] Failed to create local audio message: $e');
@@ -773,12 +821,6 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     if (message.chatId != chatId) {
       return;
     }
-    // #region agent log
-    try {
-      final logFile = File('c:\\rarebooks\\.cursor\\debug.log');
-      logFile.writeAsStringSync(json.encode({'location':'messages_provider.dart:769','message':'H2,H5: addMessage called','data':{'messageId':message.id,'clientMessageId':message.clientMessageId,'localId':message.localId,'content':message.content,'isLocalOnly':message.isLocalOnly,'currentMessageCount':state.messages.length},'timestamp':DateTime.now().millisecondsSinceEpoch,'sessionId':'debug-session','hypothesisId':'H2,H5'}) + '\n', mode: FileMode.append);
-    } catch (e) {}
-    // #endregion
     
     print('[MSG_RECV] Received message via SignalR: ${message.id} (clientMessageId: ${message.clientMessageId ?? 'none'})');
     
@@ -823,12 +865,6 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         // Replace local message with server message
         final updatedMessages = [...state.messages];
         final localMessage = updatedMessages[localIndex];
-        // #region agent log
-        try {
-          final logFile = File('c:\\rarebooks\\.cursor\\debug.log');
-          logFile.writeAsStringSync(json.encode({'location':'messages_provider.dart:822','message':'H5: FOUND local message by content, replacing','data':{'localIndex':localIndex,'oldLocalId':localMessage.localId,'newServerId':message.id,'newClientMessageId':message.clientMessageId},'timestamp':DateTime.now().millisecondsSinceEpoch,'sessionId':'debug-session','hypothesisId':'H5'}) + '\n', mode: FileMode.append);
-        } catch (e) {}
-        // #endregion
         final serverMessage = message.copyWith(
           localId: localMessage.localId,
           isLocalOnly: false,
@@ -853,13 +889,6 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
           print('[MSG_RECV] Failed to cache message in Hive: $e');
         }
         return;
-      } else {
-        // #region agent log
-        try {
-          final logFile = File('c:\\rarebooks\\.cursor\\debug.log');
-          logFile.writeAsStringSync(json.encode({'location':'messages_provider.dart:853','message':'H5: NOT FOUND - local message not matched by content','data':{'messageClientMessageId':message.clientMessageId,'willCheckFallback':true},'timestamp':DateTime.now().millisecondsSinceEpoch,'sessionId':'debug-session','hypothesisId':'H5'}) + '\n', mode: FileMode.append);
-        } catch (e) {}
-        // #endregion
       }
     }
     
@@ -915,12 +944,6 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     });
     
     if (!exists) {
-      // #region agent log
-      try {
-        final logFile = File('c:\\rarebooks\\.cursor\\debug.log');
-        logFile.writeAsStringSync(json.encode({'location':'messages_provider.dart:914','message':'H5: Adding as NEW message (dedup failed)','data':{'messageId':message.id,'clientMessageId':message.clientMessageId,'localId':message.localId,'content':message.content,'beforeCount':state.messages.length},'timestamp':DateTime.now().millisecondsSinceEpoch,'sessionId':'debug-session','hypothesisId':'H5'}) + '\n', mode: FileMode.append);
-      } catch (e) {}
-      // #endregion
       // Add new message and sort by date
       final newMessages = [...state.messages, message];
       newMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));

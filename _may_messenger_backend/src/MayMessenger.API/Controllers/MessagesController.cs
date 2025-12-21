@@ -302,20 +302,6 @@ public class MessagesController : ControllerBase
     public async Task<ActionResult<MessageDto>> SendMessage([FromBody] SendMessageDto dto)
     {
         var userId = GetCurrentUserId();
-        // #region agent log
-        var logPath = @"c:\rarebooks\.cursor\debug.log";
-        try {
-            var logEntry = System.Text.Json.JsonSerializer.Serialize(new {
-                location = "MessagesController.cs:302",
-                message = "H1,H2: SendMessage called",
-                data = new { userId, chatId = dto.ChatId, clientMessageId = dto.ClientMessageId, content = dto.Content },
-                timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                sessionId = "debug-session",
-                hypothesisId = "H1,H2"
-            });
-            System.IO.File.AppendAllText(logPath, logEntry + "\n");
-        } catch { }
-        // #endregion
         
         // Idempotency check: if clientMessageId is provided, check if message already exists
         if (!string.IsNullOrEmpty(dto.ClientMessageId))
@@ -324,19 +310,6 @@ public class MessagesController : ControllerBase
             if (existingMessage != null)
             {
                 _logger.LogInformation($"Message with ClientMessageId {dto.ClientMessageId} already exists, returning existing message {existingMessage.Id}");
-                // #region agent log
-                try {
-                    var logEntry = System.Text.Json.JsonSerializer.Serialize(new {
-                        location = "MessagesController.cs:326",
-                        message = "H1: Found existing message by clientMessageId",
-                        data = new { clientMessageId = dto.ClientMessageId, existingMessageId = existingMessage.Id },
-                        timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                        sessionId = "debug-session",
-                        hypothesisId = "H1"
-                    });
-                    System.IO.File.AppendAllText(logPath, logEntry + "\n");
-                } catch { }
-                // #endregion
                 
                 var existingMessageDto = new MessageDto
                 {
@@ -397,19 +370,6 @@ public class MessagesController : ControllerBase
         {
             // Create pending acks for reliable delivery
             await CreatePendingAcksForMessage(chat, message, userId, AckType.Message);
-            // #region agent log
-            try {
-                var logEntry = System.Text.Json.JsonSerializer.Serialize(new {
-                    location = "MessagesController.cs:408",
-                    message = "H2: Sending SignalR to group",
-                    data = new { chatId = dto.ChatId, groupName = dto.ChatId.ToString(), messageId = message.Id, clientMessageId = message.ClientMessageId },
-                    timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    sessionId = "debug-session",
-                    hypothesisId = "H2"
-                });
-                System.IO.File.AppendAllText(@"c:\rarebooks\.cursor\debug.log", logEntry + "\n");
-            } catch { }
-            // #endregion
             
             await _hubContext.Clients.Group(dto.ChatId.ToString()).SendAsync("ReceiveMessage", messageDto);
             

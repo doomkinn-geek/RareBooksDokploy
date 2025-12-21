@@ -29,6 +29,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   final _logger = LoggerService();
   bool _isPlaying = false;
   bool _hasMarkedAsPlayed = false; // Track if we've already marked as played
+  bool _isDownloadingAudio = false; // Track if audio is being downloaded
   Duration? _duration;
   Duration? _position;
 
@@ -109,14 +110,11 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             final audioUrl = '${ApiConstants.baseUrl}${widget.message.filePath}';
             
             try {
-              // Show loading indicator
+              // Set loading state
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Загрузка аудио...'),
-                    duration: Duration(seconds: 1),
-                  ),
-                );
+                setState(() {
+                  _isDownloadingAudio = true;
+                });
               }
               
               // Download and save locally
@@ -124,6 +122,12 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                 widget.message.id, 
                 audioUrl
               );
+              
+              if (mounted) {
+                setState(() {
+                  _isDownloadingAudio = false;
+                });
+              }
               
               if (localPath != null) {
                 await _audioPlayer.setFilePath(localPath);
@@ -261,14 +265,28 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: Icon(
-                _isPlaying ? Icons.pause : Icons.play_arrow,
-                color: isMe ? Colors.white : null,
-                size: 28,
-              ),
-              onPressed: _playPauseAudio,
-            ),
+            _isDownloadingAudio
+                ? Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          isMe ? Colors.white : Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                  )
+                : IconButton(
+                    icon: Icon(
+                      _isPlaying ? Icons.pause : Icons.play_arrow,
+                      color: isMe ? Colors.white : null,
+                      size: 28,
+                    ),
+                    onPressed: _playPauseAudio,
+                  ),
             Expanded(
               child: GestureDetector(
                 onTapDown: (details) => _seekAudio(details, isMe),

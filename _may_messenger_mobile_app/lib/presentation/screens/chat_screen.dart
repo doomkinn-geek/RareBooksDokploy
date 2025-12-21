@@ -13,8 +13,13 @@ import '../widgets/message_input.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final String chatId;
+  final String? initialMessageId;
 
-  const ChatScreen({super.key, required this.chatId});
+  const ChatScreen({
+    super.key,
+    required this.chatId,
+    this.initialMessageId,
+  });
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
@@ -23,6 +28,7 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
   final _logger = LoggerService();
+  final Map<String, GlobalKey> _messageKeys = {}; // Keys for scroll-to-message
 
   @override
   void initState() {
@@ -62,7 +68,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       // Mark messages as read after a short delay to ensure messages are loaded
       await Future.delayed(const Duration(milliseconds: 500));
       ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
+      
+      // Scroll to initial message if specified
+      if (widget.initialMessageId != null) {
+        await Future.delayed(const Duration(milliseconds: 800));
+        _scrollToMessage(widget.initialMessageId!);
+      }
     });
+  }
+  
+  void _scrollToMessage(String messageId) {
+    final key = _messageKeys[messageId];
+    if (key != null && key.currentContext != null) {
+      Scrollable.ensureVisible(
+        key.currentContext!,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+        alignment: 0.5, // Center the message
+      );
+      
+      // Highlight the message briefly
+      // Note: You can add animation/highlighting logic here if needed
+    }
   }
   
   void _onScroll() {
@@ -167,7 +194,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         itemCount: messagesState.messages.length,
                         itemBuilder: (context, index) {
                           final message = messagesState.messages[index];
-                          return MessageBubble(message: message);
+                          
+                          // Create a key for this message if scrolling to it
+                          if (widget.initialMessageId != null && 
+                              message.id == widget.initialMessageId) {
+                            _messageKeys[message.id] = GlobalKey();
+                          }
+                          
+                          return MessageBubble(
+                            key: _messageKeys[message.id],
+                            message: message,
+                          );
                         },
                       ),
           ),

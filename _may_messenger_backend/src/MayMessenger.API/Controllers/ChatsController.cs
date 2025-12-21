@@ -429,6 +429,93 @@ public class ChatsController : ControllerBase
         
         return Ok(new { message = "All chats reset successfully" });
     }
+    
+    /// <summary>
+    /// Поиск чатов по названию или имени участника
+    /// </summary>
+    [HttpGet("search")]
+    public async Task<ActionResult<IEnumerable<ChatDto>>> SearchChats([FromQuery] string query)
+    {
+        if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+        {
+            return BadRequest("Query must be at least 2 characters");
+        }
+        
+        var userId = GetCurrentUserId();
+        var chats = await _unitOfWork.Chats.GetUserChatsAsync(userId);
+        
+        var searchResults = new List<ChatDto>();
+        
+        foreach (var chat in chats)
+        {
+            bool matchesSearch = false;
+            
+            // For private chats, match against other participant's name
+            if (chat.Type == ChatType.Private)
+            {
+                var otherParticipant = chat.Participants
+                    .FirstOrDefault(p => p.UserId != userId);
+                
+                if (otherParticipant != null && 
+                    otherParticipant.User.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase))
+                {
+                    matchesSearch = true;
+                }
+            }
+            // For group chats, match against chat title
+            else if (chat.Title != null && chat.Title.Contains(query, StringComparison.OrdinalIgnoreCase))
+            {
+                matchesSearch = true;
+            }
+            
+            if (matchesSearch)
+            {
+                var lastMessage = chat.Messages.FirstOrDefault();
+                var unreadCount = await _unitOfWork.Messages.GetUnreadCountAsync(chat.Id, userId);
+                
+                var displayTitle = chat.Title;
+                Guid? otherParticipantId = null;
+                
+                if (chat.Type == ChatType.Private)
+                {
+                    var otherParticipant = chat.Participants
+                        .FirstOrDefault(p => p.UserId != userId);
+                    
+                    if (otherParticipant != null)
+                    {
+                        displayTitle = otherParticipant.User.DisplayName;
+                        otherParticipantId = otherParticipant.UserId;
+                    }
+                }
+                
+                searchResults.Add(new ChatDto
+                {
+                    Id = chat.Id,
+                    Type = chat.Type,
+                    Title = displayTitle,
+                    Avatar = chat.Avatar,
+                    CreatedAt = chat.CreatedAt,
+                    UnreadCount = unreadCount,
+                    OtherParticipantId = otherParticipantId,
+                    LastMessage = lastMessage != null ? new MessageDto
+                    {
+                        Id = lastMessage.Id,
+                        ChatId = lastMessage.ChatId,
+                        SenderId = lastMessage.SenderId,
+                        SenderName = lastMessage.Sender.DisplayName,
+                        Type = lastMessage.Type,
+                        Content = lastMessage.Content,
+                        FilePath = lastMessage.FilePath,
+                        Status = lastMessage.Status,
+                        CreatedAt = lastMessage.CreatedAt,
+                        ClientMessageId = lastMessage.ClientMessageId
+                    } : null
+                });
+            }
+        }
+        
+        return Ok(searchResults.Take(20)); // Limit results
+    }
 }
 
 public class CreateDirectChatRequest

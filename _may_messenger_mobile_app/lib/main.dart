@@ -203,8 +203,8 @@ class MyApp extends ConsumerWidget {
             await fcmService.initialize();
             
             // Setup FCM navigation callback
-            fcmService.onMessageTap = (chatId) async {
-              print('[FCM] Push notification tapped for chat: $chatId');
+            fcmService.onMessageTap = (chatId, {String? messageId}) async {
+              print('[FCM] Push notification tapped for chat: $chatId, messageId: $messageId');
               
               try {
                 // STEP 1: Refresh chats list to ensure chat exists
@@ -218,11 +218,14 @@ class MyApp extends ConsumerWidget {
                 // STEP 3: Wait a bit to ensure messages are loaded
                 await Future.delayed(const Duration(milliseconds: 300));
                 
-                // STEP 4: Navigate to chat screen
+                // STEP 4: Navigate to chat screen with optional messageId
                 print('[FCM] Navigating to chat screen...');
                 navigatorKey.currentState?.pushAndRemoveUntil(
                   MaterialPageRoute(
-                    builder: (context) => ChatScreen(chatId: chatId),
+                    builder: (context) => ChatScreen(
+                      chatId: chatId,
+                      initialMessageId: messageId,
+                    ),
                   ),
                   (route) => route.isFirst, // Keep only the main screen in stack
                 );
@@ -233,7 +236,10 @@ class MyApp extends ConsumerWidget {
                 // Try to navigate anyway
                 navigatorKey.currentState?.push(
                   MaterialPageRoute(
-                    builder: (context) => ChatScreen(chatId: chatId),
+                    builder: (context) => ChatScreen(
+                      chatId: chatId,
+                      initialMessageId: messageId,
+                    ),
                   ),
                 );
               }

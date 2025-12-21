@@ -109,6 +109,10 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
 
     try {
       if (await _audioRecorder.hasPermission()) {
+        // Cancel existing timer if any
+        _timer?.cancel();
+        _timer = null;
+        
         // Reset duration BEFORE starting to avoid showing old value
         setState(() {
           _recordDuration = Duration.zero;
@@ -136,6 +140,7 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
         _scaleController?.forward();
         _slideController?.forward();
 
+        // Start fresh timer from zero
         _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
           if (mounted) {
             setState(() {
@@ -155,6 +160,7 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
 
   Future<void> _stopRecording() async {
     _timer?.cancel();
+    _timer = null; // Reset timer to avoid reusing old tick values
     await _audioRecorder.stop();
   }
 

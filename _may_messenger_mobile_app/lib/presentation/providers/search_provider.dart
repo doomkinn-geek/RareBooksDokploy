@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/models/user_model.dart';
+import '../../data/models/chat_model.dart';
 import '../../data/models/search_result_model.dart';
 import '../../data/services/search_service.dart';
 
@@ -34,6 +35,7 @@ final searchProvider = StateNotifierProvider<SearchNotifier, SearchState>((ref) 
 
 class SearchState {
   final List<User> userResults;
+  final List<Chat> chatResults;
   final List<MessageSearchResult> messageResults;
   final bool isLoading;
   final String? error;
@@ -41,6 +43,7 @@ class SearchState {
 
   SearchState({
     this.userResults = const [],
+    this.chatResults = const [],
     this.messageResults = const [],
     this.isLoading = false,
     this.error,
@@ -49,6 +52,7 @@ class SearchState {
 
   SearchState copyWith({
     List<User>? userResults,
+    List<Chat>? chatResults,
     List<MessageSearchResult>? messageResults,
     bool? isLoading,
     String? error,
@@ -56,6 +60,7 @@ class SearchState {
   }) {
     return SearchState(
       userResults: userResults ?? this.userResults,
+      chatResults: chatResults ?? this.chatResults,
       messageResults: messageResults ?? this.messageResults,
       isLoading: isLoading ?? this.isLoading,
       error: error,
@@ -99,10 +104,12 @@ class SearchNotifier extends StateNotifier<SearchState> {
     _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
       try {
         final users = await _searchService.searchUsers(query.trim());
+        final chats = await _searchService.searchChats(query.trim());
         final messages = await _searchService.searchMessages(query.trim());
         
         state = state.copyWith(
           userResults: users,
+          chatResults: chats,
           messageResults: messages,
           isLoading: false,
           error: null,
