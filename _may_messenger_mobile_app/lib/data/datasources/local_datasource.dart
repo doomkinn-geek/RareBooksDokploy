@@ -2,6 +2,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/message_model.dart';
 import '../models/chat_model.dart';
+import '../models/status_update_model.dart';
 import '../repositories/outbox_repository.dart';
 import '../../core/constants/storage_keys.dart';
 
@@ -9,6 +10,7 @@ class LocalDataSource {
   static const String _messagesBox = 'messages';
   static const String _chatsBox = 'chats';
   static const String _outboxBox = 'outbox';
+  static const String _statusUpdatesBox = 'status_updates';
 
   // Auth Storage
   Future<void> saveToken(String token) async {
@@ -389,6 +391,62 @@ class LocalDataSource {
       print('[LocalDataSource] Cleared all pending messages');
     } catch (e) {
       print('[LocalDataSource] Failed to clear pending messages: $e');
+    }
+  }
+
+  // Status Updates Queue Management
+  
+  /// Save a status update to the queue
+  Future<void> saveStatusUpdate(StatusUpdate statusUpdate) async {
+    try {
+      final box = await Hive.openBox<Map>(_statusUpdatesBox);
+      await box.put(statusUpdate.id, statusUpdate.toJson());
+      await box.flush();
+    } catch (e) {
+      print('[LocalDataSource] Failed to save status update: $e');
+      rethrow;
+    }
+  }
+
+  /// Get all pending status updates
+  Future<List<StatusUpdate>> getAllStatusUpdates() async {
+    try {
+      final box = await Hive.openBox<Map>(_statusUpdatesBox);
+      final updates = <StatusUpdate>[];
+      
+      for (var key in box.keys) {
+        final data = box.get(key);
+        if (data != null) {
+          updates.add(StatusUpdate.fromJson(Map<String, dynamic>.from(data)));
+        }
+      }
+      
+      return updates;
+    } catch (e) {
+      print('[LocalDataSource] Failed to get all status updates: $e');
+      return [];
+    }
+  }
+
+  /// Delete a status update from the queue
+  Future<void> deleteStatusUpdate(String id) async {
+    try {
+      final box = await Hive.openBox<Map>(_statusUpdatesBox);
+      await box.delete(id);
+    } catch (e) {
+      print('[LocalDataSource] Failed to delete status update: $e');
+      rethrow;
+    }
+  }
+
+  /// Clear all status updates (use with caution)
+  Future<void> clearAllStatusUpdates() async {
+    try {
+      final box = await Hive.openBox<Map>(_statusUpdatesBox);
+      await box.clear();
+      print('[LocalDataSource] Cleared all status updates');
+    } catch (e) {
+      print('[LocalDataSource] Failed to clear status updates: $e');
     }
   }
 }

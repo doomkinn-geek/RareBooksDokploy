@@ -9,6 +9,7 @@ public interface IUnitOfWork : IDisposable
     IFcmTokenRepository FcmTokens { get; }
     IContactRepository Contacts { get; }
     IDeliveryReceiptRepository DeliveryReceipts { get; }
+    IPendingAckRepository PendingAcks { get; }
     
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

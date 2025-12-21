@@ -1,11 +1,9 @@
 import 'package:signalr_netcore/signalr_client.dart';
 import '../models/message_model.dart';
 import '../../core/constants/api_constants.dart';
-import '../../core/services/logger_service.dart';
 
 class SignalRService {
   HubConnection? _hubConnection;
-  final _logger = LoggerService();
   String? _currentToken;
   bool _isReconnecting = false;
 
@@ -115,11 +113,18 @@ class SignalRService {
     // Отписываемся от предыдущего обработчика, если был
     _hubConnection?.off('ReceiveMessage');
     
-    _hubConnection?.on('ReceiveMessage', (arguments) {
+    _hubConnection?.on('ReceiveMessage', (arguments) async {
       if (arguments != null && arguments.isNotEmpty) {
         final messageJson = arguments[0] as Map<String, dynamic>;
         final message = Message.fromJson(messageJson);
         callback(message);
+        
+        // Automatically send ACK
+        try {
+          await ackMessageReceived(message.id);
+        } catch (e) {
+          print('[SignalR] Failed to auto-send ACK: $e');
+        }
       }
     });
   }
@@ -128,12 +133,19 @@ class SignalRService {
     // Отписываемся от предыдущего обработчика, если был
     _hubConnection?.off('MessageStatusUpdated');
     
-    _hubConnection?.on('MessageStatusUpdated', (arguments) {
+    _hubConnection?.on('MessageStatusUpdated', (arguments) async {
       if (arguments != null && arguments.length >= 2) {
         final messageId = arguments[0] as String;
         final statusIndex = arguments[1] as int;
         final status = MessageStatus.values[statusIndex];
         callback(messageId, status);
+        
+        // Automatically send ACK
+        try {
+          await ackStatusUpdate(messageId, statusIndex);
+        } catch (e) {
+          print('[SignalR] Failed to auto-send status ACK: $e');
+        }
       }
     });
   }
@@ -163,6 +175,36 @@ class SignalRService {
       print('[SignalR] Message marked as read: $messageId');
     } catch (e) {
       print('[SignalR] Failed to mark as read: $e');
+    }
+  }
+
+  /// Send acknowledgment that message was received via SignalR
+  Future<void> ackMessageReceived(String messageId) async {
+    if (!isConnected) {
+      print('[SignalR] Cannot send ACK - not connected');
+      return;
+    }
+    
+    try {
+      await _hubConnection?.invoke('AckMessageReceived', args: [messageId]);
+      print('[SignalR] Sent ACK for message: $messageId');
+    } catch (e) {
+      print('[SignalR] Failed to send message ACK: $e');
+    }
+  }
+
+  /// Send acknowledgment that status update was received via SignalR
+  Future<void> ackStatusUpdate(String messageId, int status) async {
+    if (!isConnected) {
+      print('[SignalR] Cannot send status ACK - not connected');
+      return;
+    }
+    
+    try {
+      await _hubConnection?.invoke('AckStatusUpdate', args: [messageId, status]);
+      print('[SignalR] Sent ACK for status update: $messageId -> $status');
+    } catch (e) {
+      print('[SignalR] Failed to send status ACK: $e');
     }
   }
 

@@ -55,7 +55,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with SingleTickerProvid
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('May Messenger'),
+        title: const Text('Депеша'),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),

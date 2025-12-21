@@ -364,6 +364,9 @@ public class MessagesController : ControllerBase
         var chat = await _unitOfWork.Chats.GetByIdAsync(dto.ChatId);
         if (chat != null)
         {
+            // Create pending acks for reliable delivery
+            await CreatePendingAcksForMessage(chat, message, userId, AckType.Message);
+            
             await _hubContext.Clients.Group(dto.ChatId.ToString()).SendAsync("ReceiveMessage", messageDto);
             
             // Send push notifications to offline users
@@ -429,6 +432,9 @@ public class MessagesController : ControllerBase
         var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
         if (chat != null)
         {
+            // Create pending acks for reliable delivery
+            await CreatePendingAcksForMessage(chat, message, userId, AckType.Message);
+            
             await _hubContext.Clients.Group(chatId.ToString()).SendAsync("ReceiveMessage", messageDto);
             
             // Send push notifications to offline users
@@ -458,13 +464,13 @@ public class MessagesController : ControllerBase
         
         try
         {
-            // Compress and save image
+            // Save image (client already compressed it)
             var uploadsFolder = Path.Combine(_environment.WebRootPath, "images");
             
             string fileName;
             using (var stream = imageFile.OpenReadStream())
             {
-                fileName = await _imageCompressionService.CompressAndSaveImageAsync(
+                fileName = await _imageCompressionService.SaveImageAsync(
                     stream, 
                     imageFile.FileName, 
                     uploadsFolder);
@@ -506,6 +512,9 @@ public class MessagesController : ControllerBase
             var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
             if (chat != null)
             {
+                // Create pending acks for reliable delivery
+                await CreatePendingAcksForMessage(chat, message, userId, AckType.Message);
+                
                 await _hubContext.Clients.Group(chatId.ToString()).SendAsync("ReceiveMessage", messageDto);
                 
                 // Send push notifications to offline users
@@ -757,9 +766,8 @@ public class MessagesController : ControllerBase
             await _unitOfWork.Messages.UpdateAsync(message);
             await _unitOfWork.SaveChangesAsync();
             
-            // Notify via SignalR
-            await _hubContext.Clients.Group(message.ChatId.ToString())
-                .SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Played);
+            // Notify via SignalR with acks
+            await SendStatusUpdateWithAcks(message.ChatId, messageId, MessageStatus.Played, userId);
             
             _logger.LogInformation($"Marked audio message {messageId} as played by user {userId}");
         }
@@ -832,6 +840,64 @@ public class MessagesController : ControllerBase
         }
         
         return Ok(new { message = "Сообщение удалено" });
+    }
+    
+    /// <summary>
+    /// Helper method to create pending acks for all chat participants (except sender)
+    /// </summary>
+    private async Task CreatePendingAcksForMessage(Chat chat, Message message, Guid senderId, AckType ackType)
+    {
+        try
+        {
+            foreach (var participant in chat.Participants)
+            {
+                // Don't create ack for sender
+                if (participant.UserId == senderId) continue;
+                
+                var pendingAck = new PendingAck
+                {
+                    MessageId = message.Id,
+                    RecipientUserId = participant.UserId,
+                    Type = ackType,
+                    RetryCount = 0,
+                    CreatedAt = DateTime.UtcNow
+                };
+                
+                await _unitOfWork.PendingAcks.AddAsync(pendingAck);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Error creating pending acks for message {message.Id}");
+        }
+    }
+    
+    /// <summary>
+    /// Helper method to send status update and create pending acks
+    /// </summary>
+    private async Task SendStatusUpdateWithAcks(Guid chatId, Guid messageId, MessageStatus status, Guid senderId)
+    {
+        try
+        {
+            var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+            if (chat != null)
+            {
+                var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
+                if (message != null)
+                {
+                    // Create pending acks for status update
+                    await CreatePendingAcksForMessage(chat, message, senderId, AckType.StatusUpdate);
+                }
+                
+                // Send status update
+                await _hubContext.Clients.Group(chatId.ToString())
+                    .SendAsync("MessageStatusUpdated", messageId, (int)status);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Error sending status update for message {messageId}");
+        }
     }
 }
 

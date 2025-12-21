@@ -6,7 +6,9 @@ import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/chat_repository.dart';
 import '../../data/repositories/message_repository.dart';
 import '../../data/repositories/outbox_repository.dart';
+import '../../data/repositories/status_update_queue_repository.dart';
 import '../../data/services/audio_storage_service.dart';
+import '../../data/services/status_sync_service.dart';
 import '../../core/services/fcm_service.dart';
 
 // Утилита для форматирования ошибок
@@ -120,6 +122,19 @@ final messageRepositoryProvider = Provider<MessageRepository>((ref) {
 final outboxRepositoryProvider = Provider<OutboxRepository>((ref) {
   return OutboxRepository(
     ref.read(localDataSourceProvider),
+  );
+});
+
+final statusUpdateQueueRepositoryProvider = Provider((ref) {
+  return StatusUpdateQueueRepository(
+    ref.read(localDataSourceProvider),
+  );
+});
+
+final statusSyncServiceProvider = Provider((ref) {
+  return StatusSyncService(
+    ref.read(statusUpdateQueueRepositoryProvider),
+    ref.read(messageRepositoryProvider),
   );
 });
 

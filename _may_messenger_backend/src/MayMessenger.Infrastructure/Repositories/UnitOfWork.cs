@@ -14,6 +14,7 @@ public class UnitOfWork : IUnitOfWork
     public IFcmTokenRepository FcmTokens { get; }
     public IContactRepository Contacts { get; }
     public IDeliveryReceiptRepository DeliveryReceipts { get; }
+    public IPendingAckRepository PendingAcks { get; }
     
     public UnitOfWork(
         AppDbContext context,
@@ -23,7 +24,8 @@ public class UnitOfWork : IUnitOfWork
         IInviteLinkRepository inviteLinkRepository,
         IFcmTokenRepository fcmTokenRepository,
         IContactRepository contactRepository,
-        IDeliveryReceiptRepository deliveryReceiptRepository)
+        IDeliveryReceiptRepository deliveryReceiptRepository,
+        IPendingAckRepository pendingAckRepository)
     {
         _context = context;
         Users = userRepository;
@@ -33,6 +35,7 @@ public class UnitOfWork : IUnitOfWork
         FcmTokens = fcmTokenRepository;
         Contacts = contactRepository;
         DeliveryReceipts = deliveryReceiptRepository;
+        PendingAcks = pendingAckRepository;
     }
     
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

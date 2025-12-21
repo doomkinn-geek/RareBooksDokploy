@@ -60,6 +60,7 @@ builder.Services.AddScoped<IInviteLinkRepository, InviteLinkRepository>();
 builder.Services.AddScoped<IFcmTokenRepository, FcmTokenRepository>();
 builder.Services.AddScoped<IContactRepository, ContactRepository>();
 builder.Services.AddScoped<IDeliveryReceiptRepository, DeliveryReceiptRepository>();
+builder.Services.AddScoped<IPendingAckRepository, PendingAckRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 // Services
@@ -72,6 +73,7 @@ builder.Services.AddSingleton<MayMessenger.Application.Services.IFirebaseService
 // Background Services
 builder.Services.AddHostedService<MayMessenger.Application.Services.MediaCleanupService>(); // Audio + Images cleanup
 builder.Services.AddHostedService<MayMessenger.Application.Services.CleanupInvalidTokensService>();
+builder.Services.AddHostedService<MayMessenger.Application.Services.AckRetryService>(); // ACK retry for reliable delivery
 
 // JWT Authentication
 var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "YourSuperSecretKeyForJWTTokenGeneration123456789";

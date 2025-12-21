@@ -75,15 +75,15 @@ class ImagePickerButtons extends StatelessWidget {
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(
         source: source,
-        maxWidth: 1920,
-        maxHeight: 1920,
-        imageQuality: 85,
+        maxWidth: 2048,
+        maxHeight: 2048,
+        imageQuality: 80,
       );
 
       if (image == null) return;
 
       if (context.mounted) {
-        // Compress image
+        // Compress image more aggressively
         final compressedPath = await _compressImage(image.path);
         final finalPath = compressedPath ?? image.path;
 
@@ -116,13 +116,37 @@ class ImagePickerButtons extends StatelessWidget {
       final targetPath =
           '${tempDir.path}/compressed_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
-      final result = await FlutterImageCompress.compressAndGetFile(
+      // First compression attempt with quality 80%
+      var result = await FlutterImageCompress.compressAndGetFile(
         imagePath,
         targetPath,
-        quality: 85,
-        minWidth: 1920,
-        minHeight: 1920,
+        quality: 80,
+        minWidth: 2048,
+        minHeight: 2048,
       );
+
+      if (result != null) {
+        // Check file size
+        final file = File(result.path);
+        final fileSize = await file.length();
+        
+        // If still > 5MB, re-compress with lower quality
+        if (fileSize > 5 * 1024 * 1024) {
+          print('[ImagePicker] File too large (${(fileSize / 1024 / 1024).toStringAsFixed(2)}MB), recompressing...');
+          
+          final targetPath2 = '${tempDir.path}/compressed2_${DateTime.now().millisecondsSinceEpoch}.jpg';
+          result = await FlutterImageCompress.compressAndGetFile(
+            result.path,
+            targetPath2,
+            quality: 70,
+            minWidth: 2048,
+            minHeight: 2048,
+          );
+          
+          // Delete first attempt
+          await file.delete();
+        }
+      }
 
       return result?.path;
     } catch (e) {

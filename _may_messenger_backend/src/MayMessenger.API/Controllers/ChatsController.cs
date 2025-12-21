@@ -104,14 +104,31 @@ public class ChatsController : ControllerBase
         var lastMessage = await _unitOfWork.Messages.GetLastMessageAsync(chatId);
         var unreadCount = await _unitOfWork.Messages.GetUnreadCountAsync(chatId, userId);
         
+        // For private chats, get otherParticipantId
+        var displayTitle = chat.Title;
+        Guid? otherParticipantId = null;
+        
+        if (chat.Type == ChatType.Private)
+        {
+            var otherParticipant = chat.Participants
+                .FirstOrDefault(p => p.UserId != userId);
+            
+            if (otherParticipant != null)
+            {
+                displayTitle = otherParticipant.User.DisplayName;
+                otherParticipantId = otherParticipant.UserId;
+            }
+        }
+        
         var chatDto = new ChatDto
         {
             Id = chat.Id,
             Type = chat.Type,
-            Title = chat.Title,
+            Title = displayTitle,
             Avatar = chat.Avatar,
             CreatedAt = chat.CreatedAt,
             UnreadCount = unreadCount,
+            OtherParticipantId = otherParticipantId,
             LastMessage = lastMessage != null ? new MessageDto
             {
                 Id = lastMessage.Id,
@@ -147,7 +164,8 @@ public class ChatsController : ControllerBase
                     Title = existingChat.Title,
                     Avatar = existingChat.Avatar,
                     CreatedAt = existingChat.CreatedAt,
-                    UnreadCount = 0
+                    UnreadCount = 0,
+                    OtherParticipantId = dto.ParticipantIds[0] // Add otherParticipantId
                 });
             }
         }
@@ -191,7 +209,8 @@ public class ChatsController : ControllerBase
             Title = chat.Title,
             Avatar = chat.Avatar,
             CreatedAt = chat.CreatedAt,
-            UnreadCount = 0
+            UnreadCount = 0,
+            OtherParticipantId = chat.Type == ChatType.Private && dto.ParticipantIds.Count == 1 ? dto.ParticipantIds[0] : null
         };
         
         // Notify all participants (except creator) about new chat via SignalR
@@ -235,6 +254,7 @@ public class ChatsController : ControllerBase
                 Avatar = existingChat.Avatar,
                 CreatedAt = existingChat.CreatedAt,
                 UnreadCount = unreadCount1,
+                OtherParticipantId = request.TargetUserId, // Add otherParticipantId
                 LastMessage = lastMessage1 != null ? new MessageDto
                 {
                     Id = lastMessage1.Id,
@@ -285,7 +305,8 @@ public class ChatsController : ControllerBase
             Title = targetUser.DisplayName,
             Avatar = chat.Avatar,
             CreatedAt = chat.CreatedAt,
-            UnreadCount = 0
+            UnreadCount = 0,
+            OtherParticipantId = request.TargetUserId // Add otherParticipantId
         };
         
         // Notify target user about new chat via SignalR

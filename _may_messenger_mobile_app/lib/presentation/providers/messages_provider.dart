@@ -23,6 +23,8 @@ final messagesProvider = StateNotifierProvider.family<MessagesNotifier, Messages
       chatId,
       ref.read(signalRServiceProvider),
       ref.read(messageCacheProvider),
+      ref.read(statusUpdateQueueRepositoryProvider),
+      ref.read(statusSyncServiceProvider),
       ref,
     );
   },
@@ -62,6 +64,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   final String chatId;
   final dynamic _signalRService;
   final MessageCacheRepository _cache;
+  final dynamic _statusQueue;
+  final dynamic _statusSyncService;
   final Ref _ref;
   final _uuid = const Uuid();
   late final MessageSyncService _syncService;
@@ -77,11 +81,16 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     this.chatId,
     this._signalRService,
     this._cache,
+    this._statusQueue,
+    this._statusSyncService,
     this._ref,
   ) : super(MessagesState()) {
     _syncService = MessageSyncService(_messageRepository);
     loadMessages();
     _monitorSignalRConnection();
+    
+    // Start status sync service
+    _statusSyncService.startPeriodicSync();
   }
 
   /// Monitor SignalR connection state and perform incremental sync on reconnect
@@ -969,25 +978,34 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
       print('[STATUS_UPDATE] Marking ${unreadMessages.length} messages as read');
       
-      // Batch mark via SignalR (for real-time)
+      // Add to status queue for reliable delivery
+      for (final message in unreadMessages) {
+        await _statusQueue.enqueueStatusUpdate(message.id, MessageStatus.read);
+      }
+      
+      // Update local status immediately for responsive UI
+      for (final message in unreadMessages) {
+        updateMessageStatus(message.id, MessageStatus.read);
+      }
+      
+      // Try sending via SignalR for real-time (but queue ensures it happens eventually)
       for (final message in unreadMessages) {
         try {
           await _signalRService.markMessageAsRead(message.id, chatId);
-          
-          // Update local status immediately
-          updateMessageStatus(message.id, MessageStatus.read);
         } catch (e) {
           print('[STATUS_UPDATE] Failed to mark message ${message.id} as read via SignalR: $e');
+          // Queue will retry
         }
       }
       
-      // Also send batch request via REST API as fallback
+      // Also send batch request via REST API
       try {
         final messageIds = unreadMessages.map((m) => m.id).toList();
         await _messageRepository.batchMarkAsRead(messageIds);
         print('[STATUS_UPDATE] Batch read confirmation sent via REST API');
       } catch (e) {
         print('[STATUS_UPDATE] Failed to send batch read via REST API: $e');
+        // Queue will retry
       }
     } catch (e) {
       print('[STATUS_UPDATE] Failed to mark messages as read: $e');
@@ -996,10 +1014,10 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
 
   Future<void> markAudioAsPlayed(String messageId) async {
     try {
-      // Call API to mark as played
-      await _messageRepository.markAudioAsPlayed(messageId);
+      // Add to status queue for reliable delivery
+      await _statusQueue.enqueueStatusUpdate(messageId, MessageStatus.played);
       
-      // Update local state
+      // Update local state immediately for responsive UI
       final messageIndex = state.messages.indexWhere((m) => m.id == messageId);
       if (messageIndex != -1) {
         final updatedMessages = [...state.messages];
@@ -1007,11 +1025,20 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
           status: MessageStatus.played,
         );
         state = state.copyWith(messages: updatedMessages);
-        print('[STATUS_UPDATE] Marked audio message as played: $messageId');
+        print('[STATUS_UPDATE] Marked audio message as played locally: $messageId');
+      }
+      
+      // Try calling API immediately (queue will retry if it fails)
+      try {
+        await _messageRepository.markAudioAsPlayed(messageId);
+        print('[STATUS_UPDATE] Marked audio message as played via API: $messageId');
+      } catch (e) {
+        print('[STATUS_UPDATE] Failed to mark audio as played via API: $e');
+        // Queue will retry
       }
     } catch (e) {
       print('[STATUS_UPDATE] Failed to mark audio as played: $e');
-      rethrow;
+      // Don't rethrow - queue will handle it
     }
   }
 

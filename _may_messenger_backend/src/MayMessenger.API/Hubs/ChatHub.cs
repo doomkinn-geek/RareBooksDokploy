@@ -100,7 +100,7 @@ public class ChatHub : Hub
             await _unitOfWork.Messages.UpdateAsync(message);
             await _unitOfWork.SaveChangesAsync();
             
-            // Notify all participants about status change
+            // Notify all participants about status change (without acks - status changes don't need acks)
             await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Delivered);
         }
         else
@@ -182,6 +182,46 @@ public class ChatHub : Hub
         
         // Notify others in the chat (except sender)
         await Clients.OthersInGroup(chatId.ToString()).SendAsync("UserTyping", userId, user?.DisplayName ?? "Unknown", isTyping);
+    }
+    
+    /// <summary>
+    /// Client acknowledges that it received a message via SignalR
+    /// </summary>
+    public async Task AckMessageReceived(Guid messageId)
+    {
+        var userId = GetCurrentUserId();
+        
+        try
+        {
+            // Remove pending ack for this message
+            await _unitOfWork.PendingAcks.DeleteByMessageAndRecipientAsync(messageId, userId, AckType.Message);
+            
+            Console.WriteLine($"[ACK] Message {messageId} acknowledged by user {userId}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ACK] Error processing message ack: {ex.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// Client acknowledges that it received a status update via SignalR
+    /// </summary>
+    public async Task AckStatusUpdate(Guid messageId, int status)
+    {
+        var userId = GetCurrentUserId();
+        
+        try
+        {
+            // Remove pending ack for this status update
+            await _unitOfWork.PendingAcks.DeleteByMessageAndRecipientAsync(messageId, userId, AckType.StatusUpdate);
+            
+            Console.WriteLine($"[ACK] Status update for message {messageId} (status: {status}) acknowledged by user {userId}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ACK] Error processing status ack: {ex.Message}");
+        }
     }
 }
 

@@ -17,6 +17,7 @@ public class AppDbContext : DbContext
     public DbSet<FcmToken> FcmTokens { get; set; } = null!;
     public DbSet<Contact> Contacts { get; set; } = null!;
     public DbSet<DeliveryReceipt> DeliveryReceipts { get; set; } = null!;
+    public DbSet<PendingAck> PendingAcks { get; set; } = null!;
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -137,6 +138,24 @@ public class AppDbContext : DbContext
             entity.HasOne(e => e.User)
                 .WithMany()
                 .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // PendingAck configuration
+        modelBuilder.Entity<PendingAck>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.CreatedAt); // For cleanup queries
+            entity.HasIndex(e => new { e.MessageId, e.RecipientUserId, e.Type }); // For finding pending acks
+            
+            entity.HasOne(e => e.Message)
+                .WithMany()
+                .HasForeignKey(e => e.MessageId)
+                .OnDelete(DeleteBehavior.Cascade);
+                
+            entity.HasOne(e => e.RecipientUser)
+                .WithMany()
+                .HasForeignKey(e => e.RecipientUserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
