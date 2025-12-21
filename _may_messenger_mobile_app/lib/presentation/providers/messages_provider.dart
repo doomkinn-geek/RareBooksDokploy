@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
+import 'dart:convert';
+import 'dart:io';
 import '../../data/models/message_model.dart';
 import '../../data/services/message_sync_service.dart';
 import '../../data/repositories/message_cache_repository.dart';
@@ -321,6 +323,12 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
       // STEP 1: Create message locally with temporary ID
       localId = _uuid.v4();
+      // #region agent log
+      try {
+        final logFile = File('c:\\rarebooks\\.cursor\\debug.log');
+        await logFile.writeAsString(json.encode({'location':'messages_provider.dart:335','message':'H1,H4: Created localId','data':{'localId':localId,'content':content,'pendingSendsCount':_pendingSends.length},'timestamp':DateTime.now().millisecondsSinceEpoch,'sessionId':'debug-session','hypothesisId':'H1,H4'}) + '\n', mode: FileMode.append);
+      } catch (e) {}
+      // #endregion
       
       // Check if this message is already being sent (double-tap prevention)
       if (_pendingSends.contains(localId)) {
@@ -349,6 +357,12 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       updatedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       state = state.copyWith(messages: updatedMessages, isSending: false);
       print('[MSG_SEND] Message added to UI with local ID: $localId');
+      // #region agent log
+      try {
+        final logFile = File('c:\\rarebooks\\.cursor\\debug.log');
+        await logFile.writeAsString(json.encode({'location':'messages_provider.dart:363','message':'H4: Added local message to UI','data':{'localId':localId,'messageCount':updatedMessages.length,'isLocalOnly':localMessage.isLocalOnly,'clientMessageId':localMessage.clientMessageId},'timestamp':DateTime.now().millisecondsSinceEpoch,'sessionId':'debug-session','hypothesisId':'H4'}) + '\n', mode: FileMode.append);
+      } catch (e) {}
+      // #endregion
       
       // Add to LRU cache
       _cache.put(localMessage);
@@ -372,6 +386,12 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       );
       
       // STEP 4: Send to backend asynchronously with clientMessageId
+      // #region agent log
+      try {
+        final logFile = File('c:\\rarebooks\\.cursor\\debug.log');
+        await logFile.writeAsString(json.encode({'location':'messages_provider.dart:387','message':'H1: Calling _syncMessageToBackend','data':{'localId':localId,'clientMessageId':localId,'content':content},'timestamp':DateTime.now().millisecondsSinceEpoch,'sessionId':'debug-session','hypothesisId':'H1'}) + '\n', mode: FileMode.append);
+      } catch (e) {}
+      // #endregion
       _syncMessageToBackend(localId, MessageType.text, content: content, clientMessageId: localId);
       
     } catch (e) {
@@ -412,6 +432,12 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
       
       print('[MSG_SEND] Message synced successfully. Server ID: ${serverMessage.id}');
+      // #region agent log
+      try {
+        final logFile = File('c:\\rarebooks\\.cursor\\debug.log');
+        await logFile.writeAsString(json.encode({'location':'messages_provider.dart:435','message':'H1: Server returned message','data':{'localId':localId,'serverId':serverMessage.id,'serverClientMessageId':serverMessage.clientMessageId,'content':serverMessage.content},'timestamp':DateTime.now().millisecondsSinceEpoch,'sessionId':'debug-session','hypothesisId':'H1'}) + '\n', mode: FileMode.append);
+      } catch (e) {}
+      // #endregion
       
       // Remove from pending sends
       _pendingSends.remove(localId);
@@ -747,6 +773,12 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     if (message.chatId != chatId) {
       return;
     }
+    // #region agent log
+    try {
+      final logFile = File('c:\\rarebooks\\.cursor\\debug.log');
+      logFile.writeAsStringSync(json.encode({'location':'messages_provider.dart:769','message':'H2,H5: addMessage called','data':{'messageId':message.id,'clientMessageId':message.clientMessageId,'localId':message.localId,'content':message.content,'isLocalOnly':message.isLocalOnly,'currentMessageCount':state.messages.length},'timestamp':DateTime.now().millisecondsSinceEpoch,'sessionId':'debug-session','hypothesisId':'H2,H5'}) + '\n', mode: FileMode.append);
+    } catch (e) {}
+    // #endregion
     
     print('[MSG_RECV] Received message via SignalR: ${message.id} (clientMessageId: ${message.clientMessageId ?? 'none'})');
     
@@ -791,6 +823,12 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         // Replace local message with server message
         final updatedMessages = [...state.messages];
         final localMessage = updatedMessages[localIndex];
+        // #region agent log
+        try {
+          final logFile = File('c:\\rarebooks\\.cursor\\debug.log');
+          logFile.writeAsStringSync(json.encode({'location':'messages_provider.dart:822','message':'H5: FOUND local message by content, replacing','data':{'localIndex':localIndex,'oldLocalId':localMessage.localId,'newServerId':message.id,'newClientMessageId':message.clientMessageId},'timestamp':DateTime.now().millisecondsSinceEpoch,'sessionId':'debug-session','hypothesisId':'H5'}) + '\n', mode: FileMode.append);
+        } catch (e) {}
+        // #endregion
         final serverMessage = message.copyWith(
           localId: localMessage.localId,
           isLocalOnly: false,
@@ -815,6 +853,13 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
           print('[MSG_RECV] Failed to cache message in Hive: $e');
         }
         return;
+      } else {
+        // #region agent log
+        try {
+          final logFile = File('c:\\rarebooks\\.cursor\\debug.log');
+          logFile.writeAsStringSync(json.encode({'location':'messages_provider.dart:853','message':'H5: NOT FOUND - local message not matched by content','data':{'messageClientMessageId':message.clientMessageId,'willCheckFallback':true},'timestamp':DateTime.now().millisecondsSinceEpoch,'sessionId':'debug-session','hypothesisId':'H5'}) + '\n', mode: FileMode.append);
+        } catch (e) {}
+        // #endregion
       }
     }
     
@@ -870,6 +915,12 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     });
     
     if (!exists) {
+      // #region agent log
+      try {
+        final logFile = File('c:\\rarebooks\\.cursor\\debug.log');
+        logFile.writeAsStringSync(json.encode({'location':'messages_provider.dart:914','message':'H5: Adding as NEW message (dedup failed)','data':{'messageId':message.id,'clientMessageId':message.clientMessageId,'localId':message.localId,'content':message.content,'beforeCount':state.messages.length},'timestamp':DateTime.now().millisecondsSinceEpoch,'sessionId':'debug-session','hypothesisId':'H5'}) + '\n', mode: FileMode.append);
+      } catch (e) {}
+      // #endregion
       // Add new message and sort by date
       final newMessages = [...state.messages, message];
       newMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));

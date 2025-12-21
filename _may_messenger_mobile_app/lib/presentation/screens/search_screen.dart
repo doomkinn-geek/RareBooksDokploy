@@ -2,17 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/search_provider.dart';
 import '../providers/auth_provider.dart';
+import '../../core/utils/error_formatter.dart';
 import 'chat_screen.dart';
-
-String formatUserFriendlyError(dynamic error) {
-  if (error.toString().contains('Failed host lookup')) {
-    return 'Нет подключения к интернету';
-  }
-  if (error.toString().contains('timeout')) {
-    return 'Сервер не отвечает';
-  }
-  return 'Произошла ошибка';
-}
 
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});

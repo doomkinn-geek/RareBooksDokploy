@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/chat_model.dart';
 import '../../data/models/message_model.dart';
+import '../../core/utils/error_formatter.dart';
 import 'auth_provider.dart';
 
 final chatsProvider = StateNotifierProvider<ChatsNotifier, ChatsState>((ref) {
