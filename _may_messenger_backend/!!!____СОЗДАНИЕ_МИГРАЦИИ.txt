@@ -1,0 +1,1 @@
+cd c:\rarebooks\_may_messenger_backend\src\MayMessenger.Infrastructure && dotnet ef migrations add AddPlayedAtToMessages --startup-project ../MayMessenger.API
