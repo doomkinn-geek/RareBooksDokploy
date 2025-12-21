@@ -23,6 +23,16 @@ export const messagesApi = {
     return await apiClient.postFormData<Message>(API_ENDPOINTS.MESSAGES.SEND_AUDIO, formData);
   },
 
+  async sendImageMessage(token: string, chatId: string, imageFile: any): Promise<Message> {
+    apiClient.setToken(token);
+    
+    const formData = new FormData();
+    formData.append('chatId', chatId);
+    formData.append('imageFile', imageFile);
+    
+    return await apiClient.postFormData<Message>(API_ENDPOINTS.MESSAGES.SEND_IMAGE, formData);
+  },
+
   async markAsRead(token: string, messageIds: string[]): Promise<void> {
     apiClient.setToken(token);
     await apiClient.post(API_ENDPOINTS.MESSAGES.MARK_READ, messageIds);

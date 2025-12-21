@@ -1,18 +1,22 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'audio_recorder_widget.dart';
+import 'image_picker_buttons.dart';
 
 enum RecordingState { idle, recording, locked }
+enum HapticType { light, medium, heavy, selection }
 
 class MessageInput extends StatefulWidget {
   final String chatId;
   final bool isSending;
   final Function(String) onSendMessage;
   final Function(String) onSendAudio;
+  final Function(String) onSendImage;
 
   const MessageInput({
     super.key,
@@ -20,6 +24,7 @@ class MessageInput extends StatefulWidget {
     required this.isSending,
     required this.onSendMessage,
     required this.onSendAudio,
+    required this.onSendImage,
   });
 
   @override
@@ -88,6 +93,9 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
       }
     }
 
+    // Haptic feedback on start
+    _triggerHaptic(HapticType.medium);
+
     try {
       if (await _audioRecorder.hasPermission()) {
         // Reset duration BEFORE starting to avoid showing old value
@@ -142,6 +150,9 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
   Future<void> _sendAudio() async {
     if (_recordingState != RecordingState.recording) return;
     
+    // Haptic feedback on send
+    _triggerHaptic(HapticType.light);
+    
     await _stopRecording();
     _scaleController?.reverse();
     _slideController?.reverse();
@@ -162,6 +173,9 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
   }
 
   Future<void> _cancelRecording() async {
+    // Haptic feedback on cancel
+    _triggerHaptic(HapticType.heavy);
+    
     await _stopRecording();
     _scaleController?.reverse();
     _slideController?.reverse();
@@ -182,6 +196,9 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
   }
 
   void _lockRecording() {
+    // Haptic feedback on lock
+    _triggerHaptic(HapticType.medium);
+    
     _scaleController?.reverse();
     _slideController?.reverse();
     setState(() {
@@ -191,6 +208,24 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
       _showCancelHint = false;
       _showLockHint = false;
     });
+  }
+
+  /// Trigger haptic feedback based on type
+  void _triggerHaptic(HapticType type) {
+    switch (type) {
+      case HapticType.light:
+        HapticFeedback.lightImpact();
+        break;
+      case HapticType.medium:
+        HapticFeedback.mediumImpact();
+        break;
+      case HapticType.heavy:
+        HapticFeedback.heavyImpact();
+        break;
+      case HapticType.selection:
+        HapticFeedback.selectionClick();
+        break;
+    }
   }
 
   @override
@@ -286,6 +321,12 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          // Image picker buttons
+          ImagePickerButtons(
+            onImageSelected: (imagePath) {
+              widget.onSendImage(imagePath);
+            },
+          ),
           Expanded(
             child: TextField(
               controller: _textController,

@@ -59,6 +59,16 @@ class MessageRepository {
     );
   }
 
+  Future<Message> sendImageMessage({
+    required String chatId,
+    required String imagePath,
+  }) async {
+    return await _apiDataSource.sendImageMessage(
+      chatId: chatId,
+      imagePath: imagePath,
+    );
+  }
+
   Future<void> deleteMessage(String messageId) async {
     await _apiDataSource.deleteMessage(messageId);
     // Note: Local cache will be updated via SignalR notification
@@ -66,6 +76,10 @@ class MessageRepository {
 
   Future<void> batchMarkAsRead(List<String> messageIds) async {
     await _apiDataSource.batchMarkAsRead(messageIds);
+  }
+
+  Future<void> markAudioAsPlayed(String messageId) async {
+    await _apiDataSource.markAudioAsPlayed(messageId);
   }
 
   Future<List<Map<String, dynamic>>> getStatusUpdates({

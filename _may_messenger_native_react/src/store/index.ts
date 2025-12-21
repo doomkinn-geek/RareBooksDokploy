@@ -5,6 +5,7 @@ import chatsReducer from './slices/chatsSlice';
 import messagesReducer from './slices/messagesSlice';
 import signalrReducer from './slices/signalrSlice';
 import offlineReducer from './slices/offlineSlice';
+import contactsReducer from './slices/contactsSlice';
 
 export const store = configureStore({
   reducer: {
@@ -13,6 +14,7 @@ export const store = configureStore({
     messages: messagesReducer,
     signalr: signalrReducer,
     offline: offlineReducer,
+    contacts: contactsReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

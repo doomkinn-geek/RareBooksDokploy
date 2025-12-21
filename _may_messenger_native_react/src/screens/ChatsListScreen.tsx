@@ -5,8 +5,10 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useAppDispatch, useAppSelector } from '../store';
 import { fetchChats } from '../store/slices/chatsSlice';
+import { selectContactName } from '../store/slices/contactsSlice';
 import { formatMessageDate, getMessagePreview } from '../utils/helpers';
 import { RootStackParamList } from '../types';
+import Avatar from '../components/Avatar';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -15,6 +17,7 @@ const ChatsListScreen: React.FC = () => {
   const dispatch = useAppDispatch();
   const { list: chats, loading } = useAppSelector((state) => state.chats);
   const { token } = useAppSelector((state) => state.auth);
+  const contactsMapping = useAppSelector((state) => state.contacts.mapping);
 
   useEffect(() => {
     if (token) {
@@ -30,6 +33,14 @@ const ChatsListScreen: React.FC = () => {
     navigation.navigate('NewChat');
   };
 
+  const getDisplayTitle = (chat: any) => {
+    // For direct chats, try to get contact name from mapping
+    if (chat.type === 0 && chat.otherParticipantId) { // ChatType.Private = 0
+      return contactsMapping[chat.otherParticipantId] || chat.title;
+    }
+    return chat.title;
+  };
+
   if (loading && chats.length === 0) {
     return (
       <View style={styles.center}>
@@ -43,27 +54,31 @@ const ChatsListScreen: React.FC = () => {
       <FlatList
         data={chats}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity onPress={() => handleChatPress(item.id, item.title)}>
-            <List.Item
-              title={item.title}
-              description={item.lastMessage ? getMessagePreview(item.lastMessage) : 'Нет сообщений'}
-              left={(props) => <List.Icon {...props} icon="message-text" />}
-              right={() => (
-                <View style={styles.rightContainer}>
-                  {item.lastMessage && (
-                    <Text style={styles.time}>
-                      {formatMessageDate(item.lastMessage.createdAt)}
-                    </Text>
-                  )}
-                  {item.unreadCount > 0 && (
-                    <Badge style={styles.badge}>{item.unreadCount}</Badge>
-                  )}
-                </View>
-              )}
-            />
-          </TouchableOpacity>
-        )}
+        renderItem={({ item }) => {
+          const displayTitle = getDisplayTitle(item);
+          
+          return (
+            <TouchableOpacity onPress={() => handleChatPress(item.id, displayTitle)}>
+              <List.Item
+                title={displayTitle}
+                description={item.lastMessage ? getMessagePreview(item.lastMessage) : 'Нет сообщений'}
+                left={() => <Avatar name={displayTitle} size={48} />}
+                right={() => (
+                  <View style={styles.rightContainer}>
+                    {item.lastMessage && (
+                      <Text style={styles.time}>
+                        {formatMessageDate(item.lastMessage.createdAt)}
+                      </Text>
+                    )}
+                    {item.unreadCount > 0 && (
+                      <Badge style={styles.badge}>{item.unreadCount}</Badge>
+                    )}
+                  </View>
+                )}
+              />
+            </TouchableOpacity>
+          );
+        }}
         ListEmptyComponent={
           <View style={styles.center}>
             <Text>Нет чатов. Создайте новый!</Text>

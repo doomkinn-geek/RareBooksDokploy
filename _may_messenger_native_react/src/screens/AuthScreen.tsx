@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { TextInput, Button, Text, Surface, useTheme } from 'react-native-paper';
+import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Modal } from 'react-native';
+import { TextInput, Button, Text, Surface, useTheme, IconButton } from 'react-native-paper';
 import { useAppDispatch, useAppSelector } from '../store';
 import { loginUser, registerUser, clearError } from '../store/slices/authSlice';
+import QRScanner from '../components/QRScanner';
 
 const AuthScreen: React.FC = () => {
   const theme = useTheme();
@@ -14,6 +15,7 @@ const AuthScreen: React.FC = () => {
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [inviteCode, setInviteCode] = useState('');
+  const [showQRScanner, setShowQRScanner] = useState(false);
 
   const handleSubmit = () => {
     dispatch(clearError());
@@ -28,6 +30,11 @@ const AuthScreen: React.FC = () => {
   const toggleMode = () => {
     setIsLogin(!isLogin);
     dispatch(clearError());
+  };
+
+  const handleQRScan = (code: string) => {
+    setInviteCode(code);
+    setShowQRScanner(false);
   };
 
   return (
@@ -77,14 +84,23 @@ const AuthScreen: React.FC = () => {
           />
           
           {!isLogin && (
-            <TextInput
-              label="Код приглашения (опционально)"
-              value={inviteCode}
-              onChangeText={setInviteCode}
-              mode="outlined"
-              style={styles.input}
-              disabled={loading}
-            />
+            <View style={styles.inviteCodeContainer}>
+              <TextInput
+                label="Код приглашения (опционально)"
+                value={inviteCode}
+                onChangeText={setInviteCode}
+                mode="outlined"
+                style={styles.inviteInput}
+                disabled={loading}
+              />
+              <IconButton
+                icon="qrcode-scan"
+                size={28}
+                onPress={() => setShowQRScanner(true)}
+                disabled={loading}
+                style={styles.qrButton}
+              />
+            </View>
           )}
           
           {error && (
@@ -109,6 +125,17 @@ const AuthScreen: React.FC = () => {
             {isLogin ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
           </Button>
         </Surface>
+
+        <Modal
+          visible={showQRScanner}
+          animationType="slide"
+          onRequestClose={() => setShowQRScanner(false)}
+        >
+          <QRScanner
+            onScan={handleQRScan}
+            onClose={() => setShowQRScanner(false)}
+          />
+        </Modal>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -136,6 +163,18 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: 16,
+  },
+  inviteCodeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  inviteInput: {
+    flex: 1,
+    marginBottom: 0,
+  },
+  qrButton: {
+    marginLeft: 8,
   },
   button: {
     marginTop: 8,

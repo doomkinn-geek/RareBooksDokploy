@@ -1,6 +1,7 @@
 enum MessageType {
   text,
   audio,
+  image,
 }
 
 enum MessageStatus {
@@ -9,6 +10,7 @@ enum MessageStatus {
   delivered,
   read,
   failed,
+  played, // For audio messages that have been played
 }
 
 class Message {
@@ -20,6 +22,7 @@ class Message {
   final String? content;
   final String? filePath;
   final String? localAudioPath;
+  final String? localImagePath;
   final MessageStatus status;
   final DateTime createdAt;
   final String? localId; // Client-side UUID for tracking before server confirms
@@ -34,6 +37,7 @@ class Message {
     this.content,
     this.filePath,
     this.localAudioPath,
+    this.localImagePath,
     required this.status,
     required this.createdAt,
     this.localId,
@@ -50,6 +54,7 @@ class Message {
       content: json['content'],
       filePath: json['filePath'],
       localAudioPath: json['localAudioPath'],
+      localImagePath: json['localImagePath'],
       status: MessageStatus.values[json['status']],
       createdAt: DateTime.parse(json['createdAt']),
       localId: json['localId'],
@@ -67,6 +72,7 @@ class Message {
       'content': content,
       'filePath': filePath,
       'localAudioPath': localAudioPath,
+      'localImagePath': localImagePath,
       'status': status.index,
       'createdAt': createdAt.toIso8601String(),
       'localId': localId,
@@ -83,6 +89,7 @@ class Message {
     String? content,
     String? filePath,
     String? localAudioPath,
+    String? localImagePath,
     MessageStatus? status,
     DateTime? createdAt,
     String? localId,
@@ -97,6 +104,7 @@ class Message {
       content: content ?? this.content,
       filePath: filePath ?? this.filePath,
       localAudioPath: localAudioPath ?? this.localAudioPath,
+      localImagePath: localImagePath ?? this.localImagePath,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       localId: localId ?? this.localId,

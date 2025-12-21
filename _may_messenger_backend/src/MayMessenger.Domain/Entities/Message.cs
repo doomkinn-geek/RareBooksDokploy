@@ -12,6 +12,7 @@ public class Message : BaseEntity
     public MessageStatus Status { get; set; } = MessageStatus.Sending;
     public DateTime? DeliveredAt { get; set; }
     public DateTime? ReadAt { get; set; }
+    public DateTime? PlayedAt { get; set; }  // For audio messages
     
     // Client-side generated ID for idempotency
     public string? ClientMessageId { get; set; }

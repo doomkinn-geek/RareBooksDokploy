@@ -30,6 +30,7 @@ export const API_ENDPOINTS = {
     GET: (chatId: string) => `/messages/${chatId}`,
     SEND: '/messages',
     SEND_AUDIO: '/messages/audio',
+    SEND_IMAGE: '/messages/image',
     MARK_READ: '/messages/mark-read',
     DELETE: (messageId: string) => `/messages/${messageId}`,
   },

@@ -19,6 +19,7 @@ public class MessagesController : ControllerBase
     private readonly IWebHostEnvironment _environment;
     private readonly IHubContext<ChatHub> _hubContext;
     private readonly MayMessenger.Application.Services.IFirebaseService _firebaseService;
+    private readonly MayMessenger.Application.Services.IImageCompressionService _imageCompressionService;
     private readonly ILogger<MessagesController> _logger;
     
     public MessagesController(
@@ -26,12 +27,14 @@ public class MessagesController : ControllerBase
         IWebHostEnvironment environment, 
         IHubContext<ChatHub> hubContext,
         MayMessenger.Application.Services.IFirebaseService firebaseService,
+        MayMessenger.Application.Services.IImageCompressionService imageCompressionService,
         ILogger<MessagesController> logger)
     {
         _unitOfWork = unitOfWork;
         _environment = environment;
         _hubContext = hubContext;
         _firebaseService = firebaseService;
+        _imageCompressionService = imageCompressionService;
         _logger = logger;
     }
     
@@ -449,65 +452,73 @@ public class MessagesController : ControllerBase
         if (!allowedExtensions.Contains(extension))
             return BadRequest("Invalid image format. Allowed: jpg, jpeg, png, gif, webp");
         
-        // Validate image size (10MB max)
+        // Validate image size (10MB max for upload)
         if (imageFile.Length > 10 * 1024 * 1024)
             return BadRequest("Image size must be less than 10MB");
         
-        // Save image file
-        var uploadsFolder = Path.Combine(_environment.WebRootPath, "images");
-        Directory.CreateDirectory(uploadsFolder);
-        
-        var fileName = $"{Guid.NewGuid()}{extension}";
-        var filePath = Path.Combine(uploadsFolder, fileName);
-        
-        using (var stream = new FileStream(filePath, FileMode.Create))
+        try
         {
-            await imageFile.CopyToAsync(stream);
-        }
-        
-        var message = new Message
-        {
-            ChatId = chatId,
-            SenderId = userId,
-            Type = MessageType.Image,
-            FilePath = $"/images/{fileName}",
-            Status = MessageStatus.Sent
-        };
-        
-        await _unitOfWork.Messages.AddAsync(message);
-        await _unitOfWork.SaveChangesAsync();
-        
-        var sender = await _unitOfWork.Users.GetByIdAsync(userId);
-        if (sender == null)
-        {
-            _logger.LogError($"User {userId} not found after sending image message");
-            return StatusCode(500, "Internal server error: User not found");
-        }
-        
-        var messageDto = new MessageDto
-        {
-            Id = message.Id,
-            ChatId = message.ChatId,
-            SenderId = message.SenderId,
-            SenderName = sender.DisplayName,
-            Type = message.Type,
-            Content = message.Content,
-            FilePath = message.FilePath,
-            Status = message.Status,
-            CreatedAt = message.CreatedAt
-        };
-        
-        // Send SignalR notification ONLY to group
-        var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
-        if (chat != null)
-        {
-            await _hubContext.Clients.Group(chatId.ToString()).SendAsync("ReceiveMessage", messageDto);
+            // Compress and save image
+            var uploadsFolder = Path.Combine(_environment.WebRootPath, "images");
             
-            // Send push notifications to offline users
-            await SendPushNotificationsAsync(chat, sender, messageDto);
+            string fileName;
+            using (var stream = imageFile.OpenReadStream())
+            {
+                fileName = await _imageCompressionService.CompressAndSaveImageAsync(
+                    stream, 
+                    imageFile.FileName, 
+                    uploadsFolder);
+            }
+            
+            var message = new Message
+            {
+                ChatId = chatId,
+                SenderId = userId,
+                Type = MessageType.Image,
+                FilePath = $"/images/{fileName}",
+                Status = MessageStatus.Sent
+            };
+            
+            await _unitOfWork.Messages.AddAsync(message);
+            await _unitOfWork.SaveChangesAsync();
+            
+            var sender = await _unitOfWork.Users.GetByIdAsync(userId);
+            if (sender == null)
+            {
+                _logger.LogError($"User {userId} not found after sending image message");
+                return StatusCode(500, "Internal server error: User not found");
+            }
+            
+            var messageDto = new MessageDto
+            {
+                Id = message.Id,
+                ChatId = message.ChatId,
+                SenderId = message.SenderId,
+                SenderName = sender.DisplayName,
+                Type = message.Type,
+                Content = message.Content,
+                FilePath = message.FilePath,
+                Status = message.Status,
+                CreatedAt = message.CreatedAt
+            };
+            
+            // Send SignalR notification ONLY to group
+            var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+            if (chat != null)
+            {
+                await _hubContext.Clients.Group(chatId.ToString()).SendAsync("ReceiveMessage", messageDto);
+                
+                // Send push notifications to offline users
+                await SendPushNotificationsAsync(chat, sender, messageDto);
+            }
+            
+            return Ok(messageDto);
         }
-        
-        return Ok(messageDto);
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing image message");
+            return StatusCode(500, "Error processing image");
+        }
     }
 
     /// <summary>
@@ -710,6 +721,50 @@ public class MessagesController : ControllerBase
         
         await _unitOfWork.SaveChangesAsync();
         return Ok(new { message = $"Marked {messageIds.Count} messages as read" });
+    }
+    
+    /// <summary>
+    /// Mark audio message as played
+    /// </summary>
+    [HttpPost("{messageId}/played")]
+    public async Task<IActionResult> MarkAsPlayed(Guid messageId)
+    {
+        var userId = GetCurrentUserId();
+        var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
+        
+        if (message == null)
+        {
+            return NotFound(new { message = "Message not found" });
+        }
+        
+        // Only mark audio messages as played
+        if (message.Type != MessageType.Audio)
+        {
+            return BadRequest(new { message = "Only audio messages can be marked as played" });
+        }
+        
+        // Don't mark own messages as played
+        if (message.SenderId == userId)
+        {
+            return Ok(new { message = "Cannot mark own message as played" });
+        }
+        
+        // Update status to Played if not already
+        if (message.Status != MessageStatus.Played)
+        {
+            message.Status = MessageStatus.Played;
+            message.PlayedAt = DateTime.UtcNow;
+            await _unitOfWork.Messages.UpdateAsync(message);
+            await _unitOfWork.SaveChangesAsync();
+            
+            // Notify via SignalR
+            await _hubContext.Clients.Group(message.ChatId.ToString())
+                .SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Played);
+            
+            _logger.LogInformation($"Marked audio message {messageId} as played by user {userId}");
+        }
+        
+        return Ok(new { message = "Audio message marked as played" });
     }
     
     [HttpDelete("{messageId}")]

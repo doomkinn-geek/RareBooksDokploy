@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../data/models/message_model.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/services/logger_service.dart';
@@ -10,6 +11,9 @@ import '../providers/profile_provider.dart';
 import '../providers/contacts_names_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/messages_provider.dart';
+import 'fullscreen_image_viewer.dart';
+import 'audio_waveform.dart';
+import 'audio_player_manager.dart';
 
 class MessageBubble extends ConsumerStatefulWidget {
   final Message message;
@@ -24,6 +28,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   final _logger = LoggerService();
   bool _isPlaying = false;
+  bool _hasMarkedAsPlayed = false; // Track if we've already marked as played
   Duration? _duration;
   Duration? _position;
 
@@ -47,6 +52,13 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         _isPlaying = state.playing;
       });
       
+      // Mark as played when first started playing (and user is not the sender)
+      if (state.playing && 
+          !_hasMarkedAsPlayed && 
+          widget.message.type == MessageType.audio) {
+        _markAudioAsPlayed();
+      }
+      
       // Сброс при окончании воспроизведения
       if (state.processingState == ProcessingState.completed) {
         _audioPlayer.seek(Duration.zero);
@@ -56,10 +68,20 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   }
 
   Future<void> _playPauseAudio() async {
+    final playerManager = ref.read(audioPlayerManagerProvider);
+    
     try {
       if (_isPlaying) {
         await _audioPlayer.pause();
+        playerManager.unregisterPlayer(widget.message.id);
       } else {
+        // Register this player and stop others
+        playerManager.registerPlayer(widget.message.id, () async {
+          if (_isPlaying) {
+            await _audioPlayer.pause();
+          }
+        });
+        
         if (_audioPlayer.processingState == ProcessingState.idle) {
           // 1. Check for local audio file first
           final audioStorageService = ref.read(audioStorageServiceProvider);
@@ -191,6 +213,13 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           size: 14,
           color: Colors.green,
         );
+      case MessageStatus.played:
+        // Синяя иконка динамика - воспроизведено (для аудио)
+        return const Icon(
+          Icons.volume_up,
+          size: 14,
+          color: Colors.blue,
+        );
       case MessageStatus.failed:
         // Red error icon with retry functionality
         return GestureDetector(
@@ -215,6 +244,204 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             ],
           ),
         );
+    }
+  }
+
+  Widget _buildMessageContent(BuildContext context, bool isMe) {
+    switch (widget.message.type) {
+      case MessageType.text:
+        return Text(
+          widget.message.content ?? '',
+          style: TextStyle(
+            color: isMe ? Colors.white : null,
+          ),
+        );
+      
+      case MessageType.audio:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: Icon(
+                _isPlaying ? Icons.pause : Icons.play_arrow,
+                color: isMe ? Colors.white : null,
+                size: 28,
+              ),
+              onPressed: _playPauseAudio,
+            ),
+            Expanded(
+              child: GestureDetector(
+                onTapDown: (details) => _seekAudio(details, isMe),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AudioWaveform(
+                      progress: _duration != null && _position != null && _duration!.inMilliseconds > 0
+                          ? _position!.inMilliseconds / _duration!.inMilliseconds
+                          : 0.0,
+                      activeColor: isMe ? Colors.white : Theme.of(context).colorScheme.primary,
+                      inactiveColor: isMe ? Colors.white30 : Colors.grey[300]!,
+                      height: 30,
+                      barsCount: 25,
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _position != null
+                              ? '${_position!.inMinutes}:${(_position!.inSeconds % 60).toString().padLeft(2, '0')}'
+                              : '0:00',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isMe ? Colors.white70 : Colors.grey[600],
+                          ),
+                        ),
+                        Text(
+                          _duration != null
+                              ? '${_duration!.inMinutes}:${(_duration!.inSeconds % 60).toString().padLeft(2, '0')}'
+                              : '0:00',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isMe ? Colors.white70 : Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      
+      case MessageType.image:
+        return GestureDetector(
+          onTap: () => _showFullScreenImage(context),
+          child: _buildImageWidget(),
+        );
+    }
+  }
+
+  Widget _buildImageWidget() {
+    // Check if we have local image first
+    if (widget.message.localImagePath != null && 
+        File(widget.message.localImagePath!).existsSync()) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.file(
+          File(widget.message.localImagePath!),
+          width: 200,
+          height: 200,
+          fit: BoxFit.cover,
+        ),
+      );
+    }
+    
+    // Otherwise use network image
+    final imageUrl = widget.message.filePath != null
+        ? '${ApiConstants.baseUrl}${widget.message.filePath}'
+        : null;
+    
+    if (imageUrl != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
+          width: 200,
+          height: 200,
+          fit: BoxFit.cover,
+          placeholder: (context, url) => Container(
+            width: 200,
+            height: 200,
+            color: Colors.grey[300],
+            child: const Center(
+              child: CircularProgressIndicator(),
+            ),
+          ),
+          errorWidget: (context, url, error) => Container(
+            width: 200,
+            height: 200,
+            color: Colors.grey[300],
+            child: const Center(
+              child: Icon(Icons.error_outline, size: 48),
+            ),
+          ),
+        ),
+      );
+    }
+    
+    return Container(
+      width: 200,
+      height: 200,
+      color: Colors.grey[300],
+      child: const Center(
+        child: Text('Изображение недоступно'),
+      ),
+    );
+  }
+
+  void _showFullScreenImage(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => FullScreenImageViewer(
+          imageUrl: widget.message.filePath != null
+              ? '${ApiConstants.baseUrl}${widget.message.filePath}'
+              : null,
+          localPath: widget.message.localImagePath,
+          senderName: widget.message.senderName,
+          createdAt: widget.message.createdAt,
+        ),
+      ),
+    );
+  }
+
+  void _seekAudio(TapDownDetails details, bool isMe) {
+    if (_duration == null || _duration!.inMilliseconds == 0) return;
+    
+    // Calculate the tap position relative to the waveform width
+    final RenderBox box = context.findRenderObject() as RenderBox;
+    final localPosition = box.globalToLocal(details.globalPosition);
+    
+    // Get the waveform area (account for play button width ~48px and padding)
+    final waveformStartX = 48.0;
+    final waveformWidth = box.size.width - waveformStartX - 16.0;
+    
+    if (localPosition.dx < waveformStartX) return;
+    
+    final tapX = localPosition.dx - waveformStartX;
+    final progress = (tapX / waveformWidth).clamp(0.0, 1.0);
+    
+    final seekPosition = Duration(
+      milliseconds: (_duration!.inMilliseconds * progress).round(),
+    );
+    
+    _audioPlayer.seek(seekPosition);
+  }
+
+  Future<void> _markAudioAsPlayed() async {
+    if (_hasMarkedAsPlayed) return;
+    
+    final profileState = ref.read(profileProvider);
+    final currentUserId = profileState.profile?.id;
+    
+    // Don't mark own messages as played
+    if (currentUserId == null || widget.message.senderId == currentUserId) {
+      return;
+    }
+    
+    _hasMarkedAsPlayed = true;
+    
+    try {
+      // Call API to mark as played
+      await ref.read(messagesProvider(widget.message.chatId).notifier)
+          .markAudioAsPlayed(widget.message.id);
+    } catch (e) {
+      _logger.debug('message_bubble', 'Failed to mark audio as played: $e', {
+        'messageId': widget.message.id
+      });
+      // Reset flag to retry later
+      _hasMarkedAsPlayed = false;
     }
   }
 
@@ -338,53 +565,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                 ),
               ),
             const SizedBox(height: 4),
-            widget.message.type == MessageType.text
-                ? Text(
-                    widget.message.content ?? '',
-                    style: TextStyle(
-                      color: isMe ? Colors.white : null,
-                    ),
-                  )
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: Icon(
-                          _isPlaying ? Icons.pause : Icons.play_arrow,
-                          color: isMe ? Colors.white : null,
-                        ),
-                        onPressed: _playPauseAudio,
-                      ),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            LinearProgressIndicator(
-                              value: _duration != null && _position != null
-                                  ? _position!.inMilliseconds /
-                                      _duration!.inMilliseconds
-                                  : 0,
-                              backgroundColor: isMe
-                                  ? Colors.white30
-                                  : Colors.grey[300],
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                isMe ? Colors.white : Theme.of(context).colorScheme.primary,
-                              ),
-                            ),
-                            Text(
-                              _duration != null
-                                  ? '${_duration!.inMinutes}:${(_duration!.inSeconds % 60).toString().padLeft(2, '0')}'
-                                  : '0:00',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isMe ? Colors.white70 : Colors.grey[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+            _buildMessageContent(context, isMe),
             const SizedBox(height: 4),
             Row(
               mainAxisSize: MainAxisSize.min,

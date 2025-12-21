@@ -175,6 +175,26 @@ class ApiDataSource {
     }
   }
 
+  Future<Message> sendImageMessage({
+    required String chatId,
+    required String imagePath,
+  }) async {
+    try {
+      final formData = FormData.fromMap({
+        'chatId': chatId,
+        'imageFile': await MultipartFile.fromFile(imagePath),
+      });
+
+      final response = await _dio.post(
+        ApiConstants.imageMessages,
+        data: formData,
+      );
+      return Message.fromJson(response.data);
+    } catch (e) {
+      throw Exception('Failed to send image message: $e');
+    }
+  }
+
   Future<void> deleteMessage(String messageId) async {
     try {
       await _dio.delete('${ApiConstants.messages}/$messageId');
@@ -191,6 +211,16 @@ class ApiDataSource {
       );
     } catch (e) {
       throw Exception('Failed to batch mark as read: $e');
+    }
+  }
+
+  Future<void> markAudioAsPlayed(String messageId) async {
+    try {
+      await _dio.post(
+        '${ApiConstants.messages}/$messageId/played',
+      );
+    } catch (e) {
+      throw Exception('Failed to mark audio as played: $e');
     }
   }
 

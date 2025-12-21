@@ -14,6 +14,7 @@ class ApiConstants {
   static const String chats = '/chats';
   static const String messages = '/messages';
   static const String audioMessages = '/messages/audio';
+  static const String imageMessages = '/messages/image';
 }
 
 

@@ -184,6 +184,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   .read(messagesProvider(widget.chatId).notifier)
                   .sendAudioMessage(audioPath);
             },
+            onSendImage: (imagePath) {
+              ref
+                  .read(messagesProvider(widget.chatId).notifier)
+                  .sendImageMessage(imagePath);
+            },
           ),
         ],
       ),

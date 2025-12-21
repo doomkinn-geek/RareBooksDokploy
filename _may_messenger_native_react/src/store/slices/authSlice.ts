@@ -1,8 +1,28 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User, LoginRequest, RegisterRequest, AuthResponse } from '../../types';
+import { jwtDecode } from 'jwt-decode';
+import { User, LoginRequest, RegisterRequest, AuthResponse, UserRole } from '../../types';
 import { STORAGE_KEYS } from '../../utils/constants';
 import { authApi } from '../../api/authApi';
+
+interface JWTPayload {
+  sub: string;
+  'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/mobilephone': string;
+  'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name': string;
+  'http://schemas.microsoft.com/ws/2008/06/identity/claims/role': string;
+  exp: number;
+}
+
+function decodeUserFromToken(token: string): User {
+  const decoded = jwtDecode<JWTPayload>(token);
+  return {
+    id: decoded.sub,
+    phoneNumber: decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/mobilephone'],
+    displayName: decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name'],
+    role: decoded['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] === 'Admin' ? UserRole.Admin : UserRole.User,
+    createdAt: new Date().toISOString(),
+  };
+}
 
 interface AuthState {
   user: User | null;
@@ -30,7 +50,9 @@ export const loginUser = createAsyncThunk(
       if (response.success && response.token) {
         // Save token to AsyncStorage
         await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, response.token);
-        return { token: response.token };
+        const user = decodeUserFromToken(response.token);
+        await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(user));
+        return { token: response.token, user };
       } else {
         return rejectWithValue(response.message || 'Login failed');
       }
@@ -49,7 +71,9 @@ export const registerUser = createAsyncThunk(
       if (response.success && response.token) {
         // Save token to AsyncStorage
         await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, response.token);
-        return { token: response.token };
+        const user = decodeUserFromToken(response.token);
+        await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(user));
+        return { token: response.token, user };
       } else {
         return rejectWithValue(response.message || 'Registration failed');
       }
@@ -64,9 +88,18 @@ export const loadStoredAuth = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const token = await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+      const userData = await AsyncStorage.getItem(STORAGE_KEYS.USER_DATA);
       
       if (token) {
-        return { token };
+        let user: User | null = null;
+        if (userData) {
+          user = JSON.parse(userData);
+        } else {
+          // Decode from token if user data not saved
+          user = decodeUserFromToken(token);
+          await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(user));
+        }
+        return { token, user };
       } else {
         return rejectWithValue('No stored token');
       }
@@ -106,6 +139,7 @@ const authSlice = createSlice({
     builder.addCase(loginUser.fulfilled, (state, action) => {
       state.loading = false;
       state.token = action.payload.token;
+      state.user = action.payload.user;
       state.isAuthenticated = true;
     });
     builder.addCase(loginUser.rejected, (state, action) => {
@@ -122,6 +156,7 @@ const authSlice = createSlice({
     builder.addCase(registerUser.fulfilled, (state, action) => {
       state.loading = false;
       state.token = action.payload.token;
+      state.user = action.payload.user;
       state.isAuthenticated = true;
     });
     builder.addCase(registerUser.rejected, (state, action) => {
@@ -137,6 +172,7 @@ const authSlice = createSlice({
     builder.addCase(loadStoredAuth.fulfilled, (state, action) => {
       state.loading = false;
       state.token = action.payload.token;
+      state.user = action.payload.user;
       state.isAuthenticated = true;
     });
     builder.addCase(loadStoredAuth.rejected, (state) => {

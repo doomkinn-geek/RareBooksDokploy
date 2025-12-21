@@ -3,6 +3,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useAppSelector, useAppDispatch } from '../store';
 import { loadStoredAuth } from '../store/slices/authSlice';
+import { syncContacts } from '../store/slices/contactsSlice';
+import { signalrService } from '../services/signalrService';
+import { fcmService } from '../services/fcmService';
 import AuthScreen from '../screens/AuthScreen';
 import MainNavigator from './MainNavigator';
 import ChatScreen from '../screens/ChatScreen';
@@ -13,12 +16,64 @@ const Stack = createStackNavigator<RootStackParamList>();
 
 const RootNavigator: React.FC = () => {
   const dispatch = useAppDispatch();
-  const { isAuthenticated, loading } = useAppSelector((state) => state.auth);
+  const { isAuthenticated, loading, token } = useAppSelector((state) => state.auth);
+  const contactsSynced = useAppSelector((state) => state.contacts.synced);
 
   useEffect(() => {
     // Load stored auth on app start
     dispatch(loadStoredAuth());
   }, [dispatch]);
+
+  // Connect to SignalR and sync contacts when authenticated
+  useEffect(() => {
+    if (isAuthenticated && token) {
+      // Connect to SignalR
+      signalrService.connect(token).catch((error) => {
+        console.error('Failed to connect to SignalR:', error);
+      });
+
+      // Sync contacts after login
+      if (!contactsSynced) {
+        dispatch(syncContacts({ token }));
+      }
+
+      // Setup FCM
+      const setupFCM = async () => {
+        try {
+          const hasPermission = await fcmService.requestPermission();
+          if (hasPermission) {
+            await fcmService.registerToken(token);
+          }
+
+          // Setup notification listeners
+          fcmService.setupListeners(
+            (message) => {
+              // Foreground message received
+              console.log('Foreground notification:', message);
+              // Show local notification or update UI
+            },
+            (message) => {
+              // Notification tapped
+              console.log('Notification tapped:', message);
+              // Navigate to chat if data contains chatId
+              const chatId = message.data?.chatId;
+              if (chatId) {
+                // You can use navigation here to open the chat
+              }
+            }
+          );
+        } catch (error) {
+          console.error('[RootNavigator] Failed to setup FCM:', error);
+        }
+      };
+
+      setupFCM();
+
+      return () => {
+        signalrService.disconnect();
+      };
+    }
+  }, [isAuthenticated, token, contactsSynced, dispatch]);
 
   if (loading) {
     return null; // Show splash screen or loading indicator

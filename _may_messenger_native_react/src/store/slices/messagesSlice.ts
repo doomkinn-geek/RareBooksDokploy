@@ -53,6 +53,49 @@ export const sendTextMessage = createAsyncThunk(
   }
 );
 
+export const sendAudioMessage = createAsyncThunk(
+  'messages/sendAudio',
+  async ({ token, chatId, audioUri }: { token: string; chatId: string; audioUri: string }, { rejectWithValue }) => {
+    try {
+      const localId = generateUUID();
+      
+      // Prepare audio file for upload
+      const fileName = `audio_${Date.now()}.m4a`;
+      const audioFile = {
+        uri: audioUri,
+        type: 'audio/m4a',
+        name: fileName,
+      };
+
+      const response = await messagesApi.sendAudioMessage(token, chatId, audioFile, fileName);
+      return { ...response, localId };
+    } catch (error: any) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+export const sendImageMessage = createAsyncThunk(
+  'messages/sendImage',
+  async ({ token, chatId, imageUri, imageType, imageName }: { token: string; chatId: string; imageUri: string; imageType: string; imageName: string }, { rejectWithValue }) => {
+    try {
+      const localId = generateUUID();
+      
+      // Prepare image file for upload
+      const imageFile = {
+        uri: imageUri,
+        type: imageType,
+        name: imageName,
+      };
+
+      const response = await messagesApi.sendImageMessage(token, chatId, imageFile);
+      return { ...response, localId };
+    } catch (error: any) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
 export const markMessagesAsRead = createAsyncThunk(
   'messages/markAsRead',
   async ({ token, messageIds }: { token: string; messageIds: string[] }, { rejectWithValue }) => {
@@ -164,6 +207,22 @@ const messagesSlice = createSlice({
 
     // Send message fulfilled
     builder.addCase(sendTextMessage.fulfilled, (state, action) => {
+      const { localId } = action.payload;
+      if (localId) {
+        delete state.sending[localId];
+      }
+    });
+
+    // Send audio message fulfilled
+    builder.addCase(sendAudioMessage.fulfilled, (state, action) => {
+      const { localId } = action.payload;
+      if (localId) {
+        delete state.sending[localId];
+      }
+    });
+
+    // Send image message fulfilled
+    builder.addCase(sendImageMessage.fulfilled, (state, action) => {
       const { localId } = action.payload;
       if (localId) {
         delete state.sending[localId];

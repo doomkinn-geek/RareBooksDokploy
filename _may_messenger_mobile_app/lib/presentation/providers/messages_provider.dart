@@ -480,6 +480,84 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     }
   }
 
+  Future<void> _syncImageToBackend(String localId, String imagePath, {int attemptNumber = 0}) async {
+    const maxAttempts = 5;
+    final backoffDelays = [1, 2, 4, 8, 16, 30]; // seconds
+    
+    try {
+      print('[MSG_SEND] Syncing image to backend: $localId (attempt ${attemptNumber + 1}/$maxAttempts)');
+      
+      // Send via API
+      final serverMessage = await _messageRepository.sendImageMessage(
+        chatId: chatId,
+        imagePath: imagePath,
+      );
+      
+      print('[MSG_SEND] Image synced successfully. Server ID: ${serverMessage.id}');
+      
+      // Remove from pending sends
+      _pendingSends.remove(localId);
+      
+      // Update message in UI: replace local ID with server ID and update status
+      final messageIndex = state.messages.indexWhere((m) => m.id == localId);
+      if (messageIndex != -1) {
+        final updatedMessages = [...state.messages];
+        final finalServerMessage = serverMessage.copyWith(
+          localId: localId,
+          isLocalOnly: false,
+        );
+        updatedMessages[messageIndex] = finalServerMessage;
+        state = state.copyWith(messages: updatedMessages);
+        print('[MSG_SEND] Image message updated in UI with server ID: ${serverMessage.id}');
+        
+        // Update chat preview with server message
+        try {
+          _ref.read(chatsProvider.notifier).updateChatLastMessage(
+            chatId, 
+            finalServerMessage, 
+            incrementUnread: false,
+          );
+        } catch (e) {
+          print('[MSG_SEND] Failed to update chat preview with server message: $e');
+        }
+      }
+      
+    } catch (e) {
+      print('[MSG_SEND] Failed to sync image to backend (attempt ${attemptNumber + 1}): $e');
+      
+      // Check if we should retry
+      if (attemptNumber < maxAttempts - 1) {
+        final delaySeconds = attemptNumber < backoffDelays.length 
+            ? backoffDelays[attemptNumber] 
+            : backoffDelays.last;
+        
+        print('[MSG_SEND] Will retry in $delaySeconds seconds...');
+        
+        // Schedule retry with exponential backoff
+        Future.delayed(Duration(seconds: delaySeconds), () {
+          if (mounted) {
+            _syncImageToBackend(localId, imagePath, attemptNumber: attemptNumber + 1);
+          }
+        });
+      } else {
+        // Max attempts reached, mark as permanently failed
+        print('[MSG_SEND] Max retry attempts reached for image: $localId');
+        _pendingSends.remove(localId);
+        
+        // Update message status to failed in UI
+        final messageIndex = state.messages.indexWhere((m) => m.id == localId);
+        if (messageIndex != -1) {
+          final updatedMessages = [...state.messages];
+          updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
+            status: MessageStatus.failed,
+          );
+          state = state.copyWith(messages: updatedMessages);
+          print('[MSG_SEND] Image message marked as permanently failed in UI: $localId');
+        }
+      }
+    }
+  }
+
   Future<void> sendAudioMessage(String audioPath) async {
     print('[MSG_SEND] Starting local-first send for audio message');
     
@@ -561,6 +639,90 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
     } catch (e) {
       print('[MSG_SEND] Failed to create local audio message: $e');
+      if (localId != null) {
+        _pendingSends.remove(localId);
+      }
+      state = state.copyWith(
+        isSending: false,
+        error: e.toString(),
+      );
+    }
+  }
+
+  Future<void> sendImageMessage(String imagePath) async {
+    print('[MSG_SEND] Starting local-first send for image message');
+    
+    // Throttling: prevent too frequent sends
+    final now = DateTime.now();
+    if (_lastSendTime != null && now.difference(_lastSendTime!).inMilliseconds < 100) {
+      print('[MSG_SEND] Throttling: too frequent sends, waiting...');
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    _lastSendTime = now;
+    
+    state = state.copyWith(isSending: true);
+    
+    // Declare localId outside try block so it's accessible in catch
+    String? localId;
+    
+    try {
+      final profileState = _ref.read(profileProvider);
+      final currentUser = profileState.profile;
+      
+      if (currentUser == null) {
+        throw Exception('User not authenticated');
+      }
+      
+      // STEP 1: Create message locally with temporary ID
+      localId = _uuid.v4();
+      
+      // Check if this message is already being sent
+      if (_pendingSends.contains(localId)) {
+        print('[MSG_SEND] Message already being sent, skipping: $localId');
+        state = state.copyWith(isSending: false);
+        return;
+      }
+      
+      _pendingSends.add(localId);
+      
+      final localMessage = Message(
+        id: localId, // Temporary local ID
+        chatId: chatId,
+        senderId: currentUser.id,
+        senderName: currentUser.displayName,
+        type: MessageType.image,
+        localImagePath: imagePath,
+        status: MessageStatus.sending,
+        createdAt: now,
+        localId: localId,
+        isLocalOnly: true,
+      );
+      
+      // STEP 2: Add to UI immediately (optimistic update)
+      final updatedMessages = [...state.messages, localMessage];
+      updatedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      state = state.copyWith(messages: updatedMessages, isSending: false);
+      print('[MSG_SEND] Image message added to UI with local ID: $localId');
+      
+      // Add to LRU cache
+      _cache.put(localMessage);
+      
+      // Update chat preview immediately for better UX
+      try {
+        _ref.read(chatsProvider.notifier).updateChatLastMessage(
+          chatId, 
+          localMessage, 
+          incrementUnread: false,
+        );
+      } catch (e) {
+        print('[MSG_SEND] Failed to update chat preview: $e');
+      }
+      
+      // STEP 3: Send to backend asynchronously with clientMessageId
+      _syncImageToBackend(localId, imagePath);
+      
+    } catch (e) {
+      print('[MSG_SEND] Failed to create local image message: $e');
       if (localId != null) {
         _pendingSends.remove(localId);
       }
@@ -829,6 +991,27 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
     } catch (e) {
       print('[STATUS_UPDATE] Failed to mark messages as read: $e');
+    }
+  }
+
+  Future<void> markAudioAsPlayed(String messageId) async {
+    try {
+      // Call API to mark as played
+      await _messageRepository.markAudioAsPlayed(messageId);
+      
+      // Update local state
+      final messageIndex = state.messages.indexWhere((m) => m.id == messageId);
+      if (messageIndex != -1) {
+        final updatedMessages = [...state.messages];
+        updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
+          status: MessageStatus.played,
+        );
+        state = state.copyWith(messages: updatedMessages);
+        print('[STATUS_UPDATE] Marked audio message as played: $messageId');
+      }
+    } catch (e) {
+      print('[STATUS_UPDATE] Failed to mark audio as played: $e');
+      rethrow;
     }
   }
 
