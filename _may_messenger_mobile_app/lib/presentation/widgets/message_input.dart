@@ -45,6 +45,7 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
   AnimationController? _slideController;
   bool _showCancelHint = false;
   bool _showLockHint = false;
+  bool _hasText = false; // Track if text field has content
   
   @override
   void initState() {
@@ -57,6 +58,16 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
       vsync: this,
       duration: const Duration(milliseconds: 200),
     );
+    
+    // Listen to text changes to toggle send/mic button
+    _textController.addListener(() {
+      final hasText = _textController.text.trim().isNotEmpty;
+      if (_hasText != hasText) {
+        setState(() {
+          _hasText = hasText;
+        });
+      }
+    });
   }
 
   @override
@@ -235,15 +246,25 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
       return SafeArea(
         bottom: true,
         child: AudioRecorderWidget(
+          audioRecorder: _audioRecorder,
+          audioPath: _audioPath,
+          initialDuration: _recordDuration,
           onSend: (audioPath) {
             widget.onSendAudio(audioPath);
             setState(() {
               _recordingState = RecordingState.idle;
+              _audioPath = null;
+              _recordDuration = Duration.zero;
             });
           },
           onCancel: () {
+            if (_audioPath != null && File(_audioPath!).existsSync()) {
+              File(_audioPath!).delete();
+            }
             setState(() {
               _recordingState = RecordingState.idle;
+              _audioPath = null;
+              _recordDuration = Duration.zero;
             });
           },
         ),
@@ -347,48 +368,47 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
             ),
           ),
           const SizedBox(width: 8),
-          Builder(
-            builder: (context) {
-              return IconButton(
-                onPressed: widget.isSending ? null : _sendMessage,
-                icon: widget.isSending
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.send),
-                color: Theme.of(context).colorScheme.primary,
-              );
-            },
-          ),
-          GestureDetector(
-            onLongPressStart: (details) {
-              _startRecording();
-            },
-            child: ScaleTransition(
-              scale: Tween<double>(begin: 1.0, end: 1.3).animate(
-                CurvedAnimation(
-                  parent: _scaleController!,
-                  curve: Curves.elasticOut,
+          // Show send button if text exists, otherwise show mic button
+          if (_hasText)
+            IconButton(
+              onPressed: widget.isSending ? null : _sendMessage,
+              icon: widget.isSending
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.send),
+              color: Theme.of(context).colorScheme.primary,
+            )
+          else
+            GestureDetector(
+              onLongPressStart: (details) {
+                _startRecording();
+              },
+              child: ScaleTransition(
+                scale: Tween<double>(begin: 1.0, end: 1.3).animate(
+                  CurvedAnimation(
+                    parent: _scaleController!,
+                    curve: Curves.elasticOut,
+                  ),
                 ),
-              ),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: _recordingState == RecordingState.recording
-                    ? BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      )
-                    : null,
-                child: Icon(
-                  Icons.mic,
-                  size: 28,
-                  color: Theme.of(context).colorScheme.primary,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: _recordingState == RecordingState.recording
+                      ? BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        )
+                      : null,
+                  child: Icon(
+                    Icons.mic,
+                    size: 28,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );

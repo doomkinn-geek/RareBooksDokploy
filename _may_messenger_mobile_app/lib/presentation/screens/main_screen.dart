@@ -8,6 +8,7 @@ import 'chat_screen.dart';
 import 'settings_screen.dart';
 import 'create_group_screen.dart';
 import 'new_chat_screen.dart';
+import 'search_screen.dart';
 
 class MainScreen extends ConsumerStatefulWidget {
   const MainScreen({super.key});
@@ -16,20 +17,11 @@ class MainScreen extends ConsumerStatefulWidget {
   ConsumerState<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends ConsumerState<MainScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _MainScreenState extends ConsumerState<MainScreen> {
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    
-    // Обновляем UI при переключении вкладки (для изменения tooltip FAB)
-    _tabController.addListener(() {
-      if (mounted) {
-        setState(() {});
-      }
-    });
     
     // Загружаем чаты и контакты после того, как виджет смонтирован
     // В этот момент токен уже точно восстановлен
@@ -44,12 +36,6 @@ class _MainScreenState extends ConsumerState<MainScreen> with SingleTickerProvid
   }
 
   @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final chatsState = ref.watch(chatsProvider);
 
@@ -57,6 +43,16 @@ class _MainScreenState extends ConsumerState<MainScreen> with SingleTickerProvid
       appBar: AppBar(
         title: const Text('Депеша'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const SearchScreen(),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
@@ -68,56 +64,56 @@ class _MainScreenState extends ConsumerState<MainScreen> with SingleTickerProvid
             },
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Личные', icon: Icon(Icons.person)),
-            Tab(text: 'Группы', icon: Icon(Icons.group)),
-          ],
-        ),
       ),
       body: Column(
         children: [
           const ConnectionStatusBanner(),
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                // Private Tab
-                _buildChatList(chatsState.privateChats, chatsState.isLoading, chatsState.error),
-                // Groups Tab
-                _buildChatList(chatsState.groupChats, chatsState.isLoading, chatsState.error),
-              ],
-            ),
+            child: _buildChatList(chatsState.chats, chatsState.isLoading, chatsState.error),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // Определяем тип чата по текущей вкладке
-          // 0 = Личные, 1 = Группы
-          final isGroupChat = _tabController.index == 1;
-          
-          if (isGroupChat) {
-            // Для групп используем новый экран с контактами
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const CreateGroupScreen(),
-              ),
-            );
-          } else {
-            // Для личных чатов используем новый экран с контактами
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const NewChatScreen(),
-              ),
-            );
-          }
-        },
-        tooltip: _tabController.index == 0 
-            ? 'Создать личный чат' 
-            : 'Создать группу',
+        onPressed: () => _showCreateChatOptions(context),
+        tooltip: 'Создать чат',
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+  
+  void _showCreateChatOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('Личный чат'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const NewChatScreen(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.group),
+              title: const Text('Создать группу'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const CreateGroupScreen(),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -129,18 +125,32 @@ class _MainScreenState extends ConsumerState<MainScreen> with SingleTickerProvid
 
     if (error != null) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('Ошибка: $error'),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
-              },
-              child: const Text('Повторить'),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+              const SizedBox(height: 16),
+              const Text(
+                'Не удалось загрузить чаты',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                error,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+                },
+                child: const Text('Повторить'),
+              ),
+            ],
+          ),
         ),
       );
     }

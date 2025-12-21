@@ -81,8 +81,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
-    // Refresh chats list when leaving chat screen to update preview
-    ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+    // Don't force refresh chats here - let local updates handle it
+    // ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
     
     // Очистить текущий чат при выходе
     final notificationService = ref.read(notificationServiceProvider);

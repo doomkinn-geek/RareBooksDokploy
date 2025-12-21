@@ -129,5 +129,38 @@ public class UsersController : ControllerBase
         
         return Ok(userDtos);
     }
+    
+    /// <summary>
+    /// Поиск зарегистрированных пользователей по имени или номеру телефона
+    /// </summary>
+    [HttpGet("search")]
+    public async Task<ActionResult<IEnumerable<UserDto>>> SearchUsers([FromQuery] string query)
+    {
+        if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+        {
+            return BadRequest("Query must be at least 2 characters");
+        }
+        
+        var currentUserId = GetCurrentUserId();
+        var users = await _unitOfWork.Users.GetAllAsync();
+        
+        // Search by display name or phone number
+        var searchResults = users
+            .Where(u => u.Id != currentUserId && (
+                u.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                u.PhoneNumber.Contains(query)
+            ))
+            .Take(20) // Limit results
+            .Select(u => new UserDto
+            {
+                Id = u.Id,
+                PhoneNumber = u.PhoneNumber,
+                DisplayName = u.DisplayName,
+                Avatar = u.Avatar,
+                Role = u.Role
+            });
+        
+        return Ok(searchResults);
+    }
 }
 

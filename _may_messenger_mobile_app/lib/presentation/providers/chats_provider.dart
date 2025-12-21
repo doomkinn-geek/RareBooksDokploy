@@ -52,9 +52,10 @@ class ChatsNotifier extends StateNotifier<ChatsState> {
         isLoading: false,
       );
     } catch (e) {
+      final userFriendlyError = formatUserFriendlyError(e);
       state = state.copyWith(
         isLoading: false,
-        error: e.toString(),
+        error: userFriendlyError,
       );
     }
   }
@@ -71,7 +72,7 @@ class ChatsNotifier extends StateNotifier<ChatsState> {
       await loadChats(forceRefresh: true);
       return chat;
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      state = state.copyWith(error: formatUserFriendlyError(e));
       return null;
     }
   }
@@ -82,7 +83,7 @@ class ChatsNotifier extends StateNotifier<ChatsState> {
       // Chat will be removed from state via SignalR notification
     } catch (e) {
       print('[ChatsProvider] Failed to delete chat: $e');
-      state = state.copyWith(error: e.toString());
+      state = state.copyWith(error: formatUserFriendlyError(e));
       rethrow;
     }
   }

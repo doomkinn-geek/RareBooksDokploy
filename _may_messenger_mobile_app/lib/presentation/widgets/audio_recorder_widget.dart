@@ -5,6 +5,9 @@ import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 
 class AudioRecorderWidget extends StatefulWidget {
+  final AudioRecorder? audioRecorder; // External recorder (optional for continuing recording)
+  final String? audioPath; // Path to existing file (optional)
+  final Duration? initialDuration; // Already recorded duration (optional)
   final Function(String) onSend;
   final VoidCallback onCancel;
 
@@ -12,6 +15,9 @@ class AudioRecorderWidget extends StatefulWidget {
     super.key,
     required this.onSend,
     required this.onCancel,
+    this.audioRecorder,
+    this.audioPath,
+    this.initialDuration,
   });
 
   @override
@@ -19,7 +25,7 @@ class AudioRecorderWidget extends StatefulWidget {
 }
 
 class _AudioRecorderWidgetState extends State<AudioRecorderWidget> {
-  final AudioRecorder _audioRecorder = AudioRecorder();
+  late AudioRecorder _audioRecorder;
   String? _audioPath;
   Duration _duration = Duration.zero;
   Timer? _timer;
@@ -28,13 +34,37 @@ class _AudioRecorderWidgetState extends State<AudioRecorderWidget> {
   @override
   void initState() {
     super.initState();
-    _startRecording();
+    
+    // Check if we're continuing an existing recording
+    if (widget.audioRecorder != null && widget.audioPath != null && widget.initialDuration != null) {
+      // Continue existing recording
+      _audioRecorder = widget.audioRecorder!;
+      _audioPath = widget.audioPath;
+      _duration = widget.initialDuration!;
+      _isRecording = true;
+      
+      // Continue timer from current duration
+      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (mounted) {
+          setState(() {
+            _duration = widget.initialDuration! + Duration(seconds: timer.tick);
+          });
+        }
+      });
+    } else {
+      // Start new recording
+      _audioRecorder = AudioRecorder();
+      _startRecording();
+    }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
-    _audioRecorder.dispose();
+    // Only dispose recorder if we created it (not passed from external)
+    if (widget.audioRecorder == null) {
+      _audioRecorder.dispose();
+    }
     super.dispose();
   }
 

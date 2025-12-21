@@ -48,6 +48,10 @@ class ChatRepository {
   Future<void> updateChatLastMessageInCache(String chatId, Message message) async {
     await _localDataSource.updateChatLastMessage(chatId, message);
   }
+  
+  Future<Chat> createOrGetDirectChat(String targetUserId) async {
+    return await _apiDataSource.createOrGetDirectChat(targetUserId);
+  }
 }
 
 

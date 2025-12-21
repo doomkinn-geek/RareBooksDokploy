@@ -13,6 +13,7 @@ public class MessageDto
     public string? FilePath { get; set; }
     public MessageStatus Status { get; set; }
     public DateTime CreatedAt { get; set; }
+    public string? ClientMessageId { get; set; } // For deduplication on client
 }
 
 

@@ -73,7 +73,8 @@ public class MessagesController : ControllerBase
             Content = m.Content,
             FilePath = m.FilePath,
             Status = m.Status,
-            CreatedAt = m.CreatedAt
+            CreatedAt = m.CreatedAt,
+            ClientMessageId = m.ClientMessageId
         }));
     }
     
@@ -263,7 +264,8 @@ public class MessagesController : ControllerBase
             Content = m.Content,
             FilePath = m.FilePath,
             Status = m.Status,
-            CreatedAt = m.CreatedAt
+            CreatedAt = m.CreatedAt,
+            ClientMessageId = m.ClientMessageId
         });
         
         return Ok(messageDtos);
@@ -319,7 +321,8 @@ public class MessagesController : ControllerBase
                     Content = existingMessage.Content,
                     FilePath = existingMessage.FilePath,
                     Status = existingMessage.Status,
-                    CreatedAt = existingMessage.CreatedAt
+                    CreatedAt = existingMessage.CreatedAt,
+                    ClientMessageId = existingMessage.ClientMessageId
                 };
                 
                 return Ok(existingMessageDto);
@@ -357,7 +360,8 @@ public class MessagesController : ControllerBase
             Content = message.Content,
             FilePath = message.FilePath,
             Status = message.Status,
-            CreatedAt = message.CreatedAt
+            CreatedAt = message.CreatedAt,
+            ClientMessageId = message.ClientMessageId
         };
         
         // Send SignalR notification ONLY to group (not to individual users to avoid duplicates)
@@ -425,7 +429,8 @@ public class MessagesController : ControllerBase
             Content = message.Content,
             FilePath = message.FilePath,
             Status = message.Status,
-            CreatedAt = message.CreatedAt
+            CreatedAt = message.CreatedAt,
+            ClientMessageId = message.ClientMessageId
         };
         
         // Send SignalR notification ONLY to group (not to individual users to avoid duplicates)
@@ -897,6 +902,71 @@ public class MessagesController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, $"Error sending status update for message {messageId}");
+        }
+    }
+    
+    /// <summary>
+    /// Поиск сообщений по содержимому в чатах пользователя
+    /// </summary>
+    [HttpGet("search")]
+    public async Task<ActionResult<IEnumerable<MessageSearchResultDto>>> SearchMessages([FromQuery] string query)
+    {
+        if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+        {
+            return BadRequest("Query must be at least 2 characters");
+        }
+        
+        try
+        {
+            var userId = GetCurrentUserId();
+            
+            // Get all chats user participates in
+            var userChats = await _unitOfWork.Chats.GetUserChatsAsync(userId);
+            var chatIds = userChats.Select(c => c.Id).ToList();
+            
+            if (!chatIds.Any())
+            {
+                return Ok(new List<MessageSearchResultDto>());
+            }
+            
+            // Search messages in user's chats
+            var allMessages = new List<Message>();
+            foreach (var chatId in chatIds)
+            {
+                var messages = await _unitOfWork.Messages.GetChatMessagesAsync(chatId, 0, 200); // Get last 200 messages
+                allMessages.AddRange(messages);
+            }
+            
+            // Filter by query and group by chat
+            var searchResults = allMessages
+                .Where(m => m.Type == Domain.Enums.MessageType.Text && 
+                           m.Content != null && 
+                           m.Content.Contains(query, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(m => m.CreatedAt)
+                .Take(50) // Limit to 50 results
+                .GroupBy(m => m.ChatId)
+                .SelectMany(g => g.Take(3)) // Max 3 results per chat
+                .Select(m =>
+                {
+                    var chat = userChats.FirstOrDefault(c => c.Id == m.ChatId);
+                    return new MessageSearchResultDto
+                    {
+                        MessageId = m.Id,
+                        ChatId = m.ChatId,
+                        ChatTitle = chat?.Title ?? "Unknown Chat",
+                        MessageContent = m.Content ?? "",
+                        SenderName = m.Sender?.DisplayName ?? "Unknown",
+                        CreatedAt = m.CreatedAt
+                    };
+                })
+                .ToList();
+            
+            return Ok(searchResults);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error searching messages");
+            return StatusCode(500, "Error searching messages");
         }
     }
 }

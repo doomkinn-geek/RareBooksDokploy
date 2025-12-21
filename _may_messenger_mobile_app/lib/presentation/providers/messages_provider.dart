@@ -748,7 +748,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       return;
     }
     
-    print('[MSG_RECV] Received message via SignalR: ${message.id}');
+    print('[MSG_RECV] Received message via SignalR: ${message.id} (clientMessageId: ${message.clientMessageId ?? 'none'})');
     
     // Check if this is a replacement for a local message
     // (when our own message comes back from server via SignalR)
@@ -758,14 +758,34 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     
     // If message is from me, check if we have a local version to replace
     if (isFromMe) {
-      // Look for a pending local message with same content/time
-      final localIndex = state.messages.indexWhere((m) => 
-        m.isLocalOnly && 
-        m.chatId == message.chatId &&
-        m.content == message.content &&
-        m.type == message.type &&
-        m.createdAt.difference(message.createdAt).abs().inSeconds < 5
-      );
+      int localIndex = -1;
+      
+      // 1. BEST: Точное сопоставление по clientMessageId (самый надежный способ)
+      if (message.clientMessageId != null && message.clientMessageId!.isNotEmpty) {
+        localIndex = state.messages.indexWhere((m) => 
+          m.localId == message.clientMessageId || 
+          m.clientMessageId == message.clientMessageId
+        );
+        
+        if (localIndex != -1) {
+          print('[MSG_RECV] Found local message by clientMessageId: ${message.clientMessageId}');
+        }
+      }
+      
+      // 2. FALLBACK: Сопоставление по содержимому (для обратной совместимости)
+      if (localIndex == -1) {
+        localIndex = state.messages.indexWhere((m) => 
+          m.isLocalOnly && 
+          m.chatId == message.chatId &&
+          m.type == message.type &&
+          _matchContent(m, message) &&
+          m.createdAt.difference(message.createdAt).abs().inSeconds < 5
+        );
+        
+        if (localIndex != -1) {
+          print('[MSG_RECV] Found local message by content matching');
+        }
+      }
       
       if (localIndex != -1) {
         // Replace local message with server message
@@ -798,11 +818,18 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
     }
     
-    // Enhanced deduplication: check by ID, localId, and content/file for robustness
+    // Enhanced deduplication: check by ID, clientMessageId, localId, and content/file
     final exists = state.messages.any((m) {
       // Check by server ID (most reliable)
       if (message.id.isNotEmpty && m.id == message.id) {
         print('[MSG_RECV] Duplicate detected by server ID: ${message.id}');
+        return true;
+      }
+      
+      // Check by clientMessageId (for messages that came back from server)
+      if ((message.clientMessageId?.isNotEmpty ?? false) && 
+          (m.clientMessageId == message.clientMessageId || m.localId == message.clientMessageId)) {
+        print('[MSG_RECV] Duplicate detected by clientMessageId: ${message.clientMessageId}');
         return true;
       }
       
@@ -851,7 +878,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         messages: newMessages,
       );
       
-      print('[MSG_RECV] Added new message to state: ${message.id} (localId: ${message.localId ?? 'none'})');
+      print('[MSG_RECV] Added new message to state: ${message.id} (localId: ${message.localId ?? 'none'}, clientMessageId: ${message.clientMessageId ?? 'none'})');
       
       // Add to LRU cache
       _cache.put(message);
@@ -882,7 +909,21 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         _downloadAudioInBackground(message);
       }
     } else {
-      print('[MSG_RECV] Message already exists, ignoring: ${message.id} (localId: ${message.localId ?? 'none'})');
+      print('[MSG_RECV] Message already exists, ignoring: ${message.id} (localId: ${message.localId ?? 'none'}, clientMessageId: ${message.clientMessageId ?? 'none'})');
+    }
+  }
+  
+  /// Helper method to match content between local and server messages
+  bool _matchContent(Message local, Message server) {
+    switch (local.type) {
+      case MessageType.text:
+        return local.content == server.content;
+      case MessageType.audio:
+        // For audio, we check if both have paths (one local, one server)
+        return local.localAudioPath != null && server.filePath != null;
+      case MessageType.image:
+        // For images, we check if both have paths (one local, one server)
+        return local.localImagePath != null && server.filePath != null;
     }
   }
 

@@ -27,6 +27,7 @@ class Message {
   final DateTime createdAt;
   final String? localId; // Client-side UUID for tracking before server confirms
   final bool isLocalOnly; // True if message hasn't been synced to server yet
+  final String? clientMessageId; // Server returns this for deduplication
 
   Message({
     required this.id,
@@ -42,6 +43,7 @@ class Message {
     required this.createdAt,
     this.localId,
     this.isLocalOnly = false,
+    this.clientMessageId,
   });
 
   factory Message.fromJson(Map<String, dynamic> json) {
@@ -59,6 +61,7 @@ class Message {
       createdAt: DateTime.parse(json['createdAt']),
       localId: json['localId'],
       isLocalOnly: json['isLocalOnly'] ?? false,
+      clientMessageId: json['clientMessageId'],
     );
   }
 
@@ -77,6 +80,7 @@ class Message {
       'createdAt': createdAt.toIso8601String(),
       'localId': localId,
       'isLocalOnly': isLocalOnly,
+      'clientMessageId': clientMessageId,
     };
   }
 
@@ -94,6 +98,7 @@ class Message {
     DateTime? createdAt,
     String? localId,
     bool? isLocalOnly,
+    String? clientMessageId,
   }) {
     return Message(
       id: id ?? this.id,
@@ -109,6 +114,7 @@ class Message {
       createdAt: createdAt ?? this.createdAt,
       localId: localId ?? this.localId,
       isLocalOnly: isLocalOnly ?? this.isLocalOnly,
+      clientMessageId: clientMessageId ?? this.clientMessageId,
     );
   }
 }

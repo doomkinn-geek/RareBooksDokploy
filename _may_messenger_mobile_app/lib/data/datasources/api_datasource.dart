@@ -109,6 +109,18 @@ class ApiDataSource {
     }
   }
 
+  Future<Chat> createOrGetDirectChat(String targetUserId) async {
+    try {
+      final response = await _dio.post(
+        '${ApiConstants.chats}/create-or-get',
+        data: {'targetUserId': targetUserId},
+      );
+      return Chat.fromJson(response.data);
+    } catch (e) {
+      throw Exception('Failed to create or get direct chat: $e');
+    }
+  }
+
   // Messages
   Future<List<Message>> getMessages({
     required String chatId,

@@ -527,7 +527,10 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   Widget build(BuildContext context) {
     final profileState = ref.watch(profileProvider);
     final currentUserId = profileState.profile?.id;
-    final isMe = currentUserId != null && widget.message.senderId == currentUserId;
+    
+    // Fallback: if profile not loaded, check by isLocalOnly flag
+    final isMe = (currentUserId != null && widget.message.senderId == currentUserId) ||
+                 (widget.message.isLocalOnly ?? false);
     
     // Get display name from contacts or fallback to server name
     final contactsNames = ref.watch(contactsNamesProvider);
