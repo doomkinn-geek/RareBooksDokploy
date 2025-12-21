@@ -16,11 +16,15 @@
 
 ### 2. Backend миграции
 
-**Создана миграция:**
-- `_may_messenger_backend/src/MayMessenger.Infrastructure/Migrations/20251221000000_AddPlayedAtToMessages.cs`
-  - Добавлено поле `PlayedAt` типа `timestamp without time zone` в таблицу `Messages`
-  - Создан индекс `IX_Messages_PlayedAt` с фильтром для оптимизации запросов
+**Создана миграция через EF CLI:**
+- `_may_messenger_backend/src/MayMessenger.Infrastructure/Migrations/20251221121642_AddPlayedAtToMessages.cs`
+  - Добавлено поле `PlayedAt` типа `timestamp with time zone` в таблицу `Messages`
+  - Миграция создана правильно через `dotnet ef migrations add`
   - Endpoint `POST /api/messages/{messageId}/played` уже существовал в MessagesController.cs
+  
+**Автоматическое применение:**
+- Миграции автоматически применяются при запуске API (Program.cs, строки 190-201)
+- При перезапуске production сервера миграция применится автоматически
 
 ### 3. Функциональность аудио-сообщений
 

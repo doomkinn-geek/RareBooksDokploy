@@ -4,77 +4,78 @@
 
 Миграции **автоматически применяются** при запуске API (файл `Program.cs`, строки 190-201).
 
-### Как это работает:
-
-1. При запуске API проверяется подключение к БД
-2. Проверяются отложенные (pending) миграции
-3. Если есть отложенные миграции - они применяются автоматически
-4. Логи показывают какие миграции были применены
-
 ### Что было изменено:
 
-✅ Добавлено поле `PlayedAt` в entity `Message` (уже существовало)
-✅ Создана миграция `20251221000000_AddPlayedAtToMessages.cs`
-✅ Обновлён `AppDbContextModelSnapshot.cs` с полем `PlayedAt`
+✅ Добавлено поле `PlayedAt` в entity `Message`
+✅ Создана миграция `20251221121642_AddPlayedAtToMessages.cs` через EF CLI
+✅ Миграция добавляет колонку `PlayedAt` типа `timestamp with time zone`
 
-### Для применения на production сервере:
+### Миграция будет применена автоматически при следующем запуске API!
 
-**Вариант 1: Просто перезапустить API (рекомендуется)**
+**Просто перезапустите API на production сервере:**
+
 ```bash
-# Скачать последний код
+# 1. Обновите код
 cd /path/to/_may_messenger_backend
 git pull
 
-# Пересобрать приложение
+# 2. Пересоберите приложение
 cd src/MayMessenger.API
 dotnet build -c Release
 
-# Перезапустить (миграции применятся автоматически)
+# 3. Перезапустите (миграция применится автоматически!)
 sudo systemctl restart maymessenger
 # или
 pm2 restart maymessenger
 
-# Проверить логи
+# 4. Проверьте логи - вы должны увидеть:
 sudo journalctl -u maymessenger -f
 # или
 pm2 logs maymessenger
+
+# Ожидаемые логи:
+# "Applying 1 pending database migrations..."
+# "  - 20251221121642_AddPlayedAtToMessages"
+# "Database migrations applied successfully"
 ```
 
-**Вариант 2: Применить миграцию вручную перед запуском**
+### Альтернатива: Применить миграцию вручную (если нужно)
+
 ```bash
 cd /path/to/_may_messenger_backend/src/MayMessenger.API
 dotnet ef database update --project ../MayMessenger.Infrastructure
 ```
 
-**Вариант 3: Применить SQL напрямую (если EF не работает)**
+### Если EF не работает, выполните SQL напрямую:
+
 ```sql
 psql -U postgres -d maymessenger
 
-ALTER TABLE "Messages" ADD COLUMN IF NOT EXISTS "PlayedAt" timestamp without time zone NULL;
+ALTER TABLE "Messages" ADD COLUMN IF NOT EXISTS "PlayedAt" timestamp with time zone NULL;
 
-CREATE INDEX IF NOT EXISTS "IX_Messages_PlayedAt" 
-ON "Messages" ("PlayedAt") 
-WHERE "PlayedAt" IS NOT NULL;
-
-\d "Messages"  -- проверка
+-- Проверка
+\d "Messages"
 ```
 
 ## Проверка после применения:
 
-1. Проверьте health endpoint: https://messenger.rare-books.ru/health/ready
-2. Проверьте логи на наличие сообщения "Database migrations applied successfully"
-3. Приложение должно успешно загружать чаты без ошибки 500
+1. ✅ https://messenger.rare-books.ru/health/ready возвращает `{"status":"Ready"}`
+2. ✅ Приложение загружает чаты без ошибки 500
+3. ✅ В логах есть "Database migrations applied successfully"
+4. ✅ Колонка PlayedAt присутствует в таблице Messages
 
 ## Созданные файлы:
 
-- ✅ `20251221000000_AddPlayedAtToMessages.cs` - миграция
-- ✅ `AppDbContextModelSnapshot.cs` - обновлён
-- ✅ `Program.cs` - автоматическое применение миграций (уже было)
+- ✅ `20251221121642_AddPlayedAtToMessages.cs` - миграция (создана через EF CLI)
+- ✅ `20251221121642_AddPlayedAtToMessages.Designer.cs` - метаданные
+- ✅ `AppDbContextModelSnapshot.cs` - обновлён автоматически
 
-## Что было исправлено в мобильном приложении:
+## Изменения в мобильном приложении:
 
 - ✅ Название изменено на "Депеша"
 - ✅ Добавлены разрешения для камеры и галереи
-- ✅ Запрос всех необходимых разрешений сразу при работе с изображениями
+- ✅ Запрос всех необходимых разрешений при работе с изображениями
+- ✅ Реализована отправка статуса "Воспроизведено" для аудио
+
 
 
