@@ -39,6 +39,7 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
   String? _audioPath;
   Duration _recordDuration = Duration.zero;
   Timer? _timer;
+  DateTime? _recordingStartTime; // Track when recording started
   Offset _dragOffset = Offset.zero;
   Offset? _initialPointerPosition;
   AnimationController? _scaleController;
@@ -109,13 +110,10 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
 
     try {
       if (await _audioRecorder.hasPermission()) {
-        // Cancel existing timer if any
-        _timer?.cancel();
-        _timer = null;
-        
-        // Reset duration BEFORE starting to avoid showing old value
+        // Reset duration and start time BEFORE starting
         setState(() {
           _recordDuration = Duration.zero;
+          _recordingStartTime = DateTime.now();
         });
 
         final tempDir = await getTemporaryDirectory();
@@ -140,11 +138,10 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
         _scaleController?.forward();
         _slideController?.forward();
 
-        // Start fresh timer from zero
-        _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-          if (mounted) {
+        _timer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+          if (mounted && _recordingStartTime != null) {
             setState(() {
-              _recordDuration = Duration(seconds: timer.tick);
+              _recordDuration = DateTime.now().difference(_recordingStartTime!);
             });
           }
         });
@@ -160,7 +157,6 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
 
   Future<void> _stopRecording() async {
     _timer?.cancel();
-    _timer = null; // Reset timer to avoid reusing old tick values
     await _audioRecorder.stop();
   }
 
@@ -182,6 +178,7 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
       _recordingState = RecordingState.idle;
       _audioPath = null;
       _recordDuration = Duration.zero;
+      _recordingStartTime = null; // Reset start time
       _dragOffset = Offset.zero;
       _initialPointerPosition = null;
       _showCancelHint = false;
@@ -205,6 +202,7 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
       _recordingState = RecordingState.idle;
       _audioPath = null;
       _recordDuration = Duration.zero;
+      _recordingStartTime = null; // Reset start time
       _dragOffset = Offset.zero;
       _initialPointerPosition = null;
       _showCancelHint = false;

@@ -1,24 +1,50 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../../data/services/contacts_service.dart';
+import '../../data/datasources/local_datasource.dart';
+import '../../data/models/contact_cache_model.dart';
 import 'auth_provider.dart';
 
 /// Provider for contacts service
 final contactsServiceForNamesProvider = Provider((ref) => ContactsService(Dio()));
 
+/// Provider for local data source
+final localDataSourceForContactsProvider = Provider((ref) => LocalDataSource());
+
 /// Provider that holds mapping of userId -> displayName from phone contacts
 final contactsNamesProvider = StateNotifierProvider<ContactsNamesNotifier, Map<String, String>>(
   (ref) => ContactsNamesNotifier(
     ref.read(contactsServiceForNamesProvider),
+    ref.read(localDataSourceForContactsProvider),
     ref,
   ),
 );
 
 class ContactsNamesNotifier extends StateNotifier<Map<String, String>> {
   final ContactsService _contactsService;
+  final LocalDataSource _localDataSource;
   final Ref _ref;
 
-  ContactsNamesNotifier(this._contactsService, this._ref) : super({});
+  ContactsNamesNotifier(this._contactsService, this._localDataSource, this._ref) : super({}) {
+    _loadCachedContacts();
+  }
+
+  /// Load cached contacts on initialization
+  Future<void> _loadCachedContacts() async {
+    try {
+      final cachedContacts = await _localDataSource.getContactsCache();
+      if (cachedContacts != null && cachedContacts.isNotEmpty) {
+        final mapping = <String, String>{};
+        for (final contact in cachedContacts) {
+          mapping[contact.userId] = contact.displayName;
+        }
+        state = mapping;
+        print('[ContactsNames] Loaded ${mapping.length} contacts from cache');
+      }
+    } catch (e) {
+      print('[ContactsNames] Failed to load cached contacts: $e');
+    }
+  }
 
   /// Load contacts and build userId -> displayName mapping
   /// Safe to call - will not crash if permission denied
@@ -47,6 +73,8 @@ class ContactsNamesNotifier extends StateNotifier<Map<String, String>> {
       
       // Build mapping userId -> displayName from phone book
       final mapping = <String, String>{};
+      final cacheList = <ContactCache>[];
+      
       for (final registered in registeredContacts) {
         // Try to find matching local contact by phone hash
         String? phoneBookName;
@@ -64,10 +92,22 @@ class ContactsNamesNotifier extends StateNotifier<Map<String, String>> {
         }
         
         // Use phone book name if found, otherwise fallback to server name
-        mapping[registered.userId] = phoneBookName ?? registered.displayName;
+        final displayName = phoneBookName ?? registered.displayName;
+        mapping[registered.userId] = displayName;
+        
+        // Add to cache list
+        cacheList.add(ContactCache(
+          userId: registered.userId,
+          displayName: displayName,
+          phoneNumberHash: registered.phoneNumberHash,
+          cachedAt: DateTime.now(),
+        ));
       }
       
       print('[ContactsNames] Mapping built with ${mapping.length} entries from phone book');
+      
+      // Save to cache
+      await _localDataSource.saveContactsCache(cacheList);
       
       state = mapping;
     } catch (e) {

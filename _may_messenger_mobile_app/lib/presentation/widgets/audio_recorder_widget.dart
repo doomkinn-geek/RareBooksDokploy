@@ -30,6 +30,7 @@ class _AudioRecorderWidgetState extends State<AudioRecorderWidget> {
   Duration _duration = Duration.zero;
   Timer? _timer;
   bool _isRecording = false;
+  DateTime? _recordingStartTime; // Track when recording started
 
   @override
   void initState() {
@@ -42,12 +43,13 @@ class _AudioRecorderWidgetState extends State<AudioRecorderWidget> {
       _audioPath = widget.audioPath;
       _duration = widget.initialDuration!;
       _isRecording = true;
+      _recordingStartTime = DateTime.now(); // Set start time for continuation
       
-      // Continue timer from current duration
-      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        if (mounted) {
+      // Continue timer from current duration using real-time calculation
+      _timer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+        if (mounted && _recordingStartTime != null) {
           setState(() {
-            _duration = widget.initialDuration! + Duration(seconds: timer.tick);
+            _duration = widget.initialDuration! + DateTime.now().difference(_recordingStartTime!);
           });
         }
       });
@@ -86,12 +88,15 @@ class _AudioRecorderWidgetState extends State<AudioRecorderWidget> {
         setState(() {
           _isRecording = true;
           _audioPath = audioPath;
+          _recordingStartTime = DateTime.now(); // Set start time
         });
 
-        _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-          setState(() {
-            _duration = Duration(seconds: timer.tick);
-          });
+        _timer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+          if (mounted && _recordingStartTime != null) {
+            setState(() {
+              _duration = DateTime.now().difference(_recordingStartTime!);
+            });
+          }
         });
       }
     } catch (e) {

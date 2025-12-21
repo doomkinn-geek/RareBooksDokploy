@@ -17,8 +17,13 @@ import 'audio_player_manager.dart';
 
 class MessageBubble extends ConsumerStatefulWidget {
   final Message message;
+  final bool isHighlighted;
 
-  const MessageBubble({super.key, required this.message});
+  const MessageBubble({
+    super.key,
+    required this.message,
+    this.isHighlighted = false,
+  });
 
   @override
   ConsumerState<MessageBubble> createState() => _MessageBubbleState();
@@ -29,7 +34,6 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   final _logger = LoggerService();
   bool _isPlaying = false;
   bool _hasMarkedAsPlayed = false; // Track if we've already marked as played
-  bool _isDownloadingAudio = false; // Track if audio is being downloaded
   Duration? _duration;
   Duration? _position;
 
@@ -110,11 +114,14 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             final audioUrl = '${ApiConstants.baseUrl}${widget.message.filePath}';
             
             try {
-              // Set loading state
+              // Show loading indicator
               if (mounted) {
-                setState(() {
-                  _isDownloadingAudio = true;
-                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Загрузка аудио...'),
+                    duration: Duration(seconds: 1),
+                  ),
+                );
               }
               
               // Download and save locally
@@ -122,12 +129,6 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                 widget.message.id, 
                 audioUrl
               );
-              
-              if (mounted) {
-                setState(() {
-                  _isDownloadingAudio = false;
-                });
-              }
               
               if (localPath != null) {
                 await _audioPlayer.setFilePath(localPath);
@@ -265,28 +266,14 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _isDownloadingAudio
-                ? Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          isMe ? Colors.white : Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                    ),
-                  )
-                : IconButton(
-                    icon: Icon(
-                      _isPlaying ? Icons.pause : Icons.play_arrow,
-                      color: isMe ? Colors.white : null,
-                      size: 28,
-                    ),
-                    onPressed: _playPauseAudio,
-                  ),
+            IconButton(
+              icon: Icon(
+                _isPlaying ? Icons.pause : Icons.play_arrow,
+                color: isMe ? Colors.white : null,
+                size: 28,
+              ),
+              onPressed: _playPauseAudio,
+            ),
             Expanded(
               child: GestureDetector(
                 onTapDown: (details) => _seekAudio(details, isMe),
@@ -548,7 +535,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     
     // Fallback: if profile not loaded, check by isLocalOnly flag
     final isMe = (currentUserId != null && widget.message.senderId == currentUserId) ||
-                 (widget.message.isLocalOnly ?? false);
+                 (widget.message.isLocalOnly == true);
     
     // Get display name from contacts or fallback to server name
     final contactsNames = ref.watch(contactsNamesProvider);
@@ -559,16 +546,19 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: GestureDetector(
         onLongPress: isMe ? () => _showDeleteDialog(context) : null,
-        child: Container(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.7,
         ),
         decoration: BoxDecoration(
-          color: isMe
-              ? Theme.of(context).colorScheme.primary
-              : Theme.of(context).colorScheme.surfaceContainerHighest,
+          color: widget.isHighlighted
+              ? Colors.yellow.withOpacity(0.5)
+              : isMe
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(

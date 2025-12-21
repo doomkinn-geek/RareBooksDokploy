@@ -22,7 +22,7 @@ class FcmService {
   String? _fcmToken;
   String? _currentChatId; // Track current open chat to suppress notifications
   String? _jwtToken; // Store JWT token for auto-registration
-  Function(String chatId, {String? messageId})? onMessageTap;
+  Function(String chatId)? onMessageTap;
   Function(String chatId, String text)? onMessageReply;
   
   // Track notifications per chat for grouping
@@ -77,15 +77,10 @@ class FcmService {
       onDidReceiveNotificationResponse: (NotificationResponse response) async {
         print('[FCM] Notification tapped with payload: ${response.payload}');
         if (response.payload != null) {
-          // Payload format: "chatId|messageId" or just "chatId"
-          final parts = response.payload!.split('|');
-          final chatId = parts[0];
-          final messageId = parts.length > 1 ? parts[1] : null;
-          
           if (response.input != null && response.input!.isNotEmpty && onMessageReply != null) {
-             onMessageReply!(chatId, response.input!);
+             onMessageReply!(response.payload!, response.input!);
           } else if (onMessageTap != null) {
-             onMessageTap!(chatId, messageId: messageId);
+             onMessageTap!(response.payload!);
           }
         }
       },
@@ -248,7 +243,6 @@ class FcmService {
     final title = message.data['title'] ?? message.notification?.title ?? 'New Message';
     final body = message.data['body'] ?? message.notification?.body ?? '';
     final chatId = message.data['chatId'] as String?;
-    final messageId = message.data['messageId'] as String?;
     
     // Don't show notification if user is currently in this chat
     if (chatId != null && chatId == _currentChatId) {
@@ -257,11 +251,11 @@ class FcmService {
     }
     
     if (chatId != null) {
-      await _showGroupedNotification(chatId, title, body, messageId: messageId);
+      await _showGroupedNotification(chatId, title, body);
     }
   }
 
-  Future<void> _showGroupedNotification(String chatId, String title, String body, {String? messageId}) async {
+  Future<void> _showGroupedNotification(String chatId, String title, String body) async {
     try {
       // Track this notification
       if (!_notificationsByChat.containsKey(chatId)) {
@@ -277,9 +271,6 @@ class FcmService {
       
       // Create InboxStyle notification with all messages
       final inboxLines = messages.take(5).map((msg) => msg).toList();
-      
-      // Payload format: "chatId|messageId" or just "chatId"
-      final payload = messageId != null ? '$chatId|$messageId' : chatId;
       
       final androidDetails = AndroidNotificationDetails(
         'messages_channel',
@@ -312,7 +303,7 @@ class FcmService {
         messageCount > 1 ? '$messageCount new messages' : title,
         messageCount > 1 ? messages.last : body,
         notificationDetails,
-        payload: payload,
+        payload: chatId,
       );
       
       // Show summary notification if multiple chats have unread messages
@@ -359,9 +350,8 @@ class FcmService {
   void _handleMessageOpenedApp(RemoteMessage message) {
     print('[FCM] Message opened app: ${message.data}');
     final chatId = message.data['chatId'] as String?;
-    final messageId = message.data['messageId'] as String?;
     if (chatId != null && onMessageTap != null) {
-      onMessageTap!(chatId, messageId: messageId);
+      onMessageTap!(chatId);
     }
   }
 

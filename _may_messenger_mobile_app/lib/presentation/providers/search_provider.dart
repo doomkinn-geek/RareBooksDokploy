@@ -3,9 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/models/user_model.dart';
-import '../../data/models/chat_model.dart';
 import '../../data/models/search_result_model.dart';
+import '../../data/models/contact_cache_model.dart';
 import '../../data/services/search_service.dart';
+import '../../data/datasources/local_datasource.dart';
 
 final searchServiceProvider = Provider<SearchService>((ref) {
   // Create a new Dio instance with proper configuration
@@ -29,13 +30,19 @@ final searchServiceProvider = Provider<SearchService>((ref) {
   return SearchService(dio);
 });
 
+final localDataSourceForSearchProvider = Provider<LocalDataSource>((ref) {
+  return LocalDataSource();
+});
+
 final searchProvider = StateNotifierProvider<SearchNotifier, SearchState>((ref) {
-  return SearchNotifier(ref.read(searchServiceProvider));
+  return SearchNotifier(
+    ref.read(searchServiceProvider),
+    ref.read(localDataSourceForSearchProvider),
+  );
 });
 
 class SearchState {
   final List<User> userResults;
-  final List<Chat> chatResults;
   final List<MessageSearchResult> messageResults;
   final bool isLoading;
   final String? error;
@@ -43,7 +50,6 @@ class SearchState {
 
   SearchState({
     this.userResults = const [],
-    this.chatResults = const [],
     this.messageResults = const [],
     this.isLoading = false,
     this.error,
@@ -52,7 +58,6 @@ class SearchState {
 
   SearchState copyWith({
     List<User>? userResults,
-    List<Chat>? chatResults,
     List<MessageSearchResult>? messageResults,
     bool? isLoading,
     String? error,
@@ -60,7 +65,6 @@ class SearchState {
   }) {
     return SearchState(
       userResults: userResults ?? this.userResults,
-      chatResults: chatResults ?? this.chatResults,
       messageResults: messageResults ?? this.messageResults,
       isLoading: isLoading ?? this.isLoading,
       error: error,
@@ -71,9 +75,10 @@ class SearchState {
 
 class SearchNotifier extends StateNotifier<SearchState> {
   final SearchService _searchService;
+  final LocalDataSource _localDataSource;
   Timer? _debounceTimer;
 
-  SearchNotifier(this._searchService) : super(SearchState());
+  SearchNotifier(this._searchService, this._localDataSource) : super(SearchState());
 
   void search(String query) {
     // Cancel previous timer
@@ -100,16 +105,18 @@ class SearchNotifier extends StateNotifier<SearchState> {
       query: query.trim(),
     );
     
-    // Debounce search
+    // Search local cache immediately for instant results
+    _searchLocalContacts(query.trim());
+    
+    // Debounce backend search
     _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
       try {
-        final users = await _searchService.searchUsers(query.trim());
-        final chats = await _searchService.searchChats(query.trim());
+        // Search backend for contacts (contactsOnly=true)
+        final users = await _searchService.searchUsers(query.trim(), contactsOnly: true);
         final messages = await _searchService.searchMessages(query.trim());
         
         state = state.copyWith(
           userResults: users,
-          chatResults: chats,
           messageResults: messages,
           isLoading: false,
           error: null,
@@ -135,6 +142,30 @@ class SearchNotifier extends StateNotifier<SearchState> {
         );
       }
     });
+  }
+
+  Future<void> _searchLocalContacts(String query) async {
+    try {
+      final cachedContacts = await _localDataSource.searchContactsCache(query);
+      if (cachedContacts.isNotEmpty) {
+        // Convert ContactCache to User for display
+        final users = cachedContacts.map((c) => User(
+          id: c.userId,
+          displayName: c.displayName,
+          phoneNumber: '', // Not needed for search results
+          phoneNumberHash: c.phoneNumberHash,
+          role: 'user',
+        )).toList();
+        
+        // Update state with local results (will be replaced by backend results)
+        state = state.copyWith(
+          userResults: users,
+          isLoading: true, // Still loading backend results
+        );
+      }
+    } catch (e) {
+      print('[Search] Failed to search local contacts: $e');
+    }
   }
 
   void clear() {

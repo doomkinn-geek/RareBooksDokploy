@@ -158,6 +158,28 @@ class OfflineSyncService {
     return DateTime.now().isAfter(nextRetryTime);
   }
 
+  /// Retry a specific failed message immediately
+  Future<void> retryMessage(String localId) async {
+    print('[SYNC] Manual retry requested for message: $localId');
+    
+    final message = await _outboxRepository.getPendingMessageById(localId);
+    if (message == null) {
+      print('[SYNC] Message not found: $localId');
+      return;
+    }
+    
+    if (message.syncState != SyncState.failed) {
+      print('[SYNC] Message is not in failed state: $localId');
+      return;
+    }
+    
+    // Reset to local-only state
+    await _outboxRepository.retryMessage(localId);
+    
+    // Trigger sync
+    await _syncMessage(message);
+  }
+
   /// Get statistics about pending messages
   Future<Map<String, int>> getStats() async {
     final all = await _outboxRepository.getAllPendingMessages();

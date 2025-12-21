@@ -5,20 +5,20 @@ import '../providers/signalr_provider.dart';
 import '../providers/chats_provider.dart';
 import '../providers/contacts_names_provider.dart';
 import '../../data/models/chat_model.dart';
+import '../../data/models/message_model.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/fcm_service.dart';
-import '../../core/services/logger_service.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/message_input.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final String chatId;
-  final String? initialMessageId;
+  final String? highlightMessageId;
 
   const ChatScreen({
     super.key,
     required this.chatId,
-    this.initialMessageId,
+    this.highlightMessageId,
   });
 
   @override
@@ -27,16 +27,24 @@ class ChatScreen extends ConsumerStatefulWidget {
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
-  final _logger = LoggerService();
-  final Map<String, GlobalKey> _messageKeys = {}; // Keys for scroll-to-message
+  String? _highlightedMessageId;
 
   @override
   void initState() {
     super.initState();
     
-    // #region agent log
-    _logger.debug('chat_screen.initState', '[H2] ChatScreen opened', {'chatId': widget.chatId});
-    // #endregion
+    // Set highlighted message if provided
+    if (widget.highlightMessageId != null) {
+      _highlightedMessageId = widget.highlightMessageId;
+      // Clear highlight after 3 seconds
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          setState(() {
+            _highlightedMessageId = null;
+          });
+        }
+      });
+    }
     
     // Add scroll listener to mark messages as read when scrolled to bottom
     _scrollController.addListener(_onScroll);
@@ -45,15 +53,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     Future.microtask(() async {
       final signalRService = ref.read(signalRServiceProvider);
       
-      // #region agent log
-      await _logger.debug('chat_screen.initState.beforeJoin', '[H2] Before JoinChat', {'chatId': widget.chatId, 'isConnected': '${signalRService.isConnected}'});
-      // #endregion
-      
       await signalRService.joinChat(widget.chatId);
-      
-      // #region agent log
-      await _logger.debug('chat_screen.initState.afterJoin', '[H2] After JoinChat', {'chatId': widget.chatId});
-      // #endregion
       
       // Уведомить NotificationService и FCM что пользователь в этом чате
       final notificationService = ref.read(notificationServiceProvider);
@@ -68,28 +68,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       // Mark messages as read after a short delay to ensure messages are loaded
       await Future.delayed(const Duration(milliseconds: 500));
       ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
-      
-      // Scroll to initial message if specified
-      if (widget.initialMessageId != null) {
-        await Future.delayed(const Duration(milliseconds: 800));
-        _scrollToMessage(widget.initialMessageId!);
-      }
     });
-  }
-  
-  void _scrollToMessage(String messageId) {
-    final key = _messageKeys[messageId];
-    if (key != null && key.currentContext != null) {
-      Scrollable.ensureVisible(
-        key.currentContext!,
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeInOut,
-        alignment: 0.5, // Center the message
-      );
-      
-      // Highlight the message briefly
-      // Note: You can add animation/highlighting logic here if needed
-    }
   }
   
   void _onScroll() {
@@ -132,6 +111,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  void _scrollToHighlightedMessage(List<Message> messages) {
+    if (!_scrollController.hasClients || _highlightedMessageId == null) return;
+    
+    final index = messages.indexWhere((m) => m.id == _highlightedMessageId);
+    if (index == -1) {
+      // Message not found, scroll to bottom
+      _scrollToBottom();
+      return;
+    }
+    
+    // Calculate approximate scroll position (assuming each message is ~100px)
+    final approximateItemHeight = 100.0;
+    final scrollPosition = index * approximateItemHeight;
+    
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        final maxScroll = _scrollController.position.maxScrollExtent;
+        _scrollController.animateTo(
+          scrollPosition.clamp(0, maxScroll),
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final messagesState = ref.watch(messagesProvider(widget.chatId));
@@ -162,10 +167,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       displayTitle = 'Чат';
     }
 
-    // Scroll to bottom when new messages arrive
+    // Scroll to bottom when new messages arrive or to highlight message
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (messagesState.messages.isNotEmpty) {
-        _scrollToBottom();
+        if (_highlightedMessageId != null) {
+          _scrollToHighlightedMessage(messagesState.messages);
+        } else {
+          _scrollToBottom();
+        }
       }
     });
 
@@ -194,16 +203,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         itemCount: messagesState.messages.length,
                         itemBuilder: (context, index) {
                           final message = messagesState.messages[index];
-                          
-                          // Create a key for this message if scrolling to it
-                          if (widget.initialMessageId != null && 
-                              message.id == widget.initialMessageId) {
-                            _messageKeys[message.id] = GlobalKey();
-                          }
-                          
+                          final isHighlighted = message.id == _highlightedMessageId;
                           return MessageBubble(
-                            key: _messageKeys[message.id],
                             message: message,
+                            isHighlighted: isHighlighted,
                           );
                         },
                       ),

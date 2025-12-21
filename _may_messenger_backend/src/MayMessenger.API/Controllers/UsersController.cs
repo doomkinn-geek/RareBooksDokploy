@@ -134,7 +134,9 @@ public class UsersController : ControllerBase
     /// Поиск зарегистрированных пользователей по имени или номеру телефона
     /// </summary>
     [HttpGet("search")]
-    public async Task<ActionResult<IEnumerable<UserDto>>> SearchUsers([FromQuery] string query)
+    public async Task<ActionResult<IEnumerable<UserDto>>> SearchUsers(
+        [FromQuery] string query, 
+        [FromQuery] bool contactsOnly = false)
     {
         if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
         {
@@ -142,25 +144,48 @@ public class UsersController : ControllerBase
         }
         
         var currentUserId = GetCurrentUserId();
-        var users = await _unitOfWork.Users.GetAllAsync();
         
-        // Search by display name or phone number
-        var searchResults = users
-            .Where(u => u.Id != currentUserId && (
-                u.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                u.PhoneNumber.Contains(query)
-            ))
-            .Take(20) // Limit results
-            .Select(u => new UserDto
-            {
-                Id = u.Id,
-                PhoneNumber = u.PhoneNumber,
-                DisplayName = u.DisplayName,
-                Avatar = u.Avatar,
-                Role = u.Role
-            });
-        
-        return Ok(searchResults);
+        if (contactsOnly)
+        {
+            // Search only in user's contacts (from phone book)
+            var contactResults = await _unitOfWork.Contacts.SearchUserContactsAsync(currentUserId, query);
+            
+            var userDtos = contactResults
+                .Take(20)
+                .Select(r => new UserDto
+                {
+                    Id = r.user.Id,
+                    PhoneNumber = r.user.PhoneNumber,
+                    DisplayName = r.contactDisplayName ?? r.user.DisplayName, // Use phone book name if available
+                    Avatar = r.user.Avatar,
+                    Role = r.user.Role
+                });
+            
+            return Ok(userDtos);
+        }
+        else
+        {
+            // Search all users (original behavior)
+            var users = await _unitOfWork.Users.GetAllAsync();
+            
+            // Search by display name or phone number
+            var searchResults = users
+                .Where(u => u.Id != currentUserId && (
+                    u.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    u.PhoneNumber.Contains(query)
+                ))
+                .Take(20) // Limit results
+                .Select(u => new UserDto
+                {
+                    Id = u.Id,
+                    PhoneNumber = u.PhoneNumber,
+                    DisplayName = u.DisplayName,
+                    Avatar = u.Avatar,
+                    Role = u.Role
+                });
+            
+            return Ok(searchResults);
+        }
     }
 }
 

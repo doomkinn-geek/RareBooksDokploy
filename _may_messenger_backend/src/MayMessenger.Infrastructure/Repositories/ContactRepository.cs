@@ -70,4 +70,32 @@ public class ContactRepository : IContactRepository
             .Include(c => c.User)
             .FirstOrDefaultAsync();
     }
+
+    public async Task<List<(User user, string? contactDisplayName)>> SearchUserContactsAsync(Guid userId, string searchQuery)
+    {
+        // Get contacts where displayName (from phone book) matches the query
+        var matchingContacts = await _context.Contacts
+            .Where(c => c.UserId == userId && 
+                       c.DisplayName != null && 
+                       c.DisplayName.Contains(searchQuery))
+            .ToListAsync();
+
+        // Get the phoneHashes of matching contacts
+        var phoneHashes = matchingContacts.Select(c => c.PhoneNumberHash).ToList();
+
+        // Find registered users with these phone hashes
+        var users = await _context.Users
+            .Where(u => phoneHashes.Contains(u.PhoneNumberHash))
+            .ToListAsync();
+
+        // Build result list with user and their contact display name
+        var results = new List<(User user, string? contactDisplayName)>();
+        foreach (var user in users)
+        {
+            var contact = matchingContacts.FirstOrDefault(c => c.PhoneNumberHash == user.PhoneNumberHash);
+            results.Add((user, contact?.DisplayName));
+        }
+
+        return results;
+    }
 }

@@ -8,4 +8,5 @@ public interface IContactRepository
     Task<List<User>> FindUsersByPhoneHashesAsync(List<string> phoneHashes);
     Task SyncContactsAsync(Guid userId, List<(string phoneHash, string? displayName)> contacts);
     Task<Contact?> GetByUserAndPhoneHashAsync(Guid userId, string phoneHash);
+    Task<List<(User user, string? contactDisplayName)>> SearchUserContactsAsync(Guid userId, string searchQuery);
 }

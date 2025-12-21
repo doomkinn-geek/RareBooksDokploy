@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/message_model.dart';
 import '../models/chat_model.dart';
 import '../models/status_update_model.dart';
+import '../models/contact_cache_model.dart';
 import '../repositories/outbox_repository.dart';
 import '../../core/constants/storage_keys.dart';
 
@@ -11,6 +12,7 @@ class LocalDataSource {
   static const String _chatsBox = 'chats';
   static const String _outboxBox = 'outbox';
   static const String _statusUpdatesBox = 'status_updates';
+  static const String _contactsCacheBox = 'contacts_cache';
 
   // Auth Storage
   Future<void> saveToken(String token) async {
@@ -447,6 +449,73 @@ class LocalDataSource {
       print('[LocalDataSource] Cleared all status updates');
     } catch (e) {
       print('[LocalDataSource] Failed to clear status updates: $e');
+    }
+  }
+
+  // Contacts Cache
+  /// Save contacts cache
+  Future<void> saveContactsCache(List<ContactCache> contacts) async {
+    try {
+      final box = await Hive.openBox<Map>(_contactsCacheBox);
+      final data = {
+        'contacts': contacts.map((c) => c.toJson()).toList(),
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+      await box.put('cache', data);
+      await box.flush();
+      print('[ContactsCache] Saved ${contacts.length} contacts to cache');
+    } catch (e) {
+      print('[ContactsCache] Failed to save contacts cache: $e');
+      rethrow;
+    }
+  }
+
+  /// Get cached contacts
+  Future<List<ContactCache>?> getContactsCache() async {
+    try {
+      final box = await Hive.openBox<Map>(_contactsCacheBox);
+      final data = box.get('cache');
+      if (data == null) {
+        return null;
+      }
+
+      final contacts = (data['contacts'] as List)
+          .map((json) => ContactCache.fromJson(Map<String, dynamic>.from(json as Map)))
+          .toList();
+      
+      return contacts;
+    } catch (e) {
+      print('[ContactsCache] Failed to get contacts cache: $e');
+      return null;
+    }
+  }
+
+  /// Search cached contacts by name
+  Future<List<ContactCache>> searchContactsCache(String query) async {
+    try {
+      final contacts = await getContactsCache();
+      if (contacts == null) {
+        return [];
+      }
+
+      return contacts
+          .where((c) => c.displayName.toLowerCase().contains(query.toLowerCase()))
+          .toList();
+    } catch (e) {
+      print('[ContactsCache] Failed to search contacts cache: $e');
+      return [];
+    }
+  }
+
+  /// Clear contacts cache
+  Future<void> clearContactsCache() async {
+    try {
+      final box = await Hive.openBox<Map>(_contactsCacheBox);
+      await box.clear();
+      print('[ContactsCache] Cleared contacts cache');
+    } catch (e) {
+      print('[ContactsCache] Failed to clear contacts cache: $e');
+      rethrow;
     }
   }
 }

@@ -9,7 +9,7 @@ final notificationServiceProvider = Provider<NotificationService>((ref) {
 class NotificationService {
   final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
   String? _currentChatId;
-  Future<void> Function(String chatId)? onNotificationTap;
+  Future<void> Function(String chatId, String? messageId)? onNotificationTap;
   Future<void> Function(String chatId, String text)? onNotificationReply;
   
   // Track notifications per chat for grouping
@@ -33,10 +33,15 @@ class NotificationService {
       initSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) async {
         if (response.payload != null) {
+          // Parse payload: "chatId|messageId" or just "chatId"
+          final parts = response.payload!.split('|');
+          final chatId = parts[0];
+          final messageId = parts.length > 1 ? parts[1] : null;
+          
           if (response.input != null && response.input!.isNotEmpty && onNotificationReply != null) {
-            await onNotificationReply!(response.payload!, response.input!);
+            await onNotificationReply!(chatId, response.input!);
           } else if (onNotificationTap != null) {
-            await onNotificationTap!(response.payload!);
+            await onNotificationTap!(chatId, messageId);
           }
         }
       },
@@ -128,7 +133,7 @@ class NotificationService {
       messageCount > 1 ? '$chatTitle ($messageCount)' : chatTitle,
       messageCount > 1 ? messages.last : body,
       notificationDetails,
-      payload: message.chatId,
+      payload: '${message.chatId}|${message.id}', // Include messageId
     );
     
     // Show summary notification if multiple chats have unread messages

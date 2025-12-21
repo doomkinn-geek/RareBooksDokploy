@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
+import 'dart:convert';
+import 'dart:io';
 import '../../data/models/message_model.dart';
 import '../../data/services/message_sync_service.dart';
 import '../../data/repositories/message_cache_repository.dart';
@@ -889,6 +891,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
           print('[MSG_RECV] Failed to cache message in Hive: $e');
         }
         return;
+      } else {
       }
     }
     

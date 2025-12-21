@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/search_provider.dart';
 import '../providers/auth_provider.dart';
 import '../../core/utils/error_formatter.dart';
-import '../../data/repositories/chat_repository.dart';
 import 'chat_screen.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
@@ -83,7 +82,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             ),
             SizedBox(height: 8),
             Text(
-              'Контакты • Чаты • Сообщения',
+              'Контакты • Сообщения',
               style: TextStyle(color: Colors.grey, fontSize: 12),
             ),
           ],
@@ -116,10 +115,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
 
     final hasUsers = state.userResults.isNotEmpty;
-    final hasChats = state.chatResults.isNotEmpty;
     final hasMessages = state.messageResults.isNotEmpty;
 
-    if (!hasUsers && !hasChats && !hasMessages) {
+    if (!hasUsers && !hasMessages) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -186,54 +184,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   }
                 },
               )),
-          if (hasChats || hasMessages) const Divider(height: 32),
-        ],
-        if (hasChats) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Text(
-              'Чаты (${state.chatResults.length})',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-          ),
-          ...state.chatResults.map((chat) => ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
-                  child: Icon(
-                    chat.type.toString().contains('Group') ? Icons.group : Icons.person,
-                    color: Theme.of(context).colorScheme.tertiary,
-                  ),
-                ),
-                title: Text(chat.title),
-                subtitle: chat.lastMessage != null
-                    ? Text(
-                        chat.lastMessage!.content ?? 'Медиа',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      )
-                    : null,
-                trailing: chat.unreadCount > 0
-                    ? CircleAvatar(
-                        radius: 12,
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        child: Text(
-                          chat.unreadCount.toString(),
-                          style: const TextStyle(fontSize: 10, color: Colors.white),
-                        ),
-                      )
-                    : null,
-                onTap: () {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ChatScreen(chatId: chat.id),
-                    ),
-                  );
-                },
-              )),
           if (hasMessages) const Divider(height: 32),
         ],
         if (hasMessages) ...[
@@ -261,7 +211,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   children: [
                     const SizedBox(height: 4),
                     Text(
-                      result.snippet ?? result.content ?? 'Медиа',
+                      result.messageContent,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: Colors.grey[600]),
@@ -276,18 +226,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     ),
                   ],
                 ),
-                onTap: () {
-                  // Navigate to chat and scroll to specific message
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ChatScreen(
-                        chatId: result.chatId,
-                        initialMessageId: result.id,
-                      ),
+              onTap: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ChatScreen(
+                      chatId: result.chatId,
+                      highlightMessageId: result.messageId,
                     ),
-                  );
-                },
+                  ),
+                );
+              },
               )),
         ],
       ],
