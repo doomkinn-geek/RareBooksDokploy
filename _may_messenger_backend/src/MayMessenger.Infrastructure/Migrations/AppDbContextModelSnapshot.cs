@@ -241,6 +241,9 @@ namespace MayMessenger.Infrastructure.Migrations
                     b.Property<string>("FilePath")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("PlayedAt")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<DateTime?>("ReadAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -259,6 +262,9 @@ namespace MayMessenger.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ClientMessageId");
+
+                    b.HasIndex("PlayedAt")
+                        .HasFilter("\"PlayedAt\" IS NOT NULL");
 
                     b.HasIndex("SenderId");
 

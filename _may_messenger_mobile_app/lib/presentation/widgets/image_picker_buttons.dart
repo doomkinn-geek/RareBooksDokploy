@@ -15,25 +15,60 @@ class ImagePickerButtons extends StatelessWidget {
   });
 
   Future<void> _pickImage(BuildContext context, ImageSource source) async {
-    // Request permissions
-    final Permission permission = source == ImageSource.camera
-        ? Permission.camera
-        : Permission.photos;
-
-    final status = await permission.request();
-    if (!status.isGranted) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              source == ImageSource.camera
-                  ? 'Требуется разрешение на использование камеры'
-                  : 'Требуется разрешение на доступ к галерее',
+    // Request multiple permissions at once
+    final Map<Permission, PermissionStatus> statuses;
+    
+    if (source == ImageSource.camera) {
+      statuses = await [
+        Permission.camera,
+        Permission.storage,
+      ].request();
+      
+      if (!statuses[Permission.camera]!.isGranted) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Требуется разрешение на использование камеры'),
             ),
-          ),
-        );
+          );
+        }
+        return;
       }
-      return;
+    } else {
+      // For gallery, request appropriate permissions based on Android version
+      if (Platform.isAndroid) {
+        statuses = await [
+          Permission.photos,
+          Permission.storage,
+        ].request();
+        
+        final hasPermission = statuses[Permission.photos]?.isGranted == true ||
+                              statuses[Permission.storage]?.isGranted == true;
+        
+        if (!hasPermission) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Требуется разрешение на доступ к галерее'),
+              ),
+            );
+          }
+          return;
+        }
+      } else {
+        // iOS
+        final status = await Permission.photos.request();
+        if (!status.isGranted) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Требуется разрешение на доступ к галерее'),
+              ),
+            );
+          }
+          return;
+        }
+      }
     }
 
     try {
