@@ -1,54 +1,80 @@
-# Инструкции для исправления ошибки 500
+# Инструкции по применению миграций
 
-## Проблема
-После авторизации приложение получает ошибку 500 при запросе чатов. 
-Это происходит потому что на production сервере не применена миграция для поля `PlayedAt`.
+## ✅ Автоматическое применение миграций настроено!
 
-## Решение
+Миграции **автоматически применяются** при запуске API (файл `Program.cs`, строки 190-201).
 
-### На сервере (SSH к messenger.rare-books.ru):
+### Как это работает:
 
+1. При запуске API проверяется подключение к БД
+2. Проверяются отложенные (pending) миграции
+3. Если есть отложенные миграции - они применяются автоматически
+4. Логи показывают какие миграции были применены
+
+### Что было изменено:
+
+✅ Добавлено поле `PlayedAt` в entity `Message` (уже существовало)
+✅ Создана миграция `20251221000000_AddPlayedAtToMessages.cs`
+✅ Обновлён `AppDbContextModelSnapshot.cs` с полем `PlayedAt`
+
+### Для применения на production сервере:
+
+**Вариант 1: Просто перезапустить API (рекомендуется)**
 ```bash
-# 1. Перейти в директорию backend
-cd /path/to/_may_messenger_backend/src/MayMessenger.API
+# Скачать последний код
+cd /path/to/_may_messenger_backend
+git pull
 
-# 2. Применить миграцию
-dotnet ef database update --project ../MayMessenger.Infrastructure
+# Пересобрать приложение
+cd src/MayMessenger.API
+dotnet build -c Release
 
-# 3. Перезапустить приложение
+# Перезапустить (миграции применятся автоматически)
 sudo systemctl restart maymessenger
 # или
 pm2 restart maymessenger
+
+# Проверить логи
+sudo journalctl -u maymessenger -f
+# или
+pm2 logs maymessenger
 ```
 
-### Альтернативно: Применить SQL миграцию напрямую
+**Вариант 2: Применить миграцию вручную перед запуском**
+```bash
+cd /path/to/_may_messenger_backend/src/MayMessenger.API
+dotnet ef database update --project ../MayMessenger.Infrastructure
+```
 
-Если EF миграция не применяется, можно выполнить SQL напрямую:
-
+**Вариант 3: Применить SQL напрямую (если EF не работает)**
 ```sql
--- Подключиться к PostgreSQL
 psql -U postgres -d maymessenger
 
--- Выполнить миграцию
 ALTER TABLE "Messages" ADD COLUMN IF NOT EXISTS "PlayedAt" timestamp without time zone NULL;
 
 CREATE INDEX IF NOT EXISTS "IX_Messages_PlayedAt" 
 ON "Messages" ("PlayedAt") 
 WHERE "PlayedAt" IS NOT NULL;
 
--- Проверить результат
-\d "Messages"
+\d "Messages"  -- проверка
 ```
 
-## Проверка
+## Проверка после применения:
 
-После применения миграции проверьте:
-- https://messenger.rare-books.ru/health/ready должен отвечать {"status":"Ready"}
-- Приложение должно успешно загружать чаты
+1. Проверьте health endpoint: https://messenger.rare-books.ru/health/ready
+2. Проверьте логи на наличие сообщения "Database migrations applied successfully"
+3. Приложение должно успешно загружать чаты без ошибки 500
 
-## Дополнительные исправления (уже внесены в код):
+## Созданные файлы:
 
-✅ Название приложения изменено на "Депеша"
-✅ Добавлены разрешения для камеры и галереи в AndroidManifest.xml
-✅ Обновлен ImagePickerButtons для запроса всех необходимых разрешений
+- ✅ `20251221000000_AddPlayedAtToMessages.cs` - миграция
+- ✅ `AppDbContextModelSnapshot.cs` - обновлён
+- ✅ `Program.cs` - автоматическое применение миграций (уже было)
+
+## Что было исправлено в мобильном приложении:
+
+- ✅ Название изменено на "Депеша"
+- ✅ Добавлены разрешения для камеры и галереи
+- ✅ Запрос всех необходимых разрешений сразу при работе с изображениями
+
 
