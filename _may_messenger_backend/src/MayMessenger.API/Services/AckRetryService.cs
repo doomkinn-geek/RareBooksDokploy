@@ -6,7 +6,7 @@ using MayMessenger.API.Hubs;
 using MayMessenger.Application.DTOs;
 using MayMessenger.Domain.Interfaces;
 
-namespace MayMessenger.Application.Services;
+namespace MayMessenger.API.Services;
 
 /// <summary>
 /// Background service that retries sending unacknowledged messages via SignalR.

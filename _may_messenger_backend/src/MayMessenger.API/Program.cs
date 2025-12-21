@@ -73,7 +73,7 @@ builder.Services.AddSingleton<MayMessenger.Application.Services.IFirebaseService
 // Background Services
 builder.Services.AddHostedService<MayMessenger.Application.Services.MediaCleanupService>(); // Audio + Images cleanup
 builder.Services.AddHostedService<MayMessenger.Application.Services.CleanupInvalidTokensService>();
-builder.Services.AddHostedService<MayMessenger.Application.Services.AckRetryService>(); // ACK retry for reliable delivery
+builder.Services.AddHostedService<MayMessenger.API.Services.AckRetryService>(); // ACK retry for reliable delivery
 
 // JWT Authentication
 var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "YourSuperSecretKeyForJWTTokenGeneration123456789";
