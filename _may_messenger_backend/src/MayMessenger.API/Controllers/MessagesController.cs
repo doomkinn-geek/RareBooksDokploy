@@ -496,7 +496,7 @@ public class MessagesController : ControllerBase
     }
     
     [HttpPost("audio")]
-    public async Task<ActionResult<MessageDto>> SendAudioMessage([FromForm] Guid chatId, IFormFile audioFile)
+    public async Task<ActionResult<MessageDto>> SendAudioMessage([FromForm] Guid chatId, IFormFile audioFile, [FromForm] string? clientMessageId = null)
     {
         var userId = GetCurrentUserId();
         
@@ -521,7 +521,8 @@ public class MessagesController : ControllerBase
             SenderId = userId,
             Type = MessageType.Audio,
             FilePath = $"/audio/{fileName}",
-            Status = MessageStatus.Sent
+            Status = MessageStatus.Sent,
+            ClientMessageId = clientMessageId  // Add clientMessageId for deduplication
         };
         
         await _unitOfWork.Messages.AddAsync(message);
@@ -576,7 +577,7 @@ public class MessagesController : ControllerBase
     }
     
     [HttpPost("image")]
-    public async Task<ActionResult<MessageDto>> SendImageMessage([FromForm] Guid chatId, IFormFile imageFile)
+    public async Task<ActionResult<MessageDto>> SendImageMessage([FromForm] Guid chatId, IFormFile imageFile, [FromForm] string? clientMessageId = null)
     {
         var userId = GetCurrentUserId();
         
@@ -613,7 +614,8 @@ public class MessagesController : ControllerBase
                 SenderId = userId,
                 Type = MessageType.Image,
                 FilePath = $"/images/{fileName}",
-                Status = MessageStatus.Sent
+                Status = MessageStatus.Sent,
+                ClientMessageId = clientMessageId  // Add clientMessageId for deduplication
             };
             
             await _unitOfWork.Messages.AddAsync(message);
@@ -636,7 +638,8 @@ public class MessagesController : ControllerBase
                 Content = message.Content,
                 FilePath = message.FilePath,
                 Status = message.Status,
-                CreatedAt = message.CreatedAt
+                CreatedAt = message.CreatedAt,
+                ClientMessageId = message.ClientMessageId  // Include clientMessageId for deduplication
             };
             
             // Send SignalR notification ONLY to group

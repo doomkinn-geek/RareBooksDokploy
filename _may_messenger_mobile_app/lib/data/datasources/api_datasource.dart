@@ -170,11 +170,13 @@ class ApiDataSource {
   Future<Message> sendAudioMessage({
     required String chatId,
     required String audioPath,
+    String? clientMessageId,
   }) async {
     try {
       final formData = FormData.fromMap({
         'chatId': chatId,
         'audioFile': await MultipartFile.fromFile(audioPath),
+        if (clientMessageId != null) 'clientMessageId': clientMessageId,
       });
 
       final response = await _dio.post(
@@ -190,11 +192,13 @@ class ApiDataSource {
   Future<Message> sendImageMessage({
     required String chatId,
     required String imagePath,
+    String? clientMessageId,
   }) async {
     try {
       final formData = FormData.fromMap({
         'chatId': chatId,
         'imageFile': await MultipartFile.fromFile(imagePath),
+        if (clientMessageId != null) 'clientMessageId': clientMessageId,
       });
 
       final response = await _dio.post(

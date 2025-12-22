@@ -8,6 +8,8 @@ import 'auth_provider.dart';
 import 'signalr_provider.dart';
 import 'profile_provider.dart';
 import 'chats_provider.dart';
+import 'dart:io';
+import 'dart:convert';
 
 // LRU Cache provider - singleton для всего приложения
 final messageCacheProvider = Provider<MessageCacheRepository>((ref) {
@@ -94,6 +96,24 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     // Start status sync service
     _statusSyncService.startPeriodicSync();
   }
+
+  // #region agent log helper
+  Future<void> _logToFile(String event, Map<String, dynamic> data) async {
+    try {
+      final logEntry = jsonEncode({
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'location': 'messages_provider.dart',
+        'event': event,
+        'data': data,
+        'sessionId': 'debug-session',
+      });
+      final file = File('d:\\_SOURCES\\source\\RareBooksServicePublic\\.cursor\\debug.log');
+      await file.writeAsString('$logEntry\n', mode: FileMode.append);
+    } catch (e) {
+      print('[LOG_ERROR] Failed to write log: $e');
+    }
+  }
+  // #endregion
 
   /// Periodic message sync to catch any missed messages (runs every 30 seconds)
   void _startPeriodicSync() {
@@ -483,9 +503,13 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
           clientMessageId: clientMessageId,
         );
       } else {
+        // #region agent log - Hypothesis B: Check clientMessageId for audio
+        await _logToFile('AUDIO_SEND', {'localId': localId, 'clientMessageId': clientMessageId, 'type': type.toString()});
+        // #endregion
         serverMessage = await _messageRepository.sendAudioMessage(
           chatId: chatId,
           audioPath: audioPath!,
+          clientMessageId: clientMessageId,
         );
       }
       
@@ -570,17 +594,21 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     }
   }
 
-  Future<void> _syncImageToBackend(String localId, String imagePath, {int attemptNumber = 0}) async {
+  Future<void> _syncImageToBackend(String localId, String imagePath, {String? clientMessageId, int attemptNumber = 0}) async {
     const maxAttempts = 5;
     final backoffDelays = [1, 2, 4, 8, 16, 30]; // seconds
     
     try {
       print('[MSG_SEND] Syncing image to backend: $localId (attempt ${attemptNumber + 1}/$maxAttempts)');
+      // #region agent log - Hypothesis B: Check clientMessageId for image
+      await _logToFile('IMAGE_SEND', {'localId': localId, 'clientMessageId': clientMessageId, 'imagePath': imagePath});
+      // #endregion
       
-      // Send via API
+      // Send via API with clientMessageId
       final serverMessage = await _messageRepository.sendImageMessage(
         chatId: chatId,
         imagePath: imagePath,
+        clientMessageId: clientMessageId,
       );
       
       print('[MSG_SEND] Image synced successfully. Server ID: ${serverMessage.id}');
@@ -630,7 +658,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         // Schedule retry with exponential backoff
         Future.delayed(Duration(seconds: delaySeconds), () {
           if (mounted) {
-            _syncImageToBackend(localId, imagePath, attemptNumber: attemptNumber + 1);
+            _syncImageToBackend(localId, imagePath, clientMessageId: clientMessageId, attemptNumber: attemptNumber + 1);
           }
         });
       } else {
@@ -676,8 +704,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         throw Exception('User not authenticated');
       }
       
-      // STEP 1: Create message locally with temporary ID
+      // STEP 1: Create message locally with temporary ID and clientMessageId
       localId = _uuid.v4();
+      final clientMessageId = localId; // Use same UUID for both
       
       // Check if this message is already being sent
       if (_pendingSends.contains(localId)) {
@@ -699,13 +728,14 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         createdAt: now,
         localId: localId,
         isLocalOnly: true,
+        clientMessageId: clientMessageId, // Add clientMessageId for deduplication
       );
       
       // STEP 2: Add to UI immediately (optimistic update)
       final updatedMessages = [...state.messages, localMessage];
       updatedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       state = state.copyWith(messages: updatedMessages, isSending: false);
-      print('[MSG_SEND] Audio message added to UI with local ID: $localId');
+      print('[MSG_SEND] Audio message added to UI with local ID: $localId, clientMessageId: $clientMessageId');
       
       // Add to LRU cache
       _cache.put(localMessage);
@@ -730,7 +760,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final outboxId = outboxEntry.localId; // Save outbox ID for later cleanup
       
       // STEP 4: Send to backend asynchronously with clientMessageId
-      _syncMessageToBackend(localId, MessageType.audio, outboxId: outboxId, audioPath: audioPath, clientMessageId: localId);
+      _syncMessageToBackend(localId, MessageType.audio, outboxId: outboxId, audioPath: audioPath, clientMessageId: clientMessageId);
       
     } catch (e) {
       print('[MSG_SEND] Failed to create local audio message: $e');
@@ -768,8 +798,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         throw Exception('User not authenticated');
       }
       
-      // STEP 1: Create message locally with temporary ID
+      // STEP 1: Create message locally with temporary ID and clientMessageId
       localId = _uuid.v4();
+      final clientMessageId = localId; // Use same UUID for both
       
       // Check if this message is already being sent
       if (_pendingSends.contains(localId)) {
@@ -791,13 +822,14 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         createdAt: now,
         localId: localId,
         isLocalOnly: true,
+        clientMessageId: clientMessageId, // Add clientMessageId for deduplication
       );
       
       // STEP 2: Add to UI immediately (optimistic update)
       final updatedMessages = [...state.messages, localMessage];
       updatedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       state = state.copyWith(messages: updatedMessages, isSending: false);
-      print('[MSG_SEND] Image message added to UI with local ID: $localId');
+      print('[MSG_SEND] Image message added to UI with local ID: $localId, clientMessageId: $clientMessageId');
       
       // Add to LRU cache
       _cache.put(localMessage);
@@ -814,7 +846,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
       
       // STEP 3: Send to backend asynchronously with clientMessageId
-      _syncImageToBackend(localId, imagePath);
+      _syncImageToBackend(localId, imagePath, clientMessageId: clientMessageId);
       
     } catch (e) {
       print('[MSG_SEND] Failed to create local image message: $e');
@@ -835,6 +867,16 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     }
     
     print('[MSG_RECV] Received message via SignalR: ${message.id} (clientMessageId: ${message.clientMessageId ?? 'none'})');
+    // #region agent log - Hypothesis A/D: Track incoming message
+    _logToFile('MSG_RECEIVED', {
+      'messageId': message.id,
+      'clientMessageId': message.clientMessageId,
+      'localId': message.localId,
+      'type': message.type.toString(),
+      'isLocalOnly': message.isLocalOnly,
+      'currentMessages': state.messages.length,
+    });
+    // #endregion
     
     // Check if this is a replacement for a local message
     // (when our own message comes back from server via SignalR)
@@ -1034,6 +1076,14 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final oldStatus = oldMessage.status;
       
       if (oldStatus != status) {
+        // #region agent log - Hypothesis H: Track status updates
+        _logToFile('STATUS_UPDATED', {
+          'messageId': messageId,
+          'oldStatus': oldStatus.toString(),
+          'newStatus': status.toString(),
+          'chatId': chatId,
+        });
+        // #endregion
         final updatedMessage = oldMessage.copyWith(status: status);
         updatedMessages[messageIndex] = updatedMessage;
         
@@ -1074,9 +1124,20 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
                message.status != MessageStatus.read;
       }).toList();
       
-      if (unreadMessages.isEmpty) return;
+      if (unreadMessages.isEmpty) {
+        // #region agent log - Hypothesis E: Check if markMessagesAsRead is called
+        await _logToFile('MARK_READ_NO_UNREAD', {'totalMessages': state.messages.length});
+        // #endregion
+        return;
+      }
       
       print('[STATUS_UPDATE] Marking ${unreadMessages.length} messages as read');
+      // #region agent log - Hypothesis E: Track read marking
+      await _logToFile('MARK_READ_START', {
+        'unreadCount': unreadMessages.length,
+        'messageIds': unreadMessages.map((m) => m.id).take(5).toList(),
+      });
+      // #endregion
       
       // Add to status queue for reliable delivery
       for (final message in unreadMessages) {

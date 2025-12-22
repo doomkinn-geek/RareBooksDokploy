@@ -89,6 +89,19 @@ void main() async {
       // This MUST be done here, not in FcmService.initialize()
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
       print('[FCM] Background handler registered in main()');
+      
+      // Request PUSH notification permissions immediately on app start
+      try {
+        final settings = await FirebaseMessaging.instance.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+          provisional: false,
+        );
+        print('[FCM] Permission status: ${settings.authorizationStatus}');
+      } catch (e) {
+        print('[FCM] Failed to request permissions: $e');
+      }
     } catch (e) {
       print('Firebase initialization failed (may be not configured): $e');
     }

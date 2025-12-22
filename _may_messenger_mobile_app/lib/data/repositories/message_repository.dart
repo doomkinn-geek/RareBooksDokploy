@@ -52,20 +52,24 @@ class MessageRepository {
   Future<Message> sendAudioMessage({
     required String chatId,
     required String audioPath,
+    String? clientMessageId,
   }) async {
     return await _apiDataSource.sendAudioMessage(
       chatId: chatId,
       audioPath: audioPath,
+      clientMessageId: clientMessageId,
     );
   }
 
   Future<Message> sendImageMessage({
     required String chatId,
     required String imagePath,
+    String? clientMessageId,
   }) async {
     return await _apiDataSource.sendImageMessage(
       chatId: chatId,
       imagePath: imagePath,
+      clientMessageId: clientMessageId,
     );
   }
 
