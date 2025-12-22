@@ -1,0 +1,5 @@
+﻿
+12-22 20:04:27.253 26007 26007 I flutter : [SignalR] Sending heartbeat...
+12-22 20:04:27.303 26007 26007 I flutter : [SignalR] Pong received
+
+

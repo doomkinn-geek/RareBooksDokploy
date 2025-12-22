@@ -8,8 +8,6 @@ import 'auth_provider.dart';
 import 'signalr_provider.dart';
 import 'profile_provider.dart';
 import 'chats_provider.dart';
-import 'dart:io';
-import 'dart:convert';
 
 // LRU Cache provider - singleton для всего приложения
 final messageCacheProvider = Provider<MessageCacheRepository>((ref) {
@@ -97,23 +95,6 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     _statusSyncService.startPeriodicSync();
   }
 
-  // #region agent log helper
-  Future<void> _logToFile(String event, Map<String, dynamic> data) async {
-    try {
-      final logEntry = jsonEncode({
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-        'location': 'messages_provider.dart',
-        'event': event,
-        'data': data,
-        'sessionId': 'debug-session',
-      });
-      final file = File('d:\\_SOURCES\\source\\RareBooksServicePublic\\.cursor\\debug.log');
-      await file.writeAsString('$logEntry\n', mode: FileMode.append);
-    } catch (e) {
-      print('[LOG_ERROR] Failed to write log: $e');
-    }
-  }
-  // #endregion
 
   /// Periodic message sync to catch any missed messages (runs every 30 seconds)
   void _startPeriodicSync() {
@@ -263,12 +244,22 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   bool _isLoadingOlder = false;
 
   Future<void> loadMessages({bool forceRefresh = false}) async {
+    // #region agent log - Hypothesis A/E: Track loadMessages calls and concurrency
+    print('[MSG_LOAD] HYP_A_ENTRY: loadMessages called - chatId: $chatId, forceRefresh: $forceRefresh, currentIsLoading: ${state.isLoading}, currentMessagesCount: ${state.messages.length}, timestamp: ${DateTime.now().toIso8601String()}');
+    // #endregion
+    
     state = state.copyWith(isLoading: true, error: null);
     try {
       print('[MSG_LOAD] ========== STARTING LOAD MESSAGES ========== forceRefresh=$forceRefresh');
       
       // STEP 1: Try LRU cache first for instant loading
+      // #region agent log - Hypothesis A: Track LRU cache hit
+      final lruCacheStart = DateTime.now();
+      // #endregion
       final cachedMessages = _cache.getChatMessages(chatId);
+      // #region agent log - Hypothesis A
+      print('[MSG_LOAD] HYP_A_LRU: LRU cache check took ${DateTime.now().difference(lruCacheStart).inMilliseconds}ms, found ${cachedMessages.length} messages');
+      // #endregion
       
       if (cachedMessages.isNotEmpty && !forceRefresh) {
         print('[MSG_LOAD] Found ${cachedMessages.length} messages in LRU cache');
@@ -281,10 +272,16 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
       // STEP 2: Load synced messages from repository (Hive cache or API)
       print('[MSG_LOAD] Loading synced messages from repository...');
+      // #region agent log - Hypothesis E: Track Hive/API load timing
+      final repoLoadStart = DateTime.now();
+      // #endregion
       final List<Message> syncedMessages = await _messageRepository.getMessages(
         chatId: chatId,
         forceRefresh: forceRefresh,
       );
+      // #region agent log - Hypothesis E
+      print('[MSG_LOAD] HYP_E_REPO: Repository load took ${DateTime.now().difference(repoLoadStart).inMilliseconds}ms, loaded ${syncedMessages.length} messages');
+      // #endregion
       print('[MSG_LOAD] Loaded ${syncedMessages.length} synced messages from repository');
       for (final msg in syncedMessages.take(5)) {
         print('[MSG_LOAD]   - Synced: id=${msg.id}, localId=${msg.localId}, content="${msg.content}", isLocalOnly=${msg.isLocalOnly}');
@@ -363,6 +360,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       
       print('[MSG_LOAD] Final result: ${messages.length} messages total');
+      // #region agent log - Hypothesis A: Track final state update
+      print('[MSG_LOAD] HYP_A_FINAL: Final messages count: ${messages.length}, updating state...');
+      // #endregion
       print('[MSG_LOAD] ========== LOAD MESSAGES COMPLETE ==========');
       
       // STEP 5: Update LRU cache with fresh data
@@ -373,6 +373,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         messages: messages,
         isLoading: false,
       );
+      // #region agent log - Hypothesis A
+      print('[MSG_LOAD] HYP_A_STATE_UPDATED: State updated with ${messages.length} messages, isLoading: false');
+      // #endregion
       
       // STEP 6: Гарантируем сохранение в Hive кэш (на случай если репозиторий не сохранил)
       try {
@@ -488,6 +491,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     final backoffDelays = [1, 2, 4, 8, 16, 30]; // seconds
     
     try {
+      // #region agent log - Hypothesis B: Track sync attempts and SignalR status
+      print('[MSG_SYNC] HYP_B1: Syncing message to backend - localId: $localId, type: $type, outboxId: $outboxId, attempt: ${attemptNumber + 1}/$maxAttempts, signalRConnected: $_isSignalRConnected, timestamp: ${DateTime.now().toIso8601String()}');
+      // #endregion
       print('[MSG_SEND] Syncing message to backend: localId=$localId, outboxId=$outboxId (attempt ${attemptNumber + 1}/$maxAttempts)');
       if (outboxId != null) {
         await _outboxRepository.markAsSyncing(outboxId);
@@ -495,6 +501,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
       // Send via API with clientMessageId for idempotency
       final Message serverMessage;
+      // #region agent log - Hypothesis B: Track API call timing
+      final apiCallStart = DateTime.now();
+      // #endregion
       if (type == MessageType.text) {
         serverMessage = await _messageRepository.sendMessage(
           chatId: chatId,
@@ -503,15 +512,16 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
           clientMessageId: clientMessageId,
         );
       } else {
-        // #region agent log - Hypothesis B: Check clientMessageId for audio
-        await _logToFile('AUDIO_SEND', {'localId': localId, 'clientMessageId': clientMessageId, 'type': type.toString()});
-        // #endregion
         serverMessage = await _messageRepository.sendAudioMessage(
           chatId: chatId,
           audioPath: audioPath!,
           clientMessageId: clientMessageId,
         );
       }
+      // #region agent log - Hypothesis B
+      final apiCallDuration = DateTime.now().difference(apiCallStart).inMilliseconds;
+      print('[MSG_SYNC] HYP_B2: API call completed in ${apiCallDuration}ms, serverId: ${serverMessage.id}');
+      // #endregion
       
       print('[MSG_SEND] Message synced successfully. Server ID: ${serverMessage.id}');
       
@@ -554,6 +564,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
       
     } catch (e) {
+      // #region agent log - Hypothesis B: Track sync failures
+      print('[MSG_SYNC] HYP_B_ERROR: Sync failed (attempt ${attemptNumber + 1}) - localId: $localId, error: $e');
+      // #endregion
       print('[MSG_SEND] Failed to sync message to backend (attempt ${attemptNumber + 1}): $e');
       
       // Check if we should retry
@@ -563,6 +576,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
             ? backoffDelays[attemptNumber] 
             : backoffDelays.last;
         
+        // #region agent log - Hypothesis B
+        print('[MSG_SYNC] HYP_B3: Will retry in ${delaySeconds}s');
+        // #endregion
         print('[MSG_SEND] Will retry in $delaySeconds seconds...');
         
         // Mark as failed temporarily but will retry
@@ -576,6 +592,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         });
       } else {
         // Max attempts reached, mark as permanently failed
+        // #region agent log - Hypothesis B
+        print('[MSG_SYNC] HYP_B_MAX_RETRY: Max retry attempts reached for message: $localId');
+        // #endregion
         print('[MSG_SEND] Max retry attempts reached for message: $localId');
         _pendingSends.remove(localId);
         await _outboxRepository.markAsFailed(localId, 'Failed after $maxAttempts attempts: ${e.toString()}');
@@ -599,10 +618,10 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     final backoffDelays = [1, 2, 4, 8, 16, 30]; // seconds
     
     try {
-      print('[MSG_SEND] Syncing image to backend: $localId (attempt ${attemptNumber + 1}/$maxAttempts)');
       // #region agent log - Hypothesis B: Check clientMessageId for image
-      await _logToFile('IMAGE_SEND', {'localId': localId, 'clientMessageId': clientMessageId, 'imagePath': imagePath});
+      print('[MSG_SYNC] HYP_B_IMAGE: Syncing image to backend - localId: $localId, clientMessageId: $clientMessageId, attempt: ${attemptNumber + 1}/$maxAttempts');
       // #endregion
+      print('[MSG_SEND] Syncing image to backend: $localId (attempt ${attemptNumber + 1}/$maxAttempts)');
       
       // Send via API with clientMessageId
       final serverMessage = await _messageRepository.sendImageMessage(
@@ -868,14 +887,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     
     print('[MSG_RECV] Received message via SignalR: ${message.id} (clientMessageId: ${message.clientMessageId ?? 'none'})');
     // #region agent log - Hypothesis A/D: Track incoming message
-    _logToFile('MSG_RECEIVED', {
-      'messageId': message.id,
-      'clientMessageId': message.clientMessageId,
-      'localId': message.localId,
-      'type': message.type.toString(),
-      'isLocalOnly': message.isLocalOnly,
-      'currentMessages': state.messages.length,
-    });
+    print('[MSG_RECV] HYP_A_INCOMING: Message received - id: ${message.id}, clientMessageId: ${message.clientMessageId}, type: ${message.type}, isLocalOnly: ${message.isLocalOnly}, currentMessages: ${state.messages.length}');
     // #endregion
     
     // Check if this is a replacement for a local message

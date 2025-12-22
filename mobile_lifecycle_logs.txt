@@ -1,0 +1,23 @@
+﻿
+12-22 20:00:05.740 26007 26007 I flutter : [FCM] Background handler registered in main()
+12-22 20:01:24.084 26007 26007 I flutter : [FCM_BG] Handling background message: 0:1766422883652553%a8850b49f9fd7ecd
+12-22 20:01:41.728 26007 26007 I flutter : [FCM_FG] Foreground message data: {chatId: 19a80023-0346-4a2b-9540-15097f1c9
+01e, messageId: 4bc6e1f6-5cef-45ba-87c4-561af03e4c1b, body: ╨Я╤А╨╕╨▓╨╡╤В), type: Text, title: ╨Э╨╛╨▓╨╛╨╡ ╤Б╨╛╨╛╨▒╤Й╨╡╨╜
+╨╕╨╡ ╨╛╤В ╨Ь╨╕╤А╨░}
+12-22 20:01:41.728 26007 26007 I flutter : [FCM_FG] Foreground message data: {chatId: 19a80023-0346-4a2b-9540-15097f1c9
+01e, messageId: 4bc6e1f6-5cef-45ba-87c4-561af03e4c1b, body: ╨Я╤А╨╕╨▓╨╡╤В), type: Text, title: ╨Э╨╛╨▓╨╛╨╡ ╤Б╨╛╨╛╨▒╤Й╨╡╨╜
+╨╕╨╡ ╨╛╤В ╨Ь╨╕╤А╨░}
+12-22 20:01:47.255 26007 26007 I flutter : [FCM_FG] Foreground message data: {chatId: 19a80023-0346-4a2b-9540-15097f1c9
+01e, messageId: 39552567-f7aa-446a-92cf-d25104a84122, body: ╨Э╨╡╤Г╨╢╨╡╨╗╨╕ ╨▓╤Б╨╡ ╨╖╨░╤А╨░╨▒╨╛╤В╨░╨╗╨╛?, type: Text, ti
+tle: ╨Э╨╛╨▓╨╛╨╡ ╤Б╨╛╨╛╨▒╤Й╨╡╨╜╨╕╨╡ ╨╛╤В ╨Ь╨╕╤А╨░}
+12-22 20:01:47.255 26007 26007 I flutter : [FCM_FG] Foreground message data: {chatId: 19a80023-0346-4a2b-9540-15097f1c9
+01e, messageId: 39552567-f7aa-446a-92cf-d25104a84122, body: ╨Э╨╡╤Г╨╢╨╡╨╗╨╕ ╨▓╤Б╨╡ ╨╖╨░╤А╨░╨▒╨╛╤В╨░╨╗╨╛?, type: Text, ti
+tle: ╨Э╨╛╨▓╨╛╨╡ ╤Б╨╛╨╛╨▒╤Й╨╡╨╜╨╕╨╡ ╨╛╤В ╨Ь╨╕╤А╨░}
+12-22 20:01:52.479 26007 26007 I flutter : [FCM_FG] Foreground message data: {chatId: 19a80023-0346-4a2b-9540-15097f1c9
+01e, messageId: 12990582-c234-480d-a8a3-79c66fbe08e1, body: ╨Ю╤З╨╡╨╜╤М ╤Б╤В╤А╨░╨╜╨╜╨╛, type: Text, title: ╨Э╨╛╨▓╨╛╨╡ ╤Б
+╨╛╨╛╨▒╤Й╨╡╨╜╨╕╨╡ ╨╛╤В ╨Ь╨╕╤А╨░}
+12-22 20:01:52.480 26007 26007 I flutter : [FCM_FG] Foreground message data: {chatId: 19a80023-0346-4a2b-9540-15097f1c9
+01e, messageId: 12990582-c234-480d-a8a3-79c66fbe08e1, body: ╨Ю╤З╨╡╨╜╤М ╤Б╤В╤А╨░╨╜╨╜╨╛, type: Text, title: ╨Э╨╛╨▓╨╛╨╡ ╤Б
+╨╛╨╛╨▒╤Й╨╡╨╜╨╕╨╡ ╨╛╤В ╨Ь╨╕╤А╨░}
+
+

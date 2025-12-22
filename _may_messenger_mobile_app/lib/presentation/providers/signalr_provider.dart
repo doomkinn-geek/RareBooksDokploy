@@ -57,16 +57,32 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
 
   Future<void> _initialize() async {
     try {
+      // #region agent log - Hypothesis C: Track SignalR initialization
+      print('[SIGNALR_INIT] HYP_C_START: Starting SignalR initialization, timestamp: ${DateTime.now().toIso8601String()}');
+      // #endregion
       final token = await _authRepository.getStoredToken();
+      // #region agent log - Hypothesis C
+      print('[SIGNALR_INIT] HYP_C_TOKEN: Token retrieved: ${token != null ? "yes (${token.substring(0, 20)}...)" : "no"}');
+      // #endregion
       
       if (token != null) {
+        // #region agent log - Hypothesis C
+        final connectStart = DateTime.now();
+        // #endregion
         await _signalRService.connect(token);
+        // #region agent log - Hypothesis C
+        final connectDuration = DateTime.now().difference(connectStart).inMilliseconds;
+        print('[SIGNALR_INIT] HYP_C_CONNECTED: Connected in ${connectDuration}ms');
+        // #endregion
         _setupListeners();
         
         state = state.copyWith(isConnected: true);
         print('[SignalR] Provider initialized and listeners setup');
       }
     } catch (e) {
+      // #region agent log - Hypothesis C
+      print('[SIGNALR_INIT] HYP_C_ERROR: Failed to initialize: $e');
+      // #endregion
       print('[SignalR] Failed to initialize: $e');
       state = state.copyWith(error: e.toString(), isConnected: false);
     }
@@ -265,12 +281,17 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
   Future<void> reconnect() async {
     print('[SignalR] Manual reconnect requested');
     try {
-      final token = await _authRepository.getStoredToken();
-      if (token != null) {
-        await _signalRService.connect(token);
-        _setupListeners();
-        state = state.copyWith(isConnected: true);
+      // Use the service's force reconnect method which handles retries
+      await _signalRService.forceReconnectFromLifecycle();
+      
+      // Update state based on actual connection status
+      final isConnected = _signalRService.isConnected;
+      state = state.copyWith(isConnected: isConnected);
+      
+      if (isConnected) {
         print('[SignalR] Reconnected successfully');
+      } else {
+        print('[SignalR] Reconnect in progress...');
       }
     } catch (e) {
       print('[SignalR] Reconnect failed: $e');

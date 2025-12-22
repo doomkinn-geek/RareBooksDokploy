@@ -116,11 +116,53 @@ void main() async {
   );
 }
 
-class MyApp extends ConsumerWidget {
+class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    print('[LIFECYCLE] App state changed to: $state');
+    
+    // When app returns to foreground, check and reconnect SignalR if needed
+    if (state == AppLifecycleState.resumed) {
+      print('[LIFECYCLE] App resumed - checking SignalR connection');
+      final authState = ref.read(authStateProvider);
+      
+      if (authState.isAuthenticated) {
+        final signalRState = ref.read(signalRConnectionProvider);
+        
+        if (!signalRState.isConnected) {
+          print('[LIFECYCLE] SignalR disconnected - attempting reconnect');
+          ref.read(signalRConnectionProvider.notifier).reconnect();
+        } else {
+          print('[LIFECYCLE] SignalR already connected');
+        }
+      }
+    } else if (state == AppLifecycleState.paused) {
+      print('[LIFECYCLE] App paused - SignalR will maintain connection via heartbeat');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
     
     // Initialize SignalR and services when authenticated
@@ -223,19 +265,46 @@ class MyApp extends ConsumerWidget {
             
             // Setup FCM navigation callback
             fcmService.onMessageTap = (chatId) async {
-              print('[FCM] Push notification tapped for chat: $chatId');
+              // #region agent log - Hypothesis A: Track push tap navigation flow
+              print('[PUSH_NAV] HYP_A1: Push notification tapped for chat: $chatId, timestamp: ${DateTime.now().toIso8601String()}');
+              // #endregion
               
               try {
+                // #region agent log - Hypothesis C: Check SignalR status before navigation
+                final signalRState = ref.read(signalRConnectionProvider);
+                print('[PUSH_NAV] HYP_C1: SignalR connected: ${signalRState.isConnected}');
+                // #endregion
+                
                 // STEP 1: Refresh chats list to ensure chat exists
                 print('[FCM] Refreshing chats list...');
+                // #region agent log - Hypothesis A: Track chats load timing
+                final chatsLoadStart = DateTime.now();
+                // #endregion
                 await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+                // #region agent log - Hypothesis A
+                final chatsLoadDuration = DateTime.now().difference(chatsLoadStart).inMilliseconds;
+                print('[PUSH_NAV] HYP_A2: Chats loaded in ${chatsLoadDuration}ms');
+                // #endregion
                 
                 // STEP 2: Force refresh messages for this chat to show new message
                 print('[FCM] Loading messages for chat $chatId...');
+                // #region agent log - Hypothesis A/E: Track messages load timing and result
+                final messagesLoadStart = DateTime.now();
+                // #endregion
                 await ref.read(messagesProvider(chatId).notifier).loadMessages(forceRefresh: true);
+                // #region agent log - Hypothesis A/E
+                final messagesLoadDuration = DateTime.now().difference(messagesLoadStart).inMilliseconds;
+                final messagesState = ref.read(messagesProvider(chatId));
+                print('[PUSH_NAV] HYP_A3: Messages loaded in ${messagesLoadDuration}ms, count: ${messagesState.messages.length}, isLoading: ${messagesState.isLoading}, error: ${messagesState.error}');
+                // #endregion
                 
                 // STEP 3: Wait a bit to ensure messages are loaded
                 await Future.delayed(const Duration(milliseconds: 300));
+                
+                // #region agent log - Hypothesis A: Check messages after delay
+                final messagesStateAfterDelay = ref.read(messagesProvider(chatId));
+                print('[PUSH_NAV] HYP_A4: After delay - messages count: ${messagesStateAfterDelay.messages.length}, isLoading: ${messagesStateAfterDelay.isLoading}');
+                // #endregion
                 
                 // STEP 4: Navigate to chat screen
                 print('[FCM] Navigating to chat screen...');
@@ -246,9 +315,13 @@ class MyApp extends ConsumerWidget {
                   (route) => route.isFirst, // Keep only the main screen in stack
                 );
                 
-                print('[FCM] Navigation completed');
+                // #region agent log - Hypothesis A
+                print('[PUSH_NAV] HYP_A5: Navigation completed');
+                // #endregion
               } catch (e) {
-                print('[FCM] Error handling notification tap: $e');
+                // #region agent log - Hypothesis A
+                print('[PUSH_NAV] HYP_A_ERROR: Error handling notification tap: $e');
+                // #endregion
                 // Try to navigate anyway
                 navigatorKey.currentState?.push(
                   MaterialPageRoute(

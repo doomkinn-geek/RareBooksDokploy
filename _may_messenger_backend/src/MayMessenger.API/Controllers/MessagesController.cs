@@ -314,35 +314,35 @@ public class MessagesController : ControllerBase
         
         try
         {
-            // Idempotency check: if clientMessageId is provided, check if message already exists
+        // Idempotency check: if clientMessageId is provided, check if message already exists
             // This check is now protected by SERIALIZABLE transaction
-            if (!string.IsNullOrEmpty(dto.ClientMessageId))
+        if (!string.IsNullOrEmpty(dto.ClientMessageId))
+        {
+            var existingMessage = await _unitOfWork.Messages.GetByClientMessageIdAsync(dto.ClientMessageId);
+            if (existingMessage != null)
             {
-                var existingMessage = await _unitOfWork.Messages.GetByClientMessageIdAsync(dto.ClientMessageId);
-                if (existingMessage != null)
-                {
-                    _logger.LogInformation($"Message with ClientMessageId {dto.ClientMessageId} already exists, returning existing message {existingMessage.Id}");
+                _logger.LogInformation($"Message with ClientMessageId {dto.ClientMessageId} already exists, returning existing message {existingMessage.Id}");
                     
                     // Commit transaction (no changes made)
                     await transaction.CommitAsync();
-                    
-                    var existingMessageDto = new MessageDto
-                    {
-                        Id = existingMessage.Id,
-                        ChatId = existingMessage.ChatId,
-                        SenderId = existingMessage.SenderId,
-                        SenderName = existingMessage.Sender?.DisplayName ?? "Unknown",
-                        Type = existingMessage.Type,
-                        Content = existingMessage.Content,
-                        FilePath = existingMessage.FilePath,
-                        Status = existingMessage.Status,
-                        CreatedAt = existingMessage.CreatedAt,
-                        ClientMessageId = existingMessage.ClientMessageId
-                    };
-                    
-                    return Ok(existingMessageDto);
-                }
+                
+                var existingMessageDto = new MessageDto
+                {
+                    Id = existingMessage.Id,
+                    ChatId = existingMessage.ChatId,
+                    SenderId = existingMessage.SenderId,
+                    SenderName = existingMessage.Sender?.DisplayName ?? "Unknown",
+                    Type = existingMessage.Type,
+                    Content = existingMessage.Content,
+                    FilePath = existingMessage.FilePath,
+                    Status = existingMessage.Status,
+                    CreatedAt = existingMessage.CreatedAt,
+                    ClientMessageId = existingMessage.ClientMessageId
+                };
+                
+                return Ok(existingMessageDto);
             }
+        }
             
             // Get sender and chat within transaction
             var sender = await _unitOfWork.Users.GetByIdAsync(userId);
@@ -358,26 +358,26 @@ public class MessagesController : ControllerBase
                 _logger.LogError($"Chat {dto.ChatId} not found");
                 return BadRequest("Chat not found");
             }
-            
-            // Create new message
-            var message = new Message
-            {
-                ChatId = dto.ChatId,
-                SenderId = userId,
-                Type = dto.Type,
-                Content = dto.Content,
-                ClientMessageId = dto.ClientMessageId,
-                Status = MessageStatus.Sent
-            };
-            
-            await _unitOfWork.Messages.AddAsync(message);
+        
+        // Create new message
+        var message = new Message
+        {
+            ChatId = dto.ChatId,
+            SenderId = userId,
+            Type = dto.Type,
+            Content = dto.Content,
+            ClientMessageId = dto.ClientMessageId,
+            Status = MessageStatus.Sent
+        };
+        
+        await _unitOfWork.Messages.AddAsync(message);
             
             // Create pending acks for reliable delivery (within same transaction)
             await CreatePendingAcksForMessageAsync(chat, message, userId, AckType.Message);
             
             // Save all changes atomically
-            await _unitOfWork.SaveChangesAsync();
-            
+        await _unitOfWork.SaveChangesAsync();
+        
             // Commit transaction - this is the point of no return
             await transaction.CommitAsync();
             
@@ -387,25 +387,25 @@ public class MessagesController : ControllerBase
             DiagnosticsController.IncrementMessageProcessed();
             
             // Build response DTO
-            var messageDto = new MessageDto
-            {
-                Id = message.Id,
-                ChatId = message.ChatId,
-                SenderId = message.SenderId,
-                SenderName = sender.DisplayName,
-                Type = message.Type,
-                Content = message.Content,
-                FilePath = message.FilePath,
-                Status = message.Status,
-                CreatedAt = message.CreatedAt,
-                ClientMessageId = message.ClientMessageId
-            };
-            
+        var messageDto = new MessageDto
+        {
+            Id = message.Id,
+            ChatId = message.ChatId,
+            SenderId = message.SenderId,
+            SenderName = sender.DisplayName,
+            Type = message.Type,
+            Content = message.Content,
+            FilePath = message.FilePath,
+            Status = message.Status,
+            CreatedAt = message.CreatedAt,
+            ClientMessageId = message.ClientMessageId
+        };
+        
             // Send SignalR notification AFTER transaction commit
             // This ensures message is persisted before notifying clients
             try
             {
-                await _hubContext.Clients.Group(dto.ChatId.ToString()).SendAsync("ReceiveMessage", messageDto);
+            await _hubContext.Clients.Group(dto.ChatId.ToString()).SendAsync("ReceiveMessage", messageDto);
                 _logger.LogInformation($"SignalR notification sent for message {message.Id}");
             }
             catch (Exception ex)
@@ -445,10 +445,10 @@ public class MessagesController : ControllerBase
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, $"[DEBUG_PUSH_ERROR] Failed to send push notifications for message {message.Id}");
-                }
+        }
             });
-            
-            return Ok(messageDto);
+        
+        return Ok(messageDto);
         }
         catch (Microsoft.EntityFrameworkCore.DbUpdateException ex) when (ex.InnerException?.Message?.Contains("IX_Messages_ClientMessageId") == true)
         {
@@ -1067,24 +1067,24 @@ public class MessagesController : ControllerBase
     /// IMPORTANT: This method should be called within a transaction
     /// </summary>
     private async Task CreatePendingAcksForMessageAsync(Chat chat, Message message, Guid senderId, AckType ackType)
-    {
-        foreach (var participant in chat.Participants)
         {
-            // Don't create ack for sender
-            if (participant.UserId == senderId) continue;
-            
-            var pendingAck = new PendingAck
+            foreach (var participant in chat.Participants)
             {
-                MessageId = message.Id,
-                RecipientUserId = participant.UserId,
-                Type = ackType,
-                RetryCount = 0,
-                CreatedAt = DateTime.UtcNow
-            };
-            
-            await _unitOfWork.PendingAcks.AddAsync(pendingAck);
+                // Don't create ack for sender
+                if (participant.UserId == senderId) continue;
+                
+                var pendingAck = new PendingAck
+                {
+                    MessageId = message.Id,
+                    RecipientUserId = participant.UserId,
+                    Type = ackType,
+                    RetryCount = 0,
+                    CreatedAt = DateTime.UtcNow
+                };
+                
+                await _unitOfWork.PendingAcks.AddAsync(pendingAck);
+            }
         }
-    }
     
     /// <summary>
     /// Legacy method for backward compatibility - delegates to async version

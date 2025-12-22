@@ -14,6 +14,9 @@ class SignalRService {
   DateTime? _lastPongReceived;
 
   Future<void> connect(String token) async {
+    // #region agent log - Hypothesis C: Track SignalR connect lifecycle
+    print('[SIGNALR_CONNECT] HYP_C1: connect() called, timestamp: ${DateTime.now().toIso8601String()}');
+    // #endregion
     _currentToken = token;
     
     _hubConnection = HubConnectionBuilder()
@@ -32,6 +35,9 @@ class SignalRService {
 
     // Обработчик разрыва соединения
     _hubConnection?.onclose(({error}) {
+      // #region agent log - Hypothesis C
+      print('[SIGNALR_CONNECT] HYP_C_CLOSE: Connection closed, error: $error, timestamp: ${DateTime.now().toIso8601String()}');
+      // #endregion
       print('[SignalR] Connection closed. Error: $error');
       _isReconnecting = false;
       
@@ -52,12 +58,18 @@ class SignalRService {
     
     // Обработчик начала переподключения
     _hubConnection?.onreconnecting(({error}) {
+      // #region agent log - Hypothesis C
+      print('[SIGNALR_CONNECT] HYP_C_RECONNECTING: Reconnecting started, error: $error');
+      // #endregion
       print('[SignalR] Reconnecting... Error: $error');
       _isReconnecting = true;
     });
     
     // Обработчик успешного переподключения
     _hubConnection?.onreconnected(({connectionId}) async {
+      // #region agent log - Hypothesis C
+      print('[SIGNALR_CONNECT] HYP_C_RECONNECTED: Reconnected successfully, connectionId: $connectionId');
+      // #endregion
       print('[SignalR] Reconnected successfully! Connection ID: $connectionId');
       _isReconnecting = false;
       _reconnectAttempts = 0;
@@ -73,12 +85,22 @@ class SignalRService {
     _setupPongHandler();
     
     try {
+      // #region agent log - Hypothesis C
+      final startConnectTime = DateTime.now();
+      // #endregion
       await _hubConnection?.start();
+      // #region agent log - Hypothesis C
+      final connectDuration = DateTime.now().difference(startConnectTime).inMilliseconds;
+      print('[SIGNALR_CONNECT] HYP_C2: Connected successfully in ${connectDuration}ms, state: ${_hubConnection?.state}');
+      // #endregion
       print('[SignalR] Connected successfully');
       
       // Start heartbeat timer after successful connection
       _startHeartbeatTimer();
     } catch (e) {
+      // #region agent log - Hypothesis C
+      print('[SIGNALR_CONNECT] HYP_C_ERROR: Failed to connect: $e');
+      // #endregion
       print('[SignalR] Failed to connect: $e');
       rethrow;
     }
@@ -140,6 +162,13 @@ class SignalRService {
     print('[SignalR] Forcing reconnect due to heartbeat failure');
     _stopHeartbeatTimer();
     await _attemptReconnect();
+  }
+  
+  /// Public method to force reconnect (e.g., when app returns from background)
+  Future<void> forceReconnectFromLifecycle() async {
+    print('[SignalR] Force reconnect requested from app lifecycle');
+    _reconnectAttempts = 0; // Reset attempts for fresh start
+    await _forceReconnect();
   }
   
   Future<void> _attemptReconnect() async {
@@ -419,15 +448,31 @@ class SignalRService {
   }
 
   Future<void> joinChat(String chatId) async {
+    // #region agent log - Hypothesis C/D: Track joinChat calls
+    print('[SIGNALR_JOIN] HYP_D_JOIN1: joinChat called - chatId: $chatId, isConnected: $isConnected, state: ${_hubConnection?.state}, timestamp: ${DateTime.now().toIso8601String()}');
+    // #endregion
     if (!isConnected) {
+      // #region agent log - Hypothesis C
+      print('[SIGNALR_JOIN] HYP_C_NOT_CONNECTED: Cannot join chat - SignalR not connected');
+      // #endregion
       print('[SignalR] Cannot join chat - not connected');
       return;
     }
     
     try {
+      // #region agent log - Hypothesis D
+      final joinStart = DateTime.now();
+      // #endregion
       await _hubConnection?.invoke('JoinChat', args: [chatId]);
+      // #region agent log - Hypothesis D
+      final joinDuration = DateTime.now().difference(joinStart).inMilliseconds;
+      print('[SIGNALR_JOIN] HYP_D_JOIN2: Joined chat in ${joinDuration}ms');
+      // #endregion
       print('[SignalR] Joined chat: $chatId');
     } catch (e) {
+      // #region agent log - Hypothesis C/D
+      print('[SIGNALR_JOIN] HYP_D_JOIN_ERROR: Failed to join chat: $e');
+      // #endregion
       print('[SignalR] Failed to join chat: $e');
     }
   }

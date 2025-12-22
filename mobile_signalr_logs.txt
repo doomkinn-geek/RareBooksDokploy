@@ -1,0 +1,935 @@
+﻿
+12-22 20:01:43.534 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:43.534 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 51d79ca3-6a
+55-4e7f-8049-d872a301b2ab, NewStatus: MessageStatus.read, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2025
+-12-22T20:01:43.534991
+12-22 20:01:43.535 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:43.535 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:43.535 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:43.547 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 51d
+79ca3-6a55-4e7f-8049-d872a301b2ab, Status: MessageStatus.read, Timestamp: 2025-12-22T20:01:43.547034
+12-22 20:01:43.547 26007 26007 I flutter : [SignalR] Message status updated: 51d79ca3-6a55-4e7f-8049-d872a301b2ab -> Me
+ssageStatus.read
+12-22 20:01:43.547 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:43.547 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 51d79ca3-6a
+55-4e7f-8049-d872a301b2ab, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:43.547132
+12-22 20:01:43.547 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 49
+12-22 20:01:43.547 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.read, SenderId: 942a32ce-c4ef-4b0e-a547-3eb2e176d04f
+12-22 20:01:43.547 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:43.547 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 51d79ca3-6a
+55-4e7f-8049-d872a301b2ab, NewStatus: MessageStatus.read, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2025
+-12-22T20:01:43.547195
+12-22 20:01:43.547 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:43.547 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:43.547 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 51d79ca3-6a
+55-4e7f-8049-d872a301b2ab, NewStatus: MessageStatus.read, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2025
+-12-22T20:01:43.547222
+12-22 20:01:43.547 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:43.547 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:43.547 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:43.569 26007 26007 I flutter : [SignalR] Sent ACK for status update: 51d79ca3-6a55-4e7f-8049-d872a301b2ab -
+> 3
+12-22 20:01:43.580 26007 26007 I flutter : [SignalR] Sent ACK for status update: 51d79ca3-6a55-4e7f-8049-d872a301b2ab -
+> 3
+12-22 20:01:45.348 26007 26007 I flutter : [MSG_RECV] Message received via SignalR: 39552567-f7aa-446a-92cf-d25104a8412
+2 for chat 19a80023-0346-4a2b-9540-15097f1c901e
+12-22 20:01:45.349 26007 26007 I flutter : [MSG_RECV] Received message via SignalR: 39552567-f7aa-446a-92cf-d25104a8412
+2 (clientMessageId: 3ececf14-887c-4e56-958b-5b960fdb757e)
+12-22 20:01:45.349 26007 26007 I flutter : [MSG_RECV] HYP_A_INCOMING: Message received - id: 39552567-f7aa-446a-92cf-d2
+5104a84122, clientMessageId: 3ececf14-887c-4e56-958b-5b960fdb757e, type: MessageType.text, isLocalOnly: false, currentM
+essages: 51
+12-22 20:01:45.349 26007 26007 I flutter : [MSG_RECV] Added new message to state: 39552567-f7aa-446a-92cf-d25104a84122 
+(localId: none, clientMessageId: 3ececf14-887c-4e56-958b-5b960fdb757e)
+12-22 20:01:45.349 26007 26007 I flutter : [MSG_RECV] Message added to provider for chat 19a80023-0346-4a2b-9540-15097f
+1c901e
+12-22 20:01:45.349 26007 26007 I flutter : [MSG_RECV] Delivery confirmation sent for message: 39552567-f7aa-446a-92cf-d
+25104a84122
+12-22 20:01:45.349 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.delivered, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp:
+ 2025-12-22T20:01:45.349528
+12-22 20:01:45.349 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 51
+12-22 20:01:45.349 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.sent, New status: Message
+Status.delivered, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:45.350 26007 26007 I flutter : #1      SignalRConnectionNotifier._setupListeners.<anonymous closure> (packa
+ge:mobile_app/presentation/providers/signalr_provider.dart:124)
+12-22 20:01:45.350 26007 26007 I flutter : #2      SignalRService.onReceiveMessage.<anonymous closure> (package:mobile_
+app/data/datasources/signalr_service.dart:264)
+12-22 20:01:45.350 26007 26007 I flutter : #3      HubConnection._invokeClientMethod.<anonymous closure> (package:signa
+lr_netcore/hub_connection.dart:696)
+12-22 20:01:45.350 26007 26007 I flutter : [SignalR] Chat preview updated for chat 19a80023-0346-4a2b-9540-15097f1c901e
+, isFromMe: false
+12-22 20:01:45.390 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:45.390359
+12-22 20:01:45.390 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 51
+12-22 20:01:45.390 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.delivered, New status: Me
+ssageStatus.read, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:45.394 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 395
+52567-f7aa-446a-92cf-d25104a84122, Status: MessageStatus.sending, Timestamp: 2025-12-22T20:01:45.394111
+12-22 20:01:45.394 26007 26007 I flutter : [SignalR] Message status updated: 39552567-f7aa-446a-92cf-d25104a84122 -> Me
+ssageStatus.sending
+12-22 20:01:45.394 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:45.394 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.sending, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2
+025-12-22T20:01:45.394164
+12-22 20:01:45.394 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 51
+12-22 20:01:45.394 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.sending, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:45.394 26007 26007 I flutter : #1      SignalRConnectionNotifier._setupListeners.<anonymous closure> (packa
+ge:mobile_app/presentation/providers/signalr_provider.dart:206)
+12-22 20:01:45.394 26007 26007 I flutter : #2      SignalRService.onMessageStatusUpdated.<anonymous closure> (package:m
+obile_app/data/datasources/signalr_service.dart:312)
+12-22 20:01:45.394 26007 26007 I flutter : #3      HubConnection._invokeClientMethod.<anonymous closure> (package:signa
+lr_netcore/hub_connection.dart:696)
+12-22 20:01:45.394 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:45.394 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.sending, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2
+025-12-22T20:01:45.394437
+12-22 20:01:45.394 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:45.394 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:45.394 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.sending, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2
+025-12-22T20:01:45.394476
+12-22 20:01:45.394 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:45.394 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:45.394 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:45.398 26007 26007 I flutter : [SignalR] Sent ACK for message: 39552567-f7aa-446a-92cf-d25104a84122
+12-22 20:01:45.415 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:45.415568
+12-22 20:01:45.415 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 51
+12-22 20:01:45.415 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.sending, New status: Mess
+ageStatus.read, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:45.434 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 395
+52567-f7aa-446a-92cf-d25104a84122, Status: MessageStatus.delivered, Timestamp: 2025-12-22T20:01:45.434126
+12-22 20:01:45.434 26007 26007 I flutter : [SignalR] Message status updated: 39552567-f7aa-446a-92cf-d25104a84122 -> Me
+ssageStatus.delivered
+12-22 20:01:45.434 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:45.434 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.delivered, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp:
+ 2025-12-22T20:01:45.434164
+12-22 20:01:45.434 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 51
+12-22 20:01:45.434 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.delivered, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:45.434 26007 26007 I flutter : #1      SignalRConnectionNotifier._setupListeners.<anonymous closure> (packa
+ge:mobile_app/presentation/providers/signalr_provider.dart:206)
+12-22 20:01:45.434 26007 26007 I flutter : #2      SignalRService.onMessageStatusUpdated.<anonymous closure> (package:m
+obile_app/data/datasources/signalr_service.dart:312)
+12-22 20:01:45.434 26007 26007 I flutter : #3      HubConnection._invokeClientMethod.<anonymous closure> (package:signa
+lr_netcore/hub_connection.dart:696)
+12-22 20:01:45.434 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:45.434 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.delivered, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp:
+ 2025-12-22T20:01:45.434447
+12-22 20:01:45.434 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:45.434 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:45.434 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.delivered, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp:
+ 2025-12-22T20:01:45.434480
+12-22 20:01:45.434 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:45.434 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:45.434 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:45.441 26007 26007 I flutter : [SignalR] Message marked as read: 39552567-f7aa-446a-92cf-d25104a84122
+12-22 20:01:45.441 26007 26007 I flutter : [SignalR] Sent ACK for status update: 39552567-f7aa-446a-92cf-d25104a84122 -
+> 0
+12-22 20:01:45.455 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 395
+52567-f7aa-446a-92cf-d25104a84122, Status: MessageStatus.read, Timestamp: 2025-12-22T20:01:45.455888
+12-22 20:01:45.455 26007 26007 I flutter : [SignalR] Message status updated: 39552567-f7aa-446a-92cf-d25104a84122 -> Me
+ssageStatus.read
+12-22 20:01:45.455 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:45.455 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:45.455952
+12-22 20:01:45.455 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 51
+12-22 20:01:45.455 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.delivered, New status: Me
+ssageStatus.read, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:45.456 26007 26007 I flutter : #1      SignalRConnectionNotifier._setupListeners.<anonymous closure> (packa
+ge:mobile_app/presentation/providers/signalr_provider.dart:206)
+12-22 20:01:45.456 26007 26007 I flutter : #2      SignalRService.onMessageStatusUpdated.<anonymous closure> (package:m
+obile_app/data/datasources/signalr_service.dart:312)
+12-22 20:01:45.456 26007 26007 I flutter : #3      HubConnection._invokeClientMethod.<anonymous closure> (package:signa
+lr_netcore/hub_connection.dart:696)
+12-22 20:01:45.456 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:45.456 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.read, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2025
+-12-22T20:01:45.456276
+12-22 20:01:45.456 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:45.456 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:45.456 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.read, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2025
+-12-22T20:01:45.456329
+12-22 20:01:45.456 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:45.456 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:45.456 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:45.458 26007 26007 I flutter : [SignalR] Message marked as read: 39552567-f7aa-446a-92cf-d25104a84122
+12-22 20:01:45.467 26007 26007 I flutter : [SignalR] Sent ACK for status update: 39552567-f7aa-446a-92cf-d25104a84122 -
+> 2
+12-22 20:01:45.491 26007 26007 I flutter : [SignalR] Sent ACK for status update: 39552567-f7aa-446a-92cf-d25104a84122 -
+> 3
+12-22 20:01:45.545 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 395
+52567-f7aa-446a-92cf-d25104a84122, Status: MessageStatus.read, Timestamp: 2025-12-22T20:01:45.545277
+12-22 20:01:45.545 26007 26007 I flutter : [SignalR] Message status updated: 39552567-f7aa-446a-92cf-d25104a84122 -> Me
+ssageStatus.read
+12-22 20:01:45.545 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:45.545 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:45.545316
+12-22 20:01:45.545 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 51
+12-22 20:01:45.545 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.read, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:45.545 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:45.545 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.read, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2025
+-12-22T20:01:45.545365
+12-22 20:01:45.545 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:45.545 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:45.545 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.read, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2025
+-12-22T20:01:45.545426
+12-22 20:01:45.545 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:45.545 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:45.545 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:45.559 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 395
+52567-f7aa-446a-92cf-d25104a84122, Status: MessageStatus.read, Timestamp: 2025-12-22T20:01:45.559145
+12-22 20:01:45.559 26007 26007 I flutter : [SignalR] Message status updated: 39552567-f7aa-446a-92cf-d25104a84122 -> Me
+ssageStatus.read
+12-22 20:01:45.559 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:45.559 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:45.559191
+12-22 20:01:45.559 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 51
+12-22 20:01:45.559 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.read, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:45.559 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:45.559 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.read, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2025
+-12-22T20:01:45.559247
+12-22 20:01:45.559 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:45.559 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:45.559 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.read, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2025
+-12-22T20:01:45.559278
+12-22 20:01:45.559 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:45.559 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:45.559 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:45.578 26007 26007 I flutter : [SignalR] Sent ACK for status update: 39552567-f7aa-446a-92cf-d25104a84122 -
+> 3
+12-22 20:01:45.592 26007 26007 I flutter : [SignalR] Sent ACK for status update: 39552567-f7aa-446a-92cf-d25104a84122 -
+> 3
+12-22 20:01:47.255 26007 26007 I flutter : [FCM_FG] Foreground message data: {chatId: 19a80023-0346-4a2b-9540-15097f1c9
+01e, messageId: 39552567-f7aa-446a-92cf-d25104a84122, body: ╨Э╨╡╤Г╨╢╨╡╨╗╨╕ ╨▓╤Б╨╡ ╨╖╨░╤А╨░╨▒╨╛╤В╨░╨╗╨╛?, type: Text, ti
+tle: ╨Э╨╛╨▓╨╛╨╡ ╤Б╨╛╨╛╨▒╤Й╨╡╨╜╨╕╨╡ ╨╛╤В ╨Ь╨╕╤А╨░}
+12-22 20:01:47.255 26007 26007 I flutter : [FCM_FG] Triggering message fetch for messageId: 39552567-f7aa-446a-92cf-d25
+104a84122
+12-22 20:01:47.255 26007 26007 I flutter : [FCM] Message received notification for message 39552567-f7aa-446a-92cf-d251
+04a84122 in chat 19a80023-0346-4a2b-9540-15097f1c901e
+12-22 20:01:47.255 26007 26007 I flutter : [FCM] Message already in cache, no fetch needed
+12-22 20:01:47.255 26007 26007 I flutter : [FCM_FG] User in current chat, not showing notification
+12-22 20:01:47.255 26007 26007 I flutter : [FCM_FG] Foreground message data: {chatId: 19a80023-0346-4a2b-9540-15097f1c9
+01e, messageId: 39552567-f7aa-446a-92cf-d25104a84122, body: ╨Э╨╡╤Г╨╢╨╡╨╗╨╕ ╨▓╤Б╨╡ ╨╖╨░╤А╨░╨▒╨╛╤В╨░╨╗╨╛?, type: Text, ti
+tle: ╨Э╨╛╨▓╨╛╨╡ ╤Б╨╛╨╛╨▒╤Й╨╡╨╜╨╕╨╡ ╨╛╤В ╨Ь╨╕╤А╨░}
+12-22 20:01:47.255 26007 26007 I flutter : [FCM_FG] Triggering message fetch for messageId: 39552567-f7aa-446a-92cf-d25
+104a84122
+12-22 20:01:47.255 26007 26007 I flutter : [FCM] Message received notification for message 39552567-f7aa-446a-92cf-d251
+04a84122 in chat 19a80023-0346-4a2b-9540-15097f1c901e
+12-22 20:01:47.255 26007 26007 I flutter : [FCM] Message already in cache, no fetch needed
+12-22 20:01:47.255 26007 26007 I flutter : [FCM_FG] User in current chat, not showing notification
+12-22 20:01:50.604 26007 26007 I flutter : [MSG_RECV] Message received via SignalR: 12990582-c234-480d-a8a3-79c66fbe08e
+1 for chat 19a80023-0346-4a2b-9540-15097f1c901e
+12-22 20:01:50.604 26007 26007 I flutter : [MSG_RECV] Received message via SignalR: 12990582-c234-480d-a8a3-79c66fbe08e
+1 (clientMessageId: 1f283e1b-f4e4-4980-8607-02c72e37a4ea)
+12-22 20:01:50.604 26007 26007 I flutter : [MSG_RECV] HYP_A_INCOMING: Message received - id: 12990582-c234-480d-a8a3-79
+c66fbe08e1, clientMessageId: 1f283e1b-f4e4-4980-8607-02c72e37a4ea, type: MessageType.text, isLocalOnly: false, currentM
+essages: 52
+12-22 20:01:50.604 26007 26007 I flutter : [MSG_RECV] Added new message to state: 12990582-c234-480d-a8a3-79c66fbe08e1 
+(localId: none, clientMessageId: 1f283e1b-f4e4-4980-8607-02c72e37a4ea)
+12-22 20:01:50.605 26007 26007 I flutter : [MSG_RECV] Message added to provider for chat 19a80023-0346-4a2b-9540-15097f
+1c901e
+12-22 20:01:50.605 26007 26007 I flutter : [MSG_RECV] Delivery confirmation sent for message: 12990582-c234-480d-a8a3-7
+9c66fbe08e1
+12-22 20:01:50.605 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.delivered, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp:
+ 2025-12-22T20:01:50.605639
+12-22 20:01:50.605 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 52
+12-22 20:01:50.605 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.sent, New status: Message
+Status.delivered, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:50.606 26007 26007 I flutter : #1      SignalRConnectionNotifier._setupListeners.<anonymous closure> (packa
+ge:mobile_app/presentation/providers/signalr_provider.dart:124)
+12-22 20:01:50.606 26007 26007 I flutter : #2      SignalRService.onReceiveMessage.<anonymous closure> (package:mobile_
+app/data/datasources/signalr_service.dart:264)
+12-22 20:01:50.606 26007 26007 I flutter : #3      HubConnection._invokeClientMethod.<anonymous closure> (package:signa
+lr_netcore/hub_connection.dart:696)
+12-22 20:01:50.607 26007 26007 I flutter : [SignalR] Chat preview updated for chat 19a80023-0346-4a2b-9540-15097f1c901e
+, isFromMe: false
+12-22 20:01:50.660 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:50.660376
+12-22 20:01:50.660 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 52
+12-22 20:01:50.660 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.delivered, New status: Me
+ssageStatus.read, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:50.664 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 129
+90582-c234-480d-a8a3-79c66fbe08e1, Status: MessageStatus.sending, Timestamp: 2025-12-22T20:01:50.664762
+12-22 20:01:50.664 26007 26007 I flutter : [SignalR] Message status updated: 12990582-c234-480d-a8a3-79c66fbe08e1 -> Me
+ssageStatus.sending
+12-22 20:01:50.664 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:50.664 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.sending, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2
+025-12-22T20:01:50.664826
+12-22 20:01:50.664 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 52
+12-22 20:01:50.664 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.sending, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:50.665 26007 26007 I flutter : #1      SignalRConnectionNotifier._setupListeners.<anonymous closure> (packa
+ge:mobile_app/presentation/providers/signalr_provider.dart:206)
+12-22 20:01:50.665 26007 26007 I flutter : #2      SignalRService.onMessageStatusUpdated.<anonymous closure> (package:m
+obile_app/data/datasources/signalr_service.dart:312)
+12-22 20:01:50.665 26007 26007 I flutter : #3      HubConnection._invokeClientMethod.<anonymous closure> (package:signa
+lr_netcore/hub_connection.dart:696)
+12-22 20:01:50.665 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:50.665 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.sending, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2
+025-12-22T20:01:50.665517
+12-22 20:01:50.665 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:50.665 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:50.665 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.sending, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2
+025-12-22T20:01:50.665589
+12-22 20:01:50.665 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:50.665 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:50.665 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:50.680 26007 26007 I flutter : [SignalR] Sent ACK for message: 12990582-c234-480d-a8a3-79c66fbe08e1
+12-22 20:01:50.682 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:50.682926
+12-22 20:01:50.682 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 52
+12-22 20:01:50.683 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.sending, New status: Mess
+ageStatus.read, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:50.710 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 129
+90582-c234-480d-a8a3-79c66fbe08e1, Status: MessageStatus.delivered, Timestamp: 2025-12-22T20:01:50.710759
+12-22 20:01:50.710 26007 26007 I flutter : [SignalR] Message status updated: 12990582-c234-480d-a8a3-79c66fbe08e1 -> Me
+ssageStatus.delivered
+12-22 20:01:50.710 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:50.710 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.delivered, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp:
+ 2025-12-22T20:01:50.710855
+12-22 20:01:50.710 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 52
+12-22 20:01:50.710 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.delivered, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:50.711 26007 26007 I flutter : #1      SignalRConnectionNotifier._setupListeners.<anonymous closure> (packa
+ge:mobile_app/presentation/providers/signalr_provider.dart:206)
+12-22 20:01:50.711 26007 26007 I flutter : #2      SignalRService.onMessageStatusUpdated.<anonymous closure> (package:m
+obile_app/data/datasources/signalr_service.dart:312)
+12-22 20:01:50.711 26007 26007 I flutter : #3      HubConnection._invokeClientMethod.<anonymous closure> (package:signa
+lr_netcore/hub_connection.dart:696)
+12-22 20:01:50.711 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:50.711 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.delivered, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp:
+ 2025-12-22T20:01:50.711502
+12-22 20:01:50.711 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:50.711 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:50.711 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.delivered, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp:
+ 2025-12-22T20:01:50.711568
+12-22 20:01:50.711 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:50.711 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:50.711 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:50.715 26007 26007 I flutter : [SignalR] Message marked as read: 12990582-c234-480d-a8a3-79c66fbe08e1
+12-22 20:01:50.715 26007 26007 I flutter : [SignalR] Sent ACK for status update: 12990582-c234-480d-a8a3-79c66fbe08e1 -
+> 0
+12-22 20:01:50.729 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:50.729148
+12-22 20:01:50.729 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 52
+12-22 20:01:50.729 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.delivered, New status: Me
+ssageStatus.read, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:50.732 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 129
+90582-c234-480d-a8a3-79c66fbe08e1, Status: MessageStatus.read, Timestamp: 2025-12-22T20:01:50.732276
+12-22 20:01:50.732 26007 26007 I flutter : [SignalR] Message status updated: 12990582-c234-480d-a8a3-79c66fbe08e1 -> Me
+ssageStatus.read
+12-22 20:01:50.732 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:50.732 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:50.732337
+12-22 20:01:50.732 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 52
+12-22 20:01:50.732 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.read, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:50.732 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:50.732 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2025
+-12-22T20:01:50.732412
+12-22 20:01:50.732 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:50.732 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:50.732 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2025
+-12-22T20:01:50.732458
+12-22 20:01:50.732 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:50.732 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:50.732 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:50.733 26007 26007 I flutter : [SignalR] Message marked as read: 12990582-c234-480d-a8a3-79c66fbe08e1
+12-22 20:01:50.748 26007 26007 I flutter : [SignalR] Sent ACK for status update: 12990582-c234-480d-a8a3-79c66fbe08e1 -
+> 2
+12-22 20:01:50.773 26007 26007 I flutter : [SignalR] Message marked as read: 12990582-c234-480d-a8a3-79c66fbe08e1
+12-22 20:01:50.774 26007 26007 I flutter : [SignalR] Sent ACK for status update: 12990582-c234-480d-a8a3-79c66fbe08e1 -
+> 3
+12-22 20:01:50.841 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 129
+90582-c234-480d-a8a3-79c66fbe08e1, Status: MessageStatus.read, Timestamp: 2025-12-22T20:01:50.841098
+12-22 20:01:50.841 26007 26007 I flutter : [SignalR] Message status updated: 12990582-c234-480d-a8a3-79c66fbe08e1 -> Me
+ssageStatus.read
+12-22 20:01:50.841 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:50.841 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:50.841216
+12-22 20:01:50.841 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 52
+12-22 20:01:50.841 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.read, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:50.841 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:50.841 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2025
+-12-22T20:01:50.841314
+12-22 20:01:50.841 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:50.841 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:50.841 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2025
+-12-22T20:01:50.841391
+12-22 20:01:50.841 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:50.841 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:50.841 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:50.861 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 129
+90582-c234-480d-a8a3-79c66fbe08e1, Status: MessageStatus.read, Timestamp: 2025-12-22T20:01:50.861003
+12-22 20:01:50.861 26007 26007 I flutter : [SignalR] Message status updated: 12990582-c234-480d-a8a3-79c66fbe08e1 -> Me
+ssageStatus.read
+12-22 20:01:50.861 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:50.861 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:50.861071
+12-22 20:01:50.861 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 52
+12-22 20:01:50.861 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.read, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:50.861 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:50.861 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2025
+-12-22T20:01:50.861147
+12-22 20:01:50.861 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:50.861 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:50.861 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2025
+-12-22T20:01:50.861213
+12-22 20:01:50.861 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:50.861 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:50.861 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:50.877 26007 26007 I flutter : [SignalR] Sent ACK for status update: 12990582-c234-480d-a8a3-79c66fbe08e1 -
+> 3
+12-22 20:01:50.889 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 129
+90582-c234-480d-a8a3-79c66fbe08e1, Status: MessageStatus.read, Timestamp: 2025-12-22T20:01:50.889036
+12-22 20:01:50.889 26007 26007 I flutter : [SignalR] Message status updated: 12990582-c234-480d-a8a3-79c66fbe08e1 -> Me
+ssageStatus.read
+12-22 20:01:50.889 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:50.889 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:50.889155
+12-22 20:01:50.889 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 52
+12-22 20:01:50.889 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.read, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:50.889 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:50.889 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2025
+-12-22T20:01:50.889248
+12-22 20:01:50.889 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:50.889 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:50.889 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2025
+-12-22T20:01:50.889317
+12-22 20:01:50.889 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:50.889 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:50.889 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:50.895 26007 26007 I flutter : [SignalR] Sent ACK for status update: 12990582-c234-480d-a8a3-79c66fbe08e1 -
+> 3
+12-22 20:01:50.927 26007 26007 I flutter : [SignalR] Sent ACK for status update: 12990582-c234-480d-a8a3-79c66fbe08e1 -
+> 3
+12-22 20:01:51.693 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 395
+52567-f7aa-446a-92cf-d25104a84122, Status: MessageStatus.read, Timestamp: 2025-12-22T20:01:51.693761
+12-22 20:01:51.693 26007 26007 I flutter : [SignalR] Message status updated: 39552567-f7aa-446a-92cf-d25104a84122 -> Me
+ssageStatus.read
+12-22 20:01:51.693 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:51.694 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:51.694049
+12-22 20:01:51.694 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 51
+12-22 20:01:51.694 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.read, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:51.694 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:51.694 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.read, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2025
+-12-22T20:01:51.694484
+12-22 20:01:51.694 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:51.694 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:51.694 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.read, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2025
+-12-22T20:01:51.694739
+12-22 20:01:51.694 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:51.695 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:51.695 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:51.735 26007 26007 I flutter : [SignalR] Sent ACK for status update: 39552567-f7aa-446a-92cf-d25104a84122 -
+> 3
+12-22 20:01:51.747 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 395
+52567-f7aa-446a-92cf-d25104a84122, Status: MessageStatus.read, Timestamp: 2025-12-22T20:01:51.747041
+12-22 20:01:51.747 26007 26007 I flutter : [SignalR] Message status updated: 39552567-f7aa-446a-92cf-d25104a84122 -> Me
+ssageStatus.read
+12-22 20:01:51.747 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:51.747 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:51.747275
+12-22 20:01:51.747 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 51
+12-22 20:01:51.747 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.read, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:51.747 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:51.747 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.read, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2025
+-12-22T20:01:51.747706
+12-22 20:01:51.747 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:51.747 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:51.747 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 39552567-f7
+aa-446a-92cf-d25104a84122, NewStatus: MessageStatus.read, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2025
+-12-22T20:01:51.747960
+12-22 20:01:51.748 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:51.748 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:51.748 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:51.792 26007 26007 I flutter : [SignalR] Sent ACK for status update: 39552567-f7aa-446a-92cf-d25104a84122 -
+> 3
+12-22 20:01:51.802 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 129
+90582-c234-480d-a8a3-79c66fbe08e1, Status: MessageStatus.read, Timestamp: 2025-12-22T20:01:51.802617
+12-22 20:01:51.802 26007 26007 I flutter : [SignalR] Message status updated: 12990582-c234-480d-a8a3-79c66fbe08e1 -> Me
+ssageStatus.read
+12-22 20:01:51.802 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:51.802 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:51.802800
+12-22 20:01:51.802 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 52
+12-22 20:01:51.802 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.read, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:51.803 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:51.803 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2025
+-12-22T20:01:51.803085
+12-22 20:01:51.803 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:51.803 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:51.803 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2025
+-12-22T20:01:51.803260
+12-22 20:01:51.803 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:51.803 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:51.803 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:51.844 26007 26007 I flutter : [SignalR] Sent ACK for status update: 12990582-c234-480d-a8a3-79c66fbe08e1 -
+> 3
+12-22 20:01:51.855 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 129
+90582-c234-480d-a8a3-79c66fbe08e1, Status: MessageStatus.read, Timestamp: 2025-12-22T20:01:51.855784
+12-22 20:01:51.855 26007 26007 I flutter : [SignalR] Message status updated: 12990582-c234-480d-a8a3-79c66fbe08e1 -> Me
+ssageStatus.read
+12-22 20:01:51.855 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:51.855 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:51.855898
+12-22 20:01:51.855 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 52
+12-22 20:01:51.856 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.read, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:51.856 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:51.856 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2025
+-12-22T20:01:51.856052
+12-22 20:01:51.856 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:51.856 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:51.856 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2025
+-12-22T20:01:51.856129
+12-22 20:01:51.856 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:51.856 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:51.856 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:51.895 26007 26007 I flutter : [SignalR] Sent ACK for status update: 12990582-c234-480d-a8a3-79c66fbe08e1 -
+> 3
+12-22 20:01:51.904 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 129
+90582-c234-480d-a8a3-79c66fbe08e1, Status: MessageStatus.read, Timestamp: 2025-12-22T20:01:51.904263
+12-22 20:01:51.904 26007 26007 I flutter : [SignalR] Message status updated: 12990582-c234-480d-a8a3-79c66fbe08e1 -> Me
+ssageStatus.read
+12-22 20:01:51.904 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:51.904 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:51.904362
+12-22 20:01:51.904 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 52
+12-22 20:01:51.904 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.read, SenderId: 449151d2-0d1f-4eb8-9994-667e5b610310
+12-22 20:01:51.904 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:51.904 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2025
+-12-22T20:01:51.904555
+12-22 20:01:51.904 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:51.904 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:51.904 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 12990582-c2
+34-480d-a8a3-79c66fbe08e1, NewStatus: MessageStatus.read, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2025
+-12-22T20:01:51.904685
+12-22 20:01:51.904 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:51.904 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:51.904 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:51.946 26007 26007 I flutter : [SignalR] Sent ACK for status update: 12990582-c234-480d-a8a3-79c66fbe08e1 -
+> 3
+12-22 20:01:52.479 26007 26007 I flutter : [FCM_FG] Foreground message data: {chatId: 19a80023-0346-4a2b-9540-15097f1c9
+01e, messageId: 12990582-c234-480d-a8a3-79c66fbe08e1, body: ╨Ю╤З╨╡╨╜╤М ╤Б╤В╤А╨░╨╜╨╜╨╛, type: Text, title: ╨Э╨╛╨▓╨╛╨╡ ╤Б
+╨╛╨╛╨▒╤Й╨╡╨╜╨╕╨╡ ╨╛╤В ╨Ь╨╕╤А╨░}
+12-22 20:01:52.480 26007 26007 I flutter : [FCM_FG] Triggering message fetch for messageId: 12990582-c234-480d-a8a3-79c
+66fbe08e1
+12-22 20:01:52.480 26007 26007 I flutter : [FCM] Message received notification for message 12990582-c234-480d-a8a3-79c6
+6fbe08e1 in chat 19a80023-0346-4a2b-9540-15097f1c901e
+12-22 20:01:52.480 26007 26007 I flutter : [FCM] Message already in cache, no fetch needed
+12-22 20:01:52.480 26007 26007 I flutter : [FCM_FG] User in current chat, not showing notification
+12-22 20:01:52.480 26007 26007 I flutter : [FCM_FG] Foreground message data: {chatId: 19a80023-0346-4a2b-9540-15097f1c9
+01e, messageId: 12990582-c234-480d-a8a3-79c66fbe08e1, body: ╨Ю╤З╨╡╨╜╤М ╤Б╤В╤А╨░╨╜╨╜╨╛, type: Text, title: ╨Э╨╛╨▓╨╛╨╡ ╤Б
+╨╛╨╛╨▒╤Й╨╡╨╜╨╕╨╡ ╨╛╤В ╨Ь╨╕╤А╨░}
+12-22 20:01:52.480 26007 26007 I flutter : [FCM_FG] Triggering message fetch for messageId: 12990582-c234-480d-a8a3-79c
+66fbe08e1
+12-22 20:01:52.480 26007 26007 I flutter : [FCM] Message received notification for message 12990582-c234-480d-a8a3-79c6
+6fbe08e1 in chat 19a80023-0346-4a2b-9540-15097f1c901e
+12-22 20:01:52.480 26007 26007 I flutter : [FCM] Message already in cache, no fetch needed
+12-22 20:01:52.480 26007 26007 I flutter : [FCM_FG] User in current chat, not showing notification
+12-22 20:01:54.461 26007 26007 I flutter : [MSG_SEND] Starting local-first send for text message
+12-22 20:01:54.462 26007 26007 I flutter : [MSG_SEND] Message added to UI with local ID: fa8fef0f-804f-42df-8bda-25a18a
+a01bec
+12-22 20:01:54.463 26007 26007 I flutter : [MSG_SYNC] HYP_B1: Syncing message to backend - localId: fa8fef0f-804f-42df-
+8bda-25a18aa01bec, type: MessageType.text, outboxId: 0dc421e8-8154-4fd9-beda-f3dc3ae038a7, attempt: 1/5, signalRConnect
+ed: true, timestamp: 2025-12-22T20:01:54.463946
+12-22 20:01:54.464 26007 26007 I flutter : [MSG_SEND] Syncing message to backend: localId=fa8fef0f-804f-42df-8bda-25a18
+aa01bec, outboxId=0dc421e8-8154-4fd9-beda-f3dc3ae038a7 (attempt 1/5)
+12-22 20:01:54.526 26007 26007 I flutter : [MSG_RECV] Message received via SignalR: 2d5fa5cc-08ba-4415-9ca6-6749806adc8
+9 for chat 19a80023-0346-4a2b-9540-15097f1c901e
+12-22 20:01:54.526 26007 26007 I flutter : [MSG_RECV] Received message via SignalR: 2d5fa5cc-08ba-4415-9ca6-6749806adc8
+9 (clientMessageId: fa8fef0f-804f-42df-8bda-25a18aa01bec)
+12-22 20:01:54.526 26007 26007 I flutter : [MSG_RECV] HYP_A_INCOMING: Message received - id: 2d5fa5cc-08ba-4415-9ca6-67
+49806adc89, clientMessageId: fa8fef0f-804f-42df-8bda-25a18aa01bec, type: MessageType.text, isLocalOnly: false, currentM
+essages: 54
+12-22 20:01:54.526 26007 26007 I flutter : [MSG_RECV] Found local message by clientMessageId: fa8fef0f-804f-42df-8bda-2
+5a18aa01bec
+12-22 20:01:54.526 26007 26007 I flutter : [MSG_RECV] Replaced local message with server message: 2d5fa5cc-08ba-4415-9c
+a6-6749806adc89
+12-22 20:01:54.526 26007 26007 I flutter : [MSG_RECV] Message added to provider for chat 19a80023-0346-4a2b-9540-15097f
+1c901e
+12-22 20:01:54.526 26007 26007 I flutter : [MSG_RECV] Skipping delivery confirmation for own message: 2d5fa5cc-08ba-441
+5-9ca6-6749806adc89
+12-22 20:01:54.526 26007 26007 I flutter : [SignalR] Chat preview updated for chat 19a80023-0346-4a2b-9540-15097f1c901e
+, isFromMe: true
+12-22 20:01:54.531 26007 26007 I flutter : [MSG_SYNC] HYP_B2: API call completed in 66ms, serverId: 2d5fa5cc-08ba-4415-
+9ca6-6749806adc89
+12-22 20:01:54.531 26007 26007 I flutter : [MSG_SEND] Message synced successfully. Server ID: 2d5fa5cc-08ba-4415-9ca6-6
+749806adc89
+12-22 20:01:54.540 26007 26007 I flutter : [MSG_SEND] тЬЕ Removed message from outbox using outboxId: 0dc421e8-8154-4fd
+9-beda-f3dc3ae038a7
+12-22 20:01:54.564 26007 26007 I flutter : [SignalR] Sent ACK for message: 2d5fa5cc-08ba-4415-9ca6-6749806adc89
+12-22 20:01:54.635 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 2d5
+fa5cc-08ba-4415-9ca6-6749806adc89, Status: MessageStatus.sending, Timestamp: 2025-12-22T20:01:54.635102
+12-22 20:01:54.635 26007 26007 I flutter : [SignalR] Message status updated: 2d5fa5cc-08ba-4415-9ca6-6749806adc89 -> Me
+ssageStatus.sending
+12-22 20:01:54.635 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:54.635 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.sending, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2
+025-12-22T20:01:54.635179
+12-22 20:01:54.635 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 53
+12-22 20:01:54.635 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.sent, New status: Message
+Status.sending, SenderId: 942a32ce-c4ef-4b0e-a547-3eb2e176d04f
+12-22 20:01:54.635 26007 26007 I flutter : #1      SignalRConnectionNotifier._setupListeners.<anonymous closure> (packa
+ge:mobile_app/presentation/providers/signalr_provider.dart:206)
+12-22 20:01:54.635 26007 26007 I flutter : #2      SignalRService.onMessageStatusUpdated.<anonymous closure> (package:m
+obile_app/data/datasources/signalr_service.dart:312)
+12-22 20:01:54.635 26007 26007 I flutter : #3      HubConnection._invokeClientMethod.<anonymous closure> (package:signa
+lr_netcore/hub_connection.dart:696)
+12-22 20:01:54.635 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:54.635 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.sending, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2
+025-12-22T20:01:54.635875
+12-22 20:01:54.635 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:54.635 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:54.635 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.sending, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2
+025-12-22T20:01:54.635958
+12-22 20:01:54.636 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:54.636 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:54.636 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:54.679 26007 26007 I flutter : [SignalR] Sent ACK for status update: 2d5fa5cc-08ba-4415-9ca6-6749806adc89 -
+> 0
+12-22 20:01:54.730 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 2d5
+fa5cc-08ba-4415-9ca6-6749806adc89, Status: MessageStatus.delivered, Timestamp: 2025-12-22T20:01:54.730421
+12-22 20:01:54.730 26007 26007 I flutter : [SignalR] Message status updated: 2d5fa5cc-08ba-4415-9ca6-6749806adc89 -> Me
+ssageStatus.delivered
+12-22 20:01:54.730 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:54.730 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.delivered, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp:
+ 2025-12-22T20:01:54.730522
+12-22 20:01:54.730 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 53
+12-22 20:01:54.730 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.sending, New status: Mess
+ageStatus.delivered, SenderId: 942a32ce-c4ef-4b0e-a547-3eb2e176d04f
+12-22 20:01:54.731 26007 26007 I flutter : #1      SignalRConnectionNotifier._setupListeners.<anonymous closure> (packa
+ge:mobile_app/presentation/providers/signalr_provider.dart:206)
+12-22 20:01:54.731 26007 26007 I flutter : #2      SignalRService.onMessageStatusUpdated.<anonymous closure> (package:m
+obile_app/data/datasources/signalr_service.dart:312)
+12-22 20:01:54.731 26007 26007 I flutter : #3      HubConnection._invokeClientMethod.<anonymous closure> (package:signa
+lr_netcore/hub_connection.dart:696)
+12-22 20:01:54.731 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:54.731 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.delivered, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp:
+ 2025-12-22T20:01:54.731428
+12-22 20:01:54.731 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:54.731 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:54.731 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.delivered, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp:
+ 2025-12-22T20:01:54.731536
+12-22 20:01:54.731 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:54.731 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:54.731 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:54.780 26007 26007 I flutter : [SignalR] Sent ACK for status update: 2d5fa5cc-08ba-4415-9ca6-6749806adc89 -
+> 2
+12-22 20:01:54.837 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 2d5
+fa5cc-08ba-4415-9ca6-6749806adc89, Status: MessageStatus.read, Timestamp: 2025-12-22T20:01:54.837849
+12-22 20:01:54.837 26007 26007 I flutter : [SignalR] Message status updated: 2d5fa5cc-08ba-4415-9ca6-6749806adc89 -> Me
+ssageStatus.read
+12-22 20:01:54.837 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:54.837 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:54.837954
+12-22 20:01:54.838 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 53
+12-22 20:01:54.838 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.delivered, New status: Me
+ssageStatus.read, SenderId: 942a32ce-c4ef-4b0e-a547-3eb2e176d04f
+12-22 20:01:54.838 26007 26007 I flutter : #1      SignalRConnectionNotifier._setupListeners.<anonymous closure> (packa
+ge:mobile_app/presentation/providers/signalr_provider.dart:206)
+12-22 20:01:54.838 26007 26007 I flutter : #2      SignalRService.onMessageStatusUpdated.<anonymous closure> (package:m
+obile_app/data/datasources/signalr_service.dart:312)
+12-22 20:01:54.838 26007 26007 I flutter : #3      HubConnection._invokeClientMethod.<anonymous closure> (package:signa
+lr_netcore/hub_connection.dart:696)
+12-22 20:01:54.838 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:54.838 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.read, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2025
+-12-22T20:01:54.838813
+12-22 20:01:54.838 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:54.838 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:54.838 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.read, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2025
+-12-22T20:01:54.838908
+12-22 20:01:54.838 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:54.839 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:54.839 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:54.843 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 2d5
+fa5cc-08ba-4415-9ca6-6749806adc89, Status: MessageStatus.read, Timestamp: 2025-12-22T20:01:54.843460
+12-22 20:01:54.843 26007 26007 I flutter : [SignalR] Message status updated: 2d5fa5cc-08ba-4415-9ca6-6749806adc89 -> Me
+ssageStatus.read
+12-22 20:01:54.843 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:54.843 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:54.843522
+12-22 20:01:54.843 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 53
+12-22 20:01:54.843 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.read, SenderId: 942a32ce-c4ef-4b0e-a547-3eb2e176d04f
+12-22 20:01:54.843 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:54.843 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.read, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2025
+-12-22T20:01:54.843584
+12-22 20:01:54.843 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:54.843 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:54.843 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.read, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2025
+-12-22T20:01:54.843621
+12-22 20:01:54.843 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:54.843 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:54.843 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:54.879 26007 26007 I flutter : [SignalR] Sent ACK for status update: 2d5fa5cc-08ba-4415-9ca6-6749806adc89 -
+> 3
+12-22 20:01:54.880 26007 26007 I flutter : [SignalR] Sent ACK for status update: 2d5fa5cc-08ba-4415-9ca6-6749806adc89 -
+> 3
+12-22 20:01:54.893 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 2d5
+fa5cc-08ba-4415-9ca6-6749806adc89, Status: MessageStatus.read, Timestamp: 2025-12-22T20:01:54.893898
+12-22 20:01:54.893 26007 26007 I flutter : [SignalR] Message status updated: 2d5fa5cc-08ba-4415-9ca6-6749806adc89 -> Me
+ssageStatus.read
+12-22 20:01:54.893 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:01:54.894 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:01:54.893986
+12-22 20:01:54.894 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 53
+12-22 20:01:54.894 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.read, SenderId: 942a32ce-c4ef-4b0e-a547-3eb2e176d04f
+12-22 20:01:54.894 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:01:54.894 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.read, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2025
+-12-22T20:01:54.894099
+12-22 20:01:54.894 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:54.894 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:01:54.894 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.read, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2025
+-12-22T20:01:54.894162
+12-22 20:01:54.894 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:01:54.894 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:01:54.894 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:01:54.935 26007 26007 I flutter : [SignalR] Sent ACK for status update: 2d5fa5cc-08ba-4415-9ca6-6749806adc89 -
+> 3
+12-22 20:01:57.253 26007 26007 I flutter : [SignalR] Sending heartbeat...
+12-22 20:01:57.310 26007 26007 I flutter : [SignalR] Pong received
+12-22 20:02:00.974 26007 26007 I flutter : [MSG_SEND] Starting local-first send for text message
+12-22 20:02:00.975 26007 26007 I flutter : [MSG_SEND] Message added to UI with local ID: 2ae47c7d-4ab6-4c03-967c-8a9294
+6f71a2
+12-22 20:02:00.980 26007 26007 I flutter : [MSG_SYNC] HYP_B1: Syncing message to backend - localId: 2ae47c7d-4ab6-4c03-
+967c-8a92946f71a2, type: MessageType.text, outboxId: c4f2ad2a-970d-4636-a23b-23f7e9279b2f, attempt: 1/5, signalRConnect
+ed: true, timestamp: 2025-12-22T20:02:00.980771
+12-22 20:02:00.980 26007 26007 I flutter : [MSG_SEND] Syncing message to backend: localId=2ae47c7d-4ab6-4c03-967c-8a929
+46f71a2, outboxId=c4f2ad2a-970d-4636-a23b-23f7e9279b2f (attempt 1/5)
+12-22 20:02:01.138 26007 26007 I flutter : [MSG_RECV] Message received via SignalR: 3d9c334b-9861-421e-abb7-1c460e43fa3
+7 for chat 19a80023-0346-4a2b-9540-15097f1c901e
+12-22 20:02:01.138 26007 26007 I flutter : [MSG_RECV] Received message via SignalR: 3d9c334b-9861-421e-abb7-1c460e43fa3
+7 (clientMessageId: 2ae47c7d-4ab6-4c03-967c-8a92946f71a2)
+12-22 20:02:01.138 26007 26007 I flutter : [MSG_RECV] HYP_A_INCOMING: Message received - id: 3d9c334b-9861-421e-abb7-1c
+460e43fa37, clientMessageId: 2ae47c7d-4ab6-4c03-967c-8a92946f71a2, type: MessageType.text, isLocalOnly: false, currentM
+essages: 55
+12-22 20:02:01.138 26007 26007 I flutter : [MSG_RECV] Found local message by clientMessageId: 2ae47c7d-4ab6-4c03-967c-8
+a92946f71a2
+12-22 20:02:01.138 26007 26007 I flutter : [MSG_RECV] Replaced local message with server message: 3d9c334b-9861-421e-ab
+b7-1c460e43fa37
+12-22 20:02:01.138 26007 26007 I flutter : [MSG_RECV] Message added to provider for chat 19a80023-0346-4a2b-9540-15097f
+1c901e
+12-22 20:02:01.138 26007 26007 I flutter : [MSG_RECV] Skipping delivery confirmation for own message: 3d9c334b-9861-421
+e-abb7-1c460e43fa37
+12-22 20:02:01.138 26007 26007 I flutter : [SignalR] Chat preview updated for chat 19a80023-0346-4a2b-9540-15097f1c901e
+, isFromMe: true
+12-22 20:02:01.156 26007 26007 I flutter : [MSG_SYNC] HYP_B2: API call completed in 165ms, serverId: 3d9c334b-9861-421e
+-abb7-1c460e43fa37
+12-22 20:02:01.156 26007 26007 I flutter : [MSG_SEND] Message synced successfully. Server ID: 3d9c334b-9861-421e-abb7-1
+c460e43fa37
+12-22 20:02:01.157 26007 26007 I flutter : [MSG_SEND] тЬЕ Removed message from outbox using outboxId: c4f2ad2a-970d-463
+6-a23b-23f7e9279b2f
+12-22 20:02:01.183 26007 26007 I flutter : [SignalR] Sent ACK for message: 3d9c334b-9861-421e-abb7-1c460e43fa37
+12-22 20:02:27.254 26007 26007 I flutter : [SignalR] Sending heartbeat...
+12-22 20:02:27.305 26007 26007 I flutter : [SignalR] Pong received
+12-22 20:02:57.254 26007 26007 I flutter : [SignalR] Sending heartbeat...
+12-22 20:02:57.306 26007 26007 I flutter : [SignalR] Pong received
+12-22 20:03:13.441 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 2d5
+fa5cc-08ba-4415-9ca6-6749806adc89, Status: MessageStatus.read, Timestamp: 2025-12-22T20:03:13.441135
+12-22 20:03:13.441 26007 26007 I flutter : [SignalR] Message status updated: 2d5fa5cc-08ba-4415-9ca6-6749806adc89 -> Me
+ssageStatus.read
+12-22 20:03:13.441 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:03:13.441 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:03:13.441335
+12-22 20:03:13.441 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 53
+12-22 20:03:13.441 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.read, SenderId: 942a32ce-c4ef-4b0e-a547-3eb2e176d04f
+12-22 20:03:13.441 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:03:13.441 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.read, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2025
+-12-22T20:03:13.441656
+12-22 20:03:13.441 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:03:13.441 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:03:13.441 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.read, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2025
+-12-22T20:03:13.441848
+12-22 20:03:13.441 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:03:13.442 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:03:13.442 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:03:13.481 26007 26007 I flutter : [SignalR] Sent ACK for status update: 2d5fa5cc-08ba-4415-9ca6-6749806adc89 -
+> 3
+12-22 20:03:13.491 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: 2d5
+fa5cc-08ba-4415-9ca6-6749806adc89, Status: MessageStatus.read, Timestamp: 2025-12-22T20:03:13.491590
+12-22 20:03:13.491 26007 26007 I flutter : [SignalR] Message status updated: 2d5fa5cc-08ba-4415-9ca6-6749806adc89 -> Me
+ssageStatus.read
+12-22 20:03:13.491 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Total chats: 3
+12-22 20:03:13.491 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.read, ChatId: 19a80023-0346-4a2b-9540-15097f1c901e, Timestamp: 2025
+-12-22T20:03:13.491751
+12-22 20:03:13.491 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: 53
+12-22 20:03:13.491 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Old status: MessageStatus.read, New status: Message
+Status.read, SenderId: 942a32ce-c4ef-4b0e-a547-3eb2e176d04f
+12-22 20:03:13.491 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 19a80023-0346-4a2b-9540
+-15097f1c901e
+12-22 20:03:13.492 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.read, ChatId: bf9162f5-5ae6-4620-977b-430cd8c07ad8, Timestamp: 2025
+-12-22T20:03:13.491998
+12-22 20:03:13.492 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:03:13.492 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat bf9162f5-5ae6-4620-977b
+-430cd8c07ad8
+12-22 20:03:13.492 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: 2d5fa5cc-08
+ba-4415-9ca6-6749806adc89, NewStatus: MessageStatus.read, ChatId: 545d9772-8170-40fc-a17f-bbf4a60952f9, Timestamp: 2025
+-12-22T20:03:13.492153
+12-22 20:03:13.492 26007 26007 I flutter : [MSG_STATUS] HYP_CLIENT: Message found at index: -1
+12-22 20:03:13.492 26007 26007 I flutter : [SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat 545d9772-8170-40fc-a17f
+-bbf4a60952f9
+12-22 20:03:13.492 26007 26007 I flutter : [SignalR] Message status updated in 3 chat(s)
+12-22 20:03:13.528 26007 26007 I flutter : [SignalR] Sent ACK for status update: 2d5fa5cc-08ba-4415-9ca6-6749806adc89 -
+> 3
+12-22 20:03:27.253 26007 26007 I flutter : [SignalR] Sending heartbeat...
+12-22 20:03:27.302 26007 26007 I flutter : [SignalR] Pong received
+12-22 20:03:57.253 26007 26007 I flutter : [SignalR] Sending heartbeat...
+12-22 20:03:57.305 26007 26007 I flutter : [SignalR] Pong received
+
+

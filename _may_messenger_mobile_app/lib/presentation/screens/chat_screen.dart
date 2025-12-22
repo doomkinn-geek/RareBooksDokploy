@@ -34,6 +34,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void initState() {
     super.initState();
     
+    // #region agent log - Hypothesis A/D: Track ChatScreen initialization
+    print('[CHAT_SCREEN] HYP_D1: initState called - chatId: ${widget.chatId}, highlightMessageId: ${widget.highlightMessageId}, timestamp: ${DateTime.now().toIso8601String()}');
+    // #endregion
+    
     // Set highlighted message if provided
     if (widget.highlightMessageId != null) {
       _highlightedMessageId = widget.highlightMessageId;
@@ -52,9 +56,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     
     // Join chat via SignalR
     Future.microtask(() async {
-      final signalRService = ref.read(signalRServiceProvider);
+      // #region agent log - Hypothesis C/D: Track SignalR join and current messages state
+      final messagesStateBefore = ref.read(messagesProvider(widget.chatId));
+      print('[CHAT_SCREEN] HYP_D2: Before joinChat - messages count: ${messagesStateBefore.messages.length}, isLoading: ${messagesStateBefore.isLoading}');
+      // #endregion
       
+      final signalRService = ref.read(signalRServiceProvider);
+      // #region agent log - Hypothesis C
+      final joinStart = DateTime.now();
+      // #endregion
       await signalRService.joinChat(widget.chatId);
+      // #region agent log - Hypothesis C
+      print('[CHAT_SCREEN] HYP_C_JOIN: joinChat completed in ${DateTime.now().difference(joinStart).inMilliseconds}ms');
+      // #endregion
       
       // Уведомить NotificationService и FCM что пользователь в этом чате
       final notificationService = ref.read(notificationServiceProvider);
@@ -68,6 +82,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       
       // Mark messages as read after a short delay to ensure messages are loaded
       await Future.delayed(const Duration(milliseconds: 500));
+      // #region agent log - Hypothesis A/D
+      final messagesStateAfter = ref.read(messagesProvider(widget.chatId));
+      print('[CHAT_SCREEN] HYP_D3: Before markAsRead - messages count: ${messagesStateAfter.messages.length}, isLoading: ${messagesStateAfter.isLoading}');
+      // #endregion
       ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
     });
   }
