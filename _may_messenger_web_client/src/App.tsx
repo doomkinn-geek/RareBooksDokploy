@@ -6,9 +6,13 @@ import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ChatPage } from './pages/ChatPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { SearchPage } from './pages/SearchPage';
+import { NewChatPage } from './pages/NewChatPage';
+import { CreateGroupPage } from './pages/CreateGroupPage';
 import { notificationService } from './services/notificationService';
 import { fcmService } from './services/fcmService';
 import { signalRService } from './services/signalRService';
+import { servicesManager } from './services/servicesManager';
 import { MessageType } from './types/chat';
 
 function App() {
@@ -23,9 +27,13 @@ function App() {
   }, []);
 
   useEffect(() => {
-    // Initialize notifications when authenticated
+    // Initialize services and notifications when authenticated
     if (token) {
+      initializeServices();
       initializeNotifications();
+    } else {
+      // Cleanup services when logged out
+      servicesManager.dispose();
     }
 
     // Listen for Service Worker messages (e.g., notification clicks)
@@ -52,6 +60,17 @@ function App() {
       });
     }
   }, [token]);
+
+  const initializeServices = async () => {
+    if (!token) return;
+
+    try {
+      await servicesManager.initialize(token);
+      console.log('[App] Services initialized');
+    } catch (error) {
+      console.error('[App] Services initialization failed:', error);
+    }
+  };
 
   const initializeNotifications = async () => {
     try {
@@ -139,6 +158,18 @@ function App() {
         <Route
           path="/settings"
           element={token ? <SettingsPage /> : <Navigate to="/login" replace />}
+        />
+        <Route
+          path="/search"
+          element={token ? <SearchPage /> : <Navigate to="/login" replace />}
+        />
+        <Route
+          path="/new-chat"
+          element={token ? <NewChatPage /> : <Navigate to="/login" replace />}
+        />
+        <Route
+          path="/create-group"
+          element={token ? <CreateGroupPage /> : <Navigate to="/login" replace />}
         />
       </Routes>
     </BrowserRouter>

@@ -1,9 +1,11 @@
 import { ReactNode, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Header } from './Header';
 import { ChatList } from '../chat/ChatList';
 import { ChatWindow } from '../chat/ChatWindow';
 import { CreateChatDialog } from '../chat/CreateChatDialog';
-import { Plus, MessageCircle, Users } from 'lucide-react';
+import { ConnectionStatusBanner } from './ConnectionStatusBanner';
+import { Plus, MessageCircle, Users, Search } from 'lucide-react';
 import { useChatStore } from '../../stores/chatStore';
 
 interface AppLayoutProps {
@@ -14,6 +16,7 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
   const [activeTab, setActiveTab] = useState<'all' | 'private' | 'group'>('all');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const { selectChat } = useChatStore();
+  const navigate = useNavigate();
 
   const handleChatCreated = (chatId: string) => {
     selectChat(chatId);
@@ -22,20 +25,30 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
   return (
     <div className="h-screen flex flex-col">
       <Header />
+      <ConnectionStatusBanner />
       
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar with Chat List */}
         <div className="w-80 border-r border-gray-200 bg-white flex flex-col">
-          {/* Header with title and create button */}
+          {/* Header with title, search and create button */}
           <div className="p-4 border-b border-gray-200 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Чаты</h2>
-            <button
-              onClick={() => setShowCreateDialog(true)}
-              className="p-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition"
-              title="Новый чат"
-            >
-              <Plus className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigate('/search')}
+                className="p-2 rounded-lg hover:bg-gray-100 transition"
+                title="Поиск"
+              >
+                <Search className="w-5 h-5 text-gray-600" />
+              </button>
+              <button
+                onClick={() => setShowCreateDialog(true)}
+                className="p-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition"
+                title="Новый чат"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           {/* Tabs */}

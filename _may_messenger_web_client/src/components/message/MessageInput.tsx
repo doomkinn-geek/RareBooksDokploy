@@ -1,7 +1,7 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Send, Mic, Image as ImageIcon, X } from 'lucide-react';
 import { AudioRecorder } from './AudioRecorder';
-import { signalRService } from '../../services/signalRService';
+import { useTypingIndicator } from '../../hooks/useTypingIndicator';
 import { useChatStore } from '../../stores/chatStore';
 
 interface MessageInputProps {
@@ -16,10 +16,16 @@ export const MessageInput = ({ onSendText, onSendAudio, onSendImage, disabled }:
   const [isRecording, setIsRecording] = useState(false);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isTypingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { selectedChatId } = useChatStore();
+  const { onTyping, onStoppedTyping, cleanup } = useTypingIndicator(selectedChatId || '');
+
+  // Cleanup typing indicator when component unmounts or chat changes
+  useEffect(() => {
+    return () => {
+      cleanup();
+    };
+  }, [selectedChatId, cleanup]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,35 +34,16 @@ export const MessageInput = ({ onSendText, onSendAudio, onSendImage, disabled }:
       setText('');
       
       // Stop typing indicator
-      if (isTypingRef.current && selectedChatId) {
-        signalRService.sendTypingIndicator(selectedChatId, false);
-        isTypingRef.current = false;
-      }
+      onStoppedTyping();
     }
   };
 
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setText(e.target.value);
 
-    // Send typing indicator
-    if (selectedChatId && signalRService.isConnected) {
-      if (!isTypingRef.current) {
-        signalRService.sendTypingIndicator(selectedChatId, true);
-        isTypingRef.current = true;
-      }
-
-      // Clear existing timeout
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-
-      // Set new timeout to stop typing indicator after 2 seconds of inactivity
-      typingTimeoutRef.current = setTimeout(() => {
-        if (isTypingRef.current) {
-          signalRService.sendTypingIndicator(selectedChatId, false);
-          isTypingRef.current = false;
-        }
-      }, 2000);
+    // Send typing indicator (debounced)
+    if (selectedChatId) {
+      onTyping();
     }
   };
 
