@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
 import 'package:flutter/foundation.dart';
-import 'package:logger/logger.dart';
 
 /// Base class for all events processed by the queue
 abstract class AppEvent {
@@ -122,7 +121,6 @@ class TypingIndicatorEvent extends AppEvent {
 /// Centralized event queue service for processing all app events sequentially
 /// Ensures deduplication and ordered processing
 class EventQueueService {
-  final Logger _logger = Logger();
   final Queue<AppEvent> _queue = Queue();
   final Set<String> _processedEventIds = {};
   bool _processing = false;
@@ -140,7 +138,7 @@ class EventQueueService {
   static const Duration eventTimeout = Duration(seconds: 30);
 
   EventQueueService() {
-    _logger.d('[EventQueueService] Initialized');
+    debugPrint('[EventQueueService] Initialized');
   }
 
   /// Enqueue an event for processing
@@ -148,12 +146,12 @@ class EventQueueService {
     // Check for duplicate
     if (_processedEventIds.contains(event.eventId)) {
       _duplicatesSkipped++;
-      _logger.w('[EventQueueService] Duplicate event skipped: ${event.type} (${event.eventId})');
+      debugPrint('[EventQueueService] Duplicate event skipped: ${event.type} (${event.eventId})');
       return;
     }
 
     _queue.add(event);
-    _logger.d('[EventQueueService] Event enqueued: ${event.type} (queue size: ${_queue.length})');
+    debugPrint('[EventQueueService] Event enqueued: ${event.type} (queue size: ${_queue.length})');
 
     // Start processing if not already running
     _processQueue();
@@ -165,13 +163,13 @@ class EventQueueService {
       _handlers[eventType] = [];
     }
     _handlers[eventType]!.add(handler);
-    _logger.d('[EventQueueService] Handler registered for event type: $eventType');
+    debugPrint('[EventQueueService] Handler registered for event type: $eventType');
   }
 
   /// Unregister all handlers for a specific event type
   void unregisterHandlers(String eventType) {
     _handlers.remove(eventType);
-    _logger.d('[EventQueueService] Handlers unregistered for event type: $eventType');
+    debugPrint('[EventQueueService] Handlers unregistered for event type: $eventType');
   }
 
   /// Process the queue sequentially
@@ -188,7 +186,7 @@ class EventQueueService {
 
         // Check if event is too old (timeout)
         if (DateTime.now().difference(event.timestamp) > eventTimeout) {
-          _logger.w('[EventQueueService] Event timeout: ${event.type} (${event.eventId})');
+          debugPrint('[EventQueueService] Event timeout: ${event.type} (${event.eventId})');
           continue;
         }
 
@@ -207,7 +205,7 @@ class EventQueueService {
         }
       }
     } catch (e, stackTrace) {
-      _logger.e('[EventQueueService] Error processing queue', error: e, stackTrace: stackTrace);
+      debugPrint('[EventQueueService] Error processing queue: $e\n$stackTrace');
     } finally {
       _processing = false;
     }
@@ -216,11 +214,11 @@ class EventQueueService {
   /// Process a single event
   Future<void> _processEvent(AppEvent event) async {
     try {
-      _logger.d('[EventQueueService] Processing event: ${event.type} (${event.eventId})');
+      debugPrint('[EventQueueService] Processing event: ${event.type} (${event.eventId})');
 
       final handlers = _handlers[event.type];
       if (handlers == null || handlers.isEmpty) {
-        _logger.w('[EventQueueService] No handlers registered for event type: ${event.type}');
+        debugPrint('[EventQueueService] No handlers registered for event type: ${event.type}');
         return;
       }
 
@@ -229,13 +227,13 @@ class EventQueueService {
         try {
           await handler(event);
         } catch (e, stackTrace) {
-          _logger.e('[EventQueueService] Error in handler for ${event.type}', error: e, stackTrace: stackTrace);
+          debugPrint('[EventQueueService] Error in handler for ${event.type}: $e\n$stackTrace');
         }
       }
 
-      _logger.d('[EventQueueService] Event processed successfully: ${event.type}');
+      debugPrint('[EventQueueService] Event processed successfully: ${event.type}');
     } catch (e, stackTrace) {
-      _logger.e('[EventQueueService] Error processing event: ${event.type}', error: e, stackTrace: stackTrace);
+      debugPrint('[EventQueueService] Error processing event: ${event.type}: $e\n$stackTrace');
     }
   }
 
@@ -254,7 +252,7 @@ class EventQueueService {
   /// Clear the queue (use with caution)
   void clear() {
     _queue.clear();
-    _logger.w('[EventQueueService] Queue cleared');
+    debugPrint('[EventQueueService] Queue cleared');
   }
 
   /// Dispose resources
@@ -262,7 +260,7 @@ class EventQueueService {
     _queue.clear();
     _processedEventIds.clear();
     _handlers.clear();
-    _logger.d('[EventQueueService] Disposed');
+    debugPrint('[EventQueueService] Disposed');
   }
 }
 

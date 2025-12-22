@@ -6,6 +6,7 @@ import '../../data/services/event_queue_service.dart';
 import '../../data/models/user_model.dart';
 import '../providers/signalr_provider.dart';
 import '../providers/profile_provider.dart';
+import '../providers/auth_provider.dart';
 
 /// Debug settings screen for diagnostics
 /// Available for administrators in production
