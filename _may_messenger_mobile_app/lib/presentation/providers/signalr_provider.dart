@@ -7,6 +7,8 @@ import 'messages_provider.dart';
 import 'chats_provider.dart';
 import 'contacts_names_provider.dart';
 import 'profile_provider.dart';
+import 'typing_provider.dart';
+import 'online_status_provider.dart';
 import '../../core/services/notification_service.dart';
 
 final signalRServiceProvider = Provider<SignalRService>((ref) {
@@ -53,7 +55,6 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
   final SignalRService _signalRService;
   final dynamic _authRepository;
   final Ref _ref;
-  final _logger = LoggerService();
 
   SignalRConnectionNotifier(
     this._signalRService,
@@ -258,6 +259,44 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
             }
           } catch (e) {
             print('[SignalR] Failed to update message status: $e');
+          }
+        });
+
+        // Setup typing indicator listener
+        _signalRService.onUserTyping((userId, userName, isTyping) {
+          print('[SignalR] User typing indicator: $userName ($userId) - $isTyping');
+          
+          try {
+            // Find which chat this user is typing in by checking all chats
+            final chatsState = _ref.read(chatsProvider);
+            for (final chat in chatsState.chats) {
+              // Update typing state for this chat
+              // The chatId context will be determined by the chat screen itself
+              // For now, we'll let the typing provider handle it globally
+              _ref.read(typingProvider.notifier).setUserTyping(
+                chat.id, 
+                userId, 
+                userName, 
+                isTyping
+              );
+            }
+          } catch (e) {
+            print('[SignalR] Failed to process typing indicator: $e');
+          }
+        });
+        
+        // Setup user status changed listener (online/offline)
+        _signalRService.onUserStatusChanged((userId, isOnline, lastSeenAt) {
+          print('[SignalR] User status changed: $userId - isOnline: $isOnline, lastSeen: $lastSeenAt');
+          
+          try {
+            _ref.read(onlineUsersProvider.notifier).setUserOnline(userId, isOnline);
+            
+            if (lastSeenAt != null) {
+              _ref.read(lastSeenMapProvider.notifier).setLastSeen(userId, lastSeenAt);
+            }
+          } catch (e) {
+            print('[SignalR] Failed to update user status: $e');
           }
         });
 

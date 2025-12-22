@@ -2,16 +2,18 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'audio_recorder_widget.dart';
 import 'image_picker_buttons.dart';
+import '../providers/signalr_provider.dart';
 
 enum RecordingState { idle, recording, locked }
 enum HapticType { light, medium, heavy, selection }
 
-class MessageInput extends StatefulWidget {
+class MessageInput extends ConsumerStatefulWidget {
   final String chatId;
   final bool isSending;
   final Function(String) onSendMessage;
@@ -28,10 +30,10 @@ class MessageInput extends StatefulWidget {
   });
 
   @override
-  State<MessageInput> createState() => _MessageInputState();
+  ConsumerState<MessageInput> createState() => _MessageInputState();
 }
 
-class _MessageInputState extends State<MessageInput> with TickerProviderStateMixin {
+class _MessageInputState extends ConsumerState<MessageInput> with TickerProviderStateMixin {
   final TextEditingController _textController = TextEditingController();
   final AudioRecorder _audioRecorder = AudioRecorder();
   
@@ -47,6 +49,8 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
   bool _showCancelHint = false;
   bool _showLockHint = false;
   bool _hasText = false; // Track if text field has content
+  Timer? _typingTimer;
+  bool _isCurrentlyTyping = false;
   
   @override
   void initState() {
@@ -60,7 +64,7 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
       duration: const Duration(milliseconds: 200),
     );
     
-    // Listen to text changes to toggle send/mic button
+    // Listen to text changes to toggle send/mic button and send typing indicator
     _textController.addListener(() {
       final hasText = _textController.text.trim().isNotEmpty;
       if (_hasText != hasText) {
@@ -68,13 +72,46 @@ class _MessageInputState extends State<MessageInput> with TickerProviderStateMix
           _hasText = hasText;
         });
       }
+      
+      // Send typing indicator
+      _onTextChanged(hasText);
     });
+  }
+
+  void _onTextChanged(bool hasText) {
+    // Send typing indicator
+    if (hasText && !_isCurrentlyTyping) {
+      _sendTypingIndicator(true);
+      _isCurrentlyTyping = true;
+    }
+    
+    // Reset timer
+    _typingTimer?.cancel();
+    _typingTimer = Timer(const Duration(seconds: 2), () {
+      if (_isCurrentlyTyping) {
+        _sendTypingIndicator(false);
+        _isCurrentlyTyping = false;
+      }
+    });
+  }
+  
+  void _sendTypingIndicator(bool isTyping) {
+    try {
+      final signalRService = ref.read(signalRServiceProvider);
+      signalRService.sendTypingIndicator(widget.chatId, isTyping);
+    } catch (e) {
+      print('[MessageInput] Failed to send typing indicator: $e');
+    }
   }
 
   @override
   void dispose() {
     _textController.dispose();
     _timer?.cancel();
+    _typingTimer?.cancel();
+    if (_isCurrentlyTyping) {
+      _sendTypingIndicator(false);
+    }
     _audioRecorder.dispose();
     _scaleController?.dispose();
     _slideController?.dispose();

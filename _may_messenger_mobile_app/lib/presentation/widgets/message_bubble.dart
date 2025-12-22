@@ -277,15 +277,16 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         // Определить, прослушано ли сообщение
         final isPlayed = widget.message.status == MessageStatus.played;
         
-        // Цвет волны: зеленый если прослушано, иначе стандартный
-        final waveformColor = isMe 
-            ? (isPlayed ? Colors.greenAccent : Colors.white)  // Для своих сообщений
-            : (isPlayed ? Colors.green : Theme.of(context).colorScheme.primary); // Для чужих
-        
-        // Цвет иконки play/pause
-        final playIconColor = isMe 
-            ? (isPlayed ? Colors.greenAccent : Colors.white) 
-            : (isPlayed ? Colors.green : null);
+        // Все элементы зеленые для прослушанных
+        final Color playerColor = isPlayed 
+            ? (isMe ? Colors.green[300]! : Colors.green[700]!) 
+            : (isMe ? Colors.white : Colors.black);
+        final Color waveformColor = isPlayed 
+            ? (isMe ? Colors.green[200]! : Colors.green[400]!) 
+            : (isMe ? Colors.white70 : Colors.grey);
+        final Color textColor = isPlayed
+            ? (isMe ? Colors.green[100]! : Colors.green[800]!)
+            : (isMe ? Colors.white70 : Colors.grey[600]!);
         
         return Row(
           mainAxisSize: MainAxisSize.min,
@@ -293,7 +294,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             IconButton(
               icon: Icon(
                 _isPlaying ? Icons.pause : Icons.play_arrow,
-                color: playIconColor,
+                color: playerColor,
                 size: 28,
               ),
               onPressed: _playPauseAudio,
@@ -308,7 +309,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                       progress: _duration != null && _position != null && _duration!.inMilliseconds > 0
                           ? _position!.inMilliseconds / _duration!.inMilliseconds
                           : 0.0,
-                      activeColor: waveformColor, // Зеленый если прослушано
+                      activeColor: waveformColor,
                       inactiveColor: isMe ? Colors.white30 : Colors.grey[300]!,
                       height: 30,
                       barsCount: 25,
@@ -323,7 +324,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                               : '0:00',
                           style: TextStyle(
                             fontSize: 11,
-                            color: isMe ? Colors.white70 : Colors.grey[600],
+                            color: textColor,
                           ),
                         ),
                         Text(
@@ -332,7 +333,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                               : '0:00',
                           style: TextStyle(
                             fontSize: 11,
-                            color: isMe ? Colors.white70 : Colors.grey[600],
+                            color: textColor,
                           ),
                         ),
                       ],

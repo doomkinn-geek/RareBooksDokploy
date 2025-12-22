@@ -7,6 +7,7 @@ import 'auth_provider.dart';
 import 'signalr_provider.dart';
 import 'profile_provider.dart';
 import 'chats_provider.dart';
+import 'chat_preview_sync_service.dart';
 
 // LRU Cache provider - singleton для всего приложения
 final messageCacheProvider = Provider<MessageCacheRepository>((ref) {
@@ -274,7 +275,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       // #region agent log - Hypothesis E: Track Hive/API load timing
       final repoLoadStart = DateTime.now();
       // #endregion
-      final List<Message> syncedMessages = await _messageRepository.getMessages(
+      List<Message> syncedMessages = await _messageRepository.getMessages(
         chatId: chatId,
         forceRefresh: forceRefresh,
       );
@@ -282,8 +283,13 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       print('[MSG_LOAD] HYP_E_REPO: Repository load took ${DateTime.now().difference(repoLoadStart).inMilliseconds}ms, loaded ${syncedMessages.length} messages');
       // #endregion
       print('[MSG_LOAD] Loaded ${syncedMessages.length} synced messages from repository');
+      
+      // MERGE with cached messages, preserving local 'played' status
+      syncedMessages = _mergeMessagesPreservingPlayedStatus(cachedMessages, syncedMessages);
+      print('[MSG_LOAD] Merged with cached messages to preserve played status');
+      
       for (final msg in syncedMessages.take(5)) {
-        print('[MSG_LOAD]   - Synced: id=${msg.id}, localId=${msg.localId}, content="${msg.content}", isLocalOnly=${msg.isLocalOnly}');
+        print('[MSG_LOAD]   - Synced: id=${msg.id}, localId=${msg.localId}, content="${msg.content}", isLocalOnly=${msg.isLocalOnly}, status=${msg.status}');
       }
       
       // STEP 3: Load pending messages from outbox
@@ -450,15 +456,17 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       // Add to LRU cache
       _cache.put(localMessage);
       
-      // Update chat preview immediately for better UX
+      // Enqueue chat preview update via sync service
       try {
-        _ref.read(chatsProvider.notifier).updateChatLastMessage(
-          chatId, 
-          localMessage, 
-          incrementUnread: false,
-        );
+        final syncService = _ref.read(chatPreviewSyncServiceProvider);
+        syncService.enqueueUpdate(ChatPreviewUpdate(
+          chatId: chatId,
+          lastMessage: localMessage,
+          unreadCountDelta: null, // Don't increment for own messages
+          timestamp: DateTime.now(),
+        ));
       } catch (e) {
-        print('[MSG_SEND] Failed to update chat preview: $e');
+        print('[MSG_SEND] Failed to enqueue chat preview update: $e');
       }
       
       // STEP 3: Add to outbox queue for persistence
@@ -984,15 +992,20 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       // Add to LRU cache
       _cache.put(message);
       
-      // Update chat preview with this message
+      // Enqueue chat preview update via sync service
       try {
-        _ref.read(chatsProvider.notifier).updateChatLastMessage(
-          chatId, 
-          message, 
-          incrementUnread: false, // Don't increment as it's already handled by SignalR
-        );
+        final profileState = _ref.read(profileProvider);
+        final isFromMe = message.senderId == profileState.profile?.id;
+        
+        final syncService = _ref.read(chatPreviewSyncServiceProvider);
+        syncService.enqueueUpdate(ChatPreviewUpdate(
+          chatId: chatId,
+          lastMessage: message,
+          unreadCountDelta: isFromMe ? null : 1, // Increment for messages from others
+          timestamp: DateTime.now(),
+        ));
       } catch (e) {
-        print('[MSG_RECV] Failed to update chat preview: $e');
+        print('[MSG_RECV] Failed to enqueue chat preview update: $e');
       }
       
       // Save message to Hive cache for persistence
@@ -1160,6 +1173,22 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         print('[STATUS_UPDATE] Failed to send batch read via REST API: $e');
         // Queue will retry
       }
+      
+      // Enqueue chat preview update to decrement unread count
+      final unreadCount = unreadMessages.length;
+      if (unreadCount > 0) {
+        try {
+          final syncService = _ref.read(chatPreviewSyncServiceProvider);
+          syncService.enqueueUpdate(ChatPreviewUpdate(
+            chatId: chatId,
+            lastMessage: null,
+            unreadCountDelta: -unreadCount, // Decrement by number of read messages
+            timestamp: DateTime.now(),
+          ));
+        } catch (e) {
+          print('[STATUS_UPDATE] Failed to enqueue unread count update: $e');
+        }
+      }
     } catch (e) {
       print('[STATUS_UPDATE] Failed to mark messages as read: $e');
     }
@@ -1167,32 +1196,59 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
 
   Future<void> markAudioAsPlayed(String messageId) async {
     try {
-      // Add to status queue for reliable delivery
+      print('[AUDIO_STATUS] Marking audio as played: $messageId');
+      
+      // Update UI immediately
+      updateMessageStatus(messageId, MessageStatus.played);
+      
+      // CRITICAL: Force save to Hive cache before API call
+      try {
+        final localDataSource = _ref.read(localDataSourceProvider);
+        await localDataSource.updateMessageStatus(chatId, messageId, MessageStatus.played);
+        print('[AUDIO_STATUS] Status saved to Hive cache');
+      } catch (e) {
+        print('[AUDIO_STATUS] Failed to save to Hive: $e');
+      }
+      
+      // Add to status queue for reliable API sync
       await _statusQueue.enqueueStatusUpdate(messageId, MessageStatus.played);
       
-      // Update local state immediately for responsive UI
-      final messageIndex = state.messages.indexWhere((m) => m.id == messageId);
-      if (messageIndex != -1) {
-        final updatedMessages = [...state.messages];
-        updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
-          status: MessageStatus.played,
-        );
-        state = state.copyWith(messages: updatedMessages);
-        print('[STATUS_UPDATE] Marked audio message as played locally: $messageId');
-      }
-      
-      // Try calling API immediately (queue will retry if it fails)
+      // Try immediate API call
       try {
-        await _messageRepository.markAudioAsPlayed(messageId);
-        print('[STATUS_UPDATE] Marked audio message as played via API: $messageId');
+        await _signalRService.markAudioAsPlayed(messageId, chatId);
+        print('[AUDIO_STATUS] Status sent to server via SignalR');
       } catch (e) {
-        print('[STATUS_UPDATE] Failed to mark audio as played via API: $e');
-        // Queue will retry
+        print('[AUDIO_STATUS] SignalR failed, queue will retry: $e');
       }
     } catch (e) {
-      print('[STATUS_UPDATE] Failed to mark audio as played: $e');
+      print('[AUDIO_STATUS] Failed to mark audio as played: $e');
       // Don't rethrow - queue will handle it
     }
+  }
+  
+  /// Merge messages from server with cached messages, preserving local 'played' status
+  /// This prevents the server from overwriting locally tracked audio playback status
+  List<Message> _mergeMessagesPreservingPlayedStatus(
+    List<Message> cached,
+    List<Message> fromServer
+  ) {
+    final Map<String, Message> cachedMap = {
+      for (var msg in cached) msg.id: msg
+    };
+    
+    return fromServer.map((serverMsg) {
+      final cachedMsg = cachedMap[serverMsg.id];
+      
+      // If cached message has 'played' status, keep it
+      if (cachedMsg != null && 
+          cachedMsg.status == MessageStatus.played &&
+          serverMsg.status != MessageStatus.played) {
+        print('[MSG_LOAD] Preserving played status for message ${serverMsg.id}');
+        return serverMsg.copyWith(status: MessageStatus.played);
+      }
+      
+      return serverMsg;
+    }).toList();
   }
 
   Future<void> deleteMessage(String messageId) async {

@@ -4,13 +4,17 @@ import '../providers/messages_provider.dart';
 import '../providers/signalr_provider.dart';
 import '../providers/chats_provider.dart';
 import '../providers/contacts_names_provider.dart';
+import '../providers/typing_provider.dart';
+import '../providers/online_status_provider.dart';
+import '../providers/auth_provider.dart';
 import '../../data/models/chat_model.dart';
 import '../../data/models/message_model.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/fcm_service.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/message_input.dart';
-import '../widgets/connection_status_banner.dart';
+import '../widgets/connection_status_indicator.dart';
+import '../widgets/typing_animation.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final String chatId;
@@ -92,6 +96,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       // #endregion
       ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
     });
+    
+    // Load user status in SEPARATE async task (fire-and-forget)
+    Future.microtask(() async {
+      final chatsState = ref.read(chatsProvider);
+      final currentChat = chatsState.chats.where((chat) => chat.id == widget.chatId).firstOrNull;
+      
+      if (currentChat?.type == ChatType.private && 
+          currentChat?.otherParticipantId != null) {
+        try {
+          final userRepository = ref.read(userRepositoryProvider);
+          final statuses = await userRepository.getUsersStatus([currentChat!.otherParticipantId!]);
+          
+          if (statuses.isNotEmpty && mounted) {
+            final status = statuses.first;
+            ref.read(onlineUsersProvider.notifier).setUserOnline(status.userId, status.isOnline);
+            
+            if (status.lastSeenAt != null) {
+              ref.read(lastSeenMapProvider.notifier).setLastSeen(status.userId, status.lastSeenAt!);
+            }
+          }
+        } catch (e) {
+          print('[ChatScreen] Failed to load user status: $e');
+          // Non-critical, don't break the app
+        }
+      }
+    });
   }
   
   void _onScroll() {
@@ -122,6 +152,45 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     
     _scrollController.dispose();
     super.dispose();
+  }
+  
+  Widget _buildTypingIndicator() {
+    final typingUsers = ref.watch(typingProvider).getTypingUsers(widget.chatId);
+    
+    if (typingUsers.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          const TypingAnimation(),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _formatTypingText(typingUsers),
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+                fontStyle: FontStyle.italic,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  String _formatTypingText(List<TypingUser> users) {
+    if (users.length == 1) {
+      return '${users[0].userName} пишет...';
+    } else if (users.length == 2) {
+      return '${users[0].userName} и ${users[1].userName} пишут...';
+    } else {
+      return '${users[0].userName} и еще ${users.length - 1} пишут...';
+    }
   }
 
   void _scrollToBottom() {
@@ -207,22 +276,38 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // Build online status subtitle for private chats
     String? onlineStatusText;
     if (currentChat.type == ChatType.private && currentChat.otherParticipantId != null) {
-      if (currentChat.otherParticipantIsOnline == true) {
-        onlineStatusText = 'онлайн';
-      } else if (currentChat.otherParticipantLastSeenAt != null) {
-        final now = DateTime.now();
-        final diff = now.difference(currentChat.otherParticipantLastSeenAt!);
+      // Check typing first (highest priority)
+      final typingUsers = ref.watch(typingProvider).getTypingUsers(widget.chatId);
+      if (typingUsers.isNotEmpty) {
+        onlineStatusText = 'печатает...';
+      } else {
+        // Check online status
+        final otherUserId = currentChat.otherParticipantId!;
+        final onlineUsers = ref.watch(onlineUsersProvider);
         
-        if (diff.inMinutes < 1) {
-          onlineStatusText = 'только что';
-        } else if (diff.inMinutes < 60) {
-          onlineStatusText = 'был(а) ${diff.inMinutes} мин назад';
-        } else if (diff.inHours < 24) {
-          onlineStatusText = 'был(а) ${diff.inHours} ч назад';
-        } else if (diff.inDays < 7) {
-          onlineStatusText = 'был(а) ${diff.inDays} дн назад';
+        if (onlineUsers.contains(otherUserId)) {
+          onlineStatusText = 'онлайн';
         } else {
-          onlineStatusText = 'был(а) давно';
+          // Check last seen
+          final lastSeenMap = ref.watch(lastSeenMapProvider);
+          final lastSeenAt = lastSeenMap[otherUserId];
+          
+          if (lastSeenAt != null) {
+            final now = DateTime.now();
+            final diff = now.difference(lastSeenAt);
+            
+            if (diff.inMinutes < 1) {
+              onlineStatusText = 'только что';
+            } else if (diff.inMinutes < 60) {
+              onlineStatusText = 'был(а) ${diff.inMinutes} мин назад';
+            } else if (diff.inHours < 24) {
+              onlineStatusText = 'был(а) ${diff.inHours} ч назад';
+            } else if (diff.inDays < 7) {
+              onlineStatusText = 'был(а) ${diff.inDays} дн назад';
+            } else {
+              onlineStatusText = 'был(а) давно';
+            }
+          }
         }
       }
     }
@@ -248,6 +333,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ],
         ),
         actions: [
+          const ConnectionStatusIndicator(),
           IconButton(
             icon: const Icon(Icons.info_outline),
             onPressed: () {
@@ -266,7 +352,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ),
         child: Column(
           children: [
-            const ConnectionStatusBanner(),
             Expanded(
               child: messagesState.isLoading && messagesState.messages.isEmpty
                   ? const Center(child: CircularProgressIndicator())
@@ -286,6 +371,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           },
                         ),
             ),
+            // Typing indicator
+            _buildTypingIndicator(),
             MessageInput(
             chatId: widget.chatId,
             isSending: messagesState.isSending,

@@ -15,6 +15,9 @@ class ApiDataSource {
     receiveTimeout: const Duration(seconds: 10),
   ));
 
+  // Add getter for direct dio access
+  Dio get dio => _dio;
+
   void setToken(String token) {
     _dio.options.headers['Authorization'] = 'Bearer $token';
   }

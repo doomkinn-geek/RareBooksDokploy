@@ -13,6 +13,7 @@ import 'presentation/providers/auth_provider.dart';
 import 'presentation/providers/signalr_provider.dart';
 import 'presentation/providers/chats_provider.dart';
 import 'presentation/providers/messages_provider.dart';
+import 'presentation/providers/user_status_sync_service.dart';
 import 'presentation/screens/auth_screen.dart';
 import 'presentation/screens/main_screen.dart';
 import 'presentation/screens/chat_screen.dart';
@@ -196,6 +197,15 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       // 3. Refresh chats list to get updated unreads
       print('[LIFECYCLE] Step 3: Refreshing chats list');
       await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+      
+      // 4. Refresh user statuses
+      print('[LIFECYCLE] Step 4: Refreshing user statuses');
+      try {
+        await ref.read(userStatusSyncServiceProvider).loadInitialStatuses();
+        print('[LIFECYCLE] User statuses refreshed');
+      } catch (e) {
+        print('[LIFECYCLE] Failed to refresh user statuses: $e');
+      }
       
       print('[LIFECYCLE] Resume sync completed successfully');
       

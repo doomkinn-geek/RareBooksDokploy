@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/chats_provider.dart';
 import '../providers/contacts_names_provider.dart';
+import '../providers/user_status_sync_service.dart';
 import '../widgets/chat_list_item.dart';
-import '../widgets/connection_status_banner.dart';
+import '../widgets/connection_status_indicator.dart';
 import 'chat_screen.dart';
 import 'settings_screen.dart';
 import 'create_group_screen.dart';
@@ -32,8 +33,24 @@ class _MainScreenState extends ConsumerState<MainScreen> {
         ref.read(contactsNamesProvider.notifier).loadContactsMapping();
         // Load chats
         ref.read(chatsProvider.notifier).loadChats();
+        
+        // Load user statuses after chats are loaded
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            ref.read(userStatusSyncServiceProvider).loadInitialStatuses();
+            
+            // Start periodic sync as fallback
+            ref.read(userStatusSyncServiceProvider).startPeriodicSync();
+          }
+        });
       }
     });
+  }
+  
+  @override
+  void dispose() {
+    ref.read(userStatusSyncServiceProvider).stopPeriodicSync();
+    super.dispose();
   }
   
   @override
@@ -63,6 +80,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       appBar: AppBar(
         title: const Text('Депеша'),
         actions: [
+          const ConnectionStatusIndicator(),
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () {
@@ -85,14 +103,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          const ConnectionStatusBanner(),
-          Expanded(
-            child: _buildChatList(chatsState.chats, chatsState.isLoading, chatsState.error),
-          ),
-        ],
-      ),
+      body: _buildChatList(chatsState.chats, chatsState.isLoading, chatsState.error),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showCreateChatOptions(context),
         tooltip: 'Создать чат',

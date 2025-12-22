@@ -7,6 +7,7 @@ import '../../data/repositories/chat_repository.dart';
 import '../../data/repositories/message_repository.dart';
 import '../../data/repositories/outbox_repository.dart';
 import '../../data/repositories/status_update_queue_repository.dart';
+import '../../data/repositories/user_repository.dart';
 import '../../data/services/audio_storage_service.dart';
 import '../../data/services/status_sync_service.dart';
 import '../../core/services/fcm_service.dart';
@@ -128,6 +129,12 @@ final outboxRepositoryProvider = Provider<OutboxRepository>((ref) {
 final statusUpdateQueueRepositoryProvider = Provider((ref) {
   return StatusUpdateQueueRepository(
     ref.read(localDataSourceProvider),
+  );
+});
+
+final userRepositoryProvider = Provider<UserRepository>((ref) {
+  return UserRepository(
+    ref.read(apiDataSourceProvider),
   );
 });
 
