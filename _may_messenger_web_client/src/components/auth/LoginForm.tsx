@@ -28,7 +28,7 @@ export const LoginForm = () => {
         </div>
         
         <h1 className="text-3xl font-bold text-center mb-2 text-gray-800">
-          May Messenger
+          Депеша - обмен сообщениями
         </h1>
         <p className="text-center text-gray-600 mb-8">
           Войдите в свой аккаунт
