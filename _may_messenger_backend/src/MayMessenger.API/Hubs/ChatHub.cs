@@ -27,6 +27,19 @@ public class ChatHub : Hub
     public override async Task OnConnectedAsync()
     {
         var userId = GetCurrentUserId();
+        var user = await _unitOfWork.Users.GetByIdAsync(userId);
+        
+        if (user != null)
+        {
+            // Update user online status
+            user.IsOnline = true;
+            user.LastSeenAt = DateTime.UtcNow;
+            await _unitOfWork.Users.UpdateAsync(user);
+            await _unitOfWork.SaveChangesAsync();
+            
+            // Notify all participants in user's chats about status change
+            await NotifyUserStatusChanged(userId, true, DateTime.UtcNow);
+        }
         
         // Join user's chats
         var chats = await _unitOfWork.Chats.GetUserChatsAsync(userId);
@@ -37,6 +50,34 @@ public class ChatHub : Hub
         }
         
         await base.OnConnectedAsync();
+    }
+    
+    public override async Task OnDisconnectedAsync(Exception? exception)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            var user = await _unitOfWork.Users.GetByIdAsync(userId);
+            
+            if (user != null)
+            {
+                // Update user offline status
+                user.IsOnline = false;
+                user.LastSeenAt = DateTime.UtcNow;
+                await _unitOfWork.Users.UpdateAsync(user);
+                await _unitOfWork.SaveChangesAsync();
+                
+                // Notify all participants in user's chats about status change
+                await NotifyUserStatusChanged(userId, false, DateTime.UtcNow);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log error but don't throw - disconnection should always succeed
+            Console.WriteLine($"[ChatHub] Error in OnDisconnectedAsync: {ex.Message}");
+        }
+        
+        await base.OnDisconnectedAsync(exception);
     }
     
     public async Task JoinChat(string chatId)
@@ -221,6 +262,28 @@ public class ChatHub : Hub
         catch (Exception ex)
         {
             Console.WriteLine($"[ACK] Error processing status ack: {ex.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// Notify all participants in user's chats about user status change
+    /// </summary>
+    private async Task NotifyUserStatusChanged(Guid userId, bool isOnline, DateTime lastSeenAt)
+    {
+        try
+        {
+            var chats = await _unitOfWork.Chats.GetUserChatsAsync(userId);
+            foreach (var chat in chats)
+            {
+                await Clients.Group(chat.Id.ToString())
+                    .SendAsync("UserStatusChanged", userId.ToString(), isOnline, lastSeenAt);
+            }
+            
+            Console.WriteLine($"[ChatHub] User {userId} status changed: {(isOnline ? "online" : "offline")} at {lastSeenAt:O}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ChatHub] Error notifying user status change: {ex.Message}");
         }
     }
 }

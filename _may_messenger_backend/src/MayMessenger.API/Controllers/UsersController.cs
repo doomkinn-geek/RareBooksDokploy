@@ -45,7 +45,9 @@ public class UsersController : ControllerBase
             PhoneNumber = user.PhoneNumber,
             DisplayName = user.DisplayName,
             Avatar = user.Avatar,
-            Role = user.Role
+            Role = user.Role,
+            IsOnline = user.IsOnline,
+            LastSeenAt = user.LastSeenAt
         });
     }
     
@@ -124,7 +126,9 @@ public class UsersController : ControllerBase
                 PhoneNumber = u.PhoneNumber,
                 DisplayName = u.DisplayName,
                 Avatar = u.Avatar,
-                Role = u.Role
+                Role = u.Role,
+                IsOnline = u.IsOnline,
+                LastSeenAt = u.LastSeenAt
             });
         
         return Ok(userDtos);
@@ -158,7 +162,9 @@ public class UsersController : ControllerBase
                     PhoneNumber = r.user.PhoneNumber,
                     DisplayName = r.contactDisplayName ?? r.user.DisplayName, // Use phone book name if available
                     Avatar = r.user.Avatar,
-                    Role = r.user.Role
+                    Role = r.user.Role,
+                    IsOnline = r.user.IsOnline,
+                    LastSeenAt = r.user.LastSeenAt
                 });
             
             return Ok(userDtos);
@@ -181,11 +187,48 @@ public class UsersController : ControllerBase
                     PhoneNumber = u.PhoneNumber,
                     DisplayName = u.DisplayName,
                     Avatar = u.Avatar,
-                    Role = u.Role
+                    Role = u.Role,
+                    IsOnline = u.IsOnline,
+                    LastSeenAt = u.LastSeenAt
                 });
             
             return Ok(searchResults);
         }
+    }
+    
+    /// <summary>
+    /// Получить статусы (онлайн/офлайн) для списка пользователей
+    /// </summary>
+    [HttpGet("status")]
+    public async Task<ActionResult<IEnumerable<UserStatusDto>>> GetUsersStatus(
+        [FromQuery] List<Guid> userIds)
+    {
+        if (userIds == null || !userIds.Any())
+        {
+            return BadRequest("UserIds cannot be empty");
+        }
+        
+        var currentUserId = GetCurrentUserId();
+        var statusList = new List<UserStatusDto>();
+        
+        foreach (var userId in userIds.Distinct().Take(100)) // Limit to 100 users
+        {
+            // Skip current user
+            if (userId == currentUserId) continue;
+            
+            var user = await _unitOfWork.Users.GetByIdAsync(userId);
+            if (user != null)
+            {
+                statusList.Add(new UserStatusDto
+                {
+                    UserId = user.Id,
+                    IsOnline = user.IsOnline,
+                    LastSeenAt = user.LastSeenAt
+                });
+            }
+        }
+        
+        return Ok(statusList);
     }
 }
 

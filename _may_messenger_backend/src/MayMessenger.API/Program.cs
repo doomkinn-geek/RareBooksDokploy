@@ -70,6 +70,9 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<MayMessenger.Application.Services.IImageCompressionService, MayMessenger.Application.Services.ImageCompressionService>();
 builder.Services.AddSingleton<MayMessenger.Application.Services.IFirebaseService, MayMessenger.Application.Services.FirebaseService>();
 
+// Migration Service
+builder.Services.AddScoped<MayMessenger.API.Services.MigrationService>();
+
 // Background Services
 builder.Services.AddHostedService<MayMessenger.Application.Services.MediaCleanupService>(); // Audio + Images cleanup
 builder.Services.AddHostedService<MayMessenger.Application.Services.CleanupInvalidTokensService>();
@@ -166,7 +169,7 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-// Apply pending migrations automatically on startup
+// Apply pending migrations automatically on startup using MigrationService
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
@@ -174,48 +177,29 @@ using (var scope = app.Services.CreateScope())
     
     try
     {
-        logger.LogInformation("Checking database connection...");
-        var context = services.GetRequiredService<AppDbContext>();
+        logger.LogInformation("Starting database initialization...");
         
-        // Test database connection with timeout
-        var canConnect = await context.Database.CanConnectAsync();
-        if (!canConnect)
+        // Use MigrationService for automated migration management
+        var migrationService = services.GetRequiredService<MayMessenger.API.Services.MigrationService>();
+        var migrationSuccess = await migrationService.ApplyPendingMigrationsAsync();
+        
+        if (migrationSuccess)
         {
-            logger.LogError("Cannot connect to database. Please check connection string and ensure database is running.");
-            logger.LogWarning("Application will continue to start, but database features will not work.");
+            // Initialize database and seed data
+            var context = services.GetRequiredService<AppDbContext>();
+            var passwordHasher = services.GetRequiredService<IPasswordHasher>();
+            await DbInitializer.InitializeAsync(context, passwordHasher);
+            logger.LogInformation("Database initialization completed successfully");
         }
         else
         {
-            logger.LogInformation("Database connection successful");
-            
-            // Check for pending migrations
-            var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
-            if (pendingMigrations.Any())
-            {
-                logger.LogInformation("Applying {Count} pending database migrations...", pendingMigrations.Count());
-                foreach (var migration in pendingMigrations)
-                {
-                    logger.LogInformation("  - {MigrationName}", migration);
-                }
-                
-                // Apply migrations
-                await context.Database.MigrateAsync();
-                logger.LogInformation("Database migrations applied successfully");
-            }
-            else
-            {
-                logger.LogInformation("Database is up to date. No pending migrations.");
-            }
-            
-            // Initialize database and seed data
-            var passwordHasher = services.GetRequiredService<IPasswordHasher>();
-            await DbInitializer.InitializeAsync(context, passwordHasher);
-            logger.LogInformation("Database initialization completed");
+            logger.LogWarning("Migration service reported errors. Check logs for details.");
+            logger.LogWarning("Application will continue to start, but database features may not work properly.");
         }
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "An error occurred while migrating or initializing the database.");
+        logger.LogError(ex, "An error occurred during database initialization.");
         logger.LogError("Connection string: {ConnectionString}", 
             builder.Configuration.GetConnectionString("DefaultConnection")?.Replace("Password=", "Password=***"));
         logger.LogWarning("Application will continue to start, but database features may not work properly.");

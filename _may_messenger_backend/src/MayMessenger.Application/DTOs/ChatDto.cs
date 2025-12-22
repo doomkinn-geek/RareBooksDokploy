@@ -15,6 +15,10 @@ public class ChatDto
     // For private chats: userId of the other participant
     // Used by mobile app to map to local contact name
     public Guid? OtherParticipantId { get; set; }
+    
+    // Online status for private chats (other participant)
+    public bool? OtherParticipantIsOnline { get; set; }
+    public DateTime? OtherParticipantLastSeenAt { get; set; }
 }
 
 

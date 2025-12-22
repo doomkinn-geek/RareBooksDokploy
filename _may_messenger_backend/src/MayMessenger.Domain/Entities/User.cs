@@ -12,6 +12,10 @@ public class User : BaseEntity
     public Guid? InvitedBy { get; set; }
     public string PasswordHash { get; set; } = string.Empty;
     
+    // Online status tracking
+    public bool IsOnline { get; set; } = false;
+    public DateTime? LastSeenAt { get; set; }
+    
     // Navigation properties
     public User? InvitedByUser { get; set; }
     public ICollection<ChatParticipant> ChatParticipants { get; set; } = new List<ChatParticipant>();

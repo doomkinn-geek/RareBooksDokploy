@@ -1009,6 +1009,252 @@ public class MessagesController : ControllerBase
             return StatusCode(500, "Error searching messages");
         }
     }
+    
+    /// <summary>
+    /// Получить все несинхронизированные сообщения пользователя с определенного времени
+    /// Используется для incremental sync после переподключения
+    /// </summary>
+    [HttpGet("unsynced")]
+    public async Task<ActionResult<IEnumerable<MessageDto>>> GetUnsyncedMessages(
+        [FromQuery] DateTime since, 
+        [FromQuery] int take = 100)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            
+            _logger.LogInformation($"GetUnsyncedMessages: userId={userId}, since={since:O}");
+            
+            // Get all chats user participates in
+            var userChats = await _unitOfWork.Chats.GetUserChatsAsync(userId);
+            var chatIds = userChats.Select(c => c.Id).ToList();
+            
+            if (!chatIds.Any())
+            {
+                return Ok(new List<MessageDto>());
+            }
+            
+            // Get all messages created after 'since' timestamp from user's chats
+            var allMessages = new List<Message>();
+            foreach (var chatId in chatIds)
+            {
+                // Get messages created after 'since'
+                var messages = await _unitOfWork.Messages.GetChatMessagesAsync(chatId, 0, 1000);
+                var filteredMessages = messages
+                    .Where(m => m.CreatedAt > since)
+                    .ToList();
+                    
+                allMessages.AddRange(filteredMessages);
+            }
+            
+            // Sort by creation time and limit
+            var unsyncedMessages = allMessages
+                .OrderBy(m => m.CreatedAt)
+                .Take(take)
+                .Select(m => new MessageDto
+                {
+                    Id = m.Id,
+                    ChatId = m.ChatId,
+                    SenderId = m.SenderId,
+                    SenderName = m.Sender?.DisplayName ?? "Unknown",
+                    Type = m.Type,
+                    Content = m.Content,
+                    FilePath = m.FilePath,
+                    Status = m.Status,
+                    CreatedAt = m.CreatedAt,
+                    ClientMessageId = m.ClientMessageId
+                })
+                .ToList();
+            
+            _logger.LogInformation($"GetUnsyncedMessages: Returning {unsyncedMessages.Count} unsynced messages");
+            
+            return Ok(unsyncedMessages);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting unsynced messages");
+            return StatusCode(500, "Error getting unsynced messages");
+        }
+    }
+    
+    /// <summary>
+    /// Получить конкретное сообщение по ID
+    /// Используется для восстановления сообщения после push-уведомления
+    /// </summary>
+    [HttpGet("by-id/{messageId}")]
+    public async Task<ActionResult<MessageDto>> GetMessageById(Guid messageId)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
+            
+            if (message == null)
+            {
+                _logger.LogWarning($"GetMessageById: Message not found: {messageId}");
+                return NotFound($"Message {messageId} not found");
+            }
+            
+            // Check if user has access to this message (must be participant of the chat)
+            var chat = await _unitOfWork.Chats.GetByIdAsync(message.ChatId);
+            if (chat == null)
+            {
+                return NotFound("Chat not found");
+            }
+            
+            var isParticipant = chat.Participants.Any(p => p.UserId == userId);
+            if (!isParticipant)
+            {
+                _logger.LogWarning($"GetMessageById: User {userId} tried to access message {messageId} without permission");
+                return Forbid();
+            }
+            
+            // Auto-mark as delivered if not sender
+            if (message.SenderId != userId && message.Status == MessageStatus.Sent)
+            {
+                message.Status = MessageStatus.Delivered;
+                message.DeliveredAt = DateTime.UtcNow;
+                await _unitOfWork.Messages.UpdateAsync(message);
+                await _unitOfWork.SaveChangesAsync();
+                
+                // Notify about status change
+                await _hubContext.Clients.Group(message.ChatId.ToString())
+                    .SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Delivered);
+                    
+                _logger.LogInformation($"GetMessageById: Auto-marked message {messageId} as delivered for user {userId}");
+            }
+            
+            var messageDto = new MessageDto
+            {
+                Id = message.Id,
+                ChatId = message.ChatId,
+                SenderId = message.SenderId,
+                SenderName = message.Sender?.DisplayName ?? "Unknown",
+                Type = message.Type,
+                Content = message.Content,
+                FilePath = message.FilePath,
+                Status = message.Status,
+                CreatedAt = message.CreatedAt,
+                ClientMessageId = message.ClientMessageId
+            };
+            
+            _logger.LogInformation($"GetMessageById: Successfully retrieved message {messageId}");
+            
+            return Ok(messageDto);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Error getting message by ID: {messageId}");
+            return StatusCode(500, "Error getting message");
+        }
+    }
+    
+    /// <summary>
+    /// Batch update статусов сообщений
+    /// Используется для эффективного обновления множества сообщений одним запросом
+    /// </summary>
+    [HttpPost("batch-status")]
+    public async Task<ActionResult> BatchUpdateStatus([FromBody] BatchStatusUpdateDto dto)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            
+            if (dto.MessageIds == null || !dto.MessageIds.Any())
+            {
+                return BadRequest("MessageIds cannot be empty");
+            }
+            
+            _logger.LogInformation($"BatchUpdateStatus: Updating {dto.MessageIds.Count} messages to status {dto.Status}");
+            
+            var updatedCount = 0;
+            var affectedChatIds = new HashSet<Guid>();
+            
+            foreach (var messageId in dto.MessageIds)
+            {
+                var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
+                if (message == null) continue;
+                
+                // Don't update sender's own messages
+                if (message.SenderId == userId) continue;
+                
+                // Check if user is participant
+                var chat = await _unitOfWork.Chats.GetByIdAsync(message.ChatId);
+                if (chat == null) continue;
+                
+                var isParticipant = chat.Participants.Any(p => p.UserId == userId);
+                if (!isParticipant) continue;
+                
+                // Update status
+                bool statusChanged = false;
+                switch (dto.Status)
+                {
+                    case MessageStatus.Delivered:
+                        if (message.Status == MessageStatus.Sent)
+                        {
+                            message.Status = MessageStatus.Delivered;
+                            message.DeliveredAt = DateTime.UtcNow;
+                            statusChanged = true;
+                        }
+                        break;
+                        
+                    case MessageStatus.Read:
+                        if (message.Status != MessageStatus.Read)
+                        {
+                            message.Status = MessageStatus.Read;
+                            message.ReadAt = DateTime.UtcNow;
+                            if (message.DeliveredAt == null)
+                            {
+                                message.DeliveredAt = DateTime.UtcNow;
+                            }
+                            statusChanged = true;
+                        }
+                        break;
+                        
+                    case MessageStatus.Played:
+                        if (message.Type == MessageType.Audio && message.Status != MessageStatus.Played)
+                        {
+                            message.Status = MessageStatus.Played;
+                            message.PlayedAt = DateTime.UtcNow;
+                            if (message.DeliveredAt == null)
+                            {
+                                message.DeliveredAt = DateTime.UtcNow;
+                            }
+                            statusChanged = true;
+                        }
+                        break;
+                }
+                
+                if (statusChanged)
+                {
+                    await _unitOfWork.Messages.UpdateAsync(message);
+                    affectedChatIds.Add(message.ChatId);
+                    updatedCount++;
+                }
+            }
+            
+            await _unitOfWork.SaveChangesAsync();
+            
+            // Notify all affected chats about status updates
+            foreach (var chatId in affectedChatIds)
+            {
+                foreach (var messageId in dto.MessageIds)
+                {
+                    await _hubContext.Clients.Group(chatId.ToString())
+                        .SendAsync("MessageStatusUpdated", messageId, (int)dto.Status);
+                }
+            }
+            
+            _logger.LogInformation($"BatchUpdateStatus: Successfully updated {updatedCount} messages");
+            
+            return Ok(new { UpdatedCount = updatedCount });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in batch status update");
+            return StatusCode(500, "Error updating message statuses");
+        }
+    }
 }
 
 

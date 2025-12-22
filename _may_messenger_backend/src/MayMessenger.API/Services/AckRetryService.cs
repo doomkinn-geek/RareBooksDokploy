@@ -17,8 +17,8 @@ public class AckRetryService : BackgroundService
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<AckRetryService> _logger;
     private readonly IHubContext<ChatHub> _hubContext;
-    private const int RetryIntervalSeconds = 5;
-    private const int MaxRetries = 3;
+    private const int RetryIntervalSeconds = 3; // Reduced from 5 to 3 seconds
+    private const int MaxRetries = 5; // Increased from 3 to 5
     private const int CleanupAfterHours = 24;
 
     public AckRetryService(
@@ -92,13 +92,26 @@ public class AckRetryService : BackgroundService
 
     private async Task RetryAckAsync(Domain.Entities.PendingAck ack, IUnitOfWork unitOfWork)
     {
+        // Check if enough time has passed based on exponential backoff
+        // Delays: 3s, 6s, 12s, 24s, 48s (approximately)
+        var minDelaySeconds = RetryIntervalSeconds * Math.Pow(2, ack.RetryCount);
+        var timeSinceCreation = DateTime.UtcNow - ack.CreatedAt;
+        var timeSinceLastRetry = ack.LastRetryAt.HasValue ? DateTime.UtcNow - ack.LastRetryAt.Value : timeSinceCreation;
+        
+        if (timeSinceLastRetry.TotalSeconds < minDelaySeconds)
+        {
+            // Not time to retry yet (exponential backoff)
+            return;
+        }
+        
         // Update retry count
         ack.RetryCount++;
         ack.LastRetryAt = DateTime.UtcNow;
 
         if (ack.RetryCount >= MaxRetries)
         {
-            _logger.LogWarning($"Pending ack {ack.Id} exceeded max retries ({MaxRetries}), removing");
+            _logger.LogWarning($"Pending ack {ack.Id} exceeded max retries ({MaxRetries}), removing. " +
+                              $"Message: {ack.MessageId}, Recipient: {ack.RecipientUserId}");
             await unitOfWork.PendingAcks.DeleteAsync(ack.Id);
             return;
         }

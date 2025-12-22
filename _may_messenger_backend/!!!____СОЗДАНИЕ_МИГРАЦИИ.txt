@@ -1,3 +1,45 @@
-cd c:\rarebooks\_may_messenger_backend\src\MayMessenger.Infrastructure && dotnet ef migrations add AddPlayedAtToMessages --startup-project ../MayMessenger.API
+# ========================================
+# АВТОМАТИЧЕСКОЕ ПРИМЕНЕНИЕ МИГРАЦИЙ
+# ========================================
+# Миграции применяются АВТОМАТИЧЕСКИ при запуске приложения!
+# Просто запустите: dotnet run --project src/MayMessenger.API
 
-cd c:\rarebooks\_may_messenger_backend\src\MayMessenger.Infrastructure && dotnet ef database update --startup-project ../MayMessenger.API
+# ========================================
+# СОЗДАНИЕ НОВОЙ МИГРАЦИИ (вручную)
+# ========================================
+
+# Windows PowerShell:
+.\create-migration.ps1 MyMigrationName
+
+# Linux/Mac bash:
+./create-migration.sh MyMigrationName
+
+# ========================================
+# ПРЯМЫЕ КОМАНДЫ (если нужно)
+# ========================================
+
+# Создать миграцию:
+cd src\MayMessenger.Infrastructure && dotnet ef migrations add MyMigrationName --startup-project ..\MayMessenger.API
+
+# Применить миграции вручную (обычно не требуется):
+cd src\MayMessenger.Infrastructure && dotnet ef database update --startup-project ..\MayMessenger.API
+
+# ========================================
+# ПРИМЕРЫ ИСПОЛЬЗОВАНИЯ
+# ========================================
+
+# 1. Добавили новое поле в entity? 
+#    → Создайте миграцию: .\create-migration.ps1 AddNewField
+#    → Запустите приложение: dotnet run --project src/MayMessenger.API
+#    → Миграция применится автоматически!
+
+# 2. Production deployment:
+#    → Просто обновите код и перезапустите контейнер
+#    → Миграции применятся автоматически при старте
+
+# ========================================
+# ВАЖНО!
+# ========================================
+# - Всегда создавайте миграции локально перед deployment
+# - Проверяйте сгенерированный код миграции
+# - Commit миграции в git вместе с изменениями entity

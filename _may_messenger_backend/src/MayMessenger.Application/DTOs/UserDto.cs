@@ -9,6 +9,10 @@ public class UserDto
     public string DisplayName { get; set; } = string.Empty;
     public string? Avatar { get; set; }
     public UserRole Role { get; set; }
+    
+    // Online status
+    public bool IsOnline { get; set; }
+    public DateTime? LastSeenAt { get; set; }
 }
 
 

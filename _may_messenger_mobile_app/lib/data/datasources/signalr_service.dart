@@ -149,6 +149,31 @@ class SignalRService {
       }
     });
   }
+  
+  /// Register callback for user status changes (online/offline)
+  void onUserStatusChanged(Function(String userId, bool isOnline, DateTime? lastSeenAt) callback) {
+    // Unsubscribe from previous handler
+    _hubConnection?.off('UserStatusChanged');
+    
+    _hubConnection?.on('UserStatusChanged', (arguments) {
+      if (arguments != null && arguments.length >= 2) {
+        final userId = arguments[0] as String;
+        final isOnline = arguments[1] as bool;
+        DateTime? lastSeenAt;
+        
+        if (arguments.length >= 3 && arguments[2] != null) {
+          try {
+            lastSeenAt = DateTime.parse(arguments[2] as String);
+          } catch (e) {
+            print('[SignalR] Failed to parse lastSeenAt: $e');
+          }
+        }
+        
+        print('[SignalR] User status changed: userId=$userId, isOnline=$isOnline, lastSeenAt=$lastSeenAt');
+        callback(userId, isOnline, lastSeenAt);
+      }
+    });
+  }
 
   Future<void> markMessageAsDelivered(String messageId, String chatId) async {
     if (!isConnected) {
