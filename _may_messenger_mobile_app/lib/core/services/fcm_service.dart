@@ -157,19 +157,25 @@ class FcmService {
   }
 
   Future<void> registerToken(String token) async {
-    print('[FCM] registerToken called');
+    // #region agent log - Hypothesis A
+    print('[DEBUG_MOBILE_FCM_A] registerToken called at ${DateTime.now()}');
+    // #endregion
     
     // Store JWT token for later auto-registration
     _jwtToken = token;
     
     if (!_isFirebaseSupported) {
-      print('[FCM] registerToken skipped: Firebase not supported on this platform');
+      // #region agent log - Hypothesis A
+      print('[DEBUG_MOBILE_FCM_B] Firebase not supported on this platform');
+      // #endregion
       return;
     }
     
     // If FCM token is not available yet, wait for it
     if (_fcmToken == null) {
-      print('[FCM] FCM token not available yet, waiting for onTokenRefresh...');
+      // #region agent log - Hypothesis A
+      print('[DEBUG_MOBILE_FCM_C] FCM token not available yet, waiting...');
+      // #endregion
       
       // Try to get token again (in case it's available now)
       final messaging = _messagingInstance;
@@ -192,6 +198,10 @@ class FcmService {
     try {
       final deviceInfo = await _getDeviceInfo();
       
+      // #region agent log - Hypothesis A
+      print('[DEBUG_MOBILE_FCM_D] Sending registerToken request. Token: ${_fcmToken?.substring(0, 20)}..., DeviceInfo: $deviceInfo');
+      // #endregion
+      
       final response = await _dio.post(
         '${ApiConstants.baseUrl}/api/notifications/register-token',
         data: {
@@ -203,9 +213,13 @@ class FcmService {
         ),
       );
       
-      print('[FCM] Token registered successfully: ${response.data}');
+      // #region agent log - Hypothesis A
+      print('[DEBUG_MOBILE_FCM_E] Token registered successfully: ${response.statusCode}, ${response.data}');
+      // #endregion
     } catch (e) {
-      print('[FCM] Failed to register FCM token: $e');
+      // #region agent log - Hypothesis A
+      print('[DEBUG_MOBILE_FCM_ERROR] Failed to register FCM token: $e');
+      // #endregion
     }
   }
 

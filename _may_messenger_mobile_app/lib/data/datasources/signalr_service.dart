@@ -277,17 +277,28 @@ class SignalRService {
     _hubConnection?.off('MessageStatusUpdated');
     
     _hubConnection?.on('MessageStatusUpdated', (arguments) async {
+      // #region agent log - Hypothesis D
+      print('[DEBUG_MOBILE_STATUS_A] MessageStatusUpdated received at ${DateTime.now()}, args: $arguments');
+      // #endregion
       if (arguments != null && arguments.length >= 2) {
         final messageId = arguments[0] as String;
         final statusIndex = arguments[1] as int;
         final status = MessageStatus.values[statusIndex];
+        // #region agent log - Hypothesis D
+        print('[DEBUG_MOBILE_STATUS_B] Parsed: messageId=$messageId, status=$status');
+        // #endregion
         callback(messageId, status);
         
         // Automatically send ACK
         try {
           await ackStatusUpdate(messageId, statusIndex);
+          // #region agent log - Hypothesis D
+          print('[DEBUG_MOBILE_STATUS_C] ACK sent for status update');
+          // #endregion
         } catch (e) {
-          print('[SignalR] Failed to auto-send status ACK: $e');
+          // #region agent log - Hypothesis D
+          print('[DEBUG_MOBILE_STATUS_ERROR] Failed to auto-send status ACK: $e');
+          // #endregion
         }
       }
     });
@@ -319,16 +330,25 @@ class SignalRService {
   }
 
   Future<void> markMessageAsDelivered(String messageId, String chatId) async {
+    // #region agent log - Hypothesis E
+    print('[DEBUG_MOBILE_ACK_A] markMessageAsDelivered called for message $messageId, chat $chatId at ${DateTime.now()}');
+    // #endregion
     if (!isConnected) {
-      print('[SignalR] Cannot mark as delivered - not connected');
+      // #region agent log - Hypothesis E
+      print('[DEBUG_MOBILE_ACK_B] Cannot mark as delivered - not connected');
+      // #endregion
       return;
     }
     
     try {
       await _hubConnection?.invoke('MessageDelivered', args: [messageId, chatId]);
-      print('[SignalR] Message marked as delivered: $messageId');
+      // #region agent log - Hypothesis E
+      print('[DEBUG_MOBILE_ACK_C] Message marked as delivered successfully: $messageId');
+      // #endregion
     } catch (e) {
-      print('[SignalR] Failed to send delivery confirmation: $e');
+      // #region agent log - Hypothesis E
+      print('[DEBUG_MOBILE_ACK_ERROR] Failed to send delivery confirmation: $e');
+      // #endregion
     }
   }
 

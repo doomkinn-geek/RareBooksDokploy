@@ -109,13 +109,31 @@ public class ChatHub : Hub
     
     public async Task MessageDelivered(Guid messageId, Guid chatId)
     {
+        // #region agent log - Hypothesis C/E: Check ACK received
+        Console.WriteLine($"[DEBUG_ACK_A] MessageDelivered called for message {messageId}, chat {chatId}");
+        // #endregion
         var userId = GetCurrentUserId();
+        // #region agent log - Hypothesis C/E
+        Console.WriteLine($"[DEBUG_ACK_B] UserId: {userId}");
+        // #endregion
         var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
         
-        if (message == null) return;
+        if (message == null) 
+        {
+            // #region agent log - Hypothesis C/E
+            Console.WriteLine($"[DEBUG_ACK_C] Message not found: {messageId}");
+            // #endregion
+            return;
+        }
         
         // Don't create receipt for sender's own message
-        if (message.SenderId == userId) return;
+        if (message.SenderId == userId) 
+        {
+            // #region agent log - Hypothesis C/E
+            Console.WriteLine($"[DEBUG_ACK_D] Skipping ACK for own message");
+            // #endregion
+            return;
+        }
         
         // Create or update delivery receipt for this user
         var receipt = await _unitOfWork.DeliveryReceipts.GetByMessageAndUserAsync(messageId, userId);
@@ -152,15 +170,27 @@ public class ChatHub : Hub
             message.Status = aggregateStatus;
             if (aggregateStatus == MessageStatus.Delivered && message.DeliveredAt == null)
             {
-                message.DeliveredAt = DateTime.UtcNow;
+            message.DeliveredAt = DateTime.UtcNow;
             }
             await _unitOfWork.Messages.UpdateAsync(message);
             
+            // #region agent log - Hypothesis C: Check MessageStatusUpdated sending
+            Console.WriteLine($"[DEBUG_STATUS_A] Sending MessageStatusUpdated for message {messageId}, status {aggregateStatus} to group {chatId}");
+            // #endregion
             // Notify all participants about status change
             await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, (int)aggregateStatus);
+            // #region agent log - Hypothesis C
+            Console.WriteLine($"[DEBUG_STATUS_B] MessageStatusUpdated sent successfully");
+            // #endregion
+        }
+        else
+        {
+            // #region agent log - Hypothesis C
+            Console.WriteLine($"[DEBUG_STATUS_C] Status unchanged for message {messageId}, current: {message.Status}, aggregate: {aggregateStatus}");
+            // #endregion
         }
         
-        await _unitOfWork.SaveChangesAsync();
+            await _unitOfWork.SaveChangesAsync();
     }
     
     public async Task MessageRead(Guid messageId, Guid chatId)
@@ -207,7 +237,7 @@ public class ChatHub : Hub
         
         // Calculate aggregate status based on all events
         var aggregateStatus = await _unitOfWork.MessageStatusEvents.CalculateAggregateStatusAsync(messageId);
-        
+            
         // Update message status if it changed
         if (message.Status != aggregateStatus)
         {

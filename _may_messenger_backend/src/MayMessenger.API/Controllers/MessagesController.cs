@@ -416,15 +416,24 @@ public class MessagesController : ControllerBase
             }
             
             // Send push notifications to offline users (fire and forget)
+            // #region agent log - Hypothesis B: Check if PUSH sending is invoked
+            _logger.LogInformation($"[DEBUG_PUSH_A] About to invoke SendPushNotificationsAsync for message {message.Id}, chat {chat.Id}, sender {sender.Id}");
+            // #endregion
             _ = Task.Run(async () =>
             {
                 try
                 {
+                    // #region agent log - Hypothesis B
+                    _logger.LogInformation($"[DEBUG_PUSH_B] Executing SendPushNotificationsAsync for message {message.Id}");
+                    // #endregion
                     await SendPushNotificationsAsync(chat, sender, messageDto);
+                    // #region agent log - Hypothesis B
+                    _logger.LogInformation($"[DEBUG_PUSH_C] SendPushNotificationsAsync completed for message {message.Id}");
+                    // #endregion
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, $"Failed to send push notifications for message {message.Id}");
+                    _logger.LogError(ex, $"[DEBUG_PUSH_ERROR] Failed to send push notifications for message {message.Id}");
                 }
             });
             
@@ -636,9 +645,12 @@ public class MessagesController : ControllerBase
     /// </summary>
     private async Task SendPushNotificationsAsync(Chat chat, User sender, MessageDto message)
     {
+        // #region agent log - Hypothesis B: Check Firebase initialization
+        _logger.LogInformation($"[DEBUG_PUSH_D] SendPushNotificationsAsync started. Firebase initialized: {_firebaseService.IsInitialized}");
+        // #endregion
         if (!_firebaseService.IsInitialized)
         {
-            _logger.LogWarning("Firebase not initialized. Cannot send push notifications.");
+            _logger.LogWarning("[DEBUG_PUSH_E] Firebase not initialized. Cannot send push notifications.");
             return;
         }
 
@@ -647,12 +659,18 @@ public class MessagesController : ControllerBase
             // Получаем все FCM токены ДО любых async операций
             // чтобы избежать disposed context в Task.Run
             var userTokens = new Dictionary<Guid, List<Domain.Entities.FcmToken>>();
+            // #region agent log - Hypothesis A: Check participants
+            _logger.LogInformation($"[DEBUG_PUSH_F] Chat has {chat.Participants.Count} participants");
+            // #endregion
             foreach (var participant in chat.Participants)
             {
                 if (participant.UserId != sender.Id)
                 {
                     var tokens = await _unitOfWork.FcmTokens.GetActiveTokensForUserAsync(participant.UserId);
                     userTokens[participant.UserId] = tokens.ToList();
+                    // #region agent log - Hypothesis A: Check FCM tokens
+                    _logger.LogInformation($"[DEBUG_PUSH_G] User {participant.UserId} has {tokens.Count} active FCM tokens");
+                    // #endregion
                 }
             }
             
@@ -690,12 +708,18 @@ public class MessagesController : ControllerBase
                         
                         foreach (var token in tokens)
                         {
+                            // #region agent log - Hypothesis B: Check FCM send result
+                            _logger.LogInformation($"[DEBUG_PUSH_H] Sending FCM notification to token {token.Token.Substring(0, Math.Min(20, token.Token.Length))}...");
+                            // #endregion
                             var (success, shouldDeactivate) = await _firebaseService.SendNotificationAsync(
                                 token.Token, 
                                 title, 
                                 body ?? "", 
                                 data);
                             
+                            // #region agent log - Hypothesis B
+                            _logger.LogInformation($"[DEBUG_PUSH_I] FCM send result: success={success}, shouldDeactivate={shouldDeactivate}");
+                            // #endregion
                             if (success)
                             {
                                 successCount++;
@@ -705,7 +729,7 @@ public class MessagesController : ControllerBase
                             else if (shouldDeactivate)
                             {
                                 // Deactivate invalid token
-                                _logger.LogWarning($"Deactivating invalid FCM token for user {userId}");
+                                _logger.LogWarning($"[DEBUG_PUSH_J] Deactivating invalid FCM token for user {userId}");
                                 tokensToDeactivate.Add(token.Token);
                             }
                         }

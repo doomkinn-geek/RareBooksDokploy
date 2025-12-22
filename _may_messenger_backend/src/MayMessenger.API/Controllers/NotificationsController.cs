@@ -22,22 +22,35 @@ public class NotificationsController : ControllerBase
     [HttpPost("register-token")]
     public async Task<IActionResult> RegisterToken([FromBody] RegisterTokenRequest request)
     {
+        // #region agent log - Hypothesis A: Check FCM token registration
+        _logger.LogInformation($"[DEBUG_FCM_A] RegisterToken called with token: {request.Token?.Substring(0, Math.Min(20, request.Token?.Length ?? 0))}..., deviceInfo: {request.DeviceInfo}");
+        // #endregion
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (userId == null || !Guid.TryParse(userId, out var userGuid))
         {
+            // #region agent log - Hypothesis A
+            _logger.LogWarning($"[DEBUG_FCM_B] Unauthorized token registration attempt");
+            // #endregion
             return Unauthorized();
         }
 
+        // #region agent log - Hypothesis A
+        _logger.LogInformation($"[DEBUG_FCM_C] Registering FCM token for user {userGuid}");
+        // #endregion
         try
         {
             await _unitOfWork.FcmTokens.RegisterOrUpdateAsync(userGuid, request.Token, request.DeviceInfo ?? "Unknown");
-            _logger.LogInformation($"FCM token registered for user {userGuid}");
+            // #region agent log - Hypothesis A
+            _logger.LogInformation($"[DEBUG_FCM_D] FCM token successfully registered for user {userGuid}");
+            // #endregion
             
             return Ok(new { success = true, message = "Token registered successfully" });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"Failed to register FCM token for user {userGuid}");
+            // #region agent log - Hypothesis A
+            _logger.LogError(ex, $"[DEBUG_FCM_ERROR] Failed to register FCM token for user {userGuid}");
+            // #endregion
             return StatusCode(500, new { success = false, message = "Failed to register token" });
         }
     }

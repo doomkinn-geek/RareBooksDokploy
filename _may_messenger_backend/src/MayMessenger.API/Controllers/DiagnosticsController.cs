@@ -30,6 +30,50 @@ public class DiagnosticsController : ControllerBase
     }
 
     /// <summary>
+    /// Get debug logs from stdout/stderr (last 1000 lines)
+    /// </summary>
+    [HttpGet("logs")]
+    [AllowAnonymous] // For easy debugging - remove in production
+    public IActionResult GetLogs([FromQuery] int lines = 1000)
+    {
+        try
+        {
+            // Read from Docker logs via stdout/stderr capture
+            // This will work when logs are redirected to a file
+            var logPath = Path.Combine("/var/log", "maymessenger_api.log");
+            
+            if (!System.IO.File.Exists(logPath))
+            {
+                // Fallback: try to read from standard Docker logs location
+                return Ok(new { 
+                    message = "Log file not found. Use 'docker logs maymessenger_backend' instead.",
+                    timestamp = DateTime.UtcNow
+                });
+            }
+
+            var allLines = System.IO.File.ReadAllLines(logPath);
+            var lastLines = allLines.TakeLast(lines);
+            
+            return Ok(new {
+                logPath,
+                totalLines = allLines.Length,
+                returnedLines = lastLines.Count(),
+                logs = lastLines,
+                timestamp = DateTime.UtcNow
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to read logs");
+            return Ok(new {
+                error = ex.Message,
+                message = "Use 'docker logs maymessenger_backend' to view logs",
+                timestamp = DateTime.UtcNow
+            });
+        }
+    }
+
+    /// <summary>
     /// Get comprehensive system metrics for monitoring
     /// </summary>
     [HttpGet("metrics")]
