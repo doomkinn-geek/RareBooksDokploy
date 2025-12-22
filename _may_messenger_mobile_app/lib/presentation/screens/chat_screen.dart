@@ -10,6 +10,7 @@ import '../../core/services/notification_service.dart';
 import '../../core/services/fcm_service.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/message_input.dart';
+import '../widgets/connection_status_banner.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final String chatId;
@@ -178,9 +179,49 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
     });
 
+    // Build online status subtitle for private chats
+    String? onlineStatusText;
+    if (currentChat.type == ChatType.private && currentChat.otherParticipantId != null) {
+      if (currentChat.otherParticipantIsOnline == true) {
+        onlineStatusText = 'онлайн';
+      } else if (currentChat.otherParticipantLastSeenAt != null) {
+        final now = DateTime.now();
+        final diff = now.difference(currentChat.otherParticipantLastSeenAt!);
+        
+        if (diff.inMinutes < 1) {
+          onlineStatusText = 'только что';
+        } else if (diff.inMinutes < 60) {
+          onlineStatusText = 'был(а) ${diff.inMinutes} мин назад';
+        } else if (diff.inHours < 24) {
+          onlineStatusText = 'был(а) ${diff.inHours} ч назад';
+        } else if (diff.inDays < 7) {
+          onlineStatusText = 'был(а) ${diff.inDays} дн назад';
+        } else {
+          onlineStatusText = 'был(а) давно';
+        }
+      }
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(displayTitle),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(displayTitle),
+            if (onlineStatusText != null)
+              Text(
+                onlineStatusText,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: onlineStatusText == 'онлайн' 
+                      ? Colors.green 
+                      : Colors.grey[400],
+                  fontWeight: FontWeight.normal,
+                ),
+              ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.info_outline),
@@ -192,6 +233,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
       body: Column(
         children: [
+          const ConnectionStatusBanner(),
           Expanded(
             child: messagesState.isLoading && messagesState.messages.isEmpty
                 ? const Center(child: CircularProgressIndicator())

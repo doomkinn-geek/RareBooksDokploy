@@ -1,7 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
-import 'dart:convert';
-import 'dart:io';
 import '../../data/models/message_model.dart';
 import '../../data/services/message_sync_service.dart';
 import '../../data/repositories/message_cache_repository.dart';
@@ -91,9 +89,26 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     _syncService = MessageSyncService(_messageRepository);
     loadMessages();
     _monitorSignalRConnection();
+    _startPeriodicSync();
     
     // Start status sync service
     _statusSyncService.startPeriodicSync();
+  }
+
+  /// Periodic message sync to catch any missed messages (runs every 30 seconds)
+  void _startPeriodicSync() {
+    Future.delayed(const Duration(seconds: 30), () {
+      if (!mounted) return;
+      
+      // Only sync if we're online (SignalR connected)
+      if (_isSignalRConnected) {
+        print('[SYNC] Running periodic message sync for chat: $chatId');
+        _performIncrementalSync();
+      }
+      
+      // Schedule next sync
+      _startPeriodicSync();
+    });
   }
 
   /// Monitor SignalR connection state and perform incremental sync on reconnect
@@ -121,6 +136,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
           
           // Perform incremental sync to catch missed messages
           _performIncrementalSync();
+          
+          // Force sync of pending status updates
+          _statusSyncService.forceSync().catchError((e) {
+            print('[SYNC] Failed to force sync status updates: $e');
+          });
         }
       }
       
@@ -129,7 +149,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     });
   }
 
-  /// Perform incremental sync after SignalR reconnection
+  /// Perform incremental sync after SignalR reconnection or periodically
   Future<void> _performIncrementalSync() async {
     try {
       final localDataSource = _ref.read(localDataSourceProvider);
@@ -138,7 +158,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final lastSync = await localDataSource.getLastSyncTimestamp(chatId);
       final sinceTimestamp = lastSync ?? DateTime.now().subtract(const Duration(hours: 1));
       
-      print('[SYNC] Incremental sync since: $sinceTimestamp');
+      print('[SYNC] Incremental sync for chat $chatId since: $sinceTimestamp');
       
       // Fetch updates from backend
       final updates = await _messageRepository.getMessageUpdates(
@@ -149,6 +169,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
       if (updates.isEmpty) {
         print('[SYNC] No new messages since last sync');
+        // Update sync timestamp even if no changes
+        await localDataSource.saveLastSyncTimestamp(chatId, DateTime.now());
         return;
       }
       
@@ -170,11 +192,13 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
               existing.content != update.content) {
             messageMap[update.id] = update;
             hasChanges = true;
+            print('[SYNC] Updated message ${update.id}: status=${update.status}');
           }
         } else {
           // New message
           messageMap[update.id] = update;
           hasChanges = true;
+          print('[SYNC] New message ${update.id} from incremental sync');
         }
         
         // Add to LRU cache
@@ -188,7 +212,13 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         
         state = state.copyWith(messages: mergedMessages);
         print('[SYNC] Incremental sync completed: merged ${updates.length} updates');
+        
+        // Update chat list to reflect new messages
+        _ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
       }
+      
+      // Update last sync timestamp
+      await localDataSource.saveLastSyncTimestamp(chatId, DateTime.now());
       
       // Trigger final status sync
       _syncService.syncNow(
@@ -199,8 +229,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       );
     } catch (e) {
       print('[SYNC] Incremental sync failed: $e');
-      // Fall back to full reload on error
-      loadMessages(forceRefresh: true);
+      // Don't fall back to full reload unless absolutely necessary
+      // Just log the error and try again on next periodic sync
     }
   }
 

@@ -6,10 +6,11 @@ import { notificationService } from '../../services/notificationService';
 import { MessageBubble } from '../message/MessageBubble';
 import { MessageInput } from '../message/MessageInput';
 import { MessageCircle } from 'lucide-react';
+import { ChatType } from '../../types/chat';
 
 export const ChatWindow = () => {
   const { selectedChatId, chats } = useChatStore();
-  const { messagesByChatId, loadMessages, sendTextMessage, sendAudioMessage, isSending } = useMessageStore();
+  const { messagesByChatId, loadMessages, sendTextMessage, sendAudioMessage, sendImageMessage, isSending } = useMessageStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map());
   const typingTimeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -120,6 +121,40 @@ export const ChatWindow = () => {
     }
   };
 
+  const handleSendImage = async (imageFile: File) => {
+    try {
+      await sendImageMessage(selectedChatId, imageFile);
+    } catch (error) {
+      console.error('Failed to send image', error);
+    }
+  };
+
+  const getOnlineStatusText = (chat: typeof selectedChat): string | null => {
+    if (!chat || chat.type !== ChatType.Private || !chat.otherParticipantId) {
+      return null;
+    }
+    
+    if (chat.otherParticipantIsOnline) {
+      return 'онлайн';
+    }
+    
+    if (chat.otherParticipantLastSeenAt) {
+      const now = new Date();
+      const lastSeen = new Date(chat.otherParticipantLastSeenAt);
+      const diffSeconds = Math.floor((now.getTime() - lastSeen.getTime()) / 1000);
+      
+      if (diffSeconds < 60) return 'только что';
+      if (diffSeconds < 3600) return `был(а) ${Math.floor(diffSeconds / 60)} мин назад`;
+      if (diffSeconds < 86400) return `был(а) ${Math.floor(diffSeconds / 3600)} ч назад`;
+      if (diffSeconds < 604800) return `был(а) ${Math.floor(diffSeconds / 86400)} дн назад`;
+      return 'был(а) давно';
+    }
+    
+    return null;
+  };
+
+  const onlineStatusText = getOnlineStatusText(selectedChat);
+
   const typingUserNames = Array.from(typingUsers.values());
   const typingText = typingUserNames.length > 0
     ? typingUserNames.length === 1
@@ -139,6 +174,15 @@ export const ChatWindow = () => {
             <h2 className="font-semibold text-gray-900">{selectedChat?.title || 'Загрузка...'}</h2>
             {typingText ? (
               <p className="text-sm text-indigo-600 animate-pulse">{typingText}</p>
+            ) : onlineStatusText ? (
+              <p className={`text-sm flex items-center gap-1 ${
+                onlineStatusText === 'онлайн' ? 'text-green-500' : 'text-gray-500'
+              }`}>
+                {onlineStatusText === 'онлайн' && (
+                  <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                )}
+                {onlineStatusText}
+              </p>
             ) : (
               <p className="text-sm text-gray-500">
                 {selectedChat?.participants?.length || 0} участников
@@ -179,6 +223,7 @@ export const ChatWindow = () => {
       <MessageInput
         onSendText={handleSendText}
         onSendAudio={handleSendAudio}
+        onSendImage={handleSendImage}
         disabled={isSending}
       />
     </div>

@@ -4,7 +4,6 @@ import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/models/user_model.dart';
 import '../../data/models/search_result_model.dart';
-import '../../data/models/contact_cache_model.dart';
 import '../../data/services/search_service.dart';
 import '../../data/datasources/local_datasource.dart';
 
@@ -153,13 +152,14 @@ class SearchNotifier extends StateNotifier<SearchState> {
           id: c.userId,
           displayName: c.displayName,
           phoneNumber: '', // Not needed for search results
-          phoneNumberHash: c.phoneNumberHash,
-          role: 'user',
+          role: UserRole.user,
+          isOnline: false,
+          lastSeenAt: null,
         )).toList();
         
         // Update state with local results (will be replaced by backend results)
         state = state.copyWith(
-          userResults: users,
+          userResults: users.cast<User>(),
           isLoading: true, // Still loading backend results
         );
       }

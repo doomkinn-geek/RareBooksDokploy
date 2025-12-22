@@ -18,7 +18,7 @@ export const InviteQRDialog = ({ inviteCode, inviteLink, onClose }: InviteQRDial
   };
 
   const handleShare = () => {
-    const shareText = `Присоединяйся к May Messenger!\n\nИспользуй код приглашения: ${inviteCode}\nИли перейди по ссылке: ${inviteLink}\n\nКод действителен 7 дней.`;
+    const shareText = `Присоединяйся к Депеше!\n\nИспользуй код приглашения: ${inviteCode}\nИли перейди по ссылке: ${inviteLink}\n\nКод действителен 7 дней.`;
     
     if (navigator.share) {
       navigator.share({

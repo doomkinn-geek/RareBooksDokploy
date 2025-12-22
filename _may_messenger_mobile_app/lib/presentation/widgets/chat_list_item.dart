@@ -101,13 +101,37 @@ class ChatListItem extends ConsumerWidget {
       onTap: onTap,
       onLongPress: () => _showDeleteDialog(context, ref),
       child: ListTile(
-        leading: CircleAvatar(
-          backgroundImage: chat.avatar != null
-              ? NetworkImage(chat.avatar!)
-              : null,
-          child: chat.avatar == null
-              ? Text(displayTitle[0].toUpperCase())
-              : null,
+        leading: Stack(
+          children: [
+            CircleAvatar(
+              backgroundImage: chat.avatar != null
+                  ? NetworkImage(chat.avatar!)
+                  : null,
+              child: chat.avatar == null
+                  ? Text(displayTitle[0].toUpperCase())
+                  : null,
+            ),
+            // Online status indicator for private chats
+            if (chat.type == ChatType.private && 
+                chat.otherParticipantId != null && 
+                chat.otherParticipantIsOnline == true)
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Theme.of(context).scaffoldBackgroundColor,
+                      width: 2,
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
         title: Text(
           displayTitle,

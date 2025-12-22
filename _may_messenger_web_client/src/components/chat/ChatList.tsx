@@ -12,9 +12,12 @@ interface ChatListItemProps {
 
 const ChatListItem = ({ chat, isSelected, onClick }: ChatListItemProps) => {
   const lastMessageText = chat.lastMessage?.content || 
-    (chat.lastMessage?.type === 1 ? '🎤 Голосовое сообщение' : 'Нет сообщений');
+    (chat.lastMessage?.type === 1 ? '🎤 Голосовое сообщение' : 
+     chat.lastMessage?.type === 2 ? '🖼️ Изображение' : 
+     'Нет сообщений');
   
   const isGroupChat = chat.type === ChatType.Group;
+  const isOnline = chat.type === ChatType.Private && chat.otherParticipantIsOnline;
   
   return (
     <div
@@ -30,6 +33,9 @@ const ChatListItem = ({ chat, isSelected, onClick }: ChatListItemProps) => {
             <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center border-2 border-white">
               <Users className="w-3 h-3 text-white" />
             </div>
+          )}
+          {isOnline && (
+            <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full" />
           )}
         </div>
         

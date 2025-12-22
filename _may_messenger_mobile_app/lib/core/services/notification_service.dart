@@ -161,7 +161,7 @@ class NotificationService {
       
       await _notifications.show(
         0, // Summary notification ID
-        'May Messenger',
+        'Депеша',
         '$totalUnread new messages from $chatCount chats',
         notificationDetails,
       );

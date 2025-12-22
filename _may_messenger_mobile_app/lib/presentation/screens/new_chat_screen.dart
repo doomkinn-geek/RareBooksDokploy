@@ -191,7 +191,7 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Для создания чатов необходимо предоставить доступ к контактам телефона. Мы используем их только для поиска зарегистрированных пользователей May Messenger.',
+                'Для создания чатов необходимо предоставить доступ к контактам телефона. Мы используем их только для поиска зарегистрированных пользователей Депеши.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey),
               ),
@@ -255,7 +255,7 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Пока никто из ваших контактов не использует May Messenger',
+                'Пока никто из ваших контактов не использует Депешу',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey),
               ),

@@ -245,6 +245,40 @@ class MyApp extends ConsumerWidget {
               }
             };
 
+            // Setup FCM message received callback for immediate message fetch
+            fcmService.onMessageReceived = (messageId, chatId) async {
+              print('[FCM] Message received notification for message $messageId in chat $chatId');
+              
+              try {
+                // Check if we have the message in cache first
+                final cache = ref.read(messageCacheProvider);
+                final cachedMessage = cache.get(messageId);
+                
+                if (cachedMessage != null) {
+                  print('[FCM] Message already in cache, no fetch needed');
+                  return;
+                }
+                
+                print('[FCM] Message not in cache, fetching from API...');
+                
+                // Fetch message from API using new method
+                final messageRepo = ref.read(messageRepositoryProvider);
+                final message = await messageRepo.getMessageById(messageId);
+                
+                print('[FCM] Message fetched successfully: ${message.id}');
+                
+                // Update the messages provider to include this message
+                final messagesNotifier = ref.read(messagesProvider(chatId).notifier);
+                // The message will be automatically added via SignalR or incremental sync
+                // Just trigger a sync to be safe
+                messagesNotifier.loadMessages(forceRefresh: true);
+                
+                print('[FCM] Message fetch completed');
+              } catch (e) {
+                print('[FCM] Failed to fetch message on push notification: $e');
+              }
+            };
+
             fcmService.onMessageReply = (chatId, text) async {
               print('[FCM] Reply received for chat $chatId: $text');
               try {
@@ -283,7 +317,7 @@ class MyApp extends ConsumerWidget {
     // Показываем экран загрузки пока проверяется auth
     if (authState.isLoading) {
       return MaterialApp(
-        title: 'May Messenger',
+        title: 'Депеша',
         theme: AppTheme.lightTheme,
         home: const Scaffold(
           body: Center(
@@ -295,7 +329,7 @@ class MyApp extends ConsumerWidget {
     
     return MaterialApp(
       navigatorKey: navigatorKey,
-      title: 'May Messenger',
+      title: 'Депеша',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,

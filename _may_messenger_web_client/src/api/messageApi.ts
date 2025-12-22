@@ -31,6 +31,19 @@ export const messageApi = {
     return response.data;
   },
 
+  async sendImageMessage(chatId: string, imageFile: File): Promise<Message> {
+    const formData = new FormData();
+    formData.append('chatId', chatId);
+    formData.append('imageFile', imageFile);
+
+    const response = await apiClient.post<Message>(ENDPOINTS.SEND_IMAGE, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
   async batchMarkAsRead(messageIds: string[]): Promise<void> {
     await apiClient.post('/api/messages/mark-read', messageIds);
   },

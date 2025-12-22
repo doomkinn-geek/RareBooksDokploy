@@ -74,6 +74,32 @@ class MessageRepository {
     // Note: Local cache will be updated via SignalR notification
   }
 
+  /// Get unsynced messages since a specific timestamp (for incremental sync)
+  Future<List<Message>> getUnsyncedMessages({
+    required DateTime since,
+    int take = 100,
+  }) async {
+    try {
+      return await _apiDataSource.getUnsyncedMessages(
+        since: since,
+        take: take,
+      );
+    } catch (e) {
+      print('[MessageRepository] Failed to get unsynced messages: $e');
+      rethrow;
+    }
+  }
+
+  /// Get a specific message by ID (for recovery after push notification)
+  Future<Message> getMessageById(String messageId) async {
+    try {
+      return await _apiDataSource.getMessageById(messageId);
+    } catch (e) {
+      print('[MessageRepository] Failed to get message by ID: $e');
+      rethrow;
+    }
+  }
+
   Future<void> batchMarkAsRead(List<String> messageIds) async {
     await _apiDataSource.batchMarkAsRead(messageIds);
   }

@@ -99,7 +99,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                'May Messenger',
+                'Депеша',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineMedium,
               ),

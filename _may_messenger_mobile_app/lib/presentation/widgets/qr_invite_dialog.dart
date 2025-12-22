@@ -139,7 +139,7 @@ class QrInviteDialog extends StatelessWidget {
   void _shareInvite(BuildContext context) {
     // Формируем текст для поделиться
     final shareText = '''
-Присоединяйся к May Messenger!
+Присоединяйся к Депеше!
 
 Используй код приглашения: $inviteCode
 Или перейди по ссылке: $inviteUrl

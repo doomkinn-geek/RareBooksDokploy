@@ -5,12 +5,14 @@ import { Message, MessageStatus } from '../types/chat';
 type MessageCallback = (message: Message) => void;
 type MessageStatusCallback = (messageId: string, status: MessageStatus) => void;
 type TypingCallback = (userId: string, userName: string, isTyping: boolean) => void;
+type OnlineStatusCallback = (userId: string, isOnline: boolean, lastSeenAt?: string) => void;
 
 class SignalRService {
   private connection: signalR.HubConnection | null = null;
   private messageCallbacks: MessageCallback[] = [];
   private messageStatusCallbacks: MessageStatusCallback[] = [];
   private typingCallbacks: TypingCallback[] = [];
+  private onlineStatusCallbacks: OnlineStatusCallback[] = [];
 
   async connect(token: string): Promise<void> {
     if (this.connection?.state === signalR.HubConnectionState.Connected) {
@@ -64,6 +66,11 @@ class SignalRService {
     this.connection.on('UserTyping', (userId: string, userName: string, isTyping: boolean) => {
       console.log('[SignalR] UserTyping', userId, userName, isTyping);
       this.typingCallbacks.forEach((callback) => callback(userId, userName, isTyping));
+    });
+
+    this.connection.on('UserOnlineStatusChanged', (userId: string, isOnline: boolean, lastSeenAt?: string) => {
+      console.log('[SignalR] UserOnlineStatusChanged', userId, isOnline, lastSeenAt);
+      this.onlineStatusCallbacks.forEach((callback) => callback(userId, isOnline, lastSeenAt));
     });
 
     this.connection.onreconnecting((error) => {
@@ -151,6 +158,13 @@ class SignalRService {
     this.typingCallbacks.push(callback);
     return () => {
       this.typingCallbacks = this.typingCallbacks.filter((cb) => cb !== callback);
+    };
+  }
+
+  onOnlineStatus(callback: OnlineStatusCallback): () => void {
+    this.onlineStatusCallbacks.push(callback);
+    return () => {
+      this.onlineStatusCallbacks = this.onlineStatusCallbacks.filter((cb) => cb !== callback);
     };
   }
 

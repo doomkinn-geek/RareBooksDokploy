@@ -161,6 +161,19 @@ class LocalDataSource {
     }
   }
 
+  /// Save last sync timestamp for a chat
+  Future<void> saveLastSyncTimestamp(String chatId, DateTime timestamp) async {
+    try {
+      final box = await Hive.openBox<Map>(_messagesBox);
+      final data = box.get(chatId) ?? <String, dynamic>{};
+      data['timestamp'] = timestamp.toIso8601String();
+      await box.put(chatId, data);
+      print('[LocalDataSource] Saved last sync timestamp for chat $chatId: $timestamp');
+    } catch (e) {
+      print('[LocalDataSource] Failed to save last sync timestamp: $e');
+    }
+  }
+
   // Chats Cache
   Future<void> cacheChats(List<Chat> chats) async {
     final box = await Hive.openBox<Map>(_chatsBox);

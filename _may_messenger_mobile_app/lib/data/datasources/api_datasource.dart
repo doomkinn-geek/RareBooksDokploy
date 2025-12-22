@@ -226,6 +226,41 @@ class ApiDataSource {
     }
   }
 
+  /// Get unsynced messages since a specific timestamp (for incremental sync)
+  Future<List<Message>> getUnsyncedMessages({
+    required DateTime since,
+    int take = 100,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '${ApiConstants.messages}/unsynced',
+        queryParameters: {
+          'since': since.toIso8601String(),
+          'take': take,
+        },
+      );
+      final List<Message> messages = (response.data as List)
+          .map((json) => Message.fromJson(json as Map<String, dynamic>))
+          .toList()
+          .cast<Message>();
+      return messages;
+    } catch (e) {
+      print('[API] Failed to get unsynced messages: $e');
+      throw Exception('Failed to get unsynced messages: $e');
+    }
+  }
+
+  /// Get a specific message by ID (for recovery after push notification)
+  Future<Message> getMessageById(String messageId) async {
+    try {
+      final response = await _dio.get('${ApiConstants.messages}/by-id/$messageId');
+      return Message.fromJson(response.data);
+    } catch (e) {
+      print('[API] Failed to get message by ID: $e');
+      throw Exception('Failed to get message by ID: $e');
+    }
+  }
+
   Future<void> markAudioAsPlayed(String messageId) async {
     try {
       await _dio.post(

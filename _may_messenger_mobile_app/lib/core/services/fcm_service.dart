@@ -24,6 +24,7 @@ class FcmService {
   String? _jwtToken; // Store JWT token for auto-registration
   Function(String chatId)? onMessageTap;
   Function(String chatId, String text)? onMessageReply;
+  Function(String messageId, String chatId)? onMessageReceived; // Callback to fetch message
   
   // Track notifications per chat for grouping
   final Map<String, List<String>> _notificationsByChat = {};
@@ -243,6 +244,17 @@ class FcmService {
     final title = message.data['title'] ?? message.notification?.title ?? 'New Message';
     final body = message.data['body'] ?? message.notification?.body ?? '';
     final chatId = message.data['chatId'] as String?;
+    final messageId = message.data['messageId'] as String?;
+    
+    // Trigger message fetch callback to ensure message is loaded
+    if (messageId != null && chatId != null && onMessageReceived != null) {
+      print('[FCM_FG] Triggering message fetch for messageId: $messageId');
+      try {
+        onMessageReceived!(messageId, chatId);
+      } catch (e) {
+        print('[FCM_FG] Error fetching message: $e');
+      }
+    }
     
     // Don't show notification if user is currently in this chat
     if (chatId != null && chatId == _currentChatId) {
@@ -336,7 +348,7 @@ class FcmService {
       
       await _localNotifications.show(
         0, // Summary notification ID
-        'May Messenger',
+        'Депеша',
         '$totalUnread new messages from $chatCount chats',
         notificationDetails,
       );

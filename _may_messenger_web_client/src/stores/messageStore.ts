@@ -17,6 +17,7 @@ interface MessageState {
   loadMessages: (chatId: string, forceRefresh?: boolean) => Promise<void>;
   sendTextMessage: (chatId: string, content: string) => Promise<void>;
   sendAudioMessage: (chatId: string, audioBlob: Blob) => Promise<void>;
+  sendImageMessage: (chatId: string, imageFile: File) => Promise<void>;
   addMessage: (message: Message) => void;
   updateMessageStatus: (messageId: string, status: number) => void;
   retryMessage: (localId: string) => Promise<void>;
@@ -250,6 +251,67 @@ export const useMessageStore = create<MessageState>((set) => ({
     } catch (error: any) {
       console.error('[MSG_SEND] Failed to create local audio message:', error);
       const errorMessage = error.response?.data?.message || 'Ошибка отправки аудио';
+      set({ error: errorMessage, isSending: false });
+      throw error;
+    }
+  },
+
+  sendImageMessage: async (chatId: string, imageFile: File) => {
+    console.log('[MSG_SEND] Starting local-first send for image message');
+    set({ isSending: true, error: null });
+    
+    try {
+      const authState = useAuthStore.getState();
+      const currentUser = authState.user;
+      
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+      
+      // STEP 1: Create message locally with temporary ID
+      const localId = uuidv4();
+      const now = new Date().toISOString();
+      
+      // Create local preview URL
+      const localImagePath = URL.createObjectURL(imageFile);
+      
+      const localMessage: Message = {
+        id: localId,
+        chatId,
+        senderId: currentUser.id,
+        senderName: currentUser.displayName,
+        type: MessageType.Image,
+        status: MessageStatus.Sending,
+        createdAt: now,
+        localId,
+        isLocalOnly: true,
+        localImagePath,
+      };
+      
+      // STEP 2: Add to UI immediately (optimistic update)
+      set((state) => {
+        const chatMessages = state.messagesByChatId[chatId] || [];
+        return {
+          messagesByChatId: {
+            ...state.messagesByChatId,
+            [chatId]: [...chatMessages, localMessage].sort(
+              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            ),
+          },
+          isSending: false,
+        };
+      });
+      console.log('[MSG_SEND] Image message added to UI with local ID:', localId);
+      
+      // STEP 3: Add to outbox queue
+      await outboxRepository.addToOutbox(chatId, MessageType.Image, undefined, localImagePath);
+      
+      // STEP 4: Send to backend asynchronously
+      syncImageMessageToBackend(localId, chatId, imageFile);
+      
+    } catch (error: any) {
+      console.error('[MSG_SEND] Failed to create local image message:', error);
+      const errorMessage = error.response?.data?.message || 'Ошибка отправки изображения';
       set({ error: errorMessage, isSending: false });
       throw error;
     }
@@ -540,6 +602,79 @@ async function syncAudioMessageToBackend(localId: string, chatId: string, audioB
       }));
       
       console.log('[MSG_SEND] Audio message marked as failed in UI:', localId);
+    }
+  }
+}
+
+// Helper function to sync image message to backend
+async function syncImageMessageToBackend(localId: string, chatId: string, imageFile: File) {
+  try {
+    console.log('[MSG_SEND] Syncing image message to backend:', localId);
+    await outboxRepository.markAsSyncing(localId);
+    
+    // Send via API
+    const serverMessage = await messageApi.sendImageMessage(chatId, imageFile);
+    
+    console.log('[MSG_SEND] Image message synced successfully. Server ID:', serverMessage.id);
+    
+    // Mark as synced in outbox
+    await outboxRepository.markAsSynced(localId, serverMessage.id);
+    
+    // Update message in UI
+    const state = useMessageStore.getState();
+    const chatMessages = state.messagesByChatId[chatId] || [];
+    const messageIndex = chatMessages.findIndex((m) => m.id === localId);
+    
+    if (messageIndex !== -1) {
+      const updatedMessages = [...chatMessages];
+      // Keep local image path for faster display
+      updatedMessages[messageIndex] = {
+        ...serverMessage,
+        localId,
+        isLocalOnly: false,
+        localImagePath: updatedMessages[messageIndex].localImagePath,
+      };
+      
+      useMessageStore.setState((state) => ({
+        messagesByChatId: {
+          ...state.messagesByChatId,
+          [chatId]: updatedMessages,
+        },
+      }));
+      
+      console.log('[MSG_SEND] Image message updated in UI with server ID:', serverMessage.id);
+    }
+    
+    // Clean up outbox after a delay
+    setTimeout(() => {
+      outboxRepository.removePendingMessage(localId);
+    }, 60000);
+  } catch (error: any) {
+    console.error('[MSG_SEND] Failed to sync image message to backend:', error);
+    
+    const errorMessage = error.response?.data?.message || error.message || 'Sync failed';
+    await outboxRepository.markAsFailed(localId, errorMessage);
+    
+    // Update UI
+    const state = useMessageStore.getState();
+    const chatMessages = state.messagesByChatId[chatId] || [];
+    const messageIndex = chatMessages.findIndex((m) => m.id === localId);
+    
+    if (messageIndex !== -1) {
+      const updatedMessages = [...chatMessages];
+      updatedMessages[messageIndex] = {
+        ...updatedMessages[messageIndex],
+        status: MessageStatus.Failed,
+      };
+      
+      useMessageStore.setState((state) => ({
+        messagesByChatId: {
+          ...state.messagesByChatId,
+          [chatId]: updatedMessages,
+        },
+      }));
+      
+      console.log('[MSG_SEND] Image message marked as failed in UI:', localId);
     }
   }
 }

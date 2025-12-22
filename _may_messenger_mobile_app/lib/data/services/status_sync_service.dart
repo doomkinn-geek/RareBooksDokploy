@@ -166,6 +166,52 @@ class StatusSyncService {
   /// Check if periodic sync is running
   bool get isPeriodicSyncActive => _syncTimer != null && _syncTimer!.isActive;
 
+  /// Force immediate sync of all pending statuses (useful after reconnect)
+  Future<void> forceSync() async {
+    print('[StatusSync] Force sync requested');
+    await _syncPendingStatuses();
+  }
+
+  /// Get statistics about pending status updates
+  Future<Map<String, int>> getStatistics() async {
+    try {
+      final pendingUpdates = await _statusQueue.getPendingUpdates();
+      
+      final Map<String, int> stats = {
+        'total': pendingUpdates.length,
+        'read': 0,
+        'played': 0,
+        'delivered': 0,
+        'failed': 0,
+      };
+      
+      for (var update in pendingUpdates) {
+        switch (update.status) {
+          case MessageStatus.read:
+            stats['read'] = (stats['read'] ?? 0) + 1;
+            break;
+          case MessageStatus.played:
+            stats['played'] = (stats['played'] ?? 0) + 1;
+            break;
+          case MessageStatus.delivered:
+            stats['delivered'] = (stats['delivered'] ?? 0) + 1;
+            break;
+          default:
+            break;
+        }
+        
+        if (update.retryCount >= _maxRetries) {
+          stats['failed'] = (stats['failed'] ?? 0) + 1;
+        }
+      }
+      
+      return stats;
+    } catch (e) {
+      print('[StatusSync] Failed to get statistics: $e');
+      return {};
+    }
+  }
+
   void dispose() {
     _isDisposed = true;
     stopSync();

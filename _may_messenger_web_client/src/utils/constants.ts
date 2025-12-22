@@ -1,5 +1,6 @@
 export const API_URL = import.meta.env.VITE_API_URL || 'https://messenger.rare-books.ru';
 export const API_BASE = `${API_URL}/api`;
+export const API_BASE_URL = API_URL; // For direct file access
 export const HUB_URL = `${API_URL}/hubs/chat`;
 
 export const ENDPOINTS = {
@@ -23,4 +24,5 @@ export const ENDPOINTS = {
   MESSAGES: '/messages',
   MESSAGES_BY_CHAT: (chatId: string) => `/messages/${chatId}`,
   SEND_AUDIO: '/messages/audio',
+  SEND_IMAGE: '/messages/image',
 };

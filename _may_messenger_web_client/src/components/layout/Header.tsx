@@ -21,7 +21,7 @@ export const Header = () => {
           )}
         </div>
         <div>
-          <h1 className="font-semibold">{user?.displayName || 'May Messenger'}</h1>
+          <h1 className="font-semibold">{user?.displayName || 'Депеша - обмен сообщениями'}</h1>
           <p className="text-sm text-white/70">{user?.phoneNumber || ''}</p>
         </div>
       </div>

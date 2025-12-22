@@ -1,7 +1,7 @@
 {
-  "name": "May Messenger",
-  "short_name": "May Messenger",
-  "description": "Simple and secure messaging",
+  "name": "Депеша - обмен сообщениями",
+  "short_name": "Депеша",
+  "description": "Простой обмен сообщениями",
   "start_url": "/web/",
   "display": "standalone",
   "background_color": "#ffffff",

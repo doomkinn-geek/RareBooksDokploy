@@ -5,6 +5,12 @@ export interface Chat {
   createdAt: string;
   participants: ChatParticipant[];
   lastMessage?: Message;
+  avatar?: string;
+  unreadCount?: number;
+  // Online status for private chats
+  otherParticipantId?: string;
+  otherParticipantIsOnline?: boolean;
+  otherParticipantLastSeenAt?: string;
 }
 
 export interface ChatParticipant {
@@ -35,11 +41,14 @@ export interface Message {
   createdAt: string;
   localId?: string; // Client-side UUID for tracking before server confirms
   isLocalOnly?: boolean; // True if message hasn't been synced to server yet
+  localImagePath?: string; // Local path for cached images
+  isHighlighted?: boolean; // For highlighting messages (e.g., from notifications)
 }
 
 export enum MessageType {
   Text = 0,
   Audio = 1,
+  Image = 2,
 }
 
 export enum MessageStatus {
@@ -47,7 +56,8 @@ export enum MessageStatus {
   Sent = 1,
   Delivered = 2,
   Read = 3,
-  Failed = 4,
+  Played = 4,
+  Failed = 5,
 }
 
 export interface SendMessageRequest {

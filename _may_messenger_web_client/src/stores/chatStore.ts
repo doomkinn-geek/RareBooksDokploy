@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { Chat, ChatType } from '../types/chat';
 import { chatApi } from '../api/chatApi';
 import { indexedDBStorage } from '../services/indexedDBStorage';
+import { signalRService } from '../services/signalRService';
 
 interface ChatState {
   chats: Chat[];
@@ -14,6 +15,7 @@ interface ChatState {
   createChat: (title: string, participantIds: string[]) => Promise<Chat>;
   createOrGetPrivateChat: (targetUserId: string) => Promise<Chat>;
   updateChat: (chat: Chat) => void;
+  updateParticipantOnlineStatus: (userId: string, isOnline: boolean, lastSeenAt?: string) => void;
   clearError: () => void;
   
   // Computed properties
@@ -112,6 +114,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
   },
 
+  updateParticipantOnlineStatus: (userId: string, isOnline: boolean, lastSeenAt?: string) => {
+    set((state) => ({
+      chats: state.chats.map((chat) => {
+        // Only update private chats where this user is the other participant
+        if (chat.type === ChatType.Private && chat.otherParticipantId === userId) {
+          return {
+            ...chat,
+            otherParticipantIsOnline: isOnline,
+            otherParticipantLastSeenAt: lastSeenAt,
+          };
+        }
+        return chat;
+      }),
+    }));
+  },
+
   clearError: () => set({ error: null }),
 
   // Computed properties
@@ -123,3 +141,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     return get().chats.filter(chat => chat.type === ChatType.Group);
   },
 }));
+
+// Set up SignalR listener for online status updates
+signalRService.onOnlineStatus((userId, isOnline, lastSeenAt) => {
+  useChatStore.getState().updateParticipantOnlineStatus(userId, isOnline, lastSeenAt);
+});
