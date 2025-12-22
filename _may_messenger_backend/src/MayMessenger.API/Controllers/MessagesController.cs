@@ -899,10 +899,6 @@ public class MessagesController : ControllerBase
                     .SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Read);
                 _logger.LogInformation($"[BATCH_READ] SignalR notification sent successfully");
             }
-            else
-            {
-                _logger.LogInformation($"[BATCH_READ] Message {messageId} already read or not private chat (status: {message.Status}, chatType: {chat.Type})");
-            }
             // For group chats, check if all participants have read it
             else if (chat.Type == ChatType.Group)
             {
@@ -919,8 +915,13 @@ public class MessagesController : ControllerBase
                         .SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Read);
                 }
             }
+            else
+            {
+                _logger.LogInformation($"[BATCH_READ] Message {messageId} skipped (status: {message.Status}, chatType: {chat.Type})");
+            }
         }
         
+        _logger.LogInformation($"[BATCH_READ] DEBUG_READ_E: Completed batch mark as read. Processed {messageIds.Count} messages");
         await _unitOfWork.SaveChangesAsync();
         return Ok(new { message = $"Marked {messageIds.Count} messages as read" });
     }
