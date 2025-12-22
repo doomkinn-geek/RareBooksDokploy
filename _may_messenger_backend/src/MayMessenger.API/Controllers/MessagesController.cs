@@ -415,10 +415,21 @@ public class MessagesController : ControllerBase
                 _logger.LogError(ex, $"Failed to send SignalR notification for message {message.Id}");
             }
             
-            // Send push notifications to offline users (fire and forget)
+            // Fetch FCM tokens BEFORE fire-and-forget task to avoid disposed context
             // #region agent log - Hypothesis B: Check if PUSH sending is invoked
             _logger.LogInformation($"[DEBUG_PUSH_A] About to invoke SendPushNotificationsAsync for message {message.Id}, chat {chat.Id}, sender {sender.Id}");
             // #endregion
+            var userTokensForPush = new Dictionary<Guid, List<Domain.Entities.FcmToken>>();
+            foreach (var participant in chat.Participants)
+            {
+                if (participant.UserId != sender.Id)
+                {
+                    var tokens = await _unitOfWork.FcmTokens.GetActiveTokensForUserAsync(participant.UserId);
+                    userTokensForPush[participant.UserId] = tokens.ToList();
+                }
+            }
+            
+            // Send push notifications to offline users (fire and forget)
             _ = Task.Run(async () =>
             {
                 try
@@ -426,7 +437,7 @@ public class MessagesController : ControllerBase
                     // #region agent log - Hypothesis B
                     _logger.LogInformation($"[DEBUG_PUSH_B] Executing SendPushNotificationsAsync for message {message.Id}");
                     // #endregion
-                    await SendPushNotificationsAsync(chat, sender, messageDto);
+                    await SendPushNotificationsAsync(sender, messageDto, userTokensForPush);
                     // #region agent log - Hypothesis B
                     _logger.LogInformation($"[DEBUG_PUSH_C] SendPushNotificationsAsync completed for message {message.Id}");
                     // #endregion
@@ -546,8 +557,19 @@ public class MessagesController : ControllerBase
             
             await _hubContext.Clients.Group(chatId.ToString()).SendAsync("ReceiveMessage", messageDto);
             
+            // Fetch FCM tokens before sending push notifications
+            var userTokensForPush = new Dictionary<Guid, List<Domain.Entities.FcmToken>>();
+            foreach (var participant in chat.Participants)
+            {
+                if (participant.UserId != sender.Id)
+                {
+                    var tokens = await _unitOfWork.FcmTokens.GetActiveTokensForUserAsync(participant.UserId);
+                    userTokensForPush[participant.UserId] = tokens.ToList();
+                }
+            }
+            
             // Send push notifications to offline users
-            await SendPushNotificationsAsync(chat, sender, messageDto);
+            await SendPushNotificationsAsync(sender, messageDto, userTokensForPush);
         }
         
         return Ok(messageDto);
@@ -626,8 +648,19 @@ public class MessagesController : ControllerBase
                 
                 await _hubContext.Clients.Group(chatId.ToString()).SendAsync("ReceiveMessage", messageDto);
                 
+                // Fetch FCM tokens before sending push notifications
+                var userTokensForPush = new Dictionary<Guid, List<Domain.Entities.FcmToken>>();
+                foreach (var participant in chat.Participants)
+                {
+                    if (participant.UserId != sender.Id)
+                    {
+                        var tokens = await _unitOfWork.FcmTokens.GetActiveTokensForUserAsync(participant.UserId);
+                        userTokensForPush[participant.UserId] = tokens.ToList();
+                    }
+                }
+                
                 // Send push notifications to offline users
-                await SendPushNotificationsAsync(chat, sender, messageDto);
+                await SendPushNotificationsAsync(sender, messageDto, userTokensForPush);
             }
             
             return Ok(messageDto);
@@ -641,9 +674,9 @@ public class MessagesController : ControllerBase
 
     /// <summary>
     /// Отправка push уведомлений пользователям, которые не онлайн
-    /// Получает FCM токены заранее чтобы избежать disposed context
+    /// ВАЖНО: Все данные передаются как параметры, никаких обращений к DbContext!
     /// </summary>
-    private async Task SendPushNotificationsAsync(Chat chat, User sender, MessageDto message)
+    private async Task SendPushNotificationsAsync(User sender, MessageDto message, Dictionary<Guid, List<Domain.Entities.FcmToken>> userTokens)
     {
         // #region agent log - Hypothesis B: Check Firebase initialization
         _logger.LogInformation($"[DEBUG_PUSH_D] SendPushNotificationsAsync started. Firebase initialized: {_firebaseService.IsInitialized}");
@@ -656,23 +689,9 @@ public class MessagesController : ControllerBase
 
         try
         {
-            // Получаем все FCM токены ДО любых async операций
-            // чтобы избежать disposed context в Task.Run
-            var userTokens = new Dictionary<Guid, List<Domain.Entities.FcmToken>>();
-            // #region agent log - Hypothesis A: Check participants
-            _logger.LogInformation($"[DEBUG_PUSH_F] Chat has {chat.Participants.Count} participants");
+            // #region agent log - Hypothesis A: Check tokens received
+            _logger.LogInformation($"[DEBUG_PUSH_F] Received FCM tokens for {userTokens.Count} users");
             // #endregion
-            foreach (var participant in chat.Participants)
-            {
-                if (participant.UserId != sender.Id)
-                {
-                    var tokens = await _unitOfWork.FcmTokens.GetActiveTokensForUserAsync(participant.UserId);
-                    userTokens[participant.UserId] = tokens.ToList();
-                    // #region agent log - Hypothesis A: Check FCM tokens
-                    _logger.LogInformation($"[DEBUG_PUSH_G] User {participant.UserId} has {tokens.Count} active FCM tokens");
-                    // #endregion
-                }
-            }
             
             var title = $"Новое сообщение от {sender.DisplayName}";
             var body = message.Type switch
