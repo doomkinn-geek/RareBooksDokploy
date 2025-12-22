@@ -8,10 +8,12 @@ class SignalRService {
   HubConnection? _hubConnection;
   String? _currentToken;
   bool _isReconnecting = false;
+  bool _isManualReconnecting = false;
   int _reconnectAttempts = 0;
   DateTime? _lastSyncTimestamp;
   Timer? _heartbeatTimer;
   DateTime? _lastPongReceived;
+  Function()? _onReconnectedCallback;
 
   Future<void> connect(String token) async {
     // #region agent log - Hypothesis C: Track SignalR connect lifecycle
@@ -72,6 +74,7 @@ class SignalRService {
       // #endregion
       print('[SignalR] Reconnected successfully! Connection ID: $connectionId');
       _isReconnecting = false;
+      _isManualReconnecting = false;
       _reconnectAttempts = 0;
       
       // Restart heartbeat timer
@@ -79,6 +82,15 @@ class SignalRService {
       
       // Perform incremental sync after reconnection
       await _performIncrementalSync();
+      
+      // Trigger callback for additional sync operations (e.g., status sync)
+      if (_onReconnectedCallback != null) {
+        try {
+          await _onReconnectedCallback!();
+        } catch (e) {
+          print('[SignalR] Error in reconnected callback: $e');
+        }
+      }
     });
 
     // Setup Pong handler before connecting
@@ -167,62 +179,92 @@ class SignalRService {
   /// Public method to force reconnect (e.g., when app returns from background)
   Future<void> forceReconnectFromLifecycle() async {
     print('[SignalR] Force reconnect requested from app lifecycle');
+    
+    // Check current state
+    final currentState = _hubConnection?.state;
+    print('[SignalR] Current connection state: $currentState');
+    
+    if (currentState == HubConnectionState.Connected) {
+      print('[SignalR] Already connected, no reconnect needed');
+      return;
+    }
+    
+    if (currentState == HubConnectionState.Reconnecting) {
+      print('[SignalR] Already reconnecting, waiting for auto-reconnect');
+      return;
+    }
+    
+    // Only attempt manual reconnect if Disconnected
     _reconnectAttempts = 0; // Reset attempts for fresh start
     await _forceReconnect();
   }
   
   Future<void> _attemptReconnect() async {
-    if (_currentToken == null || _isReconnecting) {
+    if (_currentToken == null || _isReconnecting || _isManualReconnecting) {
       print('[SignalR] Reconnect skipped - already reconnecting or no token');
       return;
     }
     
-    _isReconnecting = true;
+    // Check if already connected or reconnecting
+    final currentState = _hubConnection?.state;
+    if (currentState == HubConnectionState.Connected) {
+      print('[SignalR] Already connected, skipping reconnect');
+      return;
+    }
+    
+    if (currentState == HubConnectionState.Reconnecting) {
+      print('[SignalR] Already reconnecting automatically, not interfering');
+      return;
+    }
+    
+    _isManualReconnecting = true;
     _reconnectAttempts++;
     print('[SignalR] Manual reconnect attempt #$_reconnectAttempts started');
     
     try {
-      // Stop existing connection
-      try {
-        await _hubConnection?.stop();
-      } catch (e) {
-        print('[SignalR] Error stopping connection: $e');
+      // Small delay to let automatic reconnect finish if it's in progress
+      await Future.delayed(const Duration(seconds: 2));
+      
+      // Check state again after delay
+      if (_hubConnection?.state == HubConnectionState.Connected) {
+        print('[SignalR] Connection restored during wait, aborting manual reconnect');
+        _reconnectAttempts = 0;
+        return;
       }
       
-      // Exponential backoff with jitter
-      // Base delay: 2^attempts seconds, max 60 seconds
-      // Jitter: random 0-2 seconds to prevent thundering herd
-      final baseDelay = min(pow(2, _reconnectAttempts).toInt(), 60);
-      final jitter = Random().nextInt(2000); // 0-2000ms
-      final totalDelay = Duration(seconds: baseDelay, milliseconds: jitter);
+      if (_hubConnection?.state == HubConnectionState.Reconnecting) {
+        print('[SignalR] Auto-reconnect is active, letting it handle reconnection');
+        return;
+      }
       
-      print('[SignalR] Waiting ${totalDelay.inSeconds}s before reconnect (with jitter)');
-      await Future.delayed(totalDelay);
-      
-      // Check if still disconnected
-      if (_hubConnection?.state != HubConnectionState.Connected) {
-        print('[SignalR] Attempting to establish new connection...');
-        await connect(_currentToken!);
-        print('[SignalR] Manual reconnect successful');
-        _reconnectAttempts = 0; // Reset on success
+      // If still disconnected after delay, try to restart the connection
+      if (_hubConnection?.state == HubConnectionState.Disconnected) {
+        print('[SignalR] Connection is Disconnected, attempting start()...');
+        await _hubConnection?.start();
+        print('[SignalR] Manual reconnect successful via start()');
+        _reconnectAttempts = 0;
       }
     } catch (e) {
       print('[SignalR] Manual reconnect failed: $e');
-      _isReconnecting = false;
       
       // Schedule another attempt if not too many attempts
-      if (_reconnectAttempts < 10) {
-        print('[SignalR] Scheduling retry attempt #${_reconnectAttempts + 1}...');
+      if (_reconnectAttempts < 5) {
+        final retryDelay = min(pow(2, _reconnectAttempts).toInt(), 30);
+        print('[SignalR] Scheduling retry attempt #${_reconnectAttempts + 1} in ${retryDelay}s...');
+        
+        await Future.delayed(Duration(seconds: retryDelay));
         
         // Only retry if still disconnected
-        if (_hubConnection?.state != HubConnectionState.Connected) {
+        if (_hubConnection?.state != HubConnectionState.Connected && mounted) {
+          _isManualReconnecting = false; // Reset flag for retry
           _attemptReconnect();
         }
       } else {
-        print('[SignalR] Max reconnect attempts reached. Giving up.');
+        print('[SignalR] Max reconnect attempts reached. Relying on automatic reconnect.');
         _reconnectAttempts = 0;
       }
     } finally {
+      _isManualReconnecting = false;
       if (_hubConnection?.state == HubConnectionState.Connected) {
         _isReconnecting = false;
       }
@@ -557,6 +599,14 @@ class SignalRService {
   }
 
   bool get isConnected => _hubConnection?.state == HubConnectionState.Connected;
+  
+  /// Check if service is still active (for use in async operations)
+  bool get mounted => _hubConnection != null;
+  
+  /// Set callback to be called after successful reconnection
+  void setOnReconnectedCallback(Future<void> Function() callback) {
+    _onReconnectedCallback = callback;
+  }
   
   /// Get heartbeat statistics for debugging
   Map<String, dynamic> getHeartbeatStats() {

@@ -124,6 +124,8 @@ class MyApp extends ConsumerStatefulWidget {
 }
 
 class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
+  DateTime? _lastPausedAt;
+  
   @override
   void initState() {
     super.initState();
@@ -141,23 +143,63 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
     print('[LIFECYCLE] App state changed to: $state');
     
-    // When app returns to foreground, check and reconnect SignalR if needed
-    if (state == AppLifecycleState.resumed) {
-      print('[LIFECYCLE] App resumed - checking SignalR connection');
+    if (state == AppLifecycleState.paused) {
+      _lastPausedAt = DateTime.now();
+      print('[LIFECYCLE] App paused at $_lastPausedAt - SignalR will try to maintain connection');
+    } else if (state == AppLifecycleState.resumed) {
       final authState = ref.read(authStateProvider);
       
       if (authState.isAuthenticated) {
-        final signalRState = ref.read(signalRConnectionProvider);
+        final pauseDuration = _lastPausedAt != null 
+            ? DateTime.now().difference(_lastPausedAt!)
+            : Duration.zero;
         
-        if (!signalRState.isConnected) {
-          print('[LIFECYCLE] SignalR disconnected - attempting reconnect');
-          ref.read(signalRConnectionProvider.notifier).reconnect();
+        print('[LIFECYCLE] App resumed after ${pauseDuration.inSeconds}s pause');
+        
+        // If app was in background > 30 seconds, do full reconnect + sync
+        if (pauseDuration.inSeconds > 30) {
+          print('[LIFECYCLE] Long pause detected, performing full resume sync');
+          _performResumeSync();
         } else {
-          print('[LIFECYCLE] SignalR already connected');
+          // Short pause, just check connection
+          print('[LIFECYCLE] Short pause, checking SignalR connection');
+          final signalRState = ref.read(signalRConnectionProvider);
+          
+          if (!signalRState.isConnected) {
+            print('[LIFECYCLE] SignalR disconnected - attempting reconnect');
+            ref.read(signalRConnectionProvider.notifier).reconnect();
+          } else {
+            print('[LIFECYCLE] SignalR already connected');
+          }
         }
       }
-    } else if (state == AppLifecycleState.paused) {
-      print('[LIFECYCLE] App paused - SignalR will maintain connection via heartbeat');
+    }
+  }
+  
+  Future<void> _performResumeSync() async {
+    try {
+      print('[LIFECYCLE] Starting resume sync sequence');
+      
+      // 1. Reconnect SignalR
+      print('[LIFECYCLE] Step 1: Reconnecting SignalR');
+      await ref.read(signalRConnectionProvider.notifier).reconnect();
+      
+      // Small delay to ensure connection is established
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // 2. Force sync pending status updates
+      print('[LIFECYCLE] Step 2: Syncing pending status updates');
+      final statusSyncService = ref.read(statusSyncServiceProvider);
+      await statusSyncService.forceSync();
+      
+      // 3. Refresh chats list to get updated unreads
+      print('[LIFECYCLE] Step 3: Refreshing chats list');
+      await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+      
+      print('[LIFECYCLE] Resume sync completed successfully');
+    } catch (e) {
+      print('[LIFECYCLE] Error during resume sync: $e');
+      // Non-fatal, app will continue to work
     }
   }
 

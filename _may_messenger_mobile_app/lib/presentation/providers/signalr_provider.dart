@@ -74,6 +74,19 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
         final connectDuration = DateTime.now().difference(connectStart).inMilliseconds;
         print('[SIGNALR_INIT] HYP_C_CONNECTED: Connected in ${connectDuration}ms');
         // #endregion
+        
+        // Setup reconnected callback for status sync
+        _signalRService.setOnReconnectedCallback(() async {
+          print('[SignalR] Reconnected callback triggered - syncing pending status updates');
+          try {
+            final statusSyncService = _ref.read(statusSyncServiceProvider);
+            await statusSyncService.forceSync();
+            print('[SignalR] Pending status updates synced after reconnect');
+          } catch (e) {
+            print('[SignalR] Error syncing status updates after reconnect: $e');
+          }
+        });
+        
         _setupListeners();
         
         state = state.copyWith(isConnected: true);
@@ -197,6 +210,7 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
             // This will update the UI for the sender
             final chatsState = _ref.read(chatsProvider);
             int updatedCount = 0;
+            String? foundChatId;
             // #region agent log
             print('[SIGNALR_STATUS] HYP_SIGNALR: Total chats: ${chatsState.chats.length}');
             // #endregion
@@ -205,6 +219,7 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
               try {
                 _ref.read(messagesProvider(chat.id).notifier).updateMessageStatus(messageId, status);
                 updatedCount++;
+                foundChatId = chat.id;
                 // #region agent log
                 print('[SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat ${chat.id}');
                 // #endregion
@@ -218,6 +233,20 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
             
             if (updatedCount > 0) {
               print('[SignalR] Message status updated in $updatedCount chat(s)');
+            }
+            
+            // Update unread count if message was marked as read
+            if (status == MessageStatus.read && foundChatId != null) {
+              try {
+                _ref.read(chatsProvider.notifier).updateUnreadCountOnStatusUpdate(
+                  foundChatId, 
+                  messageId, 
+                  status
+                );
+                print('[SignalR] Updated unread count for chat preview after read status');
+              } catch (e) {
+                print('[SignalR] Failed to update unread count: $e');
+              }
             }
           } catch (e) {
             print('[SignalR] Failed to update message status: $e');

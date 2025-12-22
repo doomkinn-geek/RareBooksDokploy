@@ -219,11 +219,11 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           color: Colors.green,
         );
       case MessageStatus.played:
-        // Синяя иконка динамика - воспроизведено (для аудио)
+        // Зеленые галочки - воспроизведено (для аудио)
         return const Icon(
-          Icons.volume_up,
+          Icons.done_all,
           size: 14,
-          color: Colors.blue,
+          color: Colors.green,
         );
       case MessageStatus.failed:
         // Red error icon with retry functionality
@@ -263,13 +263,26 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         );
       
       case MessageType.audio:
+        // Определить, прослушано ли сообщение
+        final isPlayed = widget.message.status == MessageStatus.played;
+        
+        // Цвет волны: зеленый если прослушано, иначе стандартный
+        final waveformColor = isMe 
+            ? (isPlayed ? Colors.greenAccent : Colors.white)  // Для своих сообщений
+            : (isPlayed ? Colors.green : Theme.of(context).colorScheme.primary); // Для чужих
+        
+        // Цвет иконки play/pause
+        final playIconColor = isMe 
+            ? (isPlayed ? Colors.greenAccent : Colors.white) 
+            : (isPlayed ? Colors.green : null);
+        
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(
               icon: Icon(
                 _isPlaying ? Icons.pause : Icons.play_arrow,
-                color: isMe ? Colors.white : null,
+                color: playIconColor,
                 size: 28,
               ),
               onPressed: _playPauseAudio,
@@ -284,7 +297,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                       progress: _duration != null && _position != null && _duration!.inMilliseconds > 0
                           ? _position!.inMilliseconds / _duration!.inMilliseconds
                           : 0.0,
-                      activeColor: isMe ? Colors.white : Theme.of(context).colorScheme.primary,
+                      activeColor: waveformColor, // Зеленый если прослушано
                       inactiveColor: isMe ? Colors.white30 : Colors.grey[300]!,
                       height: 30,
                       barsCount: 25,

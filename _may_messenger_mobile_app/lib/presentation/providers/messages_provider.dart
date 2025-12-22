@@ -3,7 +3,6 @@ import 'package:uuid/uuid.dart';
 import '../../data/models/message_model.dart';
 import '../../data/services/message_sync_service.dart';
 import '../../data/repositories/message_cache_repository.dart';
-import '../../data/repositories/outbox_repository.dart';
 import 'auth_provider.dart';
 import 'signalr_provider.dart';
 import 'profile_provider.dart';
@@ -523,7 +522,13 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       print('[MSG_SYNC] HYP_B2: API call completed in ${apiCallDuration}ms, serverId: ${serverMessage.id}');
       // #endregion
       
-      print('[MSG_SEND] Message synced successfully. Server ID: ${serverMessage.id}');
+      print('[MSG_SEND] Message synced successfully. Server ID: ${serverMessage.id}, Status: ${serverMessage.status}');
+      
+      // IMPORTANT: Ensure status is at least 'sent' after successful sync
+      // Server might return 'sending', but we know it's sent successfully
+      final finalStatus = serverMessage.status == MessageStatus.sending 
+          ? MessageStatus.sent 
+          : serverMessage.status;
       
       // Remove from pending sends
       _pendingSends.remove(localId);
@@ -546,10 +551,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         final finalServerMessage = serverMessage.copyWith(
           localId: localId,
           isLocalOnly: false,
+          status: finalStatus, // Ensure proper status
         );
         updatedMessages[messageIndex] = finalServerMessage;
         state = state.copyWith(messages: updatedMessages);
-        print('[MSG_SEND] Message updated in UI with server ID: ${serverMessage.id}');
+        print('[MSG_SEND] Message updated in UI with server ID: ${serverMessage.id}, status: $finalStatus');
         
         // Update chat preview with server message (has correct server ID now)
         try {
@@ -630,7 +636,13 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         clientMessageId: clientMessageId,
       );
       
-      print('[MSG_SEND] Image synced successfully. Server ID: ${serverMessage.id}');
+      print('[MSG_SEND] Image synced successfully. Server ID: ${serverMessage.id}, Status: ${serverMessage.status}');
+      
+      // IMPORTANT: Ensure status is at least 'sent' after successful sync
+      // Server might return 'sending', but we know it's sent successfully
+      final finalStatus = serverMessage.status == MessageStatus.sending 
+          ? MessageStatus.sent 
+          : serverMessage.status;
       
       // Remove from pending sends
       _pendingSends.remove(localId);
@@ -646,10 +658,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         final finalServerMessage = serverMessage.copyWith(
           localId: localId,
           isLocalOnly: false,
+          status: finalStatus, // Ensure proper status
         );
         updatedMessages[messageIndex] = finalServerMessage;
         state = state.copyWith(messages: updatedMessages);
-        print('[MSG_SEND] Image message updated in UI with server ID: ${serverMessage.id}');
+        print('[MSG_SEND] Image message updated in UI with server ID: ${serverMessage.id}, status: $finalStatus');
         
         // Update chat preview with server message
         try {
@@ -897,37 +910,17 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     final isFromMe = currentUserId != null && message.senderId == currentUserId;
     
     // If message is from me, check if we have a local version to replace
-    if (isFromMe) {
-      int localIndex = -1;
-      
-      // 1. BEST: Точное сопоставление по clientMessageId (самый надежный способ)
-      if (message.clientMessageId != null && message.clientMessageId!.isNotEmpty) {
-        localIndex = state.messages.indexWhere((m) => 
-          m.localId == message.clientMessageId || 
-          m.clientMessageId == message.clientMessageId
-        );
-        
-        if (localIndex != -1) {
-          print('[MSG_RECV] Found local message by clientMessageId: ${message.clientMessageId}');
-        }
-      }
-      
-      // 2. FALLBACK: Сопоставление по содержимому (для обратной совместимости)
-      if (localIndex == -1) {
-        localIndex = state.messages.indexWhere((m) => 
-          m.isLocalOnly && 
-          m.chatId == message.chatId &&
-          m.type == message.type &&
-          _matchContent(m, message) &&
-          m.createdAt.difference(message.createdAt).abs().inSeconds < 5
-        );
-        
-        if (localIndex != -1) {
-          print('[MSG_RECV] Found local message by content matching');
-        }
-      }
+    if (isFromMe && message.clientMessageId != null && message.clientMessageId!.isNotEmpty) {
+      // Only match by clientMessageId - most reliable method
+      final localIndex = state.messages.indexWhere((m) => 
+        m.localId == message.clientMessageId || 
+        m.clientMessageId == message.clientMessageId ||
+        m.id == message.clientMessageId // Also check message id (for pending messages)
+      );
       
       if (localIndex != -1) {
+        print('[MSG_RECV] Found local message by clientMessageId: ${message.clientMessageId}');
+        
         // Replace local message with server message
         final updatedMessages = [...state.messages];
         final localMessage = updatedMessages[localIndex];
@@ -955,7 +948,6 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
           print('[MSG_RECV] Failed to cache message in Hive: $e');
         }
         return;
-      } else {
       }
     }
     
@@ -1022,23 +1014,6 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     }
   }
   
-  /// Helper method to match content between local and server messages
-  /// Simplified: Only match by clientMessageId (server handles idempotency)
-  bool _matchContent(Message local, Message server) {
-    // Primary matching by clientMessageId
-    if (local.clientMessageId != null && 
-        local.clientMessageId == server.clientMessageId) {
-      return true;
-    }
-    
-    // Fallback: check if localId matches clientMessageId
-    if (local.localId != null && 
-        local.localId == server.clientMessageId) {
-      return true;
-    }
-    
-    return false;
-  }
 
   Future<void> _downloadAudioInBackground(Message message) async {
     try {

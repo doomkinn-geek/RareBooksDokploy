@@ -18,6 +18,7 @@ class MainScreen extends ConsumerStatefulWidget {
 }
 
 class _MainScreenState extends ConsumerState<MainScreen> {
+  bool _isFirstBuild = true;
 
   @override
   void initState() {
@@ -31,6 +32,25 @@ class _MainScreenState extends ConsumerState<MainScreen> {
         ref.read(contactsNamesProvider.notifier).loadContactsMapping();
         // Load chats
         ref.read(chatsProvider.notifier).loadChats();
+      }
+    });
+  }
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    
+    // Skip first build (already handled in initState)
+    if (_isFirstBuild) {
+      _isFirstBuild = false;
+      return;
+    }
+    
+    // Refresh chats when returning to this screen
+    print('[MainScreen] didChangeDependencies - refreshing chats');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
       }
     });
   }

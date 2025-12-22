@@ -20,13 +20,13 @@ class StatusSyncService {
   StatusSyncService(this._statusQueue, this._messageRepository);
 
   /// Start periodic syncing of pending status updates
-  void startPeriodicSync({Duration interval = const Duration(seconds: 10)}) {
+  void startPeriodicSync({Duration interval = const Duration(seconds: 5)}) {
     if (_syncTimer != null) {
       print('[StatusSync] Already syncing, ignoring start request');
       return;
     }
 
-    print('[StatusSync] Starting periodic status sync');
+    print('[StatusSync] Starting periodic status sync (${interval.inSeconds}s interval)');
     
     // Immediate first sync
     _syncPendingStatuses();

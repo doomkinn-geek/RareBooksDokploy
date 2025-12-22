@@ -67,6 +67,22 @@ class NotificationService {
       _unreadCountByChat.remove(chatId);
     }
   }
+  
+  /// Cancel notification for a specific chat when messages are read
+  Future<void> cancelNotificationsForChat(String chatId) async {
+    try {
+      // Cancel notification by chatId hash
+      await _notifications.cancel(chatId.hashCode);
+      
+      // Clear tracking data
+      _notificationsByChat.remove(chatId);
+      _unreadCountByChat.remove(chatId);
+      
+      print('[Notification] Cancelled notifications for chat: $chatId');
+    } catch (e) {
+      print('[Notification] Failed to cancel notifications: $e');
+    }
+  }
 
   Future<void> showMessageNotification(models.Message message, String chatTitle) async {
     // Не показываем уведомление если пользователь в текущем чате

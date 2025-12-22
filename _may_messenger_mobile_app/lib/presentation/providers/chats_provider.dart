@@ -172,6 +172,41 @@ class ChatsNotifier extends StateNotifier<ChatsState> {
       }
     }
   }
+  
+  void updateUnreadCountOnStatusUpdate(String chatId, String messageId, MessageStatus status) {
+    // Only process 'read' status updates
+    if (status != MessageStatus.read) return;
+    
+    final index = state.chats.indexWhere((c) => c.id == chatId);
+    if (index == -1) {
+      print('[ChatsProvider] Chat not found for unread count update: $chatId');
+      return;
+    }
+    
+    final chat = state.chats[index];
+    
+    // Only decrement if there are unread messages
+    if (chat.unreadCount > 0) {
+      final newUnreadCount = (chat.unreadCount - 1).clamp(0, 999999);
+      
+      final updatedChat = Chat(
+        id: chat.id,
+        type: chat.type,
+        title: chat.title,
+        avatar: chat.avatar,
+        lastMessage: chat.lastMessage,
+        unreadCount: newUnreadCount,
+        createdAt: chat.createdAt,
+        otherParticipantId: chat.otherParticipantId,
+      );
+      
+      final updatedChats = [...state.chats];
+      updatedChats[index] = updatedChat;
+      state = state.copyWith(chats: updatedChats);
+      
+      print('[ChatsProvider] Updated unread count for chat $chatId: ${chat.unreadCount} -> $newUnreadCount');
+    }
+  }
 }
 
 

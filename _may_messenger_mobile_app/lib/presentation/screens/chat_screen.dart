@@ -74,6 +74,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final notificationService = ref.read(notificationServiceProvider);
       notificationService.setCurrentChat(widget.chatId);
       
+      // Clear notifications for this chat (push notifications)
+      await notificationService.cancelNotificationsForChat(widget.chatId);
+      
       final fcmService = ref.read(fcmServiceProvider);
       fcmService.setCurrentChat(widget.chatId);
       

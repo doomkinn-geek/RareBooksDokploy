@@ -21,6 +21,7 @@ public class MessagesController : ControllerBase
     private readonly MayMessenger.Application.Services.IFirebaseService _firebaseService;
     private readonly MayMessenger.Application.Services.IImageCompressionService _imageCompressionService;
     private readonly ILogger<MessagesController> _logger;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     
     public MessagesController(
         IUnitOfWork unitOfWork, 
@@ -28,7 +29,8 @@ public class MessagesController : ControllerBase
         IHubContext<ChatHub> hubContext,
         MayMessenger.Application.Services.IFirebaseService firebaseService,
         MayMessenger.Application.Services.IImageCompressionService imageCompressionService,
-        ILogger<MessagesController> logger)
+        ILogger<MessagesController> logger,
+        IServiceScopeFactory serviceScopeFactory)
     {
         _unitOfWork = unitOfWork;
         _environment = environment;
@@ -36,6 +38,7 @@ public class MessagesController : ControllerBase
         _firebaseService = firebaseService;
         _imageCompressionService = imageCompressionService;
         _logger = logger;
+        _serviceScopeFactory = serviceScopeFactory;
     }
     
     private Guid GetCurrentUserId()
@@ -676,6 +679,94 @@ public class MessagesController : ControllerBase
     }
 
     /// <summary>
+    /// Автоматически устанавливает статус Delivered после успешной отправки FCM push
+    /// Создает новый scope для доступа к БД (безопасно для Task.Run)
+    /// </summary>
+    private async Task AutoMarkAsDeliveredAfterPushAsync(Guid messageId, Guid chatId, List<Guid> recipientUserIds)
+    {
+        try
+        {
+            using var scope = _serviceScopeFactory.CreateScope();
+            var scopedUnitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            
+            _logger.LogInformation($"[AUTO_DELIVERED] Auto-marking message {messageId} as delivered for {recipientUserIds.Count} recipients");
+            
+            var message = await scopedUnitOfWork.Messages.GetByIdAsync(messageId);
+            if (message == null)
+            {
+                _logger.LogWarning($"[AUTO_DELIVERED] Message {messageId} not found");
+                return;
+            }
+            
+            // Create delivery events for each recipient that received push
+            foreach (var recipientId in recipientUserIds)
+            {
+                // Create or update delivery receipt
+                var receipt = await scopedUnitOfWork.DeliveryReceipts.GetByMessageAndUserAsync(messageId, recipientId);
+                
+                if (receipt == null)
+                {
+                    receipt = new DeliveryReceipt
+                    {
+                        MessageId = messageId,
+                        UserId = recipientId,
+                        DeliveredAt = DateTime.UtcNow
+                    };
+                    await scopedUnitOfWork.DeliveryReceipts.AddAsync(receipt);
+                    _logger.LogInformation($"[AUTO_DELIVERED] Created delivery receipt for user {recipientId}");
+                }
+                else if (receipt.DeliveredAt == null)
+                {
+                    receipt.DeliveredAt = DateTime.UtcNow;
+                    await scopedUnitOfWork.DeliveryReceipts.UpdateAsync(receipt);
+                    _logger.LogInformation($"[AUTO_DELIVERED] Updated delivery receipt for user {recipientId}");
+                }
+                
+                // Create status event (event sourcing pattern)
+                await scopedUnitOfWork.MessageStatusEvents.CreateEventAsync(
+                    messageId, 
+                    MessageStatus.Delivered, 
+                    recipientId, 
+                    "FCM_Push");
+            }
+            
+            // Calculate aggregate status based on all events
+            var aggregateStatus = await scopedUnitOfWork.MessageStatusEvents.CalculateAggregateStatusAsync(messageId);
+            
+            // Update message status if it changed
+            if (message.Status != aggregateStatus)
+            {
+                var oldStatus = message.Status;
+                message.Status = aggregateStatus;
+                if (aggregateStatus == MessageStatus.Delivered && message.DeliveredAt == null)
+                {
+                    message.DeliveredAt = DateTime.UtcNow;
+                }
+                await scopedUnitOfWork.Messages.UpdateAsync(message);
+                await scopedUnitOfWork.SaveChangesAsync();
+                
+                _logger.LogInformation($"[AUTO_DELIVERED] Message {messageId} status changed: {oldStatus} -> {aggregateStatus}");
+                
+                // Notify sender about status change via SignalR
+                await _hubContext.Clients.Group(chatId.ToString())
+                    .SendAsync("MessageStatusUpdated", messageId, (int)aggregateStatus);
+                
+                _logger.LogInformation($"[AUTO_DELIVERED] SignalR notification sent for message {messageId}");
+            }
+            else
+            {
+                // Save delivery receipts even if status didn't change
+                await scopedUnitOfWork.SaveChangesAsync();
+                _logger.LogInformation($"[AUTO_DELIVERED] Message {messageId} status unchanged: {message.Status}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"[AUTO_DELIVERED] Error auto-marking message {messageId} as delivered");
+        }
+    }
+    
+    /// <summary>
     /// Отправка push уведомлений пользователям, которые не онлайн
     /// ВАЖНО: Все данные передаются как параметры, никаких обращений к DbContext!
     /// </summary>
@@ -711,6 +802,9 @@ public class MessagesController : ControllerBase
                 { "messageId", message.Id.ToString() },
                 { "type", message.Type.ToString() }
             };
+
+            // Track recipients who successfully received push notifications
+            var successfulRecipients = new List<Guid>();
 
             // Send to all participants except sender
             foreach (var kvp in userTokens)
@@ -756,6 +850,13 @@ public class MessagesController : ControllerBase
                             }
                         }
                         
+                        // If at least one push was sent successfully, consider user as notified
+                        if (successCount > 0)
+                        {
+                            successfulRecipients.Add(userId);
+                            _logger.LogInformation($"[DEBUG_PUSH_SUCCESS] Successfully sent push to user {userId}");
+                        }
+                        
                         // TODO: Deactivate invalid tokens asynchronously in a separate background job
                         // Cannot use _unitOfWork here as it may be disposed (running in Task.Run)
                         if (tokensToDeactivate.Any())
@@ -768,6 +869,13 @@ public class MessagesController : ControllerBase
                 {
                     _logger.LogError(ex, $"Failed to send push to user {userId}");
                 }
+            }
+            
+            // Automatically mark message as delivered for users who received push notification
+            if (successfulRecipients.Any())
+            {
+                _logger.LogInformation($"[DEBUG_PUSH_AUTO_DELIVERED] Calling AutoMarkAsDeliveredAfterPushAsync for {successfulRecipients.Count} recipients");
+                await AutoMarkAsDeliveredAfterPushAsync(message.Id, message.ChatId, successfulRecipients);
             }
         }
         catch (Exception ex)
