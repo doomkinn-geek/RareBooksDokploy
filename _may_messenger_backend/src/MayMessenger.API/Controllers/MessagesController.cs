@@ -833,18 +833,35 @@ public class MessagesController : ControllerBase
     public async Task<IActionResult> BatchMarkAsRead([FromBody] List<Guid> messageIds)
     {
         var userId = GetCurrentUserId();
-        _logger.LogInformation($"Batch marking {messageIds.Count} messages as read for user {userId}");
+        _logger.LogInformation($"[BATCH_READ] Batch marking {messageIds.Count} messages as read for user {userId}");
+        _logger.LogInformation($"[BATCH_READ] MessageIds: {string.Join(", ", messageIds.Take(5))}");
         
         foreach (var messageId in messageIds)
         {
             var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
-            if (message == null) continue;
+            if (message == null)
+            {
+                _logger.LogWarning($"[BATCH_READ] Message {messageId} not found");
+                continue;
+            }
+            
+            _logger.LogInformation($"[BATCH_READ] Processing message {messageId}, current status: {message.Status}, sender: {message.SenderId}, reader: {userId}");
             
             // Don't mark own messages as read
-            if (message.SenderId == userId) continue;
+            if (message.SenderId == userId)
+            {
+                _logger.LogInformation($"[BATCH_READ] Skipping own message {messageId}");
+                continue;
+            }
             
             var chat = await _unitOfWork.Chats.GetByIdAsync(message.ChatId);
-            if (chat == null) continue;
+            if (chat == null)
+            {
+                _logger.LogWarning($"[BATCH_READ] Chat {message.ChatId} not found for message {messageId}");
+                continue;
+            }
+            
+            _logger.LogInformation($"[BATCH_READ] Chat {message.ChatId} type: {chat.Type}, participants: {chat.Participants.Count}");
             
             // Create or update delivery receipt
             var receipt = await _unitOfWork.DeliveryReceipts.GetByMessageAndUserAsync(messageId, userId);
@@ -872,12 +889,19 @@ public class MessagesController : ControllerBase
             // For private chats, mark as read immediately
             if (chat.Type == ChatType.Private && message.Status != MessageStatus.Read)
             {
+                _logger.LogInformation($"[BATCH_READ] Marking message {messageId} as READ in private chat");
                 message.Status = MessageStatus.Read;
                 message.ReadAt = DateTime.UtcNow;
                 await _unitOfWork.Messages.UpdateAsync(message);
                 
+                _logger.LogInformation($"[BATCH_READ] Sending SignalR MessageStatusUpdated for {messageId} -> READ to group {message.ChatId}");
                 await _hubContext.Clients.Group(message.ChatId.ToString())
                     .SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Read);
+                _logger.LogInformation($"[BATCH_READ] SignalR notification sent successfully");
+            }
+            else
+            {
+                _logger.LogInformation($"[BATCH_READ] Message {messageId} already read or not private chat (status: {message.Status}, chatType: {chat.Type})");
             }
             // For group chats, check if all participants have read it
             else if (chat.Type == ChatType.Group)

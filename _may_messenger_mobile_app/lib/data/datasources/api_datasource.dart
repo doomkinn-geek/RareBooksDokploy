@@ -224,6 +224,9 @@ class ApiDataSource {
       await _dio.post(
         '${ApiConstants.messages}/mark-read',
         data: messageIds,
+        options: Options(
+          contentType: Headers.jsonContentType,
+        ),
       );
     } catch (e) {
       throw Exception('Failed to batch mark as read: $e');

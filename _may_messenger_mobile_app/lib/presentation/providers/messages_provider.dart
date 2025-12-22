@@ -1076,14 +1076,10 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final oldStatus = oldMessage.status;
       
       if (oldStatus != status) {
-        // #region agent log - Hypothesis H: Track status updates
-        _logToFile('STATUS_UPDATED', {
-          'messageId': messageId,
-          'oldStatus': oldStatus.toString(),
-          'newStatus': status.toString(),
-          'chatId': chatId,
-        });
-        // #endregion
+        // Debug: track where status update comes from
+        print('[MSG_STATUS] Stack trace for status update:');
+        print(StackTrace.current.toString().split('\n').take(5).join('\n'));
+        
         final updatedMessage = oldMessage.copyWith(status: status);
         updatedMessages[messageIndex] = updatedMessage;
         
@@ -1112,11 +1108,17 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
 
   Future<void> markMessagesAsRead() async {
     try {
+      print('[STATUS_UPDATE] markMessagesAsRead called');
       // Get current user ID
       final profileState = _ref.read(profileProvider);
       final currentUserId = profileState.profile?.id;
       
-      if (currentUserId == null) return;
+      if (currentUserId == null) {
+        print('[STATUS_UPDATE] currentUserId is null, returning');
+        return;
+      }
+      
+      print('[STATUS_UPDATE] currentUserId: $currentUserId, total messages: ${state.messages.length}');
       
       // Find all unread messages from other users
       final unreadMessages = state.messages.where((message) {
@@ -1124,20 +1126,14 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
                message.status != MessageStatus.read;
       }).toList();
       
+      print('[STATUS_UPDATE] Found ${unreadMessages.length} unread messages');
+      
       if (unreadMessages.isEmpty) {
-        // #region agent log - Hypothesis E: Check if markMessagesAsRead is called
-        await _logToFile('MARK_READ_NO_UNREAD', {'totalMessages': state.messages.length});
-        // #endregion
+        print('[STATUS_UPDATE] No unread messages, returning');
         return;
       }
       
       print('[STATUS_UPDATE] Marking ${unreadMessages.length} messages as read');
-      // #region agent log - Hypothesis E: Track read marking
-      await _logToFile('MARK_READ_START', {
-        'unreadCount': unreadMessages.length,
-        'messageIds': unreadMessages.map((m) => m.id).take(5).toList(),
-      });
-      // #endregion
       
       // Add to status queue for reliable delivery
       for (final message in unreadMessages) {
