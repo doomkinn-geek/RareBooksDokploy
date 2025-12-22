@@ -213,7 +213,10 @@ class EventQueueService {
           const toRemove = this.processedEventIds.size - EventQueueService.MAX_PROCESSED_EVENT_IDS_SIZE;
           const iterator = this.processedEventIds.values();
           for (let i = 0; i < toRemove; i++) {
-            this.processedEventIds.delete(iterator.next().value);
+            const value = iterator.next().value;
+            if (value !== undefined) {
+              this.processedEventIds.delete(value);
+            }
           }
         }
       }
