@@ -756,15 +756,11 @@ public class MessagesController : ControllerBase
                             }
                         }
                         
-                        // Deactivate invalid tokens (после цикла)
-                        foreach (var tokenToDeactivate in tokensToDeactivate)
+                        // TODO: Deactivate invalid tokens asynchronously in a separate background job
+                        // Cannot use _unitOfWork here as it may be disposed (running in Task.Run)
+                        if (tokensToDeactivate.Any())
                         {
-                            await _unitOfWork.FcmTokens.DeactivateTokenAsync(tokenToDeactivate);
-                        }
-                        
-                        if (successCount > 0 || tokensToDeactivate.Any())
-                        {
-                            await _unitOfWork.SaveChangesAsync();
+                            _logger.LogWarning($"[DEBUG_PUSH_K] {tokensToDeactivate.Count} invalid FCM tokens found for user {userId}. Manual cleanup required.");
                         }
                     }
                 }
