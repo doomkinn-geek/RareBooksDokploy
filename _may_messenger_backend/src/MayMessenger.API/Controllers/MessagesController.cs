@@ -921,10 +921,13 @@ public class MessagesController : ControllerBase
             else if (chat.Type == ChatType.Private && message.SenderId != userId && message.Status == MessageStatus.Read)
             {
                 // #region agent log
-                _logger.LogInformation($"[BATCH_READ] HYP_C: Message already Read, but sending SignalR for sync");
+                _logger.LogInformation($"[BATCH_READ] HYP_C: Message already Read, but sending SignalR for sync. ChatId: {message.ChatId}, MessageId: {messageId}, SenderId: {message.SenderId}");
                 // #endregion
                 await _hubContext.Clients.Group(message.ChatId.ToString())
                     .SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Read);
+                // #region agent log
+                _logger.LogInformation($"[BATCH_READ] HYP_C: SignalR sent to group {message.ChatId} for message {messageId} with status Read");
+                // #endregion
             }
             // For group chats, check if all participants have read it
             else if (chat.Type == ChatType.Group)

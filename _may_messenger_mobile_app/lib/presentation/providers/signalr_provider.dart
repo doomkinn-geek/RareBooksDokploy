@@ -170,6 +170,9 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
 
         // Setup message status update listener
         _signalRService.onMessageStatusUpdated((messageId, status) {
+          // #region agent log
+          print('[SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: $messageId, Status: $status, Timestamp: ${DateTime.now().toIso8601String()}');
+          // #endregion
           print('[SignalR] Message status updated: $messageId -> $status');
           
           // Update message status in all providers
@@ -178,13 +181,22 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
             // This will update the UI for the sender
             final chatsState = _ref.read(chatsProvider);
             int updatedCount = 0;
+            // #region agent log
+            print('[SIGNALR_STATUS] HYP_SIGNALR: Total chats: ${chatsState.chats.length}');
+            // #endregion
             
             for (final chat in chatsState.chats) {
               try {
                 _ref.read(messagesProvider(chat.id).notifier).updateMessageStatus(messageId, status);
                 updatedCount++;
+                // #region agent log
+                print('[SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat ${chat.id}');
+                // #endregion
               } catch (e) {
                 // Provider not active - that's OK
+                // #region agent log
+                print('[SIGNALR_STATUS] HYP_SIGNALR: Failed to update chat ${chat.id}: $e');
+                // #endregion
               }
             }
             

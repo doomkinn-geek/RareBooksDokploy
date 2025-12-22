@@ -1069,11 +1069,20 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   }
 
   void updateMessageStatus(String messageId, MessageStatus status) {
+    // #region agent log
+    print('[MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: $messageId, NewStatus: $status, ChatId: $chatId, Timestamp: ${DateTime.now().toIso8601String()}');
+    // #endregion
     final messageIndex = state.messages.indexWhere((m) => m.id == messageId);
+    // #region agent log
+    print('[MSG_STATUS] HYP_CLIENT: Message found at index: $messageIndex');
+    // #endregion
     if (messageIndex != -1) {
       final updatedMessages = [...state.messages];
       final oldMessage = updatedMessages[messageIndex];
       final oldStatus = oldMessage.status;
+      // #region agent log
+      print('[MSG_STATUS] HYP_CLIENT: Old status: $oldStatus, New status: $status, SenderId: ${oldMessage.senderId}');
+      // #endregion
       
       if (oldStatus != status) {
         // Debug: track where status update comes from
