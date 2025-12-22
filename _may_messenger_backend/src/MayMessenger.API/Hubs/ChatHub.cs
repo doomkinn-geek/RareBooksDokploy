@@ -31,9 +31,10 @@ public class ChatHub : Hub
         
         if (user != null)
         {
-            // Update user online status
+            // Update user online status and heartbeat
             user.IsOnline = true;
             user.LastSeenAt = DateTime.UtcNow;
+            user.LastHeartbeatAt = DateTime.UtcNow;
             await _unitOfWork.Users.UpdateAsync(user);
             await _unitOfWork.SaveChangesAsync();
             
@@ -48,6 +49,8 @@ public class ChatHub : Hub
         {
             await Groups.AddToGroupAsync(Context.ConnectionId, chat.Id.ToString());
         }
+        
+        Console.WriteLine($"[ChatHub] User {userId} connected. ConnectionId: {Context.ConnectionId}");
         
         await base.OnConnectedAsync();
     }
@@ -133,21 +136,31 @@ public class ChatHub : Hub
             await _unitOfWork.DeliveryReceipts.UpdateAsync(receipt);
         }
         
-        // If this is the first delivery and message status is Sent, change to Delivered
-        if (message.Status == MessageStatus.Sent)
+        // EVENT SOURCING: Create status event instead of directly updating message
+        await _unitOfWork.MessageStatusEvents.CreateEventAsync(
+            messageId, 
+            MessageStatus.Delivered, 
+            userId, 
+            "SignalR");
+        
+        // Calculate aggregate status based on all events
+        var aggregateStatus = await _unitOfWork.MessageStatusEvents.CalculateAggregateStatusAsync(messageId);
+        
+        // Update message status if it changed
+        if (message.Status != aggregateStatus)
         {
-            message.Status = MessageStatus.Delivered;
-            message.DeliveredAt = DateTime.UtcNow;
+            message.Status = aggregateStatus;
+            if (aggregateStatus == MessageStatus.Delivered && message.DeliveredAt == null)
+            {
+                message.DeliveredAt = DateTime.UtcNow;
+            }
             await _unitOfWork.Messages.UpdateAsync(message);
-            await _unitOfWork.SaveChangesAsync();
             
-            // Notify all participants about status change (without acks - status changes don't need acks)
-            await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Delivered);
+            // Notify all participants about status change
+            await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, (int)aggregateStatus);
         }
-        else
-        {
-            await _unitOfWork.SaveChangesAsync();
-        }
+        
+        await _unitOfWork.SaveChangesAsync();
     }
     
     public async Task MessageRead(Guid messageId, Guid chatId)
@@ -185,35 +198,31 @@ public class ChatHub : Hub
             await _unitOfWork.DeliveryReceipts.UpdateAsync(receipt);
         }
         
-        await _unitOfWork.SaveChangesAsync();
+        // EVENT SOURCING: Create status event instead of directly updating message
+        await _unitOfWork.MessageStatusEvents.CreateEventAsync(
+            messageId, 
+            MessageStatus.Read, 
+            userId, 
+            "SignalR");
         
-        // For private chats, mark as read immediately
-        if (chat.Type == ChatType.Private && message.Status != MessageStatus.Read)
+        // Calculate aggregate status based on all events
+        var aggregateStatus = await _unitOfWork.MessageStatusEvents.CalculateAggregateStatusAsync(messageId);
+        
+        // Update message status if it changed
+        if (message.Status != aggregateStatus)
         {
-            message.Status = MessageStatus.Read;
-            message.ReadAt = DateTime.UtcNow;
-            await _unitOfWork.Messages.UpdateAsync(message);
-            await _unitOfWork.SaveChangesAsync();
-            
-            await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Read);
-        }
-        // For group chats, check if ALL participants (except sender) have read it
-        else if (chat.Type == ChatType.Group)
-        {
-            var participantsCount = chat.Participants.Count;
-            var readCount = await _unitOfWork.DeliveryReceipts.GetReadCountAsync(messageId);
-            
-            // If all participants except sender have read it, mark message as read
-            if (readCount >= participantsCount - 1 && message.Status != MessageStatus.Read)
+            message.Status = aggregateStatus;
+            if (aggregateStatus == MessageStatus.Read && message.ReadAt == null)
             {
-                message.Status = MessageStatus.Read;
                 message.ReadAt = DateTime.UtcNow;
-                await _unitOfWork.Messages.UpdateAsync(message);
-                await _unitOfWork.SaveChangesAsync();
-                
-                await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Read);
             }
+            await _unitOfWork.Messages.UpdateAsync(message);
+            
+            // Notify all participants about status change
+            await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, (int)aggregateStatus);
         }
+        
+        await _unitOfWork.SaveChangesAsync();
     }
     
     public async Task TypingIndicator(Guid chatId, bool isTyping)
@@ -223,6 +232,95 @@ public class ChatHub : Hub
         
         // Notify others in the chat (except sender)
         await Clients.OthersInGroup(chatId.ToString()).SendAsync("UserTyping", userId, user?.DisplayName ?? "Unknown", isTyping);
+    }
+    
+    /// <summary>
+    /// Batch mark multiple messages with a specific status
+    /// Optimized for group chats where user reads multiple messages at once
+    /// </summary>
+    public async Task BatchMarkMessagesAs(Guid chatId, List<Guid> messageIds, MessageStatus status)
+    {
+        if (messageIds == null || !messageIds.Any() || messageIds.Count > 100)
+        {
+            Console.WriteLine($"[ChatHub] Invalid batch size: {messageIds?.Count ?? 0}");
+            return;
+        }
+        
+        var userId = GetCurrentUserId();
+        var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+        
+        if (chat == null)
+        {
+            Console.WriteLine($"[ChatHub] Chat {chatId} not found");
+            return;
+        }
+        
+        var updatedMessages = new List<Guid>();
+        
+        foreach (var messageId in messageIds)
+        {
+            var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
+            if (message == null || message.SenderId == userId) continue;
+            
+            // Create or update delivery receipt
+            var receipt = await _unitOfWork.DeliveryReceipts.GetByMessageAndUserAsync(messageId, userId);
+            
+            if (receipt == null)
+            {
+                receipt = new DeliveryReceipt
+                {
+                    MessageId = messageId,
+                    UserId = userId,
+                    DeliveredAt = status >= MessageStatus.Delivered ? DateTime.UtcNow : null,
+                    ReadAt = status >= MessageStatus.Read ? DateTime.UtcNow : null
+                };
+                await _unitOfWork.DeliveryReceipts.AddAsync(receipt);
+            }
+            else
+            {
+                if (status >= MessageStatus.Delivered && receipt.DeliveredAt == null)
+                {
+                    receipt.DeliveredAt = DateTime.UtcNow;
+                }
+                if (status >= MessageStatus.Read && receipt.ReadAt == null)
+                {
+                    receipt.ReadAt = DateTime.UtcNow;
+                }
+                await _unitOfWork.DeliveryReceipts.UpdateAsync(receipt);
+            }
+            
+            // EVENT SOURCING: Create status event
+            await _unitOfWork.MessageStatusEvents.CreateEventAsync(messageId, status, userId, "SignalR-Batch");
+            
+            // Calculate aggregate status
+            var aggregateStatus = await _unitOfWork.MessageStatusEvents.CalculateAggregateStatusAsync(messageId);
+            
+            // Update message if status changed
+            if (message.Status != aggregateStatus)
+            {
+                message.Status = aggregateStatus;
+                if (aggregateStatus == MessageStatus.Delivered && message.DeliveredAt == null)
+                {
+                    message.DeliveredAt = DateTime.UtcNow;
+                }
+                if (aggregateStatus == MessageStatus.Read && message.ReadAt == null)
+                {
+                    message.ReadAt = DateTime.UtcNow;
+                }
+                await _unitOfWork.Messages.UpdateAsync(message);
+                updatedMessages.Add(messageId);
+            }
+        }
+        
+        await _unitOfWork.SaveChangesAsync();
+        
+        // Notify about all updated messages in one batch
+        if (updatedMessages.Any())
+        {
+            await Clients.Group(chatId.ToString()).SendAsync("BatchMessageStatusUpdated", updatedMessages, (int)status);
+        }
+        
+        Console.WriteLine($"[ChatHub] Batch updated {updatedMessages.Count} messages to status {status}");
     }
     
     /// <summary>
@@ -262,6 +360,109 @@ public class ChatHub : Hub
         catch (Exception ex)
         {
             Console.WriteLine($"[ACK] Error processing status ack: {ex.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// Client sends heartbeat to keep connection alive and update presence
+    /// Called every 30 seconds from client
+    /// </summary>
+    public async Task Heartbeat()
+    {
+        var userId = GetCurrentUserId();
+        var user = await _unitOfWork.Users.GetByIdAsync(userId);
+        
+        if (user != null)
+        {
+            user.LastHeartbeatAt = DateTime.UtcNow;
+            user.IsOnline = true;
+            await _unitOfWork.Users.UpdateAsync(user);
+            await _unitOfWork.SaveChangesAsync();
+        }
+        
+        // Send Pong back to client
+        await Clients.Caller.SendAsync("Pong");
+    }
+    
+    /// <summary>
+    /// Incremental sync - client requests all missed events since last sync
+    /// </summary>
+    public async Task IncrementalSync(DateTime lastSyncTimestamp, List<string>? chatIds = null)
+    {
+        var userId = GetCurrentUserId();
+        
+        Console.WriteLine($"[ChatHub] IncrementalSync requested by user {userId} since {lastSyncTimestamp:O}");
+        
+        try
+        {
+            // Get user's chats or use provided chatIds
+            List<Guid> targetChatIds;
+            if (chatIds != null && chatIds.Any())
+            {
+                targetChatIds = chatIds.Select(id => Guid.Parse(id)).ToList();
+            }
+            else
+            {
+                var chats = await _unitOfWork.Chats.GetUserChatsAsync(userId);
+                targetChatIds = chats.Select(c => c.Id).ToList();
+            }
+            
+            // Collect all missed messages and status updates
+            var missedMessages = new List<object>();
+            var missedStatusUpdates = new List<object>();
+            
+            foreach (var chatId in targetChatIds)
+            {
+                // Get messages created or updated after lastSyncTimestamp
+                var messages = await _unitOfWork.Messages.GetMessagesAfterTimestampAsync(
+                    chatId, 
+                    lastSyncTimestamp, 
+                    take: 100);
+                
+                foreach (var msg in messages)
+                {
+                    var sender = await _unitOfWork.Users.GetByIdAsync(msg.SenderId);
+                    missedMessages.Add(new
+                    {
+                        Id = msg.Id,
+                        ChatId = msg.ChatId,
+                        SenderId = msg.SenderId,
+                        SenderName = sender?.DisplayName ?? "Unknown",
+                        Type = msg.Type,
+                        Content = msg.Content,
+                        FilePath = msg.FilePath,
+                        Status = msg.Status,
+                        CreatedAt = msg.CreatedAt,
+                        ClientMessageId = msg.ClientMessageId
+                    });
+                    
+                    // Also send status update if message was updated after creation
+                    if (msg.UpdatedAt.HasValue && msg.UpdatedAt.Value > lastSyncTimestamp)
+                    {
+                        missedStatusUpdates.Add(new
+                        {
+                            MessageId = msg.Id,
+                            Status = (int)msg.Status,
+                            UpdatedAt = msg.UpdatedAt.Value
+                        });
+                    }
+                }
+            }
+            
+            Console.WriteLine($"[ChatHub] IncrementalSync: {missedMessages.Count} messages, {missedStatusUpdates.Count} status updates");
+            
+            // Send all missed data to client
+            await Clients.Caller.SendAsync("IncrementalSyncResult", new
+            {
+                Messages = missedMessages,
+                StatusUpdates = missedStatusUpdates,
+                SyncTimestamp = DateTime.UtcNow
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ChatHub] Error in IncrementalSync: {ex.Message}");
+            await Clients.Caller.SendAsync("IncrementalSyncError", ex.Message);
         }
     }
     

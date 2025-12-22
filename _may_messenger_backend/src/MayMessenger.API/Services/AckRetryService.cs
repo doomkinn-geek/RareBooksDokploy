@@ -5,30 +5,41 @@ using Microsoft.Extensions.Logging;
 using MayMessenger.API.Hubs;
 using MayMessenger.Application.DTOs;
 using MayMessenger.Domain.Interfaces;
+using MayMessenger.Application.Services;
 
 namespace MayMessenger.API.Services;
 
 /// <summary>
 /// Background service that retries sending unacknowledged messages via SignalR.
-/// Runs every 5 seconds to check for pending acks that need retry.
+/// Implements exponential backoff and FCM fallback for offline users.
+/// Runs every 3 seconds to check for pending acks that need retry.
 /// </summary>
 public class AckRetryService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<AckRetryService> _logger;
     private readonly IHubContext<ChatHub> _hubContext;
-    private const int RetryIntervalSeconds = 3; // Reduced from 5 to 3 seconds
-    private const int MaxRetries = 5; // Increased from 3 to 5
+    private readonly IFirebaseService _firebaseService;
+    
+    // Retry configuration with exponential backoff
+    private const int RetryIntervalSeconds = 3;
+    private const int MaxRetries = 5;
     private const int CleanupAfterHours = 24;
+    
+    // FCM fallback configuration
+    private const int FcmFallbackAfterSeconds = 30; // Send FCM if SignalR fails for 30 seconds
+    private const int FcmRetryAfterSeconds = 300; // Retry FCM every 5 minutes if still pending
 
     public AckRetryService(
         IServiceProvider serviceProvider,
         ILogger<AckRetryService> logger,
-        IHubContext<ChatHub> hubContext)
+        IHubContext<ChatHub> hubContext,
+        IFirebaseService firebaseService)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
         _hubContext = hubContext;
+        _firebaseService = firebaseService;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -104,6 +115,18 @@ public class AckRetryService : BackgroundService
             return;
         }
         
+        // FCM FALLBACK: If SignalR has been failing for 30+ seconds, try FCM
+        if (timeSinceCreation.TotalSeconds >= FcmFallbackAfterSeconds && _firebaseService.IsInitialized)
+        {
+            var timeSinceLastFcm = ack.LastRetryAt.HasValue ? DateTime.UtcNow - ack.LastRetryAt.Value : timeSinceCreation;
+            
+            // Only send FCM once every 5 minutes to avoid spam
+            if (timeSinceLastFcm.TotalSeconds >= FcmRetryAfterSeconds)
+            {
+                await TryFcmFallbackAsync(ack, unitOfWork);
+            }
+        }
+        
         // Update retry count
         ack.RetryCount++;
         ack.LastRetryAt = DateTime.UtcNow;
@@ -139,7 +162,8 @@ public class AckRetryService : BackgroundService
                         Content = message.Content,
                         FilePath = message.FilePath,
                         Status = message.Status,
-                        CreatedAt = message.CreatedAt
+                        CreatedAt = message.CreatedAt,
+                        ClientMessageId = message.ClientMessageId
                     };
 
                     // Send to specific user
@@ -163,6 +187,93 @@ public class AckRetryService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, $"Error retrying ack {ack.Id} (type: {ack.Type})");
+        }
+    }
+    
+    /// <summary>
+    /// Fallback to FCM push notification when SignalR delivery fails
+    /// </summary>
+    private async Task TryFcmFallbackAsync(Domain.Entities.PendingAck ack, IUnitOfWork unitOfWork)
+    {
+        try
+        {
+            // Get FCM tokens for the recipient
+            var tokens = await unitOfWork.FcmTokens.GetActiveTokensForUserAsync(ack.RecipientUserId);
+            
+            if (!tokens.Any())
+            {
+                _logger.LogInformation($"No FCM tokens for user {ack.RecipientUserId}, skipping FCM fallback");
+                return;
+            }
+            
+            var message = ack.Message;
+            var sender = await unitOfWork.Users.GetByIdAsync(message.SenderId);
+            
+            if (sender == null)
+            {
+                _logger.LogWarning($"Sender {message.SenderId} not found for FCM fallback");
+                return;
+            }
+            
+            // Prepare notification content
+            string title, body;
+            var data = new Dictionary<string, string>
+            {
+                { "chatId", message.ChatId.ToString() },
+                { "messageId", message.Id.ToString() },
+                { "type", ack.Type.ToString() }
+            };
+            
+            if (ack.Type == Domain.Enums.AckType.Message)
+            {
+                title = $"Новое сообщение от {sender.DisplayName}";
+                body = message.Type switch
+                {
+                    Domain.Enums.MessageType.Text => message.Content?.Length > 100 
+                        ? message.Content.Substring(0, 100) + "..." 
+                        : message.Content ?? "Сообщение",
+                    Domain.Enums.MessageType.Audio => "🎤 Голосовое сообщение",
+                    Domain.Enums.MessageType.Image => "📷 Изображение",
+                    _ => "Новое сообщение"
+                };
+            }
+            else // StatusUpdate
+            {
+                title = "Обновление статуса сообщения";
+                body = $"Сообщение {message.Status}";
+            }
+            
+            // Send FCM to all tokens
+            int successCount = 0;
+            foreach (var token in tokens)
+            {
+                var (success, shouldDeactivate) = await _firebaseService.SendNotificationAsync(
+                    token.Token,
+                    title,
+                    body,
+                    data);
+                
+                if (success)
+                {
+                    successCount++;
+                    token.LastUsedAt = DateTime.UtcNow;
+                }
+                else if (shouldDeactivate)
+                {
+                    _logger.LogWarning($"Deactivating invalid FCM token for user {ack.RecipientUserId}");
+                    await unitOfWork.FcmTokens.DeactivateTokenAsync(token.Token);
+                }
+            }
+            
+            if (successCount > 0)
+            {
+                _logger.LogInformation($"FCM fallback sent to {successCount} device(s) for user {ack.RecipientUserId}");
+                await unitOfWork.SaveChangesAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Error in FCM fallback for ack {ack.Id}");
         }
     }
 }

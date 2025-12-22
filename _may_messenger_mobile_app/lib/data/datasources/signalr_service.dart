@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:signalr_netcore/signalr_client.dart';
 import '../models/message_model.dart';
 import '../../core/constants/api_constants.dart';
@@ -6,6 +8,10 @@ class SignalRService {
   HubConnection? _hubConnection;
   String? _currentToken;
   bool _isReconnecting = false;
+  int _reconnectAttempts = 0;
+  DateTime? _lastSyncTimestamp;
+  Timer? _heartbeatTimer;
+  DateTime? _lastPongReceived;
 
   Future<void> connect(String token) async {
     _currentToken = token;
@@ -29,6 +35,9 @@ class SignalRService {
       print('[SignalR] Connection closed. Error: $error');
       _isReconnecting = false;
       
+      // Stop heartbeat timer
+      _stopHeartbeatTimer();
+      
       // Automatic reconnect will be handled by withAutomaticReconnect
       // But if that fails completely, try manual reconnect
       if (_currentToken != null) {
@@ -48,18 +57,89 @@ class SignalRService {
     });
     
     // Обработчик успешного переподключения
-    _hubConnection?.onreconnected(({connectionId}) {
+    _hubConnection?.onreconnected(({connectionId}) async {
       print('[SignalR] Reconnected successfully! Connection ID: $connectionId');
       _isReconnecting = false;
+      _reconnectAttempts = 0;
+      
+      // Restart heartbeat timer
+      _startHeartbeatTimer();
+      
+      // Perform incremental sync after reconnection
+      await _performIncrementalSync();
     });
 
+    // Setup Pong handler before connecting
+    _setupPongHandler();
+    
     try {
       await _hubConnection?.start();
       print('[SignalR] Connected successfully');
+      
+      // Start heartbeat timer after successful connection
+      _startHeartbeatTimer();
     } catch (e) {
       print('[SignalR] Failed to connect: $e');
       rethrow;
     }
+  }
+  
+  /// Setup Pong handler to receive server heartbeat responses
+  void _setupPongHandler() {
+    _hubConnection?.off('Pong');
+    _hubConnection?.on('Pong', (arguments) {
+      _lastPongReceived = DateTime.now();
+      print('[SignalR] Pong received');
+    });
+  }
+  
+  /// Start heartbeat timer - sends Heartbeat every 30 seconds
+  void _startHeartbeatTimer() {
+    _stopHeartbeatTimer(); // Stop any existing timer
+    
+    _lastPongReceived = DateTime.now();
+    
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
+      if (_hubConnection?.state == HubConnectionState.Connected) {
+        try {
+          print('[SignalR] Sending heartbeat...');
+          await _hubConnection?.invoke('Heartbeat');
+          
+          // Check if we received Pong recently (within last 90 seconds)
+          if (_lastPongReceived != null) {
+            final timeSinceLastPong = DateTime.now().difference(_lastPongReceived!);
+            if (timeSinceLastPong.inSeconds > 90) {
+              print('[SignalR] No Pong received for ${timeSinceLastPong.inSeconds}s - forcing reconnect');
+              timer.cancel();
+              await _forceReconnect();
+            }
+          }
+        } catch (e) {
+          print('[SignalR] Heartbeat failed: $e');
+          // Connection might be dead, trigger reconnect
+          timer.cancel();
+          await _forceReconnect();
+        }
+      } else {
+        print('[SignalR] Not connected, stopping heartbeat timer');
+        timer.cancel();
+      }
+    });
+    
+    print('[SignalR] Heartbeat timer started (30s interval)');
+  }
+  
+  /// Stop heartbeat timer
+  void _stopHeartbeatTimer() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+  }
+  
+  /// Force reconnect when heartbeat fails
+  Future<void> _forceReconnect() async {
+    print('[SignalR] Forcing reconnect due to heartbeat failure');
+    _stopHeartbeatTimer();
+    await _attemptReconnect();
   }
   
   Future<void> _attemptReconnect() async {
@@ -69,7 +149,8 @@ class SignalRService {
     }
     
     _isReconnecting = true;
-    print('[SignalR] Manual reconnect attempt started');
+    _reconnectAttempts++;
+    print('[SignalR] Manual reconnect attempt #$_reconnectAttempts started');
     
     try {
       // Stop existing connection
@@ -79,32 +160,73 @@ class SignalRService {
         print('[SignalR] Error stopping connection: $e');
       }
       
-      // Wait a bit before reconnecting
-      await Future.delayed(const Duration(seconds: 2));
+      // Exponential backoff with jitter
+      // Base delay: 2^attempts seconds, max 60 seconds
+      // Jitter: random 0-2 seconds to prevent thundering herd
+      final baseDelay = min(pow(2, _reconnectAttempts).toInt(), 60);
+      final jitter = Random().nextInt(2000); // 0-2000ms
+      final totalDelay = Duration(seconds: baseDelay, milliseconds: jitter);
+      
+      print('[SignalR] Waiting ${totalDelay.inSeconds}s before reconnect (with jitter)');
+      await Future.delayed(totalDelay);
       
       // Check if still disconnected
       if (_hubConnection?.state != HubConnectionState.Connected) {
         print('[SignalR] Attempting to establish new connection...');
         await connect(_currentToken!);
         print('[SignalR] Manual reconnect successful');
+        _reconnectAttempts = 0; // Reset on success
       }
     } catch (e) {
       print('[SignalR] Manual reconnect failed: $e');
       _isReconnecting = false;
       
-      // Schedule another attempt with exponential backoff
-      print('[SignalR] Scheduling retry in 10 seconds...');
-      await Future.delayed(const Duration(seconds: 10));
-      
-      // Only retry if still disconnected
-      if (_hubConnection?.state != HubConnectionState.Connected) {
-        _attemptReconnect();
+      // Schedule another attempt if not too many attempts
+      if (_reconnectAttempts < 10) {
+        print('[SignalR] Scheduling retry attempt #${_reconnectAttempts + 1}...');
+        
+        // Only retry if still disconnected
+        if (_hubConnection?.state != HubConnectionState.Connected) {
+          _attemptReconnect();
+        }
+      } else {
+        print('[SignalR] Max reconnect attempts reached. Giving up.');
+        _reconnectAttempts = 0;
       }
     } finally {
       if (_hubConnection?.state == HubConnectionState.Connected) {
         _isReconnecting = false;
       }
     }
+  }
+  
+  /// Perform incremental sync after reconnection to fetch missed events
+  Future<void> _performIncrementalSync() async {
+    if (_lastSyncTimestamp == null) {
+      print('[SignalR] No last sync timestamp, skipping incremental sync');
+      _lastSyncTimestamp = DateTime.now();
+      return;
+    }
+    
+    try {
+      print('[SignalR] Performing incremental sync since ${_lastSyncTimestamp!.toIso8601String()}');
+      
+      // Call server method to get missed events
+      await _hubConnection?.invoke(
+        'IncrementalSync',
+        args: [_lastSyncTimestamp!.toIso8601String()],
+      );
+      
+      _lastSyncTimestamp = DateTime.now();
+      print('[SignalR] Incremental sync completed');
+    } catch (e) {
+      print('[SignalR] Incremental sync failed: $e');
+    }
+  }
+  
+  /// Update last sync timestamp (call this periodically or after successful operations)
+  void updateLastSyncTimestamp() {
+    _lastSyncTimestamp = DateTime.now();
   }
   
   HubConnectionState? get connectionState => _hubConnection?.state;
@@ -119,11 +241,32 @@ class SignalRService {
         final message = Message.fromJson(messageJson);
         callback(message);
         
+        // Update last sync timestamp
+        updateLastSyncTimestamp();
+        
         // Automatically send ACK
         try {
           await ackMessageReceived(message.id);
         } catch (e) {
           print('[SignalR] Failed to auto-send ACK: $e');
+        }
+      }
+    });
+  }
+  
+  /// Handle incremental sync result from server
+  void onIncrementalSyncResult(Function(Map<String, dynamic>) callback) {
+    _hubConnection?.off('IncrementalSyncResult');
+    
+    _hubConnection?.on('IncrementalSyncResult', (arguments) {
+      if (arguments != null && arguments.isNotEmpty) {
+        final syncData = arguments[0] as Map<String, dynamic>;
+        print('[SignalR] Received incremental sync result: ${syncData['Messages']?.length ?? 0} messages, ${syncData['StatusUpdates']?.length ?? 0} status updates');
+        callback(syncData);
+        
+        // Update last sync timestamp from server
+        if (syncData['SyncTimestamp'] != null) {
+          _lastSyncTimestamp = DateTime.parse(syncData['SyncTimestamp']);
         }
       }
     });
@@ -344,8 +487,20 @@ class SignalRService {
   }
 
   Future<void> disconnect() async {
+    _stopHeartbeatTimer();
     await _hubConnection?.stop();
   }
 
   bool get isConnected => _hubConnection?.state == HubConnectionState.Connected;
+  
+  /// Get heartbeat statistics for debugging
+  Map<String, dynamic> getHeartbeatStats() {
+    return {
+      'isHeartbeatActive': _heartbeatTimer?.isActive ?? false,
+      'lastPongReceived': _lastPongReceived?.toIso8601String(),
+      'timeSinceLastPong': _lastPongReceived != null 
+          ? DateTime.now().difference(_lastPongReceived!).inSeconds 
+          : null,
+    };
+  }
 }

@@ -12,6 +12,11 @@ public interface IMessageRepository : IRepository<Message>
     Task<IEnumerable<Message>> GetMessagesAfterTimestampAsync(Guid chatId, DateTime since, int take, CancellationToken cancellationToken = default);
     Task<IEnumerable<Message>> GetChatMessagesWithCursorAsync(Guid chatId, Guid? cursor, int take, CancellationToken cancellationToken = default);
     Task<Message?> GetByClientMessageIdAsync(string clientMessageId, CancellationToken cancellationToken = default);
+    
+    /// <summary>
+    /// Full-text search messages in specified chats using PostgreSQL tsvector
+    /// </summary>
+    Task<IEnumerable<Message>> SearchMessagesAsync(IEnumerable<Guid> chatIds, string query, int take, CancellationToken cancellationToken = default);
 }
 
 

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using MayMessenger.Domain.Entities;
 using MayMessenger.Domain.Enums;
 using MayMessenger.Domain.Interfaces;
@@ -106,6 +107,28 @@ public class MessageRepository : Repository<Message>, IMessageRepository
         return await _dbSet
             .Include(m => m.Sender)
             .FirstOrDefaultAsync(m => m.ClientMessageId == clientMessageId, cancellationToken);
+    }
+    
+    public async Task<IEnumerable<Message>> SearchMessagesAsync(IEnumerable<Guid> chatIds, string query, int take, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(query) || !chatIds.Any())
+        {
+            return Enumerable.Empty<Message>();
+        }
+        
+        // Use PostgreSQL full-text search with Russian language support
+        // This leverages the GIN index created in migration
+        var chatIdsList = chatIds.ToList();
+        
+        return await _dbSet
+            .Include(m => m.Sender)
+            .Where(m => chatIdsList.Contains(m.ChatId) && 
+                       m.Type == MessageType.Text &&
+                       m.Content != null &&
+                       EF.Functions.ToTsVector("russian", m.Content).Matches(EF.Functions.PlainToTsQuery("russian", query)))
+            .OrderByDescending(m => m.CreatedAt)
+            .Take(take)
+            .ToListAsync(cancellationToken);
     }
 }
 

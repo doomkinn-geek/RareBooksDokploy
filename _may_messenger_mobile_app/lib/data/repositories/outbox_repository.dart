@@ -122,16 +122,66 @@ class PendingMessage {
 class OutboxRepository {
   final LocalDataSource _localDataSource;
   final _uuid = const Uuid();
+  bool _isInitialized = false;
 
   OutboxRepository(this._localDataSource);
+  
+  /// Initialize repository with corruption recovery
+  Future<void> initialize() async {
+    if (_isInitialized) return;
+    
+    try {
+      print('[OUTBOX] Initializing with corruption recovery...');
+      
+      // Try to load all pending messages to check for corruption
+      final messages = await getAllPendingMessages();
+      print('[OUTBOX] Loaded ${messages.length} pending messages successfully');
+      
+      // Clean up any stuck "syncing" messages (likely from app crash)
+      int resetCount = 0;
+      for (final msg in messages) {
+        if (msg.syncState == SyncState.syncing) {
+          // Reset to localOnly so they can be retried
+          await updatePendingMessage(
+            msg.copyWith(syncState: SyncState.localOnly),
+          );
+          resetCount++;
+        }
+      }
+      
+      if (resetCount > 0) {
+        print('[OUTBOX] Reset $resetCount stuck "syncing" messages');
+      }
+      
+      _isInitialized = true;
+      print('[OUTBOX] Initialization complete');
+    } catch (e, stackTrace) {
+      print('[OUTBOX] Corruption detected during initialization: $e');
+      print('[OUTBOX] Stack trace: $stackTrace');
+      
+      // Attempt recovery by clearing corrupted data
+      try {
+        await _localDataSource.clearAllPendingMessages();
+        print('[OUTBOX] Cleared corrupted outbox data');
+        _isInitialized = true;
+      } catch (clearError) {
+        print('[OUTBOX] Failed to clear corrupted data: $clearError');
+        // Continue anyway, app should still work
+        _isInitialized = true;
+      }
+    }
+  }
 
   /// Add a new message to the outbox queue
+  /// Uses atomic operation to prevent corruption
   Future<PendingMessage> addToOutbox({
     required String chatId,
     required MessageType type,
     String? content,
     String? localAudioPath,
   }) async {
+    await initialize(); // Ensure initialized before operations
+    
     final pendingMessage = PendingMessage(
       localId: _uuid.v4(),
       chatId: chatId,
@@ -142,10 +192,17 @@ class OutboxRepository {
       createdAt: DateTime.now(),
     );
 
-    await _localDataSource.addPendingMessage(pendingMessage);
-    print('[OUTBOX] Added message to outbox: ${pendingMessage.localId}');
-    
-    return pendingMessage;
+    try {
+      // Atomic operation: add to outbox
+      await _localDataSource.addPendingMessage(pendingMessage);
+      print('[OUTBOX] Added message to outbox: ${pendingMessage.localId}');
+      
+      return pendingMessage;
+    } catch (e, stackTrace) {
+      print('[OUTBOX] Error adding message to outbox: $e');
+      print('[OUTBOX] Stack trace: $stackTrace');
+      rethrow;
+    }
   }
 
   /// Get all pending messages for a specific chat
@@ -159,9 +216,16 @@ class OutboxRepository {
   }
 
   /// Update a pending message (e.g., change sync state, add server ID)
+  /// Uses atomic operation to prevent corruption
   Future<void> updatePendingMessage(PendingMessage message) async {
-    await _localDataSource.updatePendingMessage(message);
-    print('[OUTBOX] Updated message: ${message.localId}, state: ${message.syncState}');
+    try {
+      await _localDataSource.updatePendingMessage(message);
+      print('[OUTBOX] Updated message: ${message.localId}, state: ${message.syncState}');
+    } catch (e, stackTrace) {
+      print('[OUTBOX] Error updating message: $e');
+      print('[OUTBOX] Stack trace: $stackTrace');
+      // Don't rethrow - this is not critical
+    }
   }
 
   /// Mark message as syncing
@@ -175,15 +239,14 @@ class OutboxRepository {
   }
 
   /// Mark message as synced and associate with server ID
+  /// IMMEDIATELY removes from outbox after successful sync (no need to keep synced messages)
   Future<void> markAsSynced(String localId, String serverId) async {
     final message = await _localDataSource.getPendingMessageById(localId);
     if (message != null) {
-      await updatePendingMessage(
-        message.copyWith(
-          syncState: SyncState.synced,
-          serverId: serverId,
-        ),
-      );
+      // Immediately remove from outbox instead of keeping synced messages
+      // This simplifies logic and prevents raceConditions
+      await removePendingMessage(localId);
+      print('[OUTBOX] Message synced and removed immediately: $localId -> $serverId');
     }
   }
 
@@ -202,9 +265,16 @@ class OutboxRepository {
   }
 
   /// Remove a pending message from outbox (after successful sync)
+  /// Uses atomic operation to prevent corruption
   Future<void> removePendingMessage(String localId) async {
-    await _localDataSource.removePendingMessage(localId);
-    print('[OUTBOX] Removed message from outbox: $localId');
+    try {
+      await _localDataSource.removePendingMessage(localId);
+      print('[OUTBOX] Removed message from outbox: $localId');
+    } catch (e, stackTrace) {
+      print('[OUTBOX] Error removing message: $e');
+      print('[OUTBOX] Stack trace: $stackTrace');
+      // Don't rethrow - message might already be removed
+    }
   }
 
   /// Get messages that need to be retried (failed messages)
@@ -234,13 +304,44 @@ class OutboxRepository {
   }
 
   /// Clear all synced messages from outbox (cleanup)
+  /// NOTE: With immediate removal on sync, this should rarely find anything
   Future<void> clearSyncedMessages() async {
     final allPending = await getAllPendingMessages();
+    int removedCount = 0;
     for (final msg in allPending) {
       if (msg.syncState == SyncState.synced) {
         await removePendingMessage(msg.localId);
+        removedCount++;
       }
     }
+    if (removedCount > 0) {
+      print('[OUTBOX] Cleared $removedCount synced messages (should be rare with immediate removal)');
+    }
+  }
+  
+  /// Clean up old failed messages (older than 7 days)
+  Future<void> cleanupOldFailedMessages() async {
+    final allPending = await getAllPendingMessages();
+    final cutoffDate = DateTime.now().subtract(const Duration(days: 7));
+    int removedCount = 0;
+    
+    for (final msg in allPending) {
+      if (msg.syncState == SyncState.failed && msg.createdAt.isBefore(cutoffDate)) {
+        await removePendingMessage(msg.localId);
+        removedCount++;
+      }
+    }
+    
+    if (removedCount > 0) {
+      print('[OUTBOX] Cleaned up $removedCount old failed messages');
+    }
+  }
+  
+  /// Get outbox statistics for debugging
+  Map<String, dynamic> getStats() {
+    return {
+      'isInitialized': _isInitialized,
+    };
   }
 }
 

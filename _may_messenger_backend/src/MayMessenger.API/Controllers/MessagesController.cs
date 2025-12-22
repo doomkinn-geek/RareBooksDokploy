@@ -302,42 +302,146 @@ public class MessagesController : ControllerBase
     public async Task<ActionResult<MessageDto>> SendMessage([FromBody] SendMessageDto dto)
     {
         var userId = GetCurrentUserId();
-        // #region agent log
-        var logPath = @"c:\rarebooks\.cursor\debug.log";
-        try {
-            var logEntry = System.Text.Json.JsonSerializer.Serialize(new {
-                location = "MessagesController.cs:302",
-                message = "H1,H2: SendMessage called",
-                data = new { userId, chatId = dto.ChatId, clientMessageId = dto.ClientMessageId, content = dto.Content },
-                timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                sessionId = "debug-session",
-                hypothesisId = "H1,H2"
-            });
-            System.IO.File.AppendAllText(logPath, logEntry + "\n");
-        } catch { }
-        // #endregion
         
-        // Idempotency check: if clientMessageId is provided, check if message already exists
-        if (!string.IsNullOrEmpty(dto.ClientMessageId))
+        _logger.LogInformation($"SendMessage called: userId={userId}, chatId={dto.ChatId}, clientMessageId={dto.ClientMessageId}");
+        
+        // CRITICAL: Use SERIALIZABLE transaction for guaranteed idempotency
+        // This prevents race conditions when multiple requests arrive simultaneously
+        await using var transaction = await _unitOfWork.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+        
+        try
         {
+            // Idempotency check: if clientMessageId is provided, check if message already exists
+            // This check is now protected by SERIALIZABLE transaction
+            if (!string.IsNullOrEmpty(dto.ClientMessageId))
+            {
+                var existingMessage = await _unitOfWork.Messages.GetByClientMessageIdAsync(dto.ClientMessageId);
+                if (existingMessage != null)
+                {
+                    _logger.LogInformation($"Message with ClientMessageId {dto.ClientMessageId} already exists, returning existing message {existingMessage.Id}");
+                    
+                    // Commit transaction (no changes made)
+                    await transaction.CommitAsync();
+                    
+                    var existingMessageDto = new MessageDto
+                    {
+                        Id = existingMessage.Id,
+                        ChatId = existingMessage.ChatId,
+                        SenderId = existingMessage.SenderId,
+                        SenderName = existingMessage.Sender?.DisplayName ?? "Unknown",
+                        Type = existingMessage.Type,
+                        Content = existingMessage.Content,
+                        FilePath = existingMessage.FilePath,
+                        Status = existingMessage.Status,
+                        CreatedAt = existingMessage.CreatedAt,
+                        ClientMessageId = existingMessage.ClientMessageId
+                    };
+                    
+                    return Ok(existingMessageDto);
+                }
+            }
+            
+            // Get sender and chat within transaction
+            var sender = await _unitOfWork.Users.GetByIdAsync(userId);
+            if (sender == null)
+            {
+                _logger.LogError($"User {userId} not found");
+                return StatusCode(500, "Internal server error: User not found");
+            }
+            
+            var chat = await _unitOfWork.Chats.GetByIdAsync(dto.ChatId);
+            if (chat == null)
+            {
+                _logger.LogError($"Chat {dto.ChatId} not found");
+                return BadRequest("Chat not found");
+            }
+            
+            // Create new message
+            var message = new Message
+            {
+                ChatId = dto.ChatId,
+                SenderId = userId,
+                Type = dto.Type,
+                Content = dto.Content,
+                ClientMessageId = dto.ClientMessageId,
+                Status = MessageStatus.Sent
+            };
+            
+            await _unitOfWork.Messages.AddAsync(message);
+            
+            // Create pending acks for reliable delivery (within same transaction)
+            await CreatePendingAcksForMessageAsync(chat, message, userId, AckType.Message);
+            
+            // Save all changes atomically
+            await _unitOfWork.SaveChangesAsync();
+            
+            // Commit transaction - this is the point of no return
+            await transaction.CommitAsync();
+            
+            _logger.LogInformation($"Message {message.Id} created successfully with ClientMessageId {dto.ClientMessageId}");
+            
+            // Track metrics
+            DiagnosticsController.IncrementMessageProcessed();
+            
+            // Build response DTO
+            var messageDto = new MessageDto
+            {
+                Id = message.Id,
+                ChatId = message.ChatId,
+                SenderId = message.SenderId,
+                SenderName = sender.DisplayName,
+                Type = message.Type,
+                Content = message.Content,
+                FilePath = message.FilePath,
+                Status = message.Status,
+                CreatedAt = message.CreatedAt,
+                ClientMessageId = message.ClientMessageId
+            };
+            
+            // Send SignalR notification AFTER transaction commit
+            // This ensures message is persisted before notifying clients
+            try
+            {
+                await _hubContext.Clients.Group(dto.ChatId.ToString()).SendAsync("ReceiveMessage", messageDto);
+                _logger.LogInformation($"SignalR notification sent for message {message.Id}");
+            }
+            catch (Exception ex)
+            {
+                // Log but don't fail the request - message is already saved
+                // Pending acks will handle retry
+                _logger.LogError(ex, $"Failed to send SignalR notification for message {message.Id}");
+            }
+            
+            // Send push notifications to offline users (fire and forget)
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await SendPushNotificationsAsync(chat, sender, messageDto);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"Failed to send push notifications for message {message.Id}");
+                }
+            });
+            
+            return Ok(messageDto);
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException ex) when (ex.InnerException?.Message?.Contains("IX_Messages_ClientMessageId") == true)
+        {
+            // Unique constraint violation - message with this ClientMessageId already exists
+            // This can happen due to race condition despite SERIALIZABLE isolation
+            // Rollback and return existing message
+            await transaction.RollbackAsync();
+            
+            _logger.LogWarning($"Duplicate ClientMessageId detected: {dto.ClientMessageId}, returning existing message");
+            
+            // Track duplicate detection
+            DiagnosticsController.IncrementDuplicateDetected();
+            
             var existingMessage = await _unitOfWork.Messages.GetByClientMessageIdAsync(dto.ClientMessageId);
             if (existingMessage != null)
             {
-                _logger.LogInformation($"Message with ClientMessageId {dto.ClientMessageId} already exists, returning existing message {existingMessage.Id}");
-                // #region agent log
-                try {
-                    var logEntry = System.Text.Json.JsonSerializer.Serialize(new {
-                        location = "MessagesController.cs:326",
-                        message = "H1: Found existing message by clientMessageId",
-                        data = new { clientMessageId = dto.ClientMessageId, existingMessageId = existingMessage.Id },
-                        timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                        sessionId = "debug-session",
-                        hypothesisId = "H1"
-                    });
-                    System.IO.File.AppendAllText(logPath, logEntry + "\n");
-                } catch { }
-                // #endregion
-                
                 var existingMessageDto = new MessageDto
                 {
                     Id = existingMessage.Id,
@@ -354,70 +458,18 @@ public class MessagesController : ControllerBase
                 
                 return Ok(existingMessageDto);
             }
-        }
-        
-        // Create new message
-        var message = new Message
-        {
-            ChatId = dto.ChatId,
-            SenderId = userId,
-            Type = dto.Type,
-            Content = dto.Content,
-            ClientMessageId = dto.ClientMessageId,
-            Status = MessageStatus.Sent
-        };
-        
-        await _unitOfWork.Messages.AddAsync(message);
-        await _unitOfWork.SaveChangesAsync();
-        
-        var sender = await _unitOfWork.Users.GetByIdAsync(userId);
-        if (sender == null)
-        {
-            _logger.LogError($"User {userId} not found after sending message");
-            return StatusCode(500, "Internal server error: User not found");
-        }
-        
-        var messageDto = new MessageDto
-        {
-            Id = message.Id,
-            ChatId = message.ChatId,
-            SenderId = message.SenderId,
-            SenderName = sender.DisplayName,
-            Type = message.Type,
-            Content = message.Content,
-            FilePath = message.FilePath,
-            Status = message.Status,
-            CreatedAt = message.CreatedAt,
-            ClientMessageId = message.ClientMessageId
-        };
-        
-        // Send SignalR notification ONLY to group (not to individual users to avoid duplicates)
-        var chat = await _unitOfWork.Chats.GetByIdAsync(dto.ChatId);
-        if (chat != null)
-        {
-            // Create pending acks for reliable delivery
-            await CreatePendingAcksForMessage(chat, message, userId, AckType.Message);
-            // #region agent log
-            try {
-                var logEntry = System.Text.Json.JsonSerializer.Serialize(new {
-                    location = "MessagesController.cs:408",
-                    message = "H2: Sending SignalR to group",
-                    data = new { chatId = dto.ChatId, groupName = dto.ChatId.ToString(), messageId = message.Id, clientMessageId = message.ClientMessageId },
-                    timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    sessionId = "debug-session",
-                    hypothesisId = "H2"
-                });
-                System.IO.File.AppendAllText(@"c:\rarebooks\.cursor\debug.log", logEntry + "\n");
-            } catch { }
-            // #endregion
             
-            await _hubContext.Clients.Group(dto.ChatId.ToString()).SendAsync("ReceiveMessage", messageDto);
-            
-            // Send push notifications to offline users
-            await SendPushNotificationsAsync(chat, sender, messageDto);
+            // Should never happen, but handle gracefully
+            _logger.LogError($"Duplicate detected but message not found: {dto.ClientMessageId}");
+            return StatusCode(500, "Internal server error");
         }
-        
-        return Ok(messageDto);
+        catch (Exception ex)
+        {
+            // Rollback transaction on any error
+            await transaction.RollbackAsync();
+            _logger.LogError(ex, $"Error creating message: {ex.Message}");
+            throw;
+        }
     }
     
     [HttpPost("audio")]
@@ -889,32 +941,35 @@ public class MessagesController : ControllerBase
     
     /// <summary>
     /// Helper method to create pending acks for all chat participants (except sender)
+    /// IMPORTANT: This method should be called within a transaction
     /// </summary>
+    private async Task CreatePendingAcksForMessageAsync(Chat chat, Message message, Guid senderId, AckType ackType)
+    {
+        foreach (var participant in chat.Participants)
+        {
+            // Don't create ack for sender
+            if (participant.UserId == senderId) continue;
+            
+            var pendingAck = new PendingAck
+            {
+                MessageId = message.Id,
+                RecipientUserId = participant.UserId,
+                Type = ackType,
+                RetryCount = 0,
+                CreatedAt = DateTime.UtcNow
+            };
+            
+            await _unitOfWork.PendingAcks.AddAsync(pendingAck);
+        }
+    }
+    
+    /// <summary>
+    /// Legacy method for backward compatibility - delegates to async version
+    /// </summary>
+    [Obsolete("Use CreatePendingAcksForMessageAsync instead")]
     private async Task CreatePendingAcksForMessage(Chat chat, Message message, Guid senderId, AckType ackType)
     {
-        try
-        {
-            foreach (var participant in chat.Participants)
-            {
-                // Don't create ack for sender
-                if (participant.UserId == senderId) continue;
-                
-                var pendingAck = new PendingAck
-                {
-                    MessageId = message.Id,
-                    RecipientUserId = participant.UserId,
-                    Type = ackType,
-                    RetryCount = 0,
-                    CreatedAt = DateTime.UtcNow
-                };
-                
-                await _unitOfWork.PendingAcks.AddAsync(pendingAck);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, $"Error creating pending acks for message {message.Id}");
-        }
+        await CreatePendingAcksForMessageAsync(chat, message, senderId, ackType);
     }
     
     /// <summary>
@@ -947,6 +1002,7 @@ public class MessagesController : ControllerBase
     
     /// <summary>
     /// Поиск сообщений по содержимому в чатах пользователя
+    /// Использует PostgreSQL full-text search с поддержкой русского языка
     /// </summary>
     [HttpGet("search")]
     public async Task<ActionResult<IEnumerable<MessageSearchResultDto>>> SearchMessages([FromQuery] string query)
@@ -969,21 +1025,11 @@ public class MessagesController : ControllerBase
                 return Ok(new List<MessageSearchResultDto>());
             }
             
-            // Search messages in user's chats
-            var allMessages = new List<Message>();
-            foreach (var chatId in chatIds)
-            {
-                var messages = await _unitOfWork.Messages.GetChatMessagesAsync(chatId, 0, 200); // Get last 200 messages
-                allMessages.AddRange(messages);
-            }
+            // Use optimized full-text search with PostgreSQL GIN index
+            var messages = await _unitOfWork.Messages.SearchMessagesAsync(chatIds, query, take: 50);
             
-            // Filter by query and group by chat
-            var searchResults = allMessages
-                .Where(m => m.Type == Domain.Enums.MessageType.Text && 
-                           m.Content != null && 
-                           m.Content.Contains(query, StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(m => m.CreatedAt)
-                .Take(50) // Limit to 50 results
+            // Group by chat and limit results per chat
+            var searchResults = messages
                 .GroupBy(m => m.ChatId)
                 .SelectMany(g => g.Take(3)) // Max 3 results per chat
                 .Select(m =>
@@ -1000,6 +1046,8 @@ public class MessagesController : ControllerBase
                     };
                 })
                 .ToList();
+            
+            _logger.LogInformation($"Search for '{query}' returned {searchResults.Count} results");
             
             return Ok(searchResults);
         }

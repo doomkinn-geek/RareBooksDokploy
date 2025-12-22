@@ -281,31 +281,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         print('[MSG_LOAD]   - Outbox: localId=${pm.localId}, serverId=${pm.serverId}, state=${pm.syncState}, content="${pm.content}"');
       }
       
-      // Safety cleanup: Remove any old synced/failed messages that somehow remained
-      // This is a defensive measure to prevent duplicates
-      final oneHourAgo = DateTime.now().subtract(const Duration(hours: 1));
-      final toRemove = <PendingMessage>[];
-      for (final pm in pendingMessages) {
-        // Remove synced messages (shouldn't exist, but defensive cleanup)
-        if (pm.syncState == SyncState.synced) {
-          print('[MSG_LOAD] ⚠️ FOUND synced message in outbox (should not happen): ${pm.localId}');
-          toRemove.add(pm);
-        }
-        // Remove very old failed messages (> 1 hour)
-        else if (pm.syncState == SyncState.failed && pm.createdAt.isBefore(oneHourAgo)) {
-          print('[MSG_LOAD] Removing old failed message: ${pm.localId}');
-          toRemove.add(pm);
-        }
-      }
-      
-      // Remove identified messages
-      for (final pm in toRemove) {
-        await _outboxRepository.removePendingMessage(pm.localId);
-        pendingMessages.remove(pm);
-        print('[MSG_LOAD] Cleaned up message from outbox: ${pm.localId}');
-      }
-      
-      print('[MSG_LOAD] After cleanup: ${pendingMessages.length} pending messages remain');
+      // NOTE: Defensive cleanup removed - OutboxRepository now handles cleanup immediately on sync
+      // Synced messages are removed instantly, so they should never appear here
+      print('[MSG_LOAD] Outbox contains ${pendingMessages.length} pending messages (no cleanup needed)');
       
       final profileState = _ref.read(profileProvider);
       final currentUser = profileState.profile;
@@ -327,14 +305,14 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
       
       // STEP 4: Merge synced and local messages, removing duplicates
-      // Use localId as key since it's always unique
+      // Simplified: Use clientMessageId for matching (most reliable)
       final Map<String, Message> allMessages = <String, Message>{};
       
       print('[MSG_LOAD] Merging messages...');
       
-      // Add synced messages first (use localId if available, fallback to id)
+      // Add synced messages first (use clientMessageId if available, fallback to id)
       for (final msg in syncedMessages) {
-        final key = (msg.localId?.isNotEmpty ?? false) ? msg.localId! : msg.id;
+        final key = (msg.clientMessageId?.isNotEmpty ?? false) ? msg.clientMessageId! : msg.id;
         if (key.isNotEmpty) {
           allMessages[key] = msg;
           print('[MSG_LOAD]   + Added synced message with key=$key, id=${msg.id}');
@@ -343,16 +321,18 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
       print('[MSG_LOAD] After adding synced: ${allMessages.length} unique messages');
       
-      // Add local messages (they won't override synced ones with same localId)
+      // Add local messages (use localId as key for pending messages)
+      // They won't override synced ones if clientMessageId matches
       int skipped = 0;
       for (final msg in localMessages) {
-        final key = (msg.localId?.isNotEmpty ?? false) ? msg.localId! : msg.id;
+        // For local messages, use localId as key (they don't have server ID yet)
+        final key = msg.id; // This is actually localId for pending messages
         if (key.isNotEmpty && !allMessages.containsKey(key)) {
           allMessages[key] = msg;
-          print('[MSG_LOAD]   + Added local message with key=$key, id=${msg.id}');
+          print('[MSG_LOAD]   + Added local message with key=$key');
         } else {
           skipped++;
-          print('[MSG_LOAD]   - Skipped duplicate local message with key=$key (already exists)');
+          print('[MSG_LOAD]   - Skipped duplicate local message with key=$key');
         }
       }
       
@@ -925,7 +905,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
     }
     
-    // Enhanced deduplication: check by ID, clientMessageId, localId, and content/file
+    // Simplified deduplication: check only by server ID and clientMessageId
+    // Server-side idempotency handles duplicates, so complex matching is unnecessary
     final exists = state.messages.any((m) {
       // Check by server ID (most reliable)
       if (message.id.isNotEmpty && m.id == message.id) {
@@ -935,41 +916,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
       // Check by clientMessageId (for messages that came back from server)
       if ((message.clientMessageId?.isNotEmpty ?? false) && 
-          (m.clientMessageId == message.clientMessageId || m.localId == message.clientMessageId)) {
+          m.clientMessageId == message.clientMessageId) {
         print('[MSG_RECV] Duplicate detected by clientMessageId: ${message.clientMessageId}');
-        return true;
-      }
-      
-      // Check by localId (client-side ID for pending messages)
-      if ((message.localId?.isNotEmpty ?? false) && m.localId == message.localId) {
-        print('[MSG_RECV] Duplicate detected by localId: ${message.localId}');
-        return true;
-      }
-      
-      // Check by content+sender+time for text messages
-      if (m.type == MessageType.text && message.type == MessageType.text &&
-          m.senderId == message.senderId && 
-          m.content == message.content && 
-          m.createdAt.difference(message.createdAt).abs().inSeconds < 2) {
-        print('[MSG_RECV] Duplicate detected by text content+time');
-        return true;
-      }
-      
-      // Check by filePath for audio messages (same file = same message)
-      if (m.type == MessageType.audio && message.type == MessageType.audio &&
-          m.senderId == message.senderId &&
-          m.filePath != null && message.filePath != null &&
-          m.filePath == message.filePath) {
-        print('[MSG_RECV] Duplicate detected by audio filePath: ${message.filePath}');
-        return true;
-      }
-      
-      // Check by localAudioPath for locally created audio messages
-      if (m.type == MessageType.audio && message.type == MessageType.audio &&
-          m.senderId == message.senderId &&
-          m.localAudioPath != null && message.localAudioPath != null &&
-          m.localAudioPath == message.localAudioPath) {
-        print('[MSG_RECV] Duplicate detected by localAudioPath');
         return true;
       }
       
@@ -1021,17 +969,21 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   }
   
   /// Helper method to match content between local and server messages
+  /// Simplified: Only match by clientMessageId (server handles idempotency)
   bool _matchContent(Message local, Message server) {
-    switch (local.type) {
-      case MessageType.text:
-        return local.content == server.content;
-      case MessageType.audio:
-        // For audio, we check if both have paths (one local, one server)
-        return local.localAudioPath != null && server.filePath != null;
-      case MessageType.image:
-        // For images, we check if both have paths (one local, one server)
-        return local.localImagePath != null && server.filePath != null;
+    // Primary matching by clientMessageId
+    if (local.clientMessageId != null && 
+        local.clientMessageId == server.clientMessageId) {
+      return true;
     }
+    
+    // Fallback: check if localId matches clientMessageId
+    if (local.localId != null && 
+        local.localId == server.clientMessageId) {
+      return true;
+    }
+    
+    return false;
   }
 
   Future<void> _downloadAudioInBackground(Message message) async {

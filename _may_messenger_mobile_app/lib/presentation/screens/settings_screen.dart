@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/models/user_model.dart';
 import '../providers/profile_provider.dart';
 import '../providers/invite_provider.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/qr_invite_dialog.dart';
+import 'debug_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -154,6 +156,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
 
                 const Divider(),
+
+                // Debug Diagnostics (только для админов)
+                if (profile != null && profile.role == UserRole.admin)
+                  ListTile(
+                    leading: const Icon(Icons.bug_report, color: Colors.orange),
+                    title: const Text('🔧 Debug Diagnostics'),
+                    subtitle: const Text('Диагностика и отладка'),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const DebugScreen(),
+                        ),
+                      );
+                    },
+                  ),
 
                 // Выход
                 ListTile(

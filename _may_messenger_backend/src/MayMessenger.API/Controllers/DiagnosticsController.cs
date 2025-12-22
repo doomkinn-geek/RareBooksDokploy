@@ -1,274 +1,297 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
+using MayMessenger.API.Hubs;
 using MayMessenger.Domain.Interfaces;
 
 namespace MayMessenger.API.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class DiagnosticsController : ControllerBase
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IHubContext<ChatHub> _hubContext;
     private readonly ILogger<DiagnosticsController> _logger;
-    private static readonly List<string> _recentLogs = new();
-    private static readonly object _logLock = new();
+    private static readonly DateTime _startTime = DateTime.UtcNow;
+    private static int _totalMessagesProcessed = 0;
+    private static int _duplicatesDetected = 0;
+    private static readonly object _statsLock = new object();
 
-    public DiagnosticsController(IUnitOfWork unitOfWork, ILogger<DiagnosticsController> logger)
+    public DiagnosticsController(
+        IUnitOfWork unitOfWork,
+        IHubContext<ChatHub> hubContext,
+        ILogger<DiagnosticsController> logger)
     {
         _unitOfWork = unitOfWork;
+        _hubContext = hubContext;
         _logger = logger;
     }
 
-    public static void AddLog(string log)
-    {
-        lock (_logLock)
-        {
-            _recentLogs.Add($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}] {log}");
-            if (_recentLogs.Count > 100)
-            {
-                _recentLogs.RemoveAt(0);
-            }
-        }
-    }
-
-    [HttpGet("logs")]
-    public ActionResult<IEnumerable<string>> GetLogs()
-    {
-        lock (_logLock)
-        {
-            return Ok(_recentLogs.ToList());
-        }
-    }
-
-    [HttpDelete("logs")]
-    public ActionResult ClearLogs()
-    {
-        lock (_logLock)
-        {
-            _recentLogs.Clear();
-        }
-        return Ok(new { message = "Logs cleared" });
-    }
-
-    [HttpGet("health")]
-    public async Task<ActionResult> GetHealth()
-    {
-        try
-        {
-            var usersCount = (await _unitOfWork.Users.GetAllAsync()).Count();
-            var chatsCount = (await _unitOfWork.Chats.GetAllAsync()).Count();
-            var messagesCount = (await _unitOfWork.Messages.GetAllAsync()).Count();
-
-            return Ok(new
-            {
-                status = "Healthy",
-                timestamp = DateTime.UtcNow,
-                database = new
-                {
-                    connected = true,
-                    usersCount,
-                    chatsCount,
-                    messagesCount
-                }
-            });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new
-            {
-                status = "Unhealthy",
-                error = ex.Message
-            });
-        }
-    }
-
     /// <summary>
-    /// Get full message lifecycle information for debugging
+    /// Get comprehensive system metrics for monitoring
     /// </summary>
-    [HttpGet("message/{messageId}")]
-    public async Task<ActionResult> GetMessageDiagnostics(Guid messageId)
+    [HttpGet("metrics")]
+    public async Task<ActionResult<object>> GetMetrics()
     {
         try
         {
-            var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
-            if (message == null)
-            {
-                return NotFound(new { error = "Message not found" });
-            }
+            var now = DateTime.UtcNow;
+            var uptime = now - _startTime;
 
-            var chat = await _unitOfWork.Chats.GetByIdAsync(message.ChatId);
-            var receipts = await _unitOfWork.DeliveryReceipts.GetByMessageIdAsync(messageId);
-
-            var receiptDetails = new List<object>();
-            foreach (var receipt in receipts)
-            {
-                var user = await _unitOfWork.Users.GetByIdAsync(receipt.UserId);
-                receiptDetails.Add(new
-                {
-                    userId = receipt.UserId,
-                    userName = user?.DisplayName ?? "Unknown",
-                    deliveredAt = receipt.DeliveredAt,
-                    readAt = receipt.ReadAt
-                });
-            }
-
-            return Ok(new
-            {
-                message = new
-                {
-                    id = message.Id,
-                    chatId = message.ChatId,
-                    senderId = message.SenderId,
-                    senderName = message.Sender?.DisplayName,
-                    type = message.Type.ToString(),
-                    content = message.Content,
-                    status = message.Status.ToString(),
-                    createdAt = message.CreatedAt,
-                    deliveredAt = message.DeliveredAt,
-                    readAt = message.ReadAt
-                },
-                chat = new
-                {
-                    id = chat?.Id,
-                    type = chat?.Type.ToString(),
-                    participantsCount = chat?.Participants.Count
-                },
-                deliveryReceipts = receiptDetails,
-                summary = new
-                {
-                    totalParticipants = chat?.Participants.Count ?? 0,
-                    deliveredCount = receipts.Count(r => r.DeliveredAt != null),
-                    readCount = receipts.Count(r => r.ReadAt != null),
-                    pendingDelivery = (chat?.Participants.Count ?? 0) - 1 - receipts.Count(r => r.DeliveredAt != null)
-                }
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, $"Error getting diagnostics for message {messageId}");
-            return StatusCode(500, new { error = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Get user's SignalR connection state
-    /// </summary>
-    [HttpGet("user/{userId}/connection-state")]
-    public async Task<ActionResult> GetUserConnectionState(Guid userId)
-    {
-        try
-        {
-            var user = await _unitOfWork.Users.GetByIdAsync(userId);
-            if (user == null)
-            {
-                return NotFound(new { error = "User not found" });
-            }
-
-            // Note: In a real implementation, you would track SignalR connections
-            // For now, return basic user info
-            return Ok(new
-            {
-                userId = user.Id,
-                displayName = user.DisplayName,
-                phoneNumber = user.PhoneNumber,
-                createdAt = user.CreatedAt,
-                // Connection info would come from a connection tracking service
-                connectionStatus = "Unknown (requires connection tracking implementation)"
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, $"Error getting connection state for user {userId}");
-            return StatusCode(500, new { error = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Get delivery receipts for a specific message
-    /// </summary>
-    [HttpGet("delivery-receipts/{messageId}")]
-    public async Task<ActionResult> GetDeliveryReceipts(Guid messageId)
-    {
-        try
-        {
-            var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
-            if (message == null)
-            {
-                return NotFound(new { error = "Message not found" });
-            }
-
-            var receipts = await _unitOfWork.DeliveryReceipts.GetByMessageIdAsync(messageId);
-            var receiptDetails = new List<object>();
-
-            foreach (var receipt in receipts)
-            {
-                var user = await _unitOfWork.Users.GetByIdAsync(receipt.UserId);
-                receiptDetails.Add(new
-                {
-                    userId = receipt.UserId,
-                    userName = user?.DisplayName ?? "Unknown",
-                    phoneNumber = user?.PhoneNumber ?? "Unknown",
-                    deliveredAt = receipt.DeliveredAt,
-                    deliveredAgo = receipt.DeliveredAt.HasValue 
-                        ? $"{(DateTime.UtcNow - receipt.DeliveredAt.Value).TotalSeconds:F0}s ago"
-                        : "Not delivered",
-                    readAt = receipt.ReadAt,
-                    readAgo = receipt.ReadAt.HasValue
-                        ? $"{(DateTime.UtcNow - receipt.ReadAt.Value).TotalSeconds:F0}s ago"
-                        : "Not read"
-                });
-            }
-
-            return Ok(new
-            {
-                messageId,
-                totalReceipts = receipts.Count(),
-                receipts = receiptDetails
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, $"Error getting delivery receipts for message {messageId}");
-            return StatusCode(500, new { error = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Get recent messages with their status
-    /// </summary>
-    [HttpGet("recent-messages")]
-    public async Task<ActionResult> GetRecentMessages([FromQuery] int count = 20)
-    {
-        try
-        {
+            // Database metrics
             var allMessages = await _unitOfWork.Messages.GetAllAsync();
-            var recentMessages = allMessages
-                .OrderByDescending(m => m.CreatedAt)
-                .Take(count)
-                .Select(m => new
+            var totalMessages = allMessages.Count();
+            var allUsers = await _unitOfWork.Users.GetAllAsync();
+            var totalUsers = allUsers.Count();
+            var allChats = await _unitOfWork.Chats.GetAllAsync();
+            var totalChats = allChats.Count();
+            var onlineUsers = await _unitOfWork.Users.GetOnlineUsersAsync();
+            var onlineCount = onlineUsers.Count();
+
+            // Pending operations
+            var pendingAcks = await _unitOfWork.PendingAcks.GetAllAsync();
+            var pendingAckCount = pendingAcks.Count();
+            var pendingByType = pendingAcks
+                .GroupBy(a => a.Type)
+                .ToDictionary(g => g.Key.ToString(), g => g.Count());
+
+            // Recent activity (last hour)
+            var oneHourAgo = now.AddHours(-1);
+            var recentMessages = await _unitOfWork.Messages.GetMessagesAfterTimestampAsync(
+                Guid.Empty, // Will be filtered by chat
+                oneHourAgo,
+                1000);
+            var recentMessageCount = recentMessages.Count();
+
+            // Status event metrics
+            var recentStatusEvents = await _unitOfWork.MessageStatusEvents.GetAllAsync();
+            var recentStatusEventCount = recentStatusEvents
+                .Count(e => e.CreatedAt > oneHourAgo);
+
+            var metrics = new
+            {
+                Timestamp = now,
+                Uptime = new
                 {
-                    id = m.Id,
-                    chatId = m.ChatId,
-                    senderName = m.Sender?.DisplayName ?? "Unknown",
-                    type = m.Type.ToString(),
-                    status = m.Status.ToString(),
-                    createdAt = m.CreatedAt,
-                    deliveredAt = m.DeliveredAt,
-                    readAt = m.ReadAt,
-                    ageSeconds = (DateTime.UtcNow - m.CreatedAt).TotalSeconds
+                    Days = uptime.Days,
+                    Hours = uptime.Hours,
+                    Minutes = uptime.Minutes,
+                    TotalSeconds = uptime.TotalSeconds
+                },
+                Database = new
+                {
+                    TotalMessages = totalMessages,
+                    TotalUsers = totalUsers,
+                    TotalChats = totalChats,
+                    OnlineUsers = onlineCount
+                },
+                Activity = new
+                {
+                    MessagesLastHour = recentMessageCount,
+                    StatusEventsLastHour = recentStatusEventCount,
+                    TotalMessagesProcessed = _totalMessagesProcessed,
+                    DuplicatesDetected = _duplicatesDetected
+                },
+                PendingOperations = new
+                {
+                    TotalPendingAcks = pendingAckCount,
+                    ByType = pendingByType
+                },
+                Performance = new
+                {
+                    AverageMessagesPerMinute = uptime.TotalMinutes > 0 
+                        ? Math.Round(_totalMessagesProcessed / uptime.TotalMinutes, 2) 
+                        : 0,
+                    DuplicateRate = _totalMessagesProcessed > 0 
+                        ? Math.Round((_duplicatesDetected * 100.0) / _totalMessagesProcessed, 2) 
+                        : 0
+                }
+            };
+
+            return Ok(metrics);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting diagnostics metrics");
+            return StatusCode(500, "Error retrieving metrics");
+        }
+    }
+
+    /// <summary>
+    /// Get detailed SignalR connection information
+    /// </summary>
+    [HttpGet("signalr")]
+    public ActionResult<object> GetSignalRInfo()
+    {
+        // Note: SignalR doesn't expose connection count directly
+        // This would require custom tracking in ChatHub
+        var info = new
+        {
+            HubPath = "/hubs/chat",
+            Status = "Active",
+            Features = new[]
+            {
+                "WebSockets",
+                "Automatic Reconnect",
+                "Heartbeat",
+                "Incremental Sync",
+                "Batch Operations"
+            }
+        };
+
+        return Ok(info);
+    }
+
+    /// <summary>
+    /// Get pending acks details for debugging
+    /// </summary>
+    [HttpGet("pending-acks")]
+    public async Task<ActionResult<object>> GetPendingAcks([FromQuery] int take = 50)
+    {
+        try
+        {
+            var pendingAcks = await _unitOfWork.PendingAcks.GetAllAsync();
+            var acks = pendingAcks
+                .OrderByDescending(a => a.CreatedAt)
+                .Take(take)
+                .Select(a => new
+                {
+                    a.Id,
+                    a.MessageId,
+                    a.RecipientUserId,
+                    Type = a.Type.ToString(),
+                    a.RetryCount,
+                    a.CreatedAt,
+                    a.LastRetryAt,
+                    Age = DateTime.UtcNow - a.CreatedAt
                 })
                 .ToList();
 
             return Ok(new
             {
-                count = recentMessages.Count,
-                messages = recentMessages
+                TotalCount = pendingAcks.Count(),
+                Items = acks
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting recent messages");
-            return StatusCode(500, new { error = ex.Message });
+            _logger.LogError(ex, "Error getting pending acks");
+            return StatusCode(500, "Error retrieving pending acks");
+        }
+    }
+
+    /// <summary>
+    /// Get recent status events for a message (for debugging)
+    /// </summary>
+    [HttpGet("status-events/{messageId}")]
+    public async Task<ActionResult<object>> GetMessageStatusEvents(Guid messageId)
+    {
+        try
+        {
+            var events = await _unitOfWork.MessageStatusEvents.GetMessageEventsAsync(messageId);
+            
+            var eventsList = events.Select(e => new
+            {
+                e.Id,
+                e.MessageId,
+                Status = e.Status.ToString(),
+                e.UserId,
+                e.Source,
+                e.Timestamp,
+                e.CreatedAt
+            }).ToList();
+
+            var aggregateStatus = events.Any() 
+                ? await _unitOfWork.MessageStatusEvents.CalculateAggregateStatusAsync(messageId)
+                : Domain.Enums.MessageStatus.Sending;
+
+            return Ok(new
+            {
+                MessageId = messageId,
+                Events = eventsList,
+                AggregateStatus = aggregateStatus.ToString(),
+                EventCount = eventsList.Count
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Error getting status events for message {messageId}");
+            return StatusCode(500, "Error retrieving status events");
+        }
+    }
+
+    /// <summary>
+    /// Internal method to track message processing stats
+    /// Called from MessagesController
+    /// </summary>
+    public static void IncrementMessageProcessed()
+    {
+        lock (_statsLock)
+        {
+            _totalMessagesProcessed++;
+        }
+    }
+
+    /// <summary>
+    /// Internal method to track duplicate detection
+    /// Called from MessagesController when duplicate is detected
+    /// </summary>
+    public static void IncrementDuplicateDetected()
+    {
+        lock (_statsLock)
+        {
+            _duplicatesDetected++;
+        }
+    }
+
+    /// <summary>
+    /// Health check specifically for diagnostics
+    /// </summary>
+    [HttpGet("health")]
+    [AllowAnonymous]
+    public async Task<ActionResult<object>> GetHealth()
+    {
+        try
+        {
+            // Check database connectivity
+            var canConnectToDb = false;
+            try
+            {
+                await _unitOfWork.Users.GetAllAsync();
+                canConnectToDb = true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Database health check failed");
+            }
+
+            // Check pending acks queue health
+            var pendingAcks = await _unitOfWork.PendingAcks.GetAllAsync();
+            var oldAcks = pendingAcks.Count(a => DateTime.UtcNow - a.CreatedAt > TimeSpan.FromMinutes(5));
+            var pendingAcksHealthy = oldAcks < 100; // Threshold: less than 100 acks older than 5 minutes
+
+            var health = new
+            {
+                Status = canConnectToDb && pendingAcksHealthy ? "Healthy" : "Degraded",
+                Timestamp = DateTime.UtcNow,
+                Checks = new
+                {
+                    Database = canConnectToDb ? "OK" : "Failed",
+                    PendingAcksQueue = pendingAcksHealthy ? "OK" : $"Warning: {oldAcks} old acks",
+                }
+            };
+
+            return Ok(health);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in health check");
+            return StatusCode(500, new { Status = "Unhealthy", Error = ex.Message });
         }
     }
 }
+
+
 

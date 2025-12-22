@@ -52,6 +52,13 @@ public class UserRepository : Repository<User>, IUserRepository
         
         return updatedCount;
     }
+    
+    public async Task<IEnumerable<User>> GetOnlineUsersAsync(CancellationToken cancellationToken = default)
+    {
+        return await _dbSet
+            .Where(u => u.IsOnline)
+            .ToListAsync(cancellationToken);
+    }
 }
 
 

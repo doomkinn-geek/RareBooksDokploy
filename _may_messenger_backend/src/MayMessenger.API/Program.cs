@@ -56,6 +56,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IChatRepository, ChatRepository>();
 builder.Services.AddScoped<IMessageRepository, MessageRepository>();
+builder.Services.AddScoped<IMessageStatusEventRepository, MessageStatusEventRepository>();
 builder.Services.AddScoped<IInviteLinkRepository, InviteLinkRepository>();
 builder.Services.AddScoped<IFcmTokenRepository, FcmTokenRepository>();
 builder.Services.AddScoped<IContactRepository, ContactRepository>();
@@ -77,6 +78,7 @@ builder.Services.AddScoped<MayMessenger.API.Services.MigrationService>();
 builder.Services.AddHostedService<MayMessenger.Application.Services.MediaCleanupService>(); // Audio + Images cleanup
 builder.Services.AddHostedService<MayMessenger.Application.Services.CleanupInvalidTokensService>();
 builder.Services.AddHostedService<MayMessenger.API.Services.AckRetryService>(); // ACK retry for reliable delivery
+builder.Services.AddHostedService<MayMessenger.API.Services.PresenceMonitorService>(); // User presence monitoring
 
 // JWT Authentication
 var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "YourSuperSecretKeyForJWTTokenGeneration123456789";

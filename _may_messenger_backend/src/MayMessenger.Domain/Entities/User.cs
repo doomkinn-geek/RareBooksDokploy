@@ -15,6 +15,7 @@ public class User : BaseEntity
     // Online status tracking
     public bool IsOnline { get; set; } = false;
     public DateTime? LastSeenAt { get; set; }
+    public DateTime? LastHeartbeatAt { get; set; } // For presence monitoring
     
     // Navigation properties
     public User? InvitedByUser { get; set; }

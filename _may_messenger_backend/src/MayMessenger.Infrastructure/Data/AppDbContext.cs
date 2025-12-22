@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<Chat> Chats { get; set; } = null!;
     public DbSet<ChatParticipant> ChatParticipants { get; set; } = null!;
     public DbSet<Message> Messages { get; set; } = null!;
+    public DbSet<MessageStatusEvent> MessageStatusEvents { get; set; } = null!;
     public DbSet<InviteLink> InviteLinks { get; set; } = null!;
     public DbSet<FcmToken> FcmTokens { get; set; } = null!;
     public DbSet<Contact> Contacts { get; set; } = null!;
@@ -68,7 +69,12 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.ChatId, e.CreatedAt });
-            entity.HasIndex(e => e.ClientMessageId); // For idempotency check
+            
+            // CRITICAL: Unique index on ClientMessageId for idempotency
+            // Filters out NULL values to allow messages without ClientMessageId
+            entity.HasIndex(e => e.ClientMessageId)
+                .IsUnique()
+                .HasFilter("\"ClientMessageId\" IS NOT NULL");
             
             entity.HasOne(e => e.Chat)
                 .WithMany(c => c.Messages)
@@ -79,6 +85,30 @@ public class AppDbContext : DbContext
                 .WithMany(u => u.Messages)
                 .HasForeignKey(e => e.SenderId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+        
+        // MessageStatusEvent configuration (Event Sourcing)
+        modelBuilder.Entity<MessageStatusEvent>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            
+            // Index for querying events by message
+            entity.HasIndex(e => new { e.MessageId, e.Timestamp });
+            
+            // Index for querying events by user (for group chat status aggregation)
+            entity.HasIndex(e => new { e.UserId, e.Timestamp });
+            
+            entity.Property(e => e.Source).IsRequired().HasMaxLength(50);
+            
+            entity.HasOne(e => e.Message)
+                .WithMany()
+                .HasForeignKey(e => e.MessageId)
+                .OnDelete(DeleteBehavior.Cascade);
+                
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
         
         // InviteLink configuration
