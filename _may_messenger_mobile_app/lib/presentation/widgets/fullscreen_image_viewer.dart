@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
-class FullScreenImageViewer extends StatelessWidget {
+class FullScreenImageViewer extends StatefulWidget {
   final String? imageUrl;
   final String? localPath;
   final String senderName;
@@ -17,19 +17,50 @@ class FullScreenImageViewer extends StatelessWidget {
   });
 
   @override
+  State<FullScreenImageViewer> createState() => _FullScreenImageViewerState();
+}
+
+class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
+  double _dragOffset = 0.0;
+  double _opacity = 1.0;
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          // Image viewer
-          Center(
-            child: InteractiveViewer(
-              minScale: 0.5,
-              maxScale: 4.0,
-              child: _buildImage(),
-            ),
-          ),
+      backgroundColor: Colors.black.withOpacity(_opacity),
+      body: GestureDetector(
+        onVerticalDragUpdate: (details) {
+          setState(() {
+            _dragOffset += details.delta.dy;
+            // Calculate opacity based on drag distance (fade out as dragging down)
+            _opacity = (1.0 - (_dragOffset.abs() / 300)).clamp(0.0, 1.0);
+          });
+        },
+        onVerticalDragEnd: (details) {
+          // Dismiss if dragged more than 100 pixels or fast velocity
+          if (_dragOffset.abs() > 100 || 
+              details.velocity.pixelsPerSecond.dy.abs() > 500) {
+            Navigator.of(context).pop();
+          } else {
+            // Reset position if not enough drag
+            setState(() {
+              _dragOffset = 0.0;
+              _opacity = 1.0;
+            });
+          }
+        },
+        child: Transform.translate(
+          offset: Offset(0, _dragOffset),
+          child: Stack(
+            children: [
+              // Image viewer
+              Center(
+                child: InteractiveViewer(
+                  minScale: 0.5,
+                  maxScale: 4.0,
+                  child: _buildImage(),
+                ),
+              ),
           
           // Top app bar
           Positioned(
@@ -61,7 +92,7 @@ class FullScreenImageViewer extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            senderName,
+                            widget.senderName,
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 16,
@@ -69,7 +100,7 @@ class FullScreenImageViewer extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            _formatDate(createdAt),
+                            _formatDate(widget.createdAt),
                             style: const TextStyle(
                               color: Colors.white70,
                               fontSize: 12,
@@ -82,21 +113,23 @@ class FullScreenImageViewer extends StatelessWidget {
                 ),
               ),
             ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildImage() {
-    if (localPath != null && File(localPath!).existsSync()) {
+    if (widget.localPath != null && File(widget.localPath!).existsSync()) {
       return Image.file(
-        File(localPath!),
+        File(widget.localPath!),
         fit: BoxFit.contain,
       );
-    } else if (imageUrl != null) {
+    } else if (widget.imageUrl != null) {
       return CachedNetworkImage(
-        imageUrl: imageUrl!,
+        imageUrl: widget.imageUrl!,
         fit: BoxFit.contain,
         placeholder: (context, url) => const Center(
           child: CircularProgressIndicator(color: Colors.white),

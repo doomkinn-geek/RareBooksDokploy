@@ -23,19 +23,27 @@ final signalRConnectionProvider = StateNotifierProvider<SignalRConnectionNotifie
 
 class SignalRConnectionState {
   final bool isConnected;
+  final bool isReconnecting; // Visible reconnecting (shows banner)
+  final bool isSilentReconnecting; // Silent reconnecting (no banner)
   final String? error;
 
   SignalRConnectionState({
     this.isConnected = false,
+    this.isReconnecting = false,
+    this.isSilentReconnecting = false,
     this.error,
   });
 
   SignalRConnectionState copyWith({
     bool? isConnected,
+    bool? isReconnecting,
+    bool? isSilentReconnecting,
     String? error,
   }) {
     return SignalRConnectionState(
       isConnected: isConnected ?? this.isConnected,
+      isReconnecting: isReconnecting ?? this.isReconnecting,
+      isSilentReconnecting: isSilentReconnecting ?? this.isSilentReconnecting,
       error: error,
     );
   }
@@ -325,6 +333,50 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
     } catch (e) {
       print('[SignalR] Reconnect failed: $e');
       state = state.copyWith(error: e.toString(), isConnected: false);
+    }
+  }
+  
+  /// Set visible reconnecting state (shows banner to user)
+  void setReconnecting(bool value) {
+    print('[SignalR] Setting reconnecting state: $value');
+    state = state.copyWith(
+      isReconnecting: value,
+      isSilentReconnecting: false, // Clear silent reconnecting if setting visible reconnecting
+    );
+  }
+  
+  /// Perform silent reconnect without showing banner
+  Future<void> silentReconnect() async {
+    if (state.isConnected) {
+      print('[SignalR] Already connected, skipping silent reconnect');
+      return;
+    }
+    
+    print('[SignalR] Starting silent reconnect');
+    state = state.copyWith(
+      isSilentReconnecting: true,
+      isReconnecting: false, // Clear visible reconnecting
+    );
+    
+    try {
+      await _signalRService.forceReconnectFromLifecycle();
+      
+      final isConnected = _signalRService.isConnected;
+      state = state.copyWith(
+        isConnected: isConnected,
+        isSilentReconnecting: false,
+      );
+      
+      if (isConnected) {
+        print('[SignalR] Silent reconnect successful');
+      }
+    } catch (e) {
+      print('[SignalR] Silent reconnect failed: $e');
+      state = state.copyWith(
+        error: e.toString(),
+        isConnected: false,
+        isSilentReconnecting: false,
+      );
     }
   }
 

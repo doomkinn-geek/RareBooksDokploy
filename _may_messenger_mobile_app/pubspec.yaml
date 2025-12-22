@@ -86,3 +86,6 @@ dependency_overrides:
 
 flutter:
   uses-material-design: true
+  
+  assets:
+    - assets/chat_background.png

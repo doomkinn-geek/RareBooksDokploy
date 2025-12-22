@@ -29,6 +29,7 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
   String? _highlightedMessageId;
+  bool _hasInitialScrolled = false; // Track if we've scrolled on first load
 
   @override
   void initState() {
@@ -189,16 +190,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       displayTitle = 'Чат';
     }
 
-    // Scroll to bottom when new messages arrive or to highlight message
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (messagesState.messages.isNotEmpty) {
+    // Scroll to bottom only on first load (not on every rebuild)
+    if (!_hasInitialScrolled && 
+        messagesState.messages.isNotEmpty && 
+        !messagesState.isLoading) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_highlightedMessageId != null) {
           _scrollToHighlightedMessage(messagesState.messages);
         } else {
           _scrollToBottom();
         }
-      }
-    });
+        _hasInitialScrolled = true;
+      });
+    }
 
     // Build online status subtitle for private chats
     String? onlineStatusText;
@@ -252,48 +256,69 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          const ConnectionStatusBanner(),
-          Expanded(
-            child: messagesState.isLoading && messagesState.messages.isEmpty
-                ? const Center(child: CircularProgressIndicator())
-                : messagesState.messages.isEmpty
-                    ? const Center(child: Text('Нет сообщений'))
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.all(16),
-                        itemCount: messagesState.messages.length,
-                        itemBuilder: (context, index) {
-                          final message = messagesState.messages[index];
-                          final isHighlighted = message.id == _highlightedMessageId;
-                          return MessageBubble(
-                            message: message,
-                            isHighlighted: isHighlighted,
-                          );
-                        },
-                      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/chat_background.png'),
+            fit: BoxFit.cover,
+            opacity: 0.3, // Subtle background, not too distracting
           ),
-          MessageInput(
+        ),
+        child: Column(
+          children: [
+            const ConnectionStatusBanner(),
+            Expanded(
+              child: messagesState.isLoading && messagesState.messages.isEmpty
+                  ? const Center(child: CircularProgressIndicator())
+                  : messagesState.messages.isEmpty
+                      ? const Center(child: Text('Нет сообщений'))
+                      : ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.all(16),
+                          itemCount: messagesState.messages.length,
+                          itemBuilder: (context, index) {
+                            final message = messagesState.messages[index];
+                            final isHighlighted = message.id == _highlightedMessageId;
+                            return MessageBubble(
+                              message: message,
+                              isHighlighted: isHighlighted,
+                            );
+                          },
+                        ),
+            ),
+            MessageInput(
             chatId: widget.chatId,
             isSending: messagesState.isSending,
             onSendMessage: (content) {
               ref
                   .read(messagesProvider(widget.chatId).notifier)
                   .sendMessage(content);
+              // Scroll to bottom after sending message
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (mounted) _scrollToBottom();
+              });
             },
             onSendAudio: (audioPath) {
               ref
                   .read(messagesProvider(widget.chatId).notifier)
                   .sendAudioMessage(audioPath);
+              // Scroll to bottom after sending audio
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (mounted) _scrollToBottom();
+              });
             },
             onSendImage: (imagePath) {
               ref
                   .read(messagesProvider(widget.chatId).notifier)
                   .sendImageMessage(imagePath);
+              // Scroll to bottom after sending image
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (mounted) _scrollToBottom();
+              });
             },
           ),
-        ],
+          ],
+        ),
       ),
     );
   }

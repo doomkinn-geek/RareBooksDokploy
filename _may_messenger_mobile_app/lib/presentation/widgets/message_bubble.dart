@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -36,6 +37,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   bool _hasMarkedAsPlayed = false; // Track if we've already marked as played
   Duration? _duration;
   Duration? _position;
+  Timer? _markAsPlayedTimer; // Debounce timer for mark as played
 
   @override
   void initState() {
@@ -58,10 +60,18 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       });
       
       // Mark as played when first started playing (and user is not the sender)
+      // Use debounce to prevent multiple rapid calls
       if (state.playing && 
           !_hasMarkedAsPlayed && 
           widget.message.type == MessageType.audio) {
-        _markAudioAsPlayed();
+        // Cancel previous timer if exists
+        _markAsPlayedTimer?.cancel();
+        // Debounce: wait 200ms before marking to avoid race conditions
+        _markAsPlayedTimer = Timer(const Duration(milliseconds: 200), () {
+          if (mounted && !_hasMarkedAsPlayed) {
+            _markAudioAsPlayed();
+          }
+        });
       }
       
       // Сброс при окончании воспроизведения
@@ -182,6 +192,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
 
   @override
   void dispose() {
+    _markAsPlayedTimer?.cancel();
     _audioPlayer.dispose();
     super.dispose();
   }
@@ -400,6 +411,15 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   }
 
   void _showFullScreenImage(BuildContext context) {
+    final contactsNames = ref.read(contactsNamesProvider);
+    
+    // Try to get contact name from phone book, fallback to sender name from message
+    String displayName = widget.message.senderName;
+    if (contactsNames[widget.message.senderId] != null && 
+        contactsNames[widget.message.senderId]!.isNotEmpty) {
+      displayName = contactsNames[widget.message.senderId]!;
+    }
+    
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => FullScreenImageViewer(
@@ -407,7 +427,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
               ? '${ApiConstants.baseUrl}${widget.message.filePath}'
               : null,
           localPath: widget.message.localImagePath,
-          senderName: widget.message.senderName,
+          senderName: displayName, // Use contact name if available
           createdAt: widget.message.createdAt,
         ),
       ),
@@ -438,7 +458,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   }
 
   Future<void> _markAudioAsPlayed() async {
+    // CRITICAL: Set flag IMMEDIATELY to prevent race conditions
     if (_hasMarkedAsPlayed) return;
+    _hasMarkedAsPlayed = true;
     
     final profileState = ref.read(profileProvider);
     final currentUserId = profileState.profile?.id;
@@ -448,18 +470,17 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       return;
     }
     
-    _hasMarkedAsPlayed = true;
-    
     try {
       // Call API to mark as played
       await ref.read(messagesProvider(widget.message.chatId).notifier)
           .markAudioAsPlayed(widget.message.id);
+      print('[AUDIO] Marked as played: ${widget.message.id}');
     } catch (e) {
       _logger.debug('message_bubble', 'Failed to mark audio as played: $e', {
         'messageId': widget.message.id
       });
-      // Reset flag to retry later
-      _hasMarkedAsPlayed = false;
+      print('[AUDIO] Failed to mark as played: $e');
+      // Don't reset flag - queue will retry automatically
     }
   }
 

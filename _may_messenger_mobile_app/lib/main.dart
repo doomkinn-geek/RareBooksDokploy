@@ -156,18 +156,19 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         
         print('[LIFECYCLE] App resumed after ${pauseDuration.inSeconds}s pause');
         
-        // If app was in background > 30 seconds, do full reconnect + sync
-        if (pauseDuration.inSeconds > 30) {
-          print('[LIFECYCLE] Long pause detected, performing full resume sync');
+        // Show reconnecting banner only for long pauses (> 10 seconds)
+        if (pauseDuration.inSeconds > 10) {
+          print('[LIFECYCLE] Long pause detected (> 10s), showing reconnecting banner');
+          ref.read(signalRConnectionProvider.notifier).setReconnecting(true);
           _performResumeSync();
         } else {
-          // Short pause, just check connection
-          print('[LIFECYCLE] Short pause, checking SignalR connection');
+          // Short pause, silent reconnect without banner
+          print('[LIFECYCLE] Short pause (<= 10s), performing silent reconnect');
           final signalRState = ref.read(signalRConnectionProvider);
           
           if (!signalRState.isConnected) {
-            print('[LIFECYCLE] SignalR disconnected - attempting reconnect');
-            ref.read(signalRConnectionProvider.notifier).reconnect();
+            print('[LIFECYCLE] SignalR disconnected - attempting silent reconnect');
+            ref.read(signalRConnectionProvider.notifier).silentReconnect();
           } else {
             print('[LIFECYCLE] SignalR already connected');
           }
@@ -197,8 +198,13 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
       
       print('[LIFECYCLE] Resume sync completed successfully');
+      
+      // Clear reconnecting banner
+      ref.read(signalRConnectionProvider.notifier).setReconnecting(false);
     } catch (e) {
       print('[LIFECYCLE] Error during resume sync: $e');
+      // Clear reconnecting banner even on error
+      ref.read(signalRConnectionProvider.notifier).setReconnecting(false);
       // Non-fatal, app will continue to work
     }
   }

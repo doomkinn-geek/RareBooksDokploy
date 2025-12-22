@@ -311,191 +311,141 @@ public class MessagesController : ControllerBase
         
         _logger.LogInformation($"SendMessage called: userId={userId}, chatId={dto.ChatId}, clientMessageId={dto.ClientMessageId}");
         
-        // CRITICAL: Use SERIALIZABLE transaction for guaranteed idempotency
-        // This prevents race conditions when multiple requests arrive simultaneously
-        await using var transaction = await _unitOfWork.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+        // Optimistic approach: use READ_COMMITTED for better concurrency, handle conflicts with retry
+        const int maxRetries = 3;
+        int attempt = 0;
         
-        try
+        while (attempt < maxRetries)
         {
-        // Idempotency check: if clientMessageId is provided, check if message already exists
-            // This check is now protected by SERIALIZABLE transaction
-        if (!string.IsNullOrEmpty(dto.ClientMessageId))
-        {
-            var existingMessage = await _unitOfWork.Messages.GetByClientMessageIdAsync(dto.ClientMessageId);
-            if (existingMessage != null)
-            {
-                _logger.LogInformation($"Message with ClientMessageId {dto.ClientMessageId} already exists, returning existing message {existingMessage.Id}");
-                    
-                    // Commit transaction (no changes made)
-                    await transaction.CommitAsync();
-                
-                var existingMessageDto = new MessageDto
-                {
-                    Id = existingMessage.Id,
-                    ChatId = existingMessage.ChatId,
-                    SenderId = existingMessage.SenderId,
-                    SenderName = existingMessage.Sender?.DisplayName ?? "Unknown",
-                    Type = existingMessage.Type,
-                    Content = existingMessage.Content,
-                    FilePath = existingMessage.FilePath,
-                    Status = existingMessage.Status,
-                    CreatedAt = existingMessage.CreatedAt,
-                    ClientMessageId = existingMessage.ClientMessageId
-                };
-                
-                return Ok(existingMessageDto);
-            }
-        }
+            attempt++;
             
-            // Get sender and chat within transaction
-            var sender = await _unitOfWork.Users.GetByIdAsync(userId);
-            if (sender == null)
-            {
-                _logger.LogError($"User {userId} not found");
-                return StatusCode(500, "Internal server error: User not found");
-            }
-            
-            var chat = await _unitOfWork.Chats.GetByIdAsync(dto.ChatId);
-            if (chat == null)
-            {
-                _logger.LogError($"Chat {dto.ChatId} not found");
-                return BadRequest("Chat not found");
-            }
-        
-        // Create new message
-        var message = new Message
-        {
-            ChatId = dto.ChatId,
-            SenderId = userId,
-            Type = dto.Type,
-            Content = dto.Content,
-            ClientMessageId = dto.ClientMessageId,
-            Status = MessageStatus.Sent
-        };
-        
-        await _unitOfWork.Messages.AddAsync(message);
-            
-            // Create pending acks for reliable delivery (within same transaction)
-            await CreatePendingAcksForMessageAsync(chat, message, userId, AckType.Message);
-            
-            // Save all changes atomically
-        await _unitOfWork.SaveChangesAsync();
-        
-            // Commit transaction - this is the point of no return
-            await transaction.CommitAsync();
-            
-            _logger.LogInformation($"Message {message.Id} created successfully with ClientMessageId {dto.ClientMessageId}");
-            
-            // Track metrics
-            DiagnosticsController.IncrementMessageProcessed();
-            
-            // Build response DTO
-        var messageDto = new MessageDto
-        {
-            Id = message.Id,
-            ChatId = message.ChatId,
-            SenderId = message.SenderId,
-            SenderName = sender.DisplayName,
-            Type = message.Type,
-            Content = message.Content,
-            FilePath = message.FilePath,
-            Status = message.Status,
-            CreatedAt = message.CreatedAt,
-            ClientMessageId = message.ClientMessageId
-        };
-        
-            // Send SignalR notification AFTER transaction commit
-            // This ensures message is persisted before notifying clients
             try
             {
-            await _hubContext.Clients.Group(dto.ChatId.ToString()).SendAsync("ReceiveMessage", messageDto);
-                _logger.LogInformation($"SignalR notification sent for message {message.Id}");
-            }
-            catch (Exception ex)
-            {
-                // Log but don't fail the request - message is already saved
-                // Pending acks will handle retry
-                _logger.LogError(ex, $"Failed to send SignalR notification for message {message.Id}");
-            }
-            
-            // Fetch FCM tokens BEFORE fire-and-forget task to avoid disposed context
-            // #region agent log - Hypothesis B: Check if PUSH sending is invoked
-            _logger.LogInformation($"[DEBUG_PUSH_A] About to invoke SendPushNotificationsAsync for message {message.Id}, chat {chat.Id}, sender {sender.Id}");
-            // #endregion
-            var userTokensForPush = new Dictionary<Guid, List<Domain.Entities.FcmToken>>();
-            foreach (var participant in chat.Participants)
-            {
-                if (participant.UserId != sender.Id)
-                {
-                    var tokens = await _unitOfWork.FcmTokens.GetActiveTokensForUserAsync(participant.UserId);
-                    userTokensForPush[participant.UserId] = tokens.ToList();
-                }
-            }
-            
-            // Send push notifications to offline users (fire and forget)
-            _ = Task.Run(async () =>
-            {
+                // Use READ_COMMITTED for better concurrency (allows parallel message processing)
+                await using var transaction = await _unitOfWork.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
+                
                 try
                 {
-                    // #region agent log - Hypothesis B
-                    _logger.LogInformation($"[DEBUG_PUSH_B] Executing SendPushNotificationsAsync for message {message.Id}");
-                    // #endregion
-                    await SendPushNotificationsAsync(sender, messageDto, userTokensForPush);
-                    // #region agent log - Hypothesis B
-                    _logger.LogInformation($"[DEBUG_PUSH_C] SendPushNotificationsAsync completed for message {message.Id}");
-                    // #endregion
+                    // Fast idempotency check WITHOUT locking
+                    if (!string.IsNullOrEmpty(dto.ClientMessageId))
+                    {
+                        var existingMessage = await _unitOfWork.Messages.GetByClientMessageIdAsync(dto.ClientMessageId);
+                        if (existingMessage != null)
+                        {
+                            _logger.LogInformation($"Message with ClientMessageId {dto.ClientMessageId} already exists, returning existing");
+                            await transaction.RollbackAsync();
+                            
+                            return Ok(MapToMessageDto(existingMessage));
+                        }
+                    }
+                    
+                    var sender = await _unitOfWork.Users.GetByIdAsync(userId);
+                    var chat = await _unitOfWork.Chats.GetByIdAsync(dto.ChatId);
+                    
+                    if (sender == null || chat == null)
+                    {
+                        await transaction.RollbackAsync();
+                        return BadRequest("Invalid sender or chat");
+                    }
+                    
+                    // Create message
+                    var message = new Message
+                    {
+                        ChatId = dto.ChatId,
+                        SenderId = userId,
+                        Type = dto.Type,
+                        Content = dto.Content,
+                        ClientMessageId = dto.ClientMessageId,
+                        Status = MessageStatus.Sent
+                    };
+                    
+                    await _unitOfWork.Messages.AddAsync(message);
+                    await CreatePendingAcksForMessageAsync(chat, message, userId, AckType.Message);
+                    await _unitOfWork.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                    
+                    _logger.LogInformation($"Message {message.Id} created successfully (attempt {attempt})");
+                    DiagnosticsController.IncrementMessageProcessed();
+                    
+                    var messageDto = MapToMessageDto(message, sender);
+                    
+                    // Send SignalR notification (non-blocking, outside transaction)
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await _hubContext.Clients.Group(dto.ChatId.ToString())
+                                .SendAsync("ReceiveMessage", messageDto);
+                            _logger.LogInformation($"SignalR sent for {message.Id}");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, $"SignalR failed for {message.Id}");
+                        }
+                    });
+                    
+                    // Send FCM push (fire-and-forget, outside transaction)
+                    var userTokensForPush = await GetFcmTokensForChatAsync(chat, userId);
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            _logger.LogInformation($"[DEBUG_PUSH_A] Sending push for message {message.Id}");
+                            await SendPushNotificationsAsync(sender, messageDto, userTokensForPush);
+                            _logger.LogInformation($"[DEBUG_PUSH_B] Push completed for {message.Id}");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, $"FCM failed for {message.Id}");
+                        }
+                    });
+                    
+                    return Ok(messageDto);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, $"[DEBUG_PUSH_ERROR] Failed to send push notifications for message {message.Id}");
-        }
-            });
-        
-        return Ok(messageDto);
-        }
-        catch (Microsoft.EntityFrameworkCore.DbUpdateException ex) when (ex.InnerException?.Message?.Contains("IX_Messages_ClientMessageId") == true)
-        {
-            // Unique constraint violation - message with this ClientMessageId already exists
-            // This can happen due to race condition despite SERIALIZABLE isolation
-            // Rollback and return existing message
-            await transaction.RollbackAsync();
-            
-            _logger.LogWarning($"Duplicate ClientMessageId detected: {dto.ClientMessageId}, returning existing message");
-            
-            // Track duplicate detection
-            DiagnosticsController.IncrementDuplicateDetected();
-            
-            var existingMessage = await _unitOfWork.Messages.GetByClientMessageIdAsync(dto.ClientMessageId);
-            if (existingMessage != null)
-            {
-                var existingMessageDto = new MessageDto
-                {
-                    Id = existingMessage.Id,
-                    ChatId = existingMessage.ChatId,
-                    SenderId = existingMessage.SenderId,
-                    SenderName = existingMessage.Sender?.DisplayName ?? "Unknown",
-                    Type = existingMessage.Type,
-                    Content = existingMessage.Content,
-                    FilePath = existingMessage.FilePath,
-                    Status = existingMessage.Status,
-                    CreatedAt = existingMessage.CreatedAt,
-                    ClientMessageId = existingMessage.ClientMessageId
-                };
-                
-                return Ok(existingMessageDto);
+                    await transaction.RollbackAsync();
+                    throw;
+                }
             }
-            
-            // Should never happen, but handle gracefully
-            _logger.LogError($"Duplicate detected but message not found: {dto.ClientMessageId}");
-            return StatusCode(500, "Internal server error");
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException ex) when (
+                ex.InnerException?.Message?.Contains("IX_Messages_ClientMessageId") == true)
+            {
+                // Duplicate detected by unique constraint - this is expected with READ_COMMITTED
+                _logger.LogInformation($"Duplicate ClientMessageId on attempt {attempt}: {dto.ClientMessageId}");
+                
+                if (attempt >= maxRetries)
+                {
+                    // Max retries reached, return existing message
+                    DiagnosticsController.IncrementDuplicateDetected();
+                    var existingMessage = await _unitOfWork.Messages.GetByClientMessageIdAsync(dto.ClientMessageId);
+                    if (existingMessage != null)
+                    {
+                        return Ok(MapToMessageDto(existingMessage));
+                    }
+                    
+                    _logger.LogError($"Duplicate detected but message not found: {dto.ClientMessageId}");
+                    return StatusCode(500, "Internal server error");
+                }
+                
+                // Retry with exponential backoff
+                await Task.Delay(50 * attempt);
+                continue;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error on attempt {attempt}: {ex.Message}");
+                
+                if (attempt >= maxRetries)
+                {
+                    throw;
+                }
+                
+                await Task.Delay(50 * attempt);
+            }
         }
-        catch (Exception ex)
-        {
-            // Rollback transaction on any error
-            await transaction.RollbackAsync();
-            _logger.LogError(ex, $"Error creating message: {ex.Message}");
-            throw;
-        }
+        
+        return StatusCode(500, "Failed to create message after retries");
     }
     
     [HttpPost("audio")]
@@ -1543,6 +1493,43 @@ public class MessagesController : ControllerBase
             _logger.LogError(ex, "Error in batch status update");
             return StatusCode(500, "Error updating message statuses");
         }
+    }
+    
+    /// <summary>
+    /// Helper method to fetch FCM tokens for chat participants (excluding sender)
+    /// </summary>
+    private async Task<Dictionary<Guid, List<Domain.Entities.FcmToken>>> GetFcmTokensForChatAsync(Chat chat, Guid senderId)
+    {
+        var userTokensForPush = new Dictionary<Guid, List<Domain.Entities.FcmToken>>();
+        foreach (var participant in chat.Participants)
+        {
+            if (participant.UserId != senderId)
+            {
+                var tokens = await _unitOfWork.FcmTokens.GetActiveTokensForUserAsync(participant.UserId);
+                userTokensForPush[participant.UserId] = tokens.ToList();
+            }
+        }
+        return userTokensForPush;
+    }
+
+    /// <summary>
+    /// Helper method to map Message entity to MessageDto
+    /// </summary>
+    private MessageDto MapToMessageDto(Message message, User? sender = null)
+    {
+        return new MessageDto
+        {
+            Id = message.Id,
+            ChatId = message.ChatId,
+            SenderId = message.SenderId,
+            SenderName = sender?.DisplayName ?? message.Sender?.DisplayName ?? "Unknown",
+            Type = message.Type,
+            Content = message.Content,
+            FilePath = message.FilePath,
+            Status = message.Status,
+            CreatedAt = message.CreatedAt,
+            ClientMessageId = message.ClientMessageId
+        };
     }
 }
 

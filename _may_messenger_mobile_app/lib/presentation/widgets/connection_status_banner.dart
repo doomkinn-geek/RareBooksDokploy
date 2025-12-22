@@ -11,12 +11,23 @@ class ConnectionStatusBanner extends ConsumerWidget {
     final signalRService = ref.watch(signalRServiceProvider);
     final connectionState = signalRService.connectionState;
     
-    // Keep SignalR connection alive
-    ref.watch(signalRConnectionProvider);
+    // Watch SignalRConnectionState to check reconnecting flags
+    final connectionNotifierState = ref.watch(signalRConnectionProvider);
+
+    // Hide banner completely during silent reconnecting
+    if (connectionNotifierState.isSilentReconnecting) {
+      return const SizedBox.shrink();
+    }
 
     // Only show banner when not connected or connecting
     // Hide banner when connected or when state is null (initial state)
     if (connectionState == HubConnectionState.Connected || connectionState == null) {
+      return const SizedBox.shrink();
+    }
+    
+    // Show banner only for explicit reconnecting or when actually reconnecting
+    if (connectionState == HubConnectionState.Reconnecting && !connectionNotifierState.isReconnecting) {
+      // Don't show banner for automatic reconnects unless explicitly requested
       return const SizedBox.shrink();
     }
 

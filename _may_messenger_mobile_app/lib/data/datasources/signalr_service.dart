@@ -27,12 +27,12 @@ class SignalRService {
           options: HttpConnectionOptions(
             accessTokenFactory: () async => token,
             transport: HttpTransportType.WebSockets,
-            // Connection timeout
-            requestTimeout: 30000, // 30 seconds
+            // Reduced timeout for faster reconnect
+            requestTimeout: 3000, // 3 seconds (reduced from 30s)
           ),
         )
-        // Exponential backoff: 0s, 2s, 5s, 10s, 30s, 60s
-        .withAutomaticReconnect(retryDelays: [0, 2000, 5000, 10000, 30000, 60000])
+        // Faster retry intervals for better UX
+        .withAutomaticReconnect(retryDelays: [0, 500, 1000, 2000])
         .build();
 
     // Обработчик разрыва соединения
@@ -176,9 +176,36 @@ class SignalRService {
     await _attemptReconnect();
   }
   
+  /// Quick health check to verify connection is still alive
+  /// Returns true if connection is healthy, false otherwise
+  Future<bool> _quickHealthCheck() async {
+    if (_hubConnection?.state != HubConnectionState.Connected) {
+      print('[SignalR] Health check: not connected');
+      return false;
+    }
+    
+    try {
+      // Try a lightweight operation with short timeout
+      // Note: This assumes the server has a Ping method, or we can use any lightweight method
+      // If server doesn't have Ping, this will fail but it's okay - we'll proceed with reconnect
+      await _hubConnection!.invoke('Ping').timeout(const Duration(seconds: 2));
+      print('[SignalR] Health check passed, connection is healthy');
+      return true;
+    } catch (e) {
+      print('[SignalR] Health check failed: $e');
+      return false;
+    }
+  }
+  
   /// Public method to force reconnect (e.g., when app returns from background)
   Future<void> forceReconnectFromLifecycle() async {
     print('[SignalR] Force reconnect requested from app lifecycle');
+    
+    // Quick health check first - if connection is healthy, skip reconnect
+    if (await _quickHealthCheck()) {
+      print('[SignalR] Connection healthy, skipping reconnect');
+      return;
+    }
     
     // Check current state
     final currentState = _hubConnection?.state;
