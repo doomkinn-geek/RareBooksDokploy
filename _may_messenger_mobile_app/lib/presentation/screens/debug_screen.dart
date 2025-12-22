@@ -43,34 +43,15 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
     final profileState = ref.watch(profileProvider);
     
     // Check if user is admin
-    final isAdmin = profileState.profile?.role == UserRole.admin;
+    final profile = profileState.profile;
+    final isAdmin = profile?.role == UserRole.admin;
     
-    // Show access denied if not admin
-    if (!isAdmin) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('🔧 Debug Diagnostics'),
-        ),
-        body: const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.lock, size: 64, color: Colors.grey),
-              SizedBox(height: 16),
-              Text(
-                'Доступ запрещен',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Эта функция доступна только администраторам',
-                style: TextStyle(color: Colors.grey),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+    // Debug: log profile info
+    debugPrint('[DebugScreen] Profile: ${profile?.toJson()}');
+    debugPrint('[DebugScreen] Role: ${profile?.role}, isAdmin: $isAdmin');
+    
+    // Show access warning if not admin (but still show debug info)
+    final showAccessWarning = !isAdmin;
     
     return Scaffold(
       appBar: AppBar(
@@ -102,6 +83,12 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (showAccessWarning) _buildAccessWarning(),
+            if (showAccessWarning) const SizedBox(height: 16),
+            _buildProfileSection(profileState),
+            const SizedBox(height: 16),
+            _buildCriticalErrorsSection(),
+            const SizedBox(height: 16),
             _buildSignalRSection(signalRService),
             const SizedBox(height: 16),
             _buildOutboxSection(),
@@ -111,6 +98,170 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
             _buildSystemInfoSection(),
             const SizedBox(height: 16),
             _buildActionsSection(signalRService),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccessWarning() {
+    return Card(
+      color: Colors.orange.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(Icons.warning, color: Colors.orange.shade700),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Ограниченный доступ',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange.shade900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Эта функция предназначена для администраторов. Информация показана для диагностики.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.orange.shade800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileSection(ProfileState profileState) {
+    final profile = profileState.profile;
+    
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.person, color: Colors.blue),
+                const SizedBox(width: 8),
+                const Text(
+                  'Профиль пользователя',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const Divider(),
+            if (profile == null)
+              const Text('Профиль не загружен', style: TextStyle(color: Colors.red))
+            else ...[
+              _buildInfoRow('ID', profile.id),
+              _buildInfoRow('Имя', profile.displayName),
+              _buildInfoRow('Телефон', profile.phoneNumber),
+              _buildInfoRow('Роль (enum)', profile.role.toString()),
+              _buildInfoRow('Роль (index)', profile.role.index.toString()),
+              _buildInfoRow('isAdmin', profile.isAdmin.toString()),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: SelectableText(
+                  'JSON: ${profile.toJson().toString()}',
+                  style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                ),
+              ),
+            ],
+            if (profileState.error != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Ошибка: ${profileState.error}',
+                style: const TextStyle(color: Colors.red, fontSize: 12),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  final List<String> _criticalErrors = [];
+
+  Widget _buildCriticalErrorsSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.error, color: Colors.red),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Критические ошибки',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                if (_criticalErrors.isNotEmpty)
+                  IconButton(
+                    icon: const Icon(Icons.copy, size: 20),
+                    onPressed: () {
+                      // Copy errors to clipboard
+                      final errorText = _criticalErrors.join('\n\n');
+                      debugPrint('[DebugScreen] Copied errors: $errorText');
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Ошибки скопированы в буфер обмена')),
+                      );
+                    },
+                    tooltip: 'Копировать все ошибки',
+                  ),
+              ],
+            ),
+            const Divider(),
+            if (_criticalErrors.isEmpty)
+              const Text('Нет критических ошибок', style: TextStyle(color: Colors.green))
+            else ...[
+              Text('Последние ${_criticalErrors.length} ошибок:', 
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              ..._criticalErrors.take(10).map((error) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    border: Border.all(color: Colors.red.shade200),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: SelectableText(
+                    error,
+                    style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                  ),
+                ),
+              )),
+            ],
           ],
         ),
       ),

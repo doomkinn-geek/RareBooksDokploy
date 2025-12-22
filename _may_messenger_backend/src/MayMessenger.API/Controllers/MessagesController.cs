@@ -98,8 +98,11 @@ public class MessagesController : ControllerBase
                 return NotFound("Chat not found");
             }
             
+            // Ensure 'since' is UTC to avoid PostgreSQL errors
+            var sinceUtc = since.Kind == DateTimeKind.Utc ? since : DateTime.SpecifyKind(since, DateTimeKind.Utc);
+            
             // Get messages created or updated after 'since' timestamp
-            var messages = await _unitOfWork.Messages.GetMessagesAfterTimestampAsync(chatId, since, take);
+            var messages = await _unitOfWork.Messages.GetMessagesAfterTimestampAsync(chatId, sinceUtc, take);
             
             _logger.LogInformation(
                 "Incremental sync for chat {ChatId}: found {Count} messages since {Since}", 
@@ -629,6 +632,7 @@ public class MessagesController : ControllerBase
 
     /// <summary>
     /// Отправка push уведомлений пользователям, которые не онлайн
+    /// Получает FCM токены заранее чтобы избежать disposed context
     /// </summary>
     private async Task SendPushNotificationsAsync(Chat chat, User sender, MessageDto message)
     {
@@ -640,6 +644,18 @@ public class MessagesController : ControllerBase
 
         try
         {
+            // Получаем все FCM токены ДО любых async операций
+            // чтобы избежать disposed context в Task.Run
+            var userTokens = new Dictionary<Guid, List<Domain.Entities.FcmToken>>();
+            foreach (var participant in chat.Participants)
+            {
+                if (participant.UserId != sender.Id)
+                {
+                    var tokens = await _unitOfWork.FcmTokens.GetActiveTokensForUserAsync(participant.UserId);
+                    userTokens[participant.UserId] = tokens.ToList();
+                }
+            }
+            
             var title = $"Новое сообщение от {sender.DisplayName}";
             var body = message.Type switch
             {
@@ -657,20 +673,21 @@ public class MessagesController : ControllerBase
             };
 
             // Send to all participants except sender
-            foreach (var participant in chat.Participants)
+            foreach (var kvp in userTokens)
             {
-                if (participant.UserId == sender.Id)
-                    continue;
+                var userId = kvp.Key;
+                var tokens = kvp.Value;
 
                 try
                 {
-                    var tokens = await _unitOfWork.FcmTokens.GetActiveTokensForUserAsync(participant.UserId);
                     
                     if (tokens.Any())
                     {
-                        _logger.LogInformation($"Sending push notification to user {participant.UserId}, {tokens.Count} tokens");
+                        _logger.LogInformation($"Sending push notification to user {userId}, {tokens.Count} tokens");
                         
                         int successCount = 0;
+                        var tokensToDeactivate = new List<string>();
+                        
                         foreach (var token in tokens)
                         {
                             var (success, shouldDeactivate) = await _firebaseService.SendNotificationAsync(
@@ -688,17 +705,26 @@ public class MessagesController : ControllerBase
                             else if (shouldDeactivate)
                             {
                                 // Deactivate invalid token
-                                _logger.LogWarning($"Deactivating invalid FCM token for user {participant.UserId}");
-                                await _unitOfWork.FcmTokens.DeactivateTokenAsync(token.Token);
+                                _logger.LogWarning($"Deactivating invalid FCM token for user {userId}");
+                                tokensToDeactivate.Add(token.Token);
                             }
                         }
                         
-                        await _unitOfWork.SaveChangesAsync();
+                        // Deactivate invalid tokens (после цикла)
+                        foreach (var tokenToDeactivate in tokensToDeactivate)
+                        {
+                            await _unitOfWork.FcmTokens.DeactivateTokenAsync(tokenToDeactivate);
+                        }
+                        
+                        if (successCount > 0 || tokensToDeactivate.Any())
+                        {
+                            await _unitOfWork.SaveChangesAsync();
+                        }
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, $"Failed to send push to user {participant.UserId}");
+                    _logger.LogError(ex, $"Failed to send push to user {userId}");
                 }
             }
         }
@@ -1304,5 +1330,6 @@ public class MessagesController : ControllerBase
         }
     }
 }
+
 
 
