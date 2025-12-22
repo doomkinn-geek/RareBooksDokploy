@@ -865,6 +865,9 @@ public class MessagesController : ControllerBase
             
             // Create or update delivery receipt
             var receipt = await _unitOfWork.DeliveryReceipts.GetByMessageAndUserAsync(messageId, userId);
+            // #region agent log
+            _logger.LogInformation($"[BATCH_READ] HYP_E: Receipt state - exists: {receipt != null}, ReadAt: {receipt?.ReadAt}, DeliveredAt: {receipt?.DeliveredAt}");
+            // #endregion
             if (receipt == null)
             {
                 receipt = new DeliveryReceipt
@@ -875,6 +878,9 @@ public class MessagesController : ControllerBase
                     ReadAt = DateTime.UtcNow
                 };
                 await _unitOfWork.DeliveryReceipts.AddAsync(receipt);
+                // #region agent log
+                _logger.LogInformation($"[BATCH_READ] HYP_E: Created new receipt for message {messageId}");
+                // #endregion
             }
             else if (receipt.ReadAt == null)
             {
@@ -884,10 +890,22 @@ public class MessagesController : ControllerBase
                     receipt.DeliveredAt = DateTime.UtcNow;
                 }
                 await _unitOfWork.DeliveryReceipts.UpdateAsync(receipt);
+                // #region agent log
+                _logger.LogInformation($"[BATCH_READ] HYP_E: Updated receipt for message {messageId}, set ReadAt");
+                // #endregion
+            }
+            else
+            {
+                // #region agent log
+                _logger.LogInformation($"[BATCH_READ] HYP_E: Receipt already has ReadAt, skipping update");
+                // #endregion
             }
             
             // For private chats, mark as read immediately
-            if (chat.Type == ChatType.Private && message.Status != MessageStatus.Read)
+            // #region agent log
+            _logger.LogInformation($"[BATCH_READ] HYP_C: Checking private chat condition - Type: {chat.Type}, Status: {message.Status}, SenderId: {message.SenderId}, ReaderId: {userId}");
+            // #endregion
+            if (chat.Type == ChatType.Private && message.SenderId != userId && message.Status != MessageStatus.Read)
             {
                 _logger.LogInformation($"[BATCH_READ] Marking message {messageId} as READ in private chat");
                 message.Status = MessageStatus.Read;
@@ -898,6 +916,15 @@ public class MessagesController : ControllerBase
                 await _hubContext.Clients.Group(message.ChatId.ToString())
                     .SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Read);
                 _logger.LogInformation($"[BATCH_READ] SignalR notification sent successfully");
+            }
+            // For private chats where message is already Read, still notify via SignalR
+            else if (chat.Type == ChatType.Private && message.SenderId != userId && message.Status == MessageStatus.Read)
+            {
+                // #region agent log
+                _logger.LogInformation($"[BATCH_READ] HYP_C: Message already Read, but sending SignalR for sync");
+                // #endregion
+                await _hubContext.Clients.Group(message.ChatId.ToString())
+                    .SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Read);
             }
             // For group chats, check if all participants have read it
             else if (chat.Type == ChatType.Group)
@@ -1311,6 +1338,9 @@ public class MessagesController : ControllerBase
             }
             
             _logger.LogInformation($"BatchUpdateStatus: Updating {dto.MessageIds.Count} messages to status {dto.Status}");
+            // #region agent log
+            _logger.LogInformation($"[BATCH_STATUS] HYP_A: BatchUpdateStatus called by user {userId} for {dto.MessageIds.Count} messages to status {dto.Status}");
+            // #endregion
             
             var updatedCount = 0;
             var affectedChatIds = new HashSet<Guid>();
@@ -1319,6 +1349,10 @@ public class MessagesController : ControllerBase
             {
                 var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
                 if (message == null) continue;
+                
+                // #region agent log
+                _logger.LogInformation($"[BATCH_STATUS] HYP_A: Message {messageId} current status: {message.Status}, sender: {message.SenderId}");
+                // #endregion
                 
                 // Don't update sender's own messages
                 if (message.SenderId == userId) continue;
@@ -1346,6 +1380,9 @@ public class MessagesController : ControllerBase
                     case MessageStatus.Read:
                         if (message.Status != MessageStatus.Read)
                         {
+                            // #region agent log
+                            _logger.LogInformation($"[BATCH_STATUS] HYP_A: Updating message {messageId} to Read status");
+                            // #endregion
                             message.Status = MessageStatus.Read;
                             message.ReadAt = DateTime.UtcNow;
                             if (message.DeliveredAt == null)
