@@ -415,6 +415,15 @@ public class ChatHub : Hub
     }
     
     /// <summary>
+    /// Lightweight health check - used by client to verify connection is alive
+    /// Does not update any database state, just returns immediately
+    /// </summary>
+    public async Task Ping()
+    {
+        await Clients.Caller.SendAsync("Pong");
+    }
+    
+    /// <summary>
     /// Incremental sync - client requests all missed events since last sync
     /// </summary>
     public async Task IncrementalSync(DateTime lastSyncTimestamp, List<string>? chatIds = null)

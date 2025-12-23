@@ -25,6 +25,20 @@ namespace RareBooksService.WebApi.Controllers
             });
         }
 
+        /// <summary>
+        /// Простой healthcheck endpoint для Docker healthcheck - не зависит от сложных сервисов
+        /// </summary>
+        [HttpGet("health")]
+        public IActionResult Health()
+        {
+            return Ok(new
+            {
+                status = "healthy",
+                timestamp = DateTime.UtcNow,
+                service = "RareBooksService.WebApi"
+            });
+        }
+
         [HttpGet("ping")]
         public IActionResult Ping()
         {

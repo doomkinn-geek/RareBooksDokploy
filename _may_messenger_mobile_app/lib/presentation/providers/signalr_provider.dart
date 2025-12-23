@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/datasources/signalr_service.dart';
 import '../../data/models/message_model.dart';
-import '../../core/services/logger_service.dart';
 import 'auth_provider.dart';
 import 'messages_provider.dart';
 import 'chats_provider.dart';
@@ -350,6 +349,85 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
             _ref.read(chatsProvider.notifier).removeChat(chatId);
           } catch (e) {
             print('[SignalR] Failed to handle ChatDeleted: $e');
+          }
+        });
+
+        // Setup incremental sync result listener (for recovery after reconnection)
+        _signalRService.onIncrementalSyncResult((syncData) {
+          print('[SignalR] IncrementalSyncResult received');
+          
+          try {
+            // Process missed messages
+            final messages = syncData['Messages'] as List<dynamic>?;
+            if (messages != null && messages.isNotEmpty) {
+              print('[SignalR] Processing ${messages.length} missed messages from incremental sync');
+              
+              for (final msgData in messages) {
+                try {
+                  final msgMap = msgData as Map<String, dynamic>;
+                  final message = Message.fromJson(msgMap);
+                  
+                  // Add message to appropriate chat provider
+                  try {
+                    _ref.read(messagesProvider(message.chatId).notifier).addMessage(message);
+                  } catch (e) {
+                    // Provider might not be initialized - that's OK
+                  }
+                  
+                  // Update chat preview
+                  try {
+                    final profileState = _ref.read(profileProvider);
+                    final isFromMe = message.senderId == profileState.profile?.id;
+                    _ref.read(chatsProvider.notifier).updateChatLastMessage(
+                      message.chatId,
+                      message,
+                      incrementUnread: !isFromMe,
+                    );
+                  } catch (e) {
+                    print('[SignalR] Failed to update chat preview from sync: $e');
+                  }
+                } catch (e) {
+                  print('[SignalR] Failed to process synced message: $e');
+                }
+              }
+            }
+            
+            // Process missed status updates
+            final statusUpdates = syncData['StatusUpdates'] as List<dynamic>?;
+            if (statusUpdates != null && statusUpdates.isNotEmpty) {
+              print('[SignalR] Processing ${statusUpdates.length} missed status updates from incremental sync');
+              
+              for (final updateData in statusUpdates) {
+                try {
+                  final updateMap = updateData as Map<String, dynamic>;
+                  final messageId = updateMap['MessageId']?.toString() ?? updateMap['messageId']?.toString();
+                  final statusInt = updateMap['Status'] as int? ?? updateMap['status'] as int?;
+                  
+                  if (messageId != null && statusInt != null) {
+                    final status = MessageStatus.values[statusInt];
+                    
+                    // Update in all chat providers
+                    final chatsState = _ref.read(chatsProvider);
+                    for (final chat in chatsState.chats) {
+                      try {
+                        _ref.read(messagesProvider(chat.id).notifier).updateMessageStatus(messageId, status);
+                      } catch (e) {
+                        // Provider not active - that's OK
+                      }
+                    }
+                  }
+                } catch (e) {
+                  print('[SignalR] Failed to process synced status update: $e');
+                }
+              }
+            }
+            
+            // Refresh chats to ensure UI is up to date
+            _ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+            
+            print('[SignalR] Incremental sync processing completed');
+          } catch (e) {
+            print('[SignalR] Failed to process IncrementalSyncResult: $e');
           }
         });
   }
