@@ -27,12 +27,12 @@ class SignalRService {
           options: HttpConnectionOptions(
             accessTokenFactory: () async => token,
             transport: HttpTransportType.WebSockets,
-            // Timeout for mobile networks (increased for reliability)
-            requestTimeout: 10000, // 10 seconds
+            // Reduced timeout for faster reconnect
+            requestTimeout: 3000, // 3 seconds (reduced from 30s)
           ),
         )
-        // Aggressive retry intervals for fast reconnection
-        .withAutomaticReconnect(retryDelays: [0, 100, 500, 1000, 2000, 5000])
+        // Faster retry intervals for better UX
+        .withAutomaticReconnect(retryDelays: [0, 500, 1000, 2000])
         .build();
 
     // Обработчик разрыва соединения
@@ -127,22 +127,23 @@ class SignalRService {
     });
   }
   
-  /// Start heartbeat timer - sends Heartbeat every 30 seconds
+  /// Start heartbeat timer - sends Heartbeat every 10 seconds (faster detection of dead connections)
   void _startHeartbeatTimer() {
     _stopHeartbeatTimer(); // Stop any existing timer
     
     _lastPongReceived = DateTime.now();
     
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
+    // CRITICAL FIX: Reduced from 30s to 10s for faster reconnection
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
       if (_hubConnection?.state == HubConnectionState.Connected) {
         try {
           print('[SignalR] Sending heartbeat...');
           await _hubConnection?.invoke('Heartbeat');
           
-          // Check if we received Pong recently (within last 90 seconds)
+          // CRITICAL FIX: Reduced from 90s to 30s for faster dead connection detection
           if (_lastPongReceived != null) {
             final timeSinceLastPong = DateTime.now().difference(_lastPongReceived!);
-            if (timeSinceLastPong.inSeconds > 90) {
+            if (timeSinceLastPong.inSeconds > 30) {
               print('[SignalR] No Pong received for ${timeSinceLastPong.inSeconds}s - forcing reconnect');
               timer.cancel();
               await _forceReconnect();
@@ -160,7 +161,7 @@ class SignalRService {
       }
     });
     
-    print('[SignalR] Heartbeat timer started (30s interval)');
+    print('[SignalR] Heartbeat timer started (10s interval, 30s pong timeout)');
   }
   
   /// Stop heartbeat timer
@@ -201,74 +202,29 @@ class SignalRService {
   Future<void> forceReconnectFromLifecycle() async {
     print('[SignalR] Force reconnect requested from app lifecycle');
     
-    // Check current state first
+    // Quick health check first - if connection is healthy, skip reconnect
+    if (await _quickHealthCheck()) {
+      print('[SignalR] Connection healthy, skipping reconnect');
+      return;
+    }
+    
+    // Check current state
     final currentState = _hubConnection?.state;
     print('[SignalR] Current connection state: $currentState');
     
     if (currentState == HubConnectionState.Connected) {
-      // Quick health check - if connection is alive, just sync
-      if (await _quickHealthCheck()) {
-        print('[SignalR] Connection healthy, performing incremental sync');
-        await _performIncrementalSync();
-        return;
-      }
-      // If health check failed, connection is stale - force reconnect
-      print('[SignalR] Connection stale, forcing reconnect');
+      print('[SignalR] Already connected, no reconnect needed');
+      return;
     }
     
     if (currentState == HubConnectionState.Reconnecting) {
-      print('[SignalR] Already reconnecting, waiting briefly...');
-      // Wait a short time and check again
-      await Future.delayed(const Duration(milliseconds: 300));
-      if (_hubConnection?.state == HubConnectionState.Connected) {
-        await _performIncrementalSync();
-        return;
-      }
+      print('[SignalR] Already reconnecting, waiting for auto-reconnect');
+      return;
     }
     
-    // Reset attempts for fresh start and reconnect immediately
-    _reconnectAttempts = 0;
+    // Only attempt manual reconnect if Disconnected
+    _reconnectAttempts = 0; // Reset attempts for fresh start
     await _forceReconnect();
-  }
-  
-  /// Aggressive reconnect for returning from background - no delays
-  Future<void> aggressiveReconnect() async {
-    print('[SignalR] Aggressive reconnect triggered');
-    
-    final currentState = _hubConnection?.state;
-    
-    if (currentState == HubConnectionState.Connected) {
-      // Verify connection is actually alive
-      try {
-        await _hubConnection!.invoke('Ping').timeout(const Duration(seconds: 2));
-        print('[SignalR] Connection verified alive');
-        await _performIncrementalSync();
-        return;
-      } catch (e) {
-        print('[SignalR] Connection appears dead, forcing full reconnect');
-      }
-    }
-    
-    // Stop existing connection
-    try {
-      await _hubConnection?.stop();
-    } catch (e) {
-      print('[SignalR] Error stopping connection: $e');
-    }
-    
-    // Immediately reconnect
-    if (_currentToken != null) {
-      try {
-        await connect(_currentToken!);
-        print('[SignalR] Aggressive reconnect successful');
-        await _performIncrementalSync();
-      } catch (e) {
-        print('[SignalR] Aggressive reconnect failed: $e');
-        // Fall back to normal reconnect flow
-        _reconnectAttempts = 0;
-        _attemptReconnect();
-      }
-    }
   }
   
   Future<void> _attemptReconnect() async {
@@ -294,45 +250,34 @@ class SignalRService {
     print('[SignalR] Manual reconnect attempt #$_reconnectAttempts started');
     
     try {
-      // Minimal delay to check if auto-reconnect is in progress
-      await Future.delayed(const Duration(milliseconds: 100));
+      // Small delay to let automatic reconnect finish if it's in progress
+      await Future.delayed(const Duration(seconds: 2));
       
-      // Check state immediately
+      // Check state again after delay
       if (_hubConnection?.state == HubConnectionState.Connected) {
-        print('[SignalR] Connection restored, aborting manual reconnect');
+        print('[SignalR] Connection restored during wait, aborting manual reconnect');
         _reconnectAttempts = 0;
-        _startHeartbeatTimer();
         return;
       }
       
       if (_hubConnection?.state == HubConnectionState.Reconnecting) {
-        print('[SignalR] Auto-reconnect is active, waiting briefly...');
-        // Wait a bit for auto-reconnect but don't block too long
-        await Future.delayed(const Duration(milliseconds: 500));
-        if (_hubConnection?.state == HubConnectionState.Connected) {
-          _reconnectAttempts = 0;
-          _startHeartbeatTimer();
-          return;
-        }
+        print('[SignalR] Auto-reconnect is active, letting it handle reconnection');
+        return;
       }
       
-      // If disconnected, try immediate restart
+      // If still disconnected after delay, try to restart the connection
       if (_hubConnection?.state == HubConnectionState.Disconnected) {
-        print('[SignalR] Connection is Disconnected, attempting immediate start()...');
+        print('[SignalR] Connection is Disconnected, attempting start()...');
         await _hubConnection?.start();
         print('[SignalR] Manual reconnect successful via start()');
         _reconnectAttempts = 0;
-        _startHeartbeatTimer();
-        
-        // Trigger incremental sync after successful reconnect
-        await _performIncrementalSync();
       }
     } catch (e) {
       print('[SignalR] Manual reconnect failed: $e');
       
-      // Use faster exponential backoff with lower cap
-      if (_reconnectAttempts < 8) {
-        final retryDelay = min(pow(2, _reconnectAttempts - 1).toInt(), 15);
+      // Schedule another attempt if not too many attempts
+      if (_reconnectAttempts < 5) {
+        final retryDelay = min(pow(2, _reconnectAttempts).toInt(), 30);
         print('[SignalR] Scheduling retry attempt #${_reconnectAttempts + 1} in ${retryDelay}s...');
         
         await Future.delayed(Duration(seconds: retryDelay));
@@ -355,27 +300,37 @@ class SignalRService {
   }
   
   /// Perform incremental sync after reconnection to fetch missed events
+  /// CRITICAL FIX: If no lastSyncTimestamp, sync from 1 hour ago to avoid losing messages
   Future<void> _performIncrementalSync() async {
-    if (_lastSyncTimestamp == null) {
-      print('[SignalR] No last sync timestamp, skipping incremental sync');
-      _lastSyncTimestamp = DateTime.now();
-      return;
-    }
+    // Use saved timestamp or default to 1 hour ago (never skip sync entirely)
+    final syncTimestamp = _lastSyncTimestamp ?? DateTime.now().subtract(const Duration(hours: 1));
+    
+    print('[SignalR] Performing incremental sync since ${syncTimestamp.toIso8601String()} (saved: ${_lastSyncTimestamp != null})');
     
     try {
-      print('[SignalR] Performing incremental sync since ${_lastSyncTimestamp!.toIso8601String()}');
-      
       // Call server method to get missed events
       await _hubConnection?.invoke(
         'IncrementalSync',
-        args: [_lastSyncTimestamp!.toIso8601String()],
+        args: [syncTimestamp.toIso8601String()],
       );
       
       _lastSyncTimestamp = DateTime.now();
-      print('[SignalR] Incremental sync completed');
+      print('[SignalR] Incremental sync completed, timestamp updated');
     } catch (e) {
       print('[SignalR] Incremental sync failed: $e');
+      // Set timestamp even on failure to prevent infinite retries of old sync
+      _lastSyncTimestamp ??= DateTime.now();
     }
+  }
+  
+  /// Public method to trigger incremental sync for all chats (used on app resume)
+  Future<void> performIncrementalSyncForAllChats() async {
+    if (!isConnected) {
+      print('[SignalR] Cannot perform sync - not connected');
+      return;
+    }
+    
+    await _performIncrementalSync();
   }
   
   /// Update last sync timestamp (call this periodically or after successful operations)

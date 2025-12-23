@@ -9,7 +9,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'core/themes/app_theme.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/fcm_service.dart';
-import 'core/services/background_service.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/providers/signalr_provider.dart';
 import 'presentation/providers/chats_provider.dart';
@@ -18,7 +17,6 @@ import 'presentation/providers/user_status_sync_service.dart';
 import 'presentation/screens/auth_screen.dart';
 import 'presentation/screens/main_screen.dart';
 import 'presentation/screens/chat_screen.dart';
-import 'data/models/message_model.dart' as models;
 
 // Global navigator key for navigation from FCM
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -33,47 +31,10 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   print('[FCM_BG] Handling background message: ${message.messageId}');
   print('[FCM_BG] Data: ${message.data}');
   
-  // Initialize Hive for caching in background isolate
-  try {
-    await Hive.initFlutter();
-    print('[FCM_BG] Hive initialized in background');
-  } catch (e) {
-    print('[FCM_BG] Hive already initialized or error: $e');
-  }
-  
   // Parse content from data payload (Data-only message)
   final title = message.data['title'] ?? message.notification?.title ?? 'New Message';
   final body = message.data['body'] ?? message.notification?.body ?? '';
   final chatId = message.data['chatId'] as String?;
-  final messageId = message.data['messageId'] as String?;
-  final senderId = message.data['senderId'] as String?;
-  final senderName = message.data['senderName'] as String?;
-  final messageType = message.data['type'] as String?;
-  final createdAtStr = message.data['createdAt'] as String?;
-  
-  // Save message to Hive cache for recovery when app opens
-  if (chatId != null && messageId != null) {
-    try {
-      final box = await Hive.openBox<Map>('pending_fcm_messages');
-      
-      // Store minimal message data for recovery
-      await box.put(messageId, {
-        'id': messageId,
-        'chatId': chatId,
-        'senderId': senderId ?? '',
-        'senderName': senderName ?? title,
-        'type': int.tryParse(messageType ?? '0') ?? 0,
-        'content': body,
-        'status': 1, // Sent
-        'createdAt': createdAtStr ?? DateTime.now().toIso8601String(),
-        'receivedAt': DateTime.now().toIso8601String(),
-      });
-      
-      print('[FCM_BG] Message saved to pending cache: $messageId');
-    } catch (e) {
-      print('[FCM_BG] Failed to cache message: $e');
-    }
-  }
   
   // Show local notification with grouping support
   try {
@@ -101,7 +62,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       title,
       body,
       notificationDetails,
-      payload: '$chatId|$messageId', // Include messageId in payload
+      payload: chatId,
     );
     
     print('[FCM_BG] Local notification shown');
@@ -165,92 +126,11 @@ class MyApp extends ConsumerStatefulWidget {
 
 class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   DateTime? _lastPausedAt;
-  final BackgroundServiceManager _backgroundService = BackgroundServiceManager();
   
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    
-    // Initialize background service
-    _initBackgroundService();
-    
-    // Recover any pending FCM messages from background
-    _recoverPendingMessages();
-  }
-  
-  Future<void> _initBackgroundService() async {
-    try {
-      // Only initialize on Android
-      if (!kIsWeb && Platform.isAndroid) {
-        await _backgroundService.initialize();
-        print('[LIFECYCLE] Background service initialized');
-      }
-    } catch (e) {
-      print('[LIFECYCLE] Failed to initialize background service: $e');
-    }
-  }
-  
-  /// Recover messages that were received via FCM while app was killed
-  Future<void> _recoverPendingMessages() async {
-    try {
-      final box = await Hive.openBox<Map>('pending_fcm_messages');
-      
-      if (box.isEmpty) {
-        print('[LIFECYCLE] No pending FCM messages to recover');
-        return;
-      }
-      
-      print('[LIFECYCLE] Recovering ${box.length} pending FCM messages');
-      
-      final messagesToRecover = <String, Map>{};
-      for (var key in box.keys) {
-        final data = box.get(key);
-        if (data != null) {
-          messagesToRecover[key.toString()] = Map<String, dynamic>.from(data);
-        }
-      }
-      
-      // Clear the pending box after reading
-      await box.clear();
-      
-      // Process recovered messages after providers are ready
-      Future.microtask(() async {
-        await Future.delayed(const Duration(seconds: 2)); // Wait for providers
-        
-        final authState = ref.read(authStateProvider);
-        if (!authState.isAuthenticated) {
-          print('[LIFECYCLE] Not authenticated, skipping message recovery');
-          return;
-        }
-        
-        for (var entry in messagesToRecover.entries) {
-          try {
-            final msgData = entry.value;
-            final chatId = msgData['chatId'] as String?;
-            
-            if (chatId != null) {
-              // Try to convert to Message and add to provider
-              try {
-                final message = models.Message.fromJson(Map<String, dynamic>.from(msgData));
-                ref.read(messagesProvider(chatId).notifier).addMessage(message);
-                print('[LIFECYCLE] Recovered message ${message.id} for chat $chatId');
-              } catch (e) {
-                print('[LIFECYCLE] Failed to parse recovered message: $e');
-              }
-            }
-          } catch (e) {
-            print('[LIFECYCLE] Failed to recover message: $e');
-          }
-        }
-        
-        // Force refresh chats after recovery
-        ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
-        print('[LIFECYCLE] Message recovery completed');
-      });
-    } catch (e) {
-      print('[LIFECYCLE] Error recovering pending messages: $e');
-    }
   }
 
   @override
@@ -264,18 +144,12 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
     print('[LIFECYCLE] App state changed to: $state');
     
-    final authState = ref.read(authStateProvider);
-    
     if (state == AppLifecycleState.paused) {
       _lastPausedAt = DateTime.now();
-      print('[LIFECYCLE] App paused at $_lastPausedAt');
-      
-      // Start background service to maintain SignalR connection (Android only)
-      if (authState.isAuthenticated && !kIsWeb && Platform.isAndroid) {
-        print('[LIFECYCLE] Starting background service for connection maintenance');
-        _backgroundService.startService();
-      }
+      print('[LIFECYCLE] App paused at $_lastPausedAt - SignalR will try to maintain connection');
     } else if (state == AppLifecycleState.resumed) {
+      final authState = ref.read(authStateProvider);
+      
       if (authState.isAuthenticated) {
         final pauseDuration = _lastPausedAt != null 
             ? DateTime.now().difference(_lastPausedAt!)
@@ -283,86 +157,97 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         
         print('[LIFECYCLE] App resumed after ${pauseDuration.inSeconds}s pause');
         
-        // Stop background service since we're in foreground now
-        if (!kIsWeb && Platform.isAndroid) {
-          _backgroundService.stopService();
-        }
-        
-        // Show reconnecting banner only for long pauses (> 5 seconds for better UX)
-        if (pauseDuration.inSeconds > 5) {
-          print('[LIFECYCLE] Long pause detected (> 5s), performing aggressive reconnect');
+        // Show reconnecting banner only for long pauses (> 10 seconds)
+        if (pauseDuration.inSeconds > 10) {
+          print('[LIFECYCLE] Long pause detected (> 10s), showing reconnecting banner');
           ref.read(signalRConnectionProvider.notifier).setReconnecting(true);
-          _performAggressiveResumeSync();
+          _performResumeSync();
         } else {
           // Short pause, silent reconnect without banner
-          print('[LIFECYCLE] Short pause (<= 5s), performing silent reconnect');
-          final signalRService = ref.read(signalRServiceProvider);
+          print('[LIFECYCLE] Short pause (<= 10s), performing silent reconnect');
+          final signalRState = ref.read(signalRConnectionProvider);
           
-          if (!signalRService.isConnected) {
+          if (!signalRState.isConnected) {
             print('[LIFECYCLE] SignalR disconnected - attempting silent reconnect');
             ref.read(signalRConnectionProvider.notifier).silentReconnect();
           } else {
-            print('[LIFECYCLE] SignalR already connected, verifying health...');
-            // Verify connection and sync even if already connected
-            signalRService.forceReconnectFromLifecycle();
+            print('[LIFECYCLE] SignalR already connected');
           }
         }
-      }
-    } else if (state == AppLifecycleState.detached) {
-      // App is being terminated
-      print('[LIFECYCLE] App detached - cleaning up');
-      if (!kIsWeb && Platform.isAndroid) {
-        _backgroundService.stopService();
       }
     }
   }
   
-  /// Aggressive resume sync for longer pauses - prioritizes fast reconnection
-  Future<void> _performAggressiveResumeSync() async {
+  Future<void> _performResumeSync() async {
     try {
-      print('[LIFECYCLE] Starting AGGRESSIVE resume sync sequence');
+      print('[LIFECYCLE] Starting resume sync sequence');
       
-      final signalRService = ref.read(signalRServiceProvider);
+      // 1. Reconnect SignalR
+      print('[LIFECYCLE] Step 1: Reconnecting SignalR');
+      await ref.read(signalRConnectionProvider.notifier).reconnect();
       
-      // 1. Aggressive reconnect - bypasses normal delays
-      print('[LIFECYCLE] Step 1: Aggressive SignalR reconnect');
-      await signalRService.aggressiveReconnect();
+      // Small delay to ensure connection is established
+      await Future.delayed(const Duration(milliseconds: 500));
       
-      // 2. Immediately refresh chats (parallel with status sync)
-      print('[LIFECYCLE] Step 2: Parallel refresh of chats and status sync');
-      await Future.wait([
-        ref.read(chatsProvider.notifier).loadChats(forceRefresh: true),
-        ref.read(statusSyncServiceProvider).forceSync().catchError((e) {
-          print('[LIFECYCLE] Status sync error (non-fatal): $e');
-          return Future.value();
-        }),
-      ]);
+      // 2. Trigger IncrementalSync via SignalR to get missed messages
+      print('[LIFECYCLE] Step 2: Triggering incremental sync for all chats');
+      try {
+        final signalRService = ref.read(signalRServiceProvider);
+        if (signalRService.isConnected) {
+          await signalRService.performIncrementalSyncForAllChats();
+          print('[LIFECYCLE] Incremental sync triggered via SignalR');
+        } else {
+          print('[LIFECYCLE] SignalR not connected, skipping incremental sync');
+        }
+      } catch (e) {
+        print('[LIFECYCLE] Failed to trigger incremental sync: $e');
+      }
       
-      // 3. Recover any pending FCM messages
-      print('[LIFECYCLE] Step 3: Recovering pending messages');
-      await _recoverPendingMessages();
+      // 3. Force sync pending status updates
+      print('[LIFECYCLE] Step 3: Syncing pending status updates');
+      final statusSyncService = ref.read(statusSyncServiceProvider);
+      await statusSyncService.forceSync();
       
-      // 4. Refresh user statuses (fire and forget)
-      print('[LIFECYCLE] Step 4: Refreshing user statuses');
-      ref.read(userStatusSyncServiceProvider).loadInitialStatuses().catchError((e) {
+      // 4. Refresh chats list to get updated unreads
+      print('[LIFECYCLE] Step 4: Refreshing chats list');
+      await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+      
+      // 5. Refresh messages for all active chats (critical for message sync)
+      print('[LIFECYCLE] Step 5: Refreshing messages for all chats');
+      try {
+        final chatsState = ref.read(chatsProvider);
+        int refreshedCount = 0;
+        for (final chat in chatsState.chats) {
+          try {
+            await ref.read(messagesProvider(chat.id).notifier).loadMessages(forceRefresh: true);
+            refreshedCount++;
+          } catch (e) {
+            // Provider might not be active - that's OK
+          }
+        }
+        print('[LIFECYCLE] Refreshed messages for $refreshedCount chat(s)');
+      } catch (e) {
+        print('[LIFECYCLE] Failed to refresh messages: $e');
+      }
+      
+      // 6. Refresh user statuses
+      print('[LIFECYCLE] Step 6: Refreshing user statuses');
+      try {
+        await ref.read(userStatusSyncServiceProvider).loadInitialStatuses();
+        print('[LIFECYCLE] User statuses refreshed');
+      } catch (e) {
         print('[LIFECYCLE] Failed to refresh user statuses: $e');
-      });
+      }
       
-      print('[LIFECYCLE] Aggressive resume sync completed successfully');
+      print('[LIFECYCLE] Resume sync completed successfully');
       
       // Clear reconnecting banner
       ref.read(signalRConnectionProvider.notifier).setReconnecting(false);
     } catch (e) {
-      print('[LIFECYCLE] Error during aggressive resume sync: $e');
+      print('[LIFECYCLE] Error during resume sync: $e');
       // Clear reconnecting banner even on error
       ref.read(signalRConnectionProvider.notifier).setReconnecting(false);
-      
-      // Fallback to normal reconnect
-      try {
-        await ref.read(signalRConnectionProvider.notifier).reconnect();
-      } catch (e2) {
-        print('[LIFECYCLE] Fallback reconnect also failed: $e2');
-      }
+      // Non-fatal, app will continue to work
     }
   }
 
@@ -537,36 +422,37 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
             };
 
             // Setup FCM message received callback for immediate message fetch
+            // CRITICAL FIX: Always perform full chat sync instead of fetching single message
             fcmService.onMessageReceived = (messageId, chatId) async {
               print('[FCM] Message received notification for message $messageId in chat $chatId');
               
               try {
-                // Check if we have the message in cache first
-                final cache = ref.read(messageCacheProvider);
-                final cachedMessage = cache.get(messageId);
+                // CRITICAL FIX: Full chat sync to ensure all messages are loaded
+                // Previous implementation only fetched single message which could miss other messages
+                print('[FCM] Triggering full chat sync...');
                 
-                if (cachedMessage != null) {
-                  print('[FCM] Message already in cache, no fetch needed');
-                  return;
+                // Force refresh messages for this chat
+                await ref.read(messagesProvider(chatId).notifier).loadMessages(forceRefresh: true);
+                print('[FCM] Messages refreshed for chat $chatId');
+                
+                // Also refresh chats list to update preview
+                await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+                print('[FCM] Chats list refreshed');
+                
+                // Trigger incremental sync via SignalR if connected (to catch any other missed events)
+                try {
+                  final signalRService = ref.read(signalRServiceProvider);
+                  if (signalRService.isConnected) {
+                    await signalRService.performIncrementalSyncForAllChats();
+                    print('[FCM] Incremental sync triggered');
+                  }
+                } catch (e) {
+                  print('[FCM] SignalR sync failed, using REST API fallback: $e');
                 }
                 
-                print('[FCM] Message not in cache, fetching from API...');
-                
-                // Fetch message from API using new method
-                final messageRepo = ref.read(messageRepositoryProvider);
-                final message = await messageRepo.getMessageById(messageId);
-                
-                print('[FCM] Message fetched successfully: ${message.id}');
-                
-                // Update the messages provider to include this message
-                final messagesNotifier = ref.read(messagesProvider(chatId).notifier);
-                // The message will be automatically added via SignalR or incremental sync
-                // Just trigger a sync to be safe
-                messagesNotifier.loadMessages(forceRefresh: true);
-                
-                print('[FCM] Message fetch completed');
+                print('[FCM] Full sync completed for message $messageId');
               } catch (e) {
-                print('[FCM] Failed to fetch message on push notification: $e');
+                print('[FCM] Failed to sync on push notification: $e');
               }
             };
 

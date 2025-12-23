@@ -97,15 +97,14 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
 
 
   /// Periodic message sync to catch any missed messages (runs every 30 seconds)
+  /// CRITICAL FIX: Now also syncs when SignalR is disconnected (using REST API fallback)
   void _startPeriodicSync() {
     Future.delayed(const Duration(seconds: 30), () {
       if (!mounted) return;
       
-      // Only sync if we're online (SignalR connected)
-      if (_isSignalRConnected) {
-        print('[SYNC] Running periodic message sync for chat: $chatId');
-        _performIncrementalSync();
-      }
+      // CRITICAL FIX: Always run sync, REST API fallback works without SignalR
+      print('[SYNC] Running periodic message sync for chat: $chatId (SignalR: $_isSignalRConnected)');
+      _performIncrementalSync();
       
       // Schedule next sync
       _startPeriodicSync();
@@ -151,22 +150,31 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   }
 
   /// Perform incremental sync after SignalR reconnection or periodically
+  /// CRITICAL FIX: Enhanced with REST API fallback and full reload on critical errors
   Future<void> _performIncrementalSync() async {
     try {
       final localDataSource = _ref.read(localDataSourceProvider);
       
-      // Get last sync timestamp from cache
+      // Get last sync timestamp from cache (fallback to 1 hour ago if not set)
       final lastSync = await localDataSource.getLastSyncTimestamp(chatId);
       final sinceTimestamp = lastSync ?? DateTime.now().subtract(const Duration(hours: 1));
       
-      print('[SYNC] Incremental sync for chat $chatId since: $sinceTimestamp');
+      print('[SYNC] Incremental sync for chat $chatId since: $sinceTimestamp (SignalR: $_isSignalRConnected)');
       
-      // Fetch updates from backend
-      final updates = await _messageRepository.getMessageUpdates(
-        chatId: chatId,
-        since: sinceTimestamp,
-        take: 100,
-      );
+      // CRITICAL FIX: REST API works regardless of SignalR status
+      List<Message> updates;
+      try {
+        updates = await _messageRepository.getMessageUpdates(
+          chatId: chatId,
+          since: sinceTimestamp,
+          take: 100,
+        );
+      } catch (apiError) {
+        print('[SYNC] REST API failed, falling back to full reload: $apiError');
+        // If REST API fails completely, do a full reload
+        await loadMessages(forceRefresh: true);
+        return;
+      }
       
       if (updates.isEmpty) {
         print('[SYNC] No new messages since last sync');
@@ -185,6 +193,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
       // Add or update messages
       var hasChanges = false;
+      int newCount = 0;
+      int updatedCount = 0;
+      
       for (var update in updates) {
         if (messageMap.containsKey(update.id)) {
           // Update existing message (e.g., status changed)
@@ -193,13 +204,13 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
               existing.content != update.content) {
             messageMap[update.id] = update;
             hasChanges = true;
-            print('[SYNC] Updated message ${update.id}: status=${update.status}');
+            updatedCount++;
           }
         } else {
           // New message
           messageMap[update.id] = update;
           hasChanges = true;
-          print('[SYNC] New message ${update.id} from incremental sync');
+          newCount++;
         }
         
         // Add to LRU cache
@@ -212,10 +223,14 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         mergedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
         
         state = state.copyWith(messages: mergedMessages);
-        print('[SYNC] Incremental sync completed: merged ${updates.length} updates');
+        print('[SYNC] Incremental sync completed: $newCount new, $updatedCount updated');
         
         // Update chat list to reflect new messages
-        _ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+        try {
+          _ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+        } catch (e) {
+          print('[SYNC] Failed to refresh chats list: $e');
+        }
       }
       
       // Update last sync timestamp
@@ -230,8 +245,17 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       );
     } catch (e) {
       print('[SYNC] Incremental sync failed: $e');
-      // Don't fall back to full reload unless absolutely necessary
-      // Just log the error and try again on next periodic sync
+      
+      // CRITICAL FIX: On critical failure, fall back to full message reload
+      // This ensures messages are eventually synchronized
+      try {
+        print('[SYNC] Falling back to full message reload...');
+        await loadMessages(forceRefresh: true);
+      } catch (reloadError) {
+        print('[SYNC] Full reload also failed: $reloadError');
+        // At this point we're truly offline or have a critical issue
+        // Just log and wait for next periodic sync
+      }
     }
   }
 
