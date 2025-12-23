@@ -74,10 +74,10 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:80/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 15
-      start_period: 180s
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
 
   frontend:
     build:
@@ -97,10 +97,10 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:80 || exit 1"]
-      interval: 10s
-      timeout: 5s
+      interval: 30s
+      timeout: 10s
       retries: 10
-      start_period: 90s
+      start_period: 60s
 
   proxy:
     image: nginx:stable-alpine
@@ -127,12 +127,12 @@ services:
       - rarebooks_network
     restart: unless-stopped
     healthcheck:
-      # Проверяем что nginx работает (внутренняя проверка)
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:80/ || exit 1"]
+      # Проверяем Setup API через HTTP (всегда доступен)
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:80/api/test/setup-status > /dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 15s
       retries: 5
-      start_period: 60s
+      start_period: 30s
 
   # ========================================
   # May Messenger Services
@@ -184,10 +184,10 @@ services:
     healthcheck:
       # Use simple /health/ready endpoint instead of /health for faster startup
       test: ["CMD-SHELL", "curl -fsS http://localhost:5000/health/ready || exit 1"]
-      interval: 10s
+      interval: 15s
       timeout: 5s
-      retries: 10
-      start_period: 120s
+      retries: 5
+      start_period: 60s
 
   maymessenger_web_client:
     build:
@@ -205,10 +205,10 @@ services:
     healthcheck:
       # Use dedicated healthcheck endpoint
       test: ["CMD-SHELL", "curl -fsS http://localhost/healthz || exit 1"]
-      interval: 10s
+      interval: 15s
       timeout: 3s
-      retries: 5
-      start_period: 30s
+      retries: 3
+      start_period: 5s
 
 volumes:
   db_books_data:
