@@ -319,13 +319,13 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                     ),
                   )
                 : IconButton(
-                    icon: Icon(
-                      _isPlaying ? Icons.pause : Icons.play_arrow,
-                      color: playerColor,
-                      size: 28,
-                    ),
-                    onPressed: _playPauseAudio,
-                  ),
+              icon: Icon(
+                _isPlaying ? Icons.pause : Icons.play_arrow,
+                color: playerColor,
+                size: 28,
+              ),
+              onPressed: _playPauseAudio,
+            ),
             Expanded(
               child: GestureDetector(
                 onTapDown: (details) => _seekAudio(details, isMe),

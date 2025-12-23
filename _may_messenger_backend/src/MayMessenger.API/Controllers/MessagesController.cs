@@ -1015,7 +1015,7 @@ public class MessagesController : ControllerBase
     /// Used by mobile clients to verify message delivery/read status
     /// </summary>
     [HttpPost("statuses")]
-    public async Task<ActionResult<Dictionary<Guid, MessageStatusDto>>> GetMessageStatuses([FromBody] List<Guid> messageIds)
+    public async Task<ActionResult<List<MessageStatusDto>>> GetMessageStatuses([FromBody] List<Guid> messageIds)
     {
         var userId = GetCurrentUserId();
         
@@ -1031,7 +1031,7 @@ public class MessagesController : ControllerBase
         
         _logger.LogInformation($"[BATCH_STATUS_CHECK] Getting statuses for {messageIds.Count} messages for user {userId}");
         
-        var result = new Dictionary<string, object>();
+        var result = new List<MessageStatusDto>();
         
         foreach (var messageId in messageIds)
         {
@@ -1040,15 +1040,14 @@ public class MessagesController : ControllerBase
                 var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
                 if (message != null)
                 {
-                    result[messageId.ToString()] = new
+                    result.Add(new MessageStatusDto
                     {
-                        messageId = message.Id,
-                        status = (int)message.Status,
-                        statusName = message.Status.ToString(),
-                        deliveredAt = message.DeliveredAt,
-                        readAt = message.ReadAt,
-                        playedAt = message.PlayedAt
-                    };
+                        MessageId = message.Id,
+                        Status = message.Status,
+                        DeliveredAt = message.DeliveredAt,
+                        ReadAt = message.ReadAt,
+                        PlayedAt = message.PlayedAt
+                    });
                 }
             }
             catch (Exception ex)

@@ -102,7 +102,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       
       print('[CHAT_SCREEN] Messages loaded, marking as read...');
       ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
-      
+    
       // STEP 6: Load user status immediately
       await _loadUserStatus();
       
@@ -124,21 +124,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       
       if (currentChat?.type == ChatType.private && 
           currentChat?.otherParticipantId != null) {
-        final userRepository = ref.read(userRepositoryProvider);
-        final statuses = await userRepository.getUsersStatus([currentChat!.otherParticipantId!]);
-        
-        if (statuses.isNotEmpty && mounted) {
-          final status = statuses.first;
-          ref.read(onlineUsersProvider.notifier).setUserOnline(status.userId, status.isOnline);
+          final userRepository = ref.read(userRepositoryProvider);
+          final statuses = await userRepository.getUsersStatus([currentChat!.otherParticipantId!]);
           
-          if (status.lastSeenAt != null) {
-            ref.read(lastSeenMapProvider.notifier).setLastSeen(status.userId, status.lastSeenAt!);
-          }
+          if (statuses.isNotEmpty && mounted) {
+            final status = statuses.first;
+            ref.read(onlineUsersProvider.notifier).setUserOnline(status.userId, status.isOnline);
+            
+            if (status.lastSeenAt != null) {
+              ref.read(lastSeenMapProvider.notifier).setLastSeen(status.userId, status.lastSeenAt!);
+            }
           
           print('[CHAT_SCREEN] User status loaded: ${status.isOnline ? "online" : "offline"}');
         }
-      }
-    } catch (e) {
+          }
+        } catch (e) {
       print('[CHAT_SCREEN] Failed to load user status: $e');
     }
   }
@@ -428,69 +428,69 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       body: Stack(
         children: [
           Container(
-            decoration: const BoxDecoration(
-              image: DecorationImage(
-                image: AssetImage('assets/chat_background.png'),
-                fit: BoxFit.cover,
-                opacity: 0.3, // Subtle background, not too distracting
-              ),
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/chat_background.png'),
+            fit: BoxFit.cover,
+            opacity: 0.3, // Subtle background, not too distracting
+          ),
+        ),
+        child: Column(
+          children: [
+            Expanded(
+              child: messagesState.isLoading && messagesState.messages.isEmpty
+                  ? const Center(child: CircularProgressIndicator())
+                  : messagesState.messages.isEmpty
+                      ? const Center(child: Text('Нет сообщений'))
+                      : ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.all(16),
+                          itemCount: messagesState.messages.length,
+                          itemBuilder: (context, index) {
+                            final message = messagesState.messages[index];
+                            final isHighlighted = message.id == _highlightedMessageId;
+                            return MessageBubble(
+                              message: message,
+                              isHighlighted: isHighlighted,
+                            );
+                          },
+                        ),
             ),
-            child: Column(
-              children: [
-                Expanded(
-                  child: messagesState.isLoading && messagesState.messages.isEmpty
-                      ? const Center(child: CircularProgressIndicator())
-                      : messagesState.messages.isEmpty
-                          ? const Center(child: Text('Нет сообщений'))
-                          : ListView.builder(
-                              controller: _scrollController,
-                              padding: const EdgeInsets.all(16),
-                              itemCount: messagesState.messages.length,
-                              itemBuilder: (context, index) {
-                                final message = messagesState.messages[index];
-                                final isHighlighted = message.id == _highlightedMessageId;
-                                return MessageBubble(
-                                  message: message,
-                                  isHighlighted: isHighlighted,
-                                );
-                              },
-                            ),
-                ),
-                // Typing indicator
-                _buildTypingIndicator(),
-                MessageInput(
-                chatId: widget.chatId,
-                isSending: messagesState.isSending,
-                onSendMessage: (content) {
-                  ref
-                      .read(messagesProvider(widget.chatId).notifier)
-                      .sendMessage(content);
-                  // Scroll to bottom after sending message
-                  Future.delayed(const Duration(milliseconds: 100), () {
-                    if (mounted) _scrollToBottom();
-                  });
-                },
-                onSendAudio: (audioPath) {
-                  ref
-                      .read(messagesProvider(widget.chatId).notifier)
-                      .sendAudioMessage(audioPath);
-                  // Scroll to bottom after sending audio
-                  Future.delayed(const Duration(milliseconds: 100), () {
-                    if (mounted) _scrollToBottom();
-                  });
-                },
-                onSendImage: (imagePath) {
-                  ref
-                      .read(messagesProvider(widget.chatId).notifier)
-                      .sendImageMessage(imagePath);
-                  // Scroll to bottom after sending image
-                  Future.delayed(const Duration(milliseconds: 100), () {
-                    if (mounted) _scrollToBottom();
-                  });
-                },
-              ),
-              ],
-            ),
+            // Typing indicator
+            _buildTypingIndicator(),
+            MessageInput(
+            chatId: widget.chatId,
+            isSending: messagesState.isSending,
+            onSendMessage: (content) {
+              ref
+                  .read(messagesProvider(widget.chatId).notifier)
+                  .sendMessage(content);
+              // Scroll to bottom after sending message
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (mounted) _scrollToBottom();
+              });
+            },
+            onSendAudio: (audioPath) {
+              ref
+                  .read(messagesProvider(widget.chatId).notifier)
+                  .sendAudioMessage(audioPath);
+              // Scroll to bottom after sending audio
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (mounted) _scrollToBottom();
+              });
+            },
+            onSendImage: (imagePath) {
+              ref
+                  .read(messagesProvider(widget.chatId).notifier)
+                  .sendImageMessage(imagePath);
+              // Scroll to bottom after sending image
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (mounted) _scrollToBottom();
+              });
+            },
+          ),
+          ],
+        ),
           ),
           // Scroll to bottom FAB
           Positioned(

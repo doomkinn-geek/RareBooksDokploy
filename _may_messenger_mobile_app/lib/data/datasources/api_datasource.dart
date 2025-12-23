@@ -293,14 +293,17 @@ class ApiDataSource {
       );
       
       final Map<String, MessageStatus> result = {};
-      final data = response.data as Map<String, dynamic>;
+      final data = response.data as List<dynamic>;
       
-      data.forEach((key, value) {
-        if (value is Map<String, dynamic>) {
-          final statusIndex = value['status'] as int;
-          result[key] = MessageStatus.values[statusIndex];
+      for (final item in data) {
+        if (item is Map<String, dynamic>) {
+          final messageId = item['messageId'] as String?;
+          final statusIndex = item['status'] as int?;
+          if (messageId != null && statusIndex != null && statusIndex < MessageStatus.values.length) {
+            result[messageId] = MessageStatus.values[statusIndex];
+          }
         }
-      });
+      }
       
       return result;
     } catch (e) {

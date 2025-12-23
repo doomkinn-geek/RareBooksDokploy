@@ -75,7 +75,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   // Throttling: track pending sends to prevent spam
   final Set<String> _pendingSends = {};
   DateTime? _lastSendTime;
-  
+
   // Track recently sent messages for status polling (messageId -> sentAt)
   final Map<String, DateTime> _recentlySentMessages = {};
   static const Duration _outgoingStatusPollInterval = Duration(seconds: 5);

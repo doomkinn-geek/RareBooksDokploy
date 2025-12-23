@@ -372,64 +372,64 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, -2),
-                ),
-              ],
-            ),
-            clipBehavior: Clip.none,
-            child: Listener(
-              onPointerDown: (event) {
-                if (_recordingState == RecordingState.idle) {
-                  // Save initial position when starting to press
-                  _initialPointerPosition = event.localPosition;
-                }
-              },
-              onPointerMove: _recordingState == RecordingState.recording
-                  ? (event) {
-                      if (_initialPointerPosition != null) {
-                        setState(() {
-                          // Calculate offset from the initial press position
-                          _dragOffset = Offset(
-                            event.localPosition.dx - _initialPointerPosition!.dx,
-                            event.localPosition.dy - _initialPointerPosition!.dy,
-                          );
-                          
-                          _showCancelHint = _dragOffset.dx < -50;
-                          _showLockHint = _dragOffset.dy < -50;
-                        });
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 4,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          clipBehavior: Clip.none,
+          child: Listener(
+            onPointerDown: (event) {
+              if (_recordingState == RecordingState.idle) {
+                // Save initial position when starting to press
+                _initialPointerPosition = event.localPosition;
+              }
+            },
+            onPointerMove: _recordingState == RecordingState.recording
+                ? (event) {
+                    if (_initialPointerPosition != null) {
+                      setState(() {
+                        // Calculate offset from the initial press position
+                        _dragOffset = Offset(
+                          event.localPosition.dx - _initialPointerPosition!.dx,
+                          event.localPosition.dy - _initialPointerPosition!.dy,
+                        );
                         
-                        if (_dragOffset.dy < -100) {
-                          _lockRecording();
-                        } else if (_dragOffset.dx < -150) {
-                          _cancelRecording();
-                        }
+                        _showCancelHint = _dragOffset.dx < -50;
+                        _showLockHint = _dragOffset.dy < -50;
+                      });
+                      
+                      if (_dragOffset.dy < -100) {
+                        _lockRecording();
+                      } else if (_dragOffset.dx < -150) {
+                        _cancelRecording();
                       }
                     }
-                  : null,
-              onPointerUp: (event) {
-                if (_recordingState == RecordingState.recording) {
-                  if (_dragOffset.dx > -150 && _dragOffset.dy > -100) {
-                    _sendAudio();
-                  } else {
-                    // Already cancelled by swipe, just clean up
-                    _initialPointerPosition = null;
                   }
+                : null,
+            onPointerUp: (event) {
+              if (_recordingState == RecordingState.recording) {
+                if (_dragOffset.dx > -150 && _dragOffset.dy > -100) {
+                  _sendAudio();
                 } else {
-                  // Pointer up without recording, just clean up
+                  // Already cancelled by swipe, just clean up
                   _initialPointerPosition = null;
                 }
-              },
-              child: _recordingState == RecordingState.recording
-                  ? _buildRecordingUI()
-                  : _buildNormalUI(),
-            ),
+              } else {
+                // Pointer up without recording, just clean up
+                _initialPointerPosition = null;
+              }
+            },
+            child: _recordingState == RecordingState.recording
+                ? _buildRecordingUI()
+                : _buildNormalUI(),
+          ),
           ),
           // Emoji picker
           if (_showEmojiPicker)
@@ -441,7 +441,7 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
               ),
             ),
         ],
-      ),
+        ),
     );
   }
 
