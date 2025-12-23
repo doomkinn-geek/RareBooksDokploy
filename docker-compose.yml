@@ -77,7 +77,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
-      start_period: 120s
+      start_period: 180s
 
   frontend:
     build:
@@ -100,7 +100,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
-      start_period: 60s
+      start_period: 90s
 
   proxy:
     image: nginx:stable-alpine
@@ -127,12 +127,12 @@ services:
       - rarebooks_network
     restart: unless-stopped
     healthcheck:
-      # Проверяем Setup API через HTTP (всегда доступен)
-      test: ["CMD-SHELL", "wget -q -O - http://localhost:80/api/test/setup-status > /dev/null 2>&1 || exit 1"]
+      # Проверяем простой healthcheck endpoint через HTTP (всегда доступен, не зависит от сложных сервисов)
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:80/api/test/health > /dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 15s
       retries: 5
-      start_period: 30s
+      start_period: 60s
 
   # ========================================
   # May Messenger Services
@@ -187,7 +187,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 60s
+      start_period: 120s
 
   maymessenger_web_client:
     build:
@@ -208,7 +208,7 @@ services:
       interval: 15s
       timeout: 3s
       retries: 3
-      start_period: 5s
+      start_period: 30s
 
 volumes:
   db_books_data:
