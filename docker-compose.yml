@@ -126,6 +126,8 @@ services:
     networks:
       - rarebooks_network
     restart: unless-stopped
+    # Добавляем небольшую задержку перед запуском для стабилизации DNS
+    entrypoint: /bin/sh -c "sleep 3 && nginx -g 'daemon off;'"
     healthcheck:
       # Проверяем Setup API через HTTP (всегда доступен)
       test: ["CMD-SHELL", "wget -q -O - http://localhost:80/api/test/setup-status > /dev/null 2>&1 || exit 1"]
