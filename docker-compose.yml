@@ -103,7 +103,10 @@ services:
       start_period: 90s
 
   proxy:
-    image: nginx:stable-alpine
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    image: rarebooks_nginx:latest
     container_name: nginx_container
     ports:
       - 80:80      # Только nginx открыт наружу
