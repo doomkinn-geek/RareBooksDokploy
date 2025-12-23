@@ -127,23 +127,22 @@ class SignalRService {
     });
   }
   
-  /// Start heartbeat timer - sends Heartbeat every 10 seconds (faster detection of dead connections)
+  /// Start heartbeat timer - sends Heartbeat every 30 seconds
   void _startHeartbeatTimer() {
     _stopHeartbeatTimer(); // Stop any existing timer
     
     _lastPongReceived = DateTime.now();
     
-    // CRITICAL FIX: Reduced from 30s to 10s for faster reconnection
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
       if (_hubConnection?.state == HubConnectionState.Connected) {
         try {
           print('[SignalR] Sending heartbeat...');
           await _hubConnection?.invoke('Heartbeat');
           
-          // CRITICAL FIX: Reduced from 90s to 30s for faster dead connection detection
+          // Check if we received Pong recently (within last 90 seconds)
           if (_lastPongReceived != null) {
             final timeSinceLastPong = DateTime.now().difference(_lastPongReceived!);
-            if (timeSinceLastPong.inSeconds > 30) {
+            if (timeSinceLastPong.inSeconds > 90) {
               print('[SignalR] No Pong received for ${timeSinceLastPong.inSeconds}s - forcing reconnect');
               timer.cancel();
               await _forceReconnect();
@@ -161,7 +160,7 @@ class SignalRService {
       }
     });
     
-    print('[SignalR] Heartbeat timer started (10s interval, 30s pong timeout)');
+    print('[SignalR] Heartbeat timer started (30s interval)');
   }
   
   /// Stop heartbeat timer
@@ -300,37 +299,27 @@ class SignalRService {
   }
   
   /// Perform incremental sync after reconnection to fetch missed events
-  /// CRITICAL FIX: If no lastSyncTimestamp, sync from 1 hour ago to avoid losing messages
   Future<void> _performIncrementalSync() async {
-    // Use saved timestamp or default to 1 hour ago (never skip sync entirely)
-    final syncTimestamp = _lastSyncTimestamp ?? DateTime.now().subtract(const Duration(hours: 1));
-    
-    print('[SignalR] Performing incremental sync since ${syncTimestamp.toIso8601String()} (saved: ${_lastSyncTimestamp != null})');
-    
-    try {
-      // Call server method to get missed events
-      await _hubConnection?.invoke(
-        'IncrementalSync',
-        args: [syncTimestamp.toIso8601String()],
-      );
-      
+    if (_lastSyncTimestamp == null) {
+      print('[SignalR] No last sync timestamp, skipping incremental sync');
       _lastSyncTimestamp = DateTime.now();
-      print('[SignalR] Incremental sync completed, timestamp updated');
-    } catch (e) {
-      print('[SignalR] Incremental sync failed: $e');
-      // Set timestamp even on failure to prevent infinite retries of old sync
-      _lastSyncTimestamp ??= DateTime.now();
-    }
-  }
-  
-  /// Public method to trigger incremental sync for all chats (used on app resume)
-  Future<void> performIncrementalSyncForAllChats() async {
-    if (!isConnected) {
-      print('[SignalR] Cannot perform sync - not connected');
       return;
     }
     
-    await _performIncrementalSync();
+    try {
+      print('[SignalR] Performing incremental sync since ${_lastSyncTimestamp!.toIso8601String()}');
+      
+      // Call server method to get missed events
+      await _hubConnection?.invoke(
+        'IncrementalSync',
+        args: [_lastSyncTimestamp!.toIso8601String()],
+      );
+      
+      _lastSyncTimestamp = DateTime.now();
+      print('[SignalR] Incremental sync completed');
+    } catch (e) {
+      print('[SignalR] Incremental sync failed: $e');
+    }
   }
   
   /// Update last sync timestamp (call this periodically or after successful operations)

@@ -189,49 +189,17 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       // Small delay to ensure connection is established
       await Future.delayed(const Duration(milliseconds: 500));
       
-      // 2. Trigger IncrementalSync via SignalR to get missed messages
-      print('[LIFECYCLE] Step 2: Triggering incremental sync for all chats');
-      try {
-        final signalRService = ref.read(signalRServiceProvider);
-        if (signalRService.isConnected) {
-          await signalRService.performIncrementalSyncForAllChats();
-          print('[LIFECYCLE] Incremental sync triggered via SignalR');
-        } else {
-          print('[LIFECYCLE] SignalR not connected, skipping incremental sync');
-        }
-      } catch (e) {
-        print('[LIFECYCLE] Failed to trigger incremental sync: $e');
-      }
-      
-      // 3. Force sync pending status updates
-      print('[LIFECYCLE] Step 3: Syncing pending status updates');
+      // 2. Force sync pending status updates
+      print('[LIFECYCLE] Step 2: Syncing pending status updates');
       final statusSyncService = ref.read(statusSyncServiceProvider);
       await statusSyncService.forceSync();
       
-      // 4. Refresh chats list to get updated unreads
-      print('[LIFECYCLE] Step 4: Refreshing chats list');
+      // 3. Refresh chats list to get updated unreads
+      print('[LIFECYCLE] Step 3: Refreshing chats list');
       await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
       
-      // 5. Refresh messages for all active chats (critical for message sync)
-      print('[LIFECYCLE] Step 5: Refreshing messages for all chats');
-      try {
-        final chatsState = ref.read(chatsProvider);
-        int refreshedCount = 0;
-        for (final chat in chatsState.chats) {
-          try {
-            await ref.read(messagesProvider(chat.id).notifier).loadMessages(forceRefresh: true);
-            refreshedCount++;
-          } catch (e) {
-            // Provider might not be active - that's OK
-          }
-        }
-        print('[LIFECYCLE] Refreshed messages for $refreshedCount chat(s)');
-      } catch (e) {
-        print('[LIFECYCLE] Failed to refresh messages: $e');
-      }
-      
-      // 6. Refresh user statuses
-      print('[LIFECYCLE] Step 6: Refreshing user statuses');
+      // 4. Refresh user statuses
+      print('[LIFECYCLE] Step 4: Refreshing user statuses');
       try {
         await ref.read(userStatusSyncServiceProvider).loadInitialStatuses();
         print('[LIFECYCLE] User statuses refreshed');
@@ -422,37 +390,36 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
             };
 
             // Setup FCM message received callback for immediate message fetch
-            // CRITICAL FIX: Always perform full chat sync instead of fetching single message
             fcmService.onMessageReceived = (messageId, chatId) async {
               print('[FCM] Message received notification for message $messageId in chat $chatId');
               
               try {
-                // CRITICAL FIX: Full chat sync to ensure all messages are loaded
-                // Previous implementation only fetched single message which could miss other messages
-                print('[FCM] Triggering full chat sync...');
+                // Check if we have the message in cache first
+                final cache = ref.read(messageCacheProvider);
+                final cachedMessage = cache.get(messageId);
                 
-                // Force refresh messages for this chat
-                await ref.read(messagesProvider(chatId).notifier).loadMessages(forceRefresh: true);
-                print('[FCM] Messages refreshed for chat $chatId');
-                
-                // Also refresh chats list to update preview
-                await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
-                print('[FCM] Chats list refreshed');
-                
-                // Trigger incremental sync via SignalR if connected (to catch any other missed events)
-                try {
-                  final signalRService = ref.read(signalRServiceProvider);
-                  if (signalRService.isConnected) {
-                    await signalRService.performIncrementalSyncForAllChats();
-                    print('[FCM] Incremental sync triggered');
-                  }
-                } catch (e) {
-                  print('[FCM] SignalR sync failed, using REST API fallback: $e');
+                if (cachedMessage != null) {
+                  print('[FCM] Message already in cache, no fetch needed');
+                  return;
                 }
                 
-                print('[FCM] Full sync completed for message $messageId');
+                print('[FCM] Message not in cache, fetching from API...');
+                
+                // Fetch message from API using new method
+                final messageRepo = ref.read(messageRepositoryProvider);
+                final message = await messageRepo.getMessageById(messageId);
+                
+                print('[FCM] Message fetched successfully: ${message.id}');
+                
+                // Update the messages provider to include this message
+                final messagesNotifier = ref.read(messagesProvider(chatId).notifier);
+                // The message will be automatically added via SignalR or incremental sync
+                // Just trigger a sync to be safe
+                messagesNotifier.loadMessages(forceRefresh: true);
+                
+                print('[FCM] Message fetch completed');
               } catch (e) {
-                print('[FCM] Failed to sync on push notification: $e');
+                print('[FCM] Failed to fetch message on push notification: $e');
               }
             };
 
