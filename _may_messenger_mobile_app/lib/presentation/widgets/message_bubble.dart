@@ -34,6 +34,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   final _logger = LoggerService();
   bool _isPlaying = false;
+  bool _isDownloadingAudio = false; // Track audio download state
   bool _hasMarkedAsPlayed = false; // Track if we've already marked as played
   Duration? _duration;
   Duration? _position;
@@ -124,14 +125,11 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             final audioUrl = '${ApiConstants.baseUrl}${widget.message.filePath}';
             
             try {
-              // Show loading indicator
+              // Set downloading state (shows indicator in widget)
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Загрузка аудио...'),
-                    duration: Duration(seconds: 1),
-                  ),
-                );
+                setState(() {
+                  _isDownloadingAudio = true;
+                });
               }
               
               // Download and save locally
@@ -139,6 +137,13 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                 widget.message.id, 
                 audioUrl
               );
+              
+              // Clear downloading state
+              if (mounted) {
+                setState(() {
+                  _isDownloadingAudio = false;
+                });
+              }
               
               if (localPath != null) {
                 await _audioPlayer.setFilePath(localPath);
@@ -153,6 +158,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
               } else {
                 // Failed to download - file may be deleted
                 if (mounted) {
+                  setState(() {
+                    _isDownloadingAudio = false;
+                  });
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Голосовое сообщение больше не доступно'),
@@ -165,6 +173,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             } catch (e) {
               // Network error or file deleted
               if (mounted) {
+                setState(() {
+                  _isDownloadingAudio = false;
+                });
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Не удалось загрузить аудио'),
@@ -291,14 +302,30 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: Icon(
-                _isPlaying ? Icons.pause : Icons.play_arrow,
-                color: playerColor,
-                size: 28,
-              ),
-              onPressed: _playPauseAudio,
-            ),
+            // Show loading indicator while downloading, otherwise show play/pause button
+            _isDownloadingAudio
+                ? SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          valueColor: AlwaysStoppedAnimation<Color>(playerColor),
+                        ),
+                      ),
+                    ),
+                  )
+                : IconButton(
+                    icon: Icon(
+                      _isPlaying ? Icons.pause : Icons.play_arrow,
+                      color: playerColor,
+                      size: 28,
+                    ),
+                    onPressed: _playPauseAudio,
+                  ),
             Expanded(
               child: GestureDetector(
                 onTapDown: (details) => _seekAudio(details, isMe),

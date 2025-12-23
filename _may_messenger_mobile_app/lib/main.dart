@@ -252,22 +252,15 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         await notificationService.initialize();
         
         // Setup local notification navigation callback
+        // SIMPLIFIED: Don't preload messages here - ChatScreen handles its own loading
         notificationService.onNotificationTap = (chatId, messageId) async {
           print('[NOTIFICATION] Local notification tapped for chat: $chatId, message: $messageId');
           
           try {
-            // STEP 1: Refresh chats list to ensure chat exists
-            print('[NOTIFICATION] Refreshing chats list...');
-            await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+            // Refresh chats list in background (non-blocking)
+            ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
             
-            // STEP 2: Force refresh messages for this chat to show new message
-            print('[NOTIFICATION] Loading messages for chat $chatId...');
-            await ref.read(messagesProvider(chatId).notifier).loadMessages(forceRefresh: true);
-            
-            // STEP 3: Wait a bit to ensure messages are loaded
-            await Future.delayed(const Duration(milliseconds: 300));
-            
-            // STEP 4: Navigate to chat screen with messageId for highlighting
+            // Navigate immediately - ChatScreen will handle message loading
             print('[NOTIFICATION] Navigating to chat screen...');
             navigatorKey.currentState?.pushAndRemoveUntil(
               MaterialPageRoute(
@@ -276,13 +269,13 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
                   highlightMessageId: messageId,
                 ),
               ),
-              (route) => route.isFirst, // Keep only the main screen in stack
+              (route) => route.isFirst,
             );
             
             print('[NOTIFICATION] Navigation completed');
           } catch (e) {
             print('[NOTIFICATION] Error handling notification tap: $e');
-            // Try to navigate anyway
+            // Navigate anyway on error
             navigatorKey.currentState?.push(
               MaterialPageRoute(
                 builder: (context) => ChatScreen(
@@ -322,65 +315,38 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
             await fcmService.initialize();
             
             // Setup FCM navigation callback
+            // SIMPLIFIED: Don't preload messages here - ChatScreen handles its own loading
+            // This prevents race conditions when multiple loads compete
             fcmService.onMessageTap = (chatId) async {
-              // #region agent log - Hypothesis A: Track push tap navigation flow
-              print('[PUSH_NAV] HYP_A1: Push notification tapped for chat: $chatId, timestamp: ${DateTime.now().toIso8601String()}');
-              // #endregion
+              print('[PUSH_NAV] Push notification tapped for chat: $chatId');
               
               try {
-                // #region agent log - Hypothesis C: Check SignalR status before navigation
+                // Only ensure SignalR is connected before navigating
                 final signalRState = ref.read(signalRConnectionProvider);
-                print('[PUSH_NAV] HYP_C1: SignalR connected: ${signalRState.isConnected}');
-                // #endregion
+                print('[PUSH_NAV] SignalR connected: ${signalRState.isConnected}');
                 
-                // STEP 1: Refresh chats list to ensure chat exists
-                print('[FCM] Refreshing chats list...');
-                // #region agent log - Hypothesis A: Track chats load timing
-                final chatsLoadStart = DateTime.now();
-                // #endregion
-                await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
-                // #region agent log - Hypothesis A
-                final chatsLoadDuration = DateTime.now().difference(chatsLoadStart).inMilliseconds;
-                print('[PUSH_NAV] HYP_A2: Chats loaded in ${chatsLoadDuration}ms');
-                // #endregion
+                if (!signalRState.isConnected) {
+                  // Try silent reconnect if not connected
+                  print('[PUSH_NAV] SignalR not connected, attempting reconnect...');
+                  await ref.read(signalRConnectionProvider.notifier).silentReconnect();
+                }
                 
-                // STEP 2: Force refresh messages for this chat to show new message
-                print('[FCM] Loading messages for chat $chatId...');
-                // #region agent log - Hypothesis A/E: Track messages load timing and result
-                final messagesLoadStart = DateTime.now();
-                // #endregion
-                await ref.read(messagesProvider(chatId).notifier).loadMessages(forceRefresh: true);
-                // #region agent log - Hypothesis A/E
-                final messagesLoadDuration = DateTime.now().difference(messagesLoadStart).inMilliseconds;
-                final messagesState = ref.read(messagesProvider(chatId));
-                print('[PUSH_NAV] HYP_A3: Messages loaded in ${messagesLoadDuration}ms, count: ${messagesState.messages.length}, isLoading: ${messagesState.isLoading}, error: ${messagesState.error}');
-                // #endregion
+                // Refresh chats list in background (non-blocking)
+                ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
                 
-                // STEP 3: Wait a bit to ensure messages are loaded
-                await Future.delayed(const Duration(milliseconds: 300));
-                
-                // #region agent log - Hypothesis A: Check messages after delay
-                final messagesStateAfterDelay = ref.read(messagesProvider(chatId));
-                print('[PUSH_NAV] HYP_A4: After delay - messages count: ${messagesStateAfterDelay.messages.length}, isLoading: ${messagesStateAfterDelay.isLoading}');
-                // #endregion
-                
-                // STEP 4: Navigate to chat screen
-                print('[FCM] Navigating to chat screen...');
+                // Navigate immediately - ChatScreen will handle message loading
+                print('[PUSH_NAV] Navigating to chat screen...');
                 navigatorKey.currentState?.pushAndRemoveUntil(
                   MaterialPageRoute(
                     builder: (context) => ChatScreen(chatId: chatId),
                   ),
-                  (route) => route.isFirst, // Keep only the main screen in stack
+                  (route) => route.isFirst,
                 );
                 
-                // #region agent log - Hypothesis A
-                print('[PUSH_NAV] HYP_A5: Navigation completed');
-                // #endregion
+                print('[PUSH_NAV] Navigation completed');
               } catch (e) {
-                // #region agent log - Hypothesis A
-                print('[PUSH_NAV] HYP_A_ERROR: Error handling notification tap: $e');
-                // #endregion
-                // Try to navigate anyway
+                print('[PUSH_NAV] Error handling notification tap: $e');
+                // Navigate anyway on error
                 navigatorKey.currentState?.push(
                   MaterialPageRoute(
                     builder: (context) => ChatScreen(chatId: chatId),

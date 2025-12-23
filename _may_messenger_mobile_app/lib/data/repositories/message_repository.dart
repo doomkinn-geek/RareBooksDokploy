@@ -112,6 +112,27 @@ class MessageRepository {
     await _apiDataSource.markAudioAsPlayed(messageId);
   }
 
+  /// Get statuses for multiple messages (polling fallback)
+  /// Returns a map of messageId -> MessageStatus
+  Future<Map<String, MessageStatus>> getMessageStatuses(List<String> messageIds) async {
+    try {
+      return await _apiDataSource.getMessageStatuses(messageIds);
+    } catch (e) {
+      print('[MessageRepository] Failed to get message statuses: $e');
+      rethrow;
+    }
+  }
+
+  /// Confirm delivery for multiple messages (after receiving push notification)
+  Future<void> batchConfirmDelivery(List<String> messageIds) async {
+    try {
+      await _apiDataSource.batchConfirmDelivery(messageIds);
+    } catch (e) {
+      print('[MessageRepository] Failed to confirm delivery: $e');
+      rethrow;
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getStatusUpdates({
     required String chatId,
     DateTime? since,

@@ -281,6 +281,50 @@ class ApiDataSource {
     }
   }
 
+  /// Get statuses for multiple messages (polling fallback)
+  Future<Map<String, MessageStatus>> getMessageStatuses(List<String> messageIds) async {
+    try {
+      final response = await _dio.post(
+        '${ApiConstants.messages}/statuses',
+        data: messageIds,
+        options: Options(
+          contentType: Headers.jsonContentType,
+        ),
+      );
+      
+      final Map<String, MessageStatus> result = {};
+      final data = response.data as Map<String, dynamic>;
+      
+      data.forEach((key, value) {
+        if (value is Map<String, dynamic>) {
+          final statusIndex = value['status'] as int;
+          result[key] = MessageStatus.values[statusIndex];
+        }
+      });
+      
+      return result;
+    } catch (e) {
+      print('[API] Failed to get message statuses: $e');
+      throw Exception('Failed to get message statuses: $e');
+    }
+  }
+
+  /// Confirm delivery for multiple messages (after push notification)
+  Future<void> batchConfirmDelivery(List<String> messageIds) async {
+    try {
+      await _dio.post(
+        '${ApiConstants.messages}/confirm-delivery',
+        data: messageIds,
+        options: Options(
+          contentType: Headers.jsonContentType,
+        ),
+      );
+    } catch (e) {
+      print('[API] Failed to confirm delivery: $e');
+      throw Exception('Failed to confirm delivery: $e');
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getStatusUpdates({
     required String chatId,
     DateTime? since,

@@ -1011,6 +1011,141 @@ public class MessagesController : ControllerBase
     }
     
     /// <summary>
+    /// Get statuses for multiple messages (polling fallback for when SignalR misses updates)
+    /// Used by mobile clients to verify message delivery/read status
+    /// </summary>
+    [HttpPost("statuses")]
+    public async Task<ActionResult<Dictionary<Guid, MessageStatusDto>>> GetMessageStatuses([FromBody] List<Guid> messageIds)
+    {
+        var userId = GetCurrentUserId();
+        
+        if (messageIds == null || !messageIds.Any())
+        {
+            return BadRequest(new { message = "Message IDs are required" });
+        }
+        
+        if (messageIds.Count > 100)
+        {
+            return BadRequest(new { message = "Maximum 100 messages per request" });
+        }
+        
+        _logger.LogInformation($"[BATCH_STATUS_CHECK] Getting statuses for {messageIds.Count} messages for user {userId}");
+        
+        var result = new Dictionary<string, object>();
+        
+        foreach (var messageId in messageIds)
+        {
+            try
+            {
+                var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
+                if (message != null)
+                {
+                    result[messageId.ToString()] = new
+                    {
+                        messageId = message.Id,
+                        status = (int)message.Status,
+                        statusName = message.Status.ToString(),
+                        deliveredAt = message.DeliveredAt,
+                        readAt = message.ReadAt,
+                        playedAt = message.PlayedAt
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning($"[BATCH_STATUS_CHECK] Failed to get status for message {messageId}: {ex.Message}");
+            }
+        }
+        
+        _logger.LogInformation($"[BATCH_STATUS_CHECK] Returning statuses for {result.Count} messages");
+        return Ok(result);
+    }
+    
+    /// <summary>
+    /// Batch confirm message delivery (for push notification confirmation)
+    /// Called when client receives push notification to mark messages as delivered
+    /// </summary>
+    [HttpPost("confirm-delivery")]
+    public async Task<IActionResult> BatchConfirmDelivery([FromBody] List<Guid> messageIds)
+    {
+        var userId = GetCurrentUserId();
+        
+        if (messageIds == null || !messageIds.Any())
+        {
+            return BadRequest(new { message = "Message IDs are required" });
+        }
+        
+        if (messageIds.Count > 100)
+        {
+            return BadRequest(new { message = "Maximum 100 messages per request" });
+        }
+        
+        _logger.LogInformation($"[BATCH_DELIVERY] Confirming delivery for {messageIds.Count} messages for user {userId}");
+        
+        var confirmedCount = 0;
+        
+        foreach (var messageId in messageIds)
+        {
+            try
+            {
+                var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
+                if (message == null) continue;
+                
+                // Don't confirm own messages
+                if (message.SenderId == userId) continue;
+                
+                // Only update if status is lower than Delivered
+                if (message.Status == MessageStatus.Sent || message.Status == MessageStatus.Sending)
+                {
+                    // Create delivery receipt
+                    var receipt = await _unitOfWork.DeliveryReceipts.GetByMessageAndUserAsync(messageId, userId);
+                    if (receipt == null)
+                    {
+                        receipt = new DeliveryReceipt
+                        {
+                            MessageId = messageId,
+                            UserId = userId,
+                            DeliveredAt = DateTime.UtcNow
+                        };
+                        await _unitOfWork.DeliveryReceipts.AddAsync(receipt);
+                    }
+                    else if (receipt.DeliveredAt == null)
+                    {
+                        receipt.DeliveredAt = DateTime.UtcNow;
+                        await _unitOfWork.DeliveryReceipts.UpdateAsync(receipt);
+                    }
+                    
+                    // For private chats, update message status immediately
+                    var chat = await _unitOfWork.Chats.GetByIdAsync(message.ChatId);
+                    if (chat?.Type == ChatType.Private)
+                    {
+                        message.Status = MessageStatus.Delivered;
+                        message.DeliveredAt = DateTime.UtcNow;
+                        await _unitOfWork.Messages.UpdateAsync(message);
+                        
+                        // Notify sender via SignalR
+                        await _hubContext.Clients.Group(message.ChatId.ToString())
+                            .SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Delivered);
+                        
+                        _logger.LogInformation($"[BATCH_DELIVERY] Message {messageId} marked as delivered, SignalR sent");
+                    }
+                    
+                    confirmedCount++;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning($"[BATCH_DELIVERY] Failed to confirm delivery for message {messageId}: {ex.Message}");
+            }
+        }
+        
+        await _unitOfWork.SaveChangesAsync();
+        
+        _logger.LogInformation($"[BATCH_DELIVERY] Confirmed delivery for {confirmedCount} messages");
+        return Ok(new { confirmed = confirmedCount, total = messageIds.Count });
+    }
+    
+    /// <summary>
     /// Mark audio message as played
     /// </summary>
     [HttpPost("{messageId}/played")]

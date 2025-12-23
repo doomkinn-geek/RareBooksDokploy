@@ -262,6 +262,34 @@ class LocalDataSource {
     }
   }
 
+  // Get cached message statuses for a chat (used to preserve played status)
+  Future<Map<String, MessageStatus>> getCachedMessageStatuses(String chatId) async {
+    try {
+      final box = await Hive.openBox<Map>(_messagesBox);
+      final data = box.get(chatId);
+      if (data == null) return {};
+
+      final messages = (data['messages'] as List)
+          .map((json) => Map<String, dynamic>.from(json as Map))
+          .toList();
+      
+      final Map<String, MessageStatus> statuses = {};
+      for (var message in messages) {
+        final id = message['id'] as String?;
+        final statusIndex = message['status'] as int?;
+        if (id != null && statusIndex != null && statusIndex < MessageStatus.values.length) {
+          statuses[id] = MessageStatus.values[statusIndex];
+        }
+      }
+      
+      print('[LocalDataSource] Retrieved ${statuses.length} cached message statuses for chat $chatId');
+      return statuses;
+    } catch (e) {
+      print('[LocalDataSource] Failed to get cached message statuses: $e');
+      return {};
+    }
+  }
+
   // Update chat last message in cache
   Future<void> updateChatLastMessage(String chatId, Message message) async {
     try {

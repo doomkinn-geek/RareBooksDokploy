@@ -261,7 +261,8 @@ public class ChatHub : Hub
         var user = await _unitOfWork.Users.GetByIdAsync(userId);
         
         // Notify others in the chat (except sender)
-        await Clients.OthersInGroup(chatId.ToString()).SendAsync("UserTyping", userId, user?.DisplayName ?? "Unknown", isTyping);
+        // Include chatId so clients know which chat the typing indicator is for
+        await Clients.OthersInGroup(chatId.ToString()).SendAsync("UserTyping", userId, user?.DisplayName ?? "Unknown", isTyping, chatId.ToString());
     }
     
     /// <summary>

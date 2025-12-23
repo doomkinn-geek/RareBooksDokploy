@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/datasources/signalr_service.dart';
 import '../../data/models/message_model.dart';
-import '../../core/services/logger_service.dart';
 import 'auth_provider.dart';
 import 'messages_provider.dart';
 import 'chats_provider.dart';
@@ -14,6 +13,84 @@ import '../../core/services/notification_service.dart';
 final signalRServiceProvider = Provider<SignalRService>((ref) {
   return SignalRService();
 });
+
+/// Global cache for message status updates received when MessagesProvider is not initialized
+/// This ensures status updates are not lost when user is not viewing the chat
+final pendingStatusUpdatesProvider = StateNotifierProvider<PendingStatusUpdatesNotifier, Map<String, MessageStatus>>((ref) {
+  return PendingStatusUpdatesNotifier();
+});
+
+class PendingStatusUpdatesNotifier extends StateNotifier<Map<String, MessageStatus>> {
+  PendingStatusUpdatesNotifier() : super({});
+  
+  /// Cache a status update for later application
+  void cacheStatusUpdate(String messageId, MessageStatus status) {
+    // Only cache if it's a higher priority status
+    final existingStatus = state[messageId];
+    if (existingStatus == null || _getStatusPriority(status) > _getStatusPriority(existingStatus)) {
+      state = {...state, messageId: status};
+      print('[STATUS_CACHE] Cached status update: $messageId -> $status');
+    }
+  }
+  
+  /// Get and remove pending status update for a message
+  MessageStatus? consumeStatusUpdate(String messageId) {
+    final status = state[messageId];
+    if (status != null) {
+      state = Map.from(state)..remove(messageId);
+      print('[STATUS_CACHE] Consumed cached status for $messageId: $status');
+    }
+    return status;
+  }
+  
+  /// Get all pending updates for messages in a chat (by message IDs)
+  Map<String, MessageStatus> consumeStatusUpdatesForMessages(List<String> messageIds) {
+    final result = <String, MessageStatus>{};
+    final newState = Map<String, MessageStatus>.from(state);
+    
+    for (final messageId in messageIds) {
+      if (newState.containsKey(messageId)) {
+        result[messageId] = newState[messageId]!;
+        newState.remove(messageId);
+      }
+    }
+    
+    if (result.isNotEmpty) {
+      state = newState;
+      print('[STATUS_CACHE] Consumed ${result.length} cached status updates');
+    }
+    
+    return result;
+  }
+  
+  /// Clean up old entries (call periodically)
+  void cleanup() {
+    // Keep only last 1000 entries to prevent memory issues
+    if (state.length > 1000) {
+      final entries = state.entries.toList();
+      final trimmed = entries.skip(entries.length - 500).toList();
+      state = Map.fromEntries(trimmed);
+      print('[STATUS_CACHE] Cleaned up cache, ${state.length} entries remaining');
+    }
+  }
+  
+  int _getStatusPriority(MessageStatus status) {
+    switch (status) {
+      case MessageStatus.sending:
+        return 0;
+      case MessageStatus.sent:
+        return 1;
+      case MessageStatus.failed:
+        return 1;
+      case MessageStatus.delivered:
+        return 2;
+      case MessageStatus.read:
+        return 3;
+      case MessageStatus.played:
+        return 4;
+    }
+  }
+}
 
 final signalRConnectionProvider = StateNotifierProvider<SignalRConnectionNotifier, SignalRConnectionState>((ref) {
   return SignalRConnectionNotifier(
@@ -213,6 +290,14 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
           // #endregion
           print('[SignalR] Message status updated: $messageId -> $status');
           
+          // ALWAYS cache the status update in global cache first
+          // This ensures it's not lost even if provider is not active
+          try {
+            _ref.read(pendingStatusUpdatesProvider.notifier).cacheStatusUpdate(messageId, status);
+          } catch (e) {
+            print('[SignalR] Failed to cache status update: $e');
+          }
+          
           // Update message status in all providers
           try {
             // Try to update in all active chat providers
@@ -233,15 +318,19 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
                 print('[SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat ${chat.id}');
                 // #endregion
               } catch (e) {
-                // Provider not active - that's OK
+                // Provider not active - status is cached, will be applied when provider initializes
                 // #region agent log
-                print('[SIGNALR_STATUS] HYP_SIGNALR: Failed to update chat ${chat.id}: $e');
+                print('[SIGNALR_STATUS] HYP_SIGNALR: Provider not active for chat ${chat.id}, status cached for later');
                 // #endregion
               }
             }
             
             if (updatedCount > 0) {
               print('[SignalR] Message status updated in $updatedCount chat(s)');
+              // Status was applied, we can consume it from cache
+              _ref.read(pendingStatusUpdatesProvider.notifier).consumeStatusUpdate(messageId);
+            } else {
+              print('[SignalR] No active providers found, status cached for later application');
             }
             
             // Update unread count if message was marked as read
@@ -263,23 +352,17 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
         });
 
         // Setup typing indicator listener
-        _signalRService.onUserTyping((userId, userName, isTyping) {
-          print('[SignalR] User typing indicator: $userName ($userId) - $isTyping');
+        _signalRService.onUserTyping((chatId, userId, userName, isTyping) {
+          print('[SignalR] User typing indicator: $userName ($userId) in chat $chatId - $isTyping');
           
           try {
-            // Find which chat this user is typing in by checking all chats
-            final chatsState = _ref.read(chatsProvider);
-            for (final chat in chatsState.chats) {
-              // Update typing state for this chat
-              // The chatId context will be determined by the chat screen itself
-              // For now, we'll let the typing provider handle it globally
-              _ref.read(typingProvider.notifier).setUserTyping(
-                chat.id, 
-                userId, 
-                userName, 
-                isTyping
-              );
-            }
+            // Update typing state only for the specific chat
+            _ref.read(typingProvider.notifier).setUserTyping(
+              chatId, 
+              userId, 
+              userName, 
+              isTyping
+            );
           } catch (e) {
             print('[SignalR] Failed to process typing indicator: $e');
           }

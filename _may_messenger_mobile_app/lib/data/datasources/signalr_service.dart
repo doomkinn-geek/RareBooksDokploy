@@ -494,15 +494,16 @@ class SignalRService {
     }
   }
 
-  void onUserTyping(Function(String userId, String userName, bool isTyping) callback) {
+  void onUserTyping(Function(String chatId, String userId, String userName, bool isTyping) callback) {
     _hubConnection?.off('UserTyping');
     
     _hubConnection?.on('UserTyping', (arguments) {
-      if (arguments != null && arguments.length >= 3) {
+      if (arguments != null && arguments.length >= 4) {
         final userId = arguments[0] as String;
         final userName = arguments[1] as String;
         final isTyping = arguments[2] as bool;
-        callback(userId, userName, isTyping);
+        final chatId = arguments[3] as String;
+        callback(chatId, userId, userName, isTyping);
       }
     });
   }

@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/models/user_model.dart';
+import '../../data/models/chat_model.dart';
 import '../../data/models/search_result_model.dart';
 import '../../data/services/search_service.dart';
 import '../../data/datasources/local_datasource.dart';
+import 'chats_provider.dart';
 
 final searchServiceProvider = Provider<SearchService>((ref) {
   // Create a new Dio instance with proper configuration
@@ -37,12 +39,14 @@ final searchProvider = StateNotifierProvider<SearchNotifier, SearchState>((ref) 
   return SearchNotifier(
     ref.read(searchServiceProvider),
     ref.read(localDataSourceForSearchProvider),
+    ref,
   );
 });
 
 class SearchState {
   final List<User> userResults;
   final List<MessageSearchResult> messageResults;
+  final List<Chat> chatResults; // Chats and groups matching the query
   final bool isLoading;
   final String? error;
   final String query;
@@ -50,6 +54,7 @@ class SearchState {
   SearchState({
     this.userResults = const [],
     this.messageResults = const [],
+    this.chatResults = const [],
     this.isLoading = false,
     this.error,
     this.query = '',
@@ -58,6 +63,7 @@ class SearchState {
   SearchState copyWith({
     List<User>? userResults,
     List<MessageSearchResult>? messageResults,
+    List<Chat>? chatResults,
     bool? isLoading,
     String? error,
     String? query,
@@ -65,6 +71,7 @@ class SearchState {
     return SearchState(
       userResults: userResults ?? this.userResults,
       messageResults: messageResults ?? this.messageResults,
+      chatResults: chatResults ?? this.chatResults,
       isLoading: isLoading ?? this.isLoading,
       error: error,
       query: query ?? this.query,
@@ -75,9 +82,10 @@ class SearchState {
 class SearchNotifier extends StateNotifier<SearchState> {
   final SearchService _searchService;
   final LocalDataSource _localDataSource;
+  final Ref _ref;
   Timer? _debounceTimer;
 
-  SearchNotifier(this._searchService, this._localDataSource) : super(SearchState());
+  SearchNotifier(this._searchService, this._localDataSource, this._ref) : super(SearchState());
 
   void search(String query) {
     // Cancel previous timer
@@ -106,6 +114,9 @@ class SearchNotifier extends StateNotifier<SearchState> {
     
     // Search local cache immediately for instant results
     _searchLocalContacts(query.trim());
+    
+    // Search chats/groups locally (instant)
+    _searchLocalChats(query.trim());
     
     // Debounce backend search
     _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
@@ -165,6 +176,33 @@ class SearchNotifier extends StateNotifier<SearchState> {
       }
     } catch (e) {
       print('[Search] Failed to search local contacts: $e');
+    }
+  }
+
+  /// Search chats and groups locally by title
+  void _searchLocalChats(String query) {
+    try {
+      final chatsState = _ref.read(chatsProvider);
+      final queryLower = query.toLowerCase();
+      
+      // Filter chats by title matching the query
+      final matchingChats = chatsState.chats.where((chat) {
+        return chat.title.toLowerCase().contains(queryLower);
+      }).toList();
+      
+      // Sort groups first, then private chats
+      matchingChats.sort((a, b) {
+        if (a.type == ChatType.group && b.type != ChatType.group) return -1;
+        if (a.type != ChatType.group && b.type == ChatType.group) return 1;
+        return a.title.compareTo(b.title);
+      });
+      
+      state = state.copyWith(
+        chatResults: matchingChats,
+        isLoading: true, // Still loading backend results
+      );
+    } catch (e) {
+      print('[Search] Failed to search local chats: $e');
     }
   }
 

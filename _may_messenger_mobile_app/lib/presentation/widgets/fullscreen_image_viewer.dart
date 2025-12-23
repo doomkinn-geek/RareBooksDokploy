@@ -23,41 +23,97 @@ class FullScreenImageViewer extends StatefulWidget {
 class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
   double _dragOffset = 0.0;
   double _opacity = 1.0;
+  double _currentScale = 1.0; // Track current zoom scale
+  final TransformationController _transformationController = TransformationController();
+
+  @override
+  void initState() {
+    super.initState();
+    _transformationController.addListener(_onTransformationChanged);
+  }
+
+  @override
+  void dispose() {
+    _transformationController.removeListener(_onTransformationChanged);
+    _transformationController.dispose();
+    super.dispose();
+  }
+
+  void _onTransformationChanged() {
+    // Extract scale from transformation matrix
+    final scale = _transformationController.value.getMaxScaleOnAxis();
+    if (scale != _currentScale) {
+      setState(() {
+        _currentScale = scale;
+      });
+    }
+  }
+
+  void _handleVerticalDragUpdate(DragUpdateDetails details) {
+    // Only allow swipe-to-dismiss when image is not zoomed
+    if (_currentScale <= 1.05) {
+      setState(() {
+        _dragOffset += details.delta.dy;
+        // Calculate opacity based on drag distance (fade out as dragging down)
+        _opacity = (1.0 - (_dragOffset.abs() / 300)).clamp(0.0, 1.0);
+      });
+    }
+  }
+
+  void _handleVerticalDragEnd(DragEndDetails details) {
+    // Only handle dismiss when not zoomed
+    if (_currentScale <= 1.05) {
+      // Dismiss if dragged more than 100 pixels or fast velocity
+      if (_dragOffset.abs() > 100 || 
+          details.velocity.pixelsPerSecond.dy.abs() > 500) {
+        Navigator.of(context).pop();
+      } else {
+        // Reset position if not enough drag
+        setState(() {
+          _dragOffset = 0.0;
+          _opacity = 1.0;
+        });
+      }
+    } else {
+      // Reset if zoomed
+      setState(() {
+        _dragOffset = 0.0;
+        _opacity = 1.0;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    // Determine if swipe gestures should be enabled
+    final bool enableSwipeToDismiss = _currentScale <= 1.05;
+    
     return Scaffold(
       backgroundColor: Colors.black.withOpacity(_opacity),
       body: GestureDetector(
-        onVerticalDragUpdate: (details) {
-          setState(() {
-            _dragOffset += details.delta.dy;
-            // Calculate opacity based on drag distance (fade out as dragging down)
-            _opacity = (1.0 - (_dragOffset.abs() / 300)).clamp(0.0, 1.0);
-          });
-        },
-        onVerticalDragEnd: (details) {
-          // Dismiss if dragged more than 100 pixels or fast velocity
-          if (_dragOffset.abs() > 100 || 
-              details.velocity.pixelsPerSecond.dy.abs() > 500) {
-            Navigator.of(context).pop();
-          } else {
-            // Reset position if not enough drag
-            setState(() {
-              _dragOffset = 0.0;
-              _opacity = 1.0;
-            });
-          }
-        },
+        // Only intercept vertical drags when not zoomed
+        onVerticalDragUpdate: enableSwipeToDismiss ? _handleVerticalDragUpdate : null,
+        onVerticalDragEnd: enableSwipeToDismiss ? _handleVerticalDragEnd : null,
         child: Transform.translate(
           offset: Offset(0, _dragOffset),
           child: Stack(
             children: [
-              // Image viewer
+              // Image viewer with zoom
               Center(
                 child: InteractiveViewer(
+                  transformationController: _transformationController,
                   minScale: 0.5,
                   maxScale: 4.0,
+                  // Double-tap to reset zoom
+                  onInteractionEnd: (details) {
+                    // Reset drag offset when zooming is done
+                    if (_currentScale <= 1.0 && _dragOffset != 0) {
+                      setState(() {
+                        _dragOffset = 0.0;
+                        _opacity = 1.0;
+                      });
+                    }
+                  },
                   child: _buildImage(),
                 ),
               ),

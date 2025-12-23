@@ -34,14 +34,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
   String? _highlightedMessageId;
   bool _hasInitialScrolled = false; // Track if we've scrolled on first load
+  bool _isPeriodicStatusUpdateActive = false;
+  bool _showScrollToBottomButton = false; // Show FAB when scrolled up
 
   @override
   void initState() {
     super.initState();
     
-    // #region agent log - Hypothesis A/D: Track ChatScreen initialization
-    print('[CHAT_SCREEN] HYP_D1: initState called - chatId: ${widget.chatId}, highlightMessageId: ${widget.highlightMessageId}, timestamp: ${DateTime.now().toIso8601String()}');
-    // #endregion
+    print('[CHAT_SCREEN] initState called - chatId: ${widget.chatId}, highlightMessageId: ${widget.highlightMessageId}');
     
     // Set highlighted message if provided
     if (widget.highlightMessageId != null) {
@@ -57,69 +57,106 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
     
     // Add scroll listener to mark messages as read when scrolled to bottom
+    // and to show/hide scroll-to-bottom FAB
     _scrollController.addListener(_onScroll);
+    _scrollController.addListener(_updateScrollToBottomButton);
     
-    // Join chat via SignalR
-    Future.microtask(() async {
-      // #region agent log - Hypothesis C/D: Track SignalR join and current messages state
-      final messagesStateBefore = ref.read(messagesProvider(widget.chatId));
-      print('[CHAT_SCREEN] HYP_D2: Before joinChat - messages count: ${messagesStateBefore.messages.length}, isLoading: ${messagesStateBefore.isLoading}');
-      // #endregion
+    // CRITICAL: Perform reliable sync when opening chat
+    // This ensures we have the latest data even after push notification
+    _performReliableChatSync();
+  }
+  
+  /// Perform reliable synchronization when chat screen opens
+  /// This handles the case when app was opened from push notification
+  Future<void> _performReliableChatSync() async {
+    print('[CHAT_SCREEN] Starting reliable chat sync for ${widget.chatId}');
+    
+    try {
+      // STEP 1: Force refresh messages first (most important)
+      print('[CHAT_SCREEN] Step 1: Force refreshing messages...');
+      await ref.read(messagesProvider(widget.chatId).notifier).loadMessages(forceRefresh: true);
       
+      // STEP 2: Join chat via SignalR
+      print('[CHAT_SCREEN] Step 2: Joining chat via SignalR...');
       final signalRService = ref.read(signalRServiceProvider);
-      // #region agent log - Hypothesis C
-      final joinStart = DateTime.now();
-      // #endregion
       await signalRService.joinChat(widget.chatId);
-      // #region agent log - Hypothesis C
-      print('[CHAT_SCREEN] HYP_C_JOIN: joinChat completed in ${DateTime.now().difference(joinStart).inMilliseconds}ms');
-      // #endregion
       
-      // Уведомить NotificationService и FCM что пользователь в этом чате
+      // STEP 3: Set current chat for notifications
       final notificationService = ref.read(notificationServiceProvider);
       notificationService.setCurrentChat(widget.chatId);
-      
-      // Clear notifications for this chat (push notifications)
       await notificationService.cancelNotificationsForChat(widget.chatId);
       
       final fcmService = ref.read(fcmServiceProvider);
       fcmService.setCurrentChat(widget.chatId);
       
-      // Обнуляем счетчик непрочитанных сообщений
+      // STEP 4: Clear unread count
       ref.read(chatsProvider.notifier).clearUnreadCount(widget.chatId);
       
-      // Mark messages as read after a short delay to ensure messages are loaded
-      await Future.delayed(const Duration(milliseconds: 500));
-      // #region agent log - Hypothesis A/D
-      final messagesStateAfter = ref.read(messagesProvider(widget.chatId));
-      print('[CHAT_SCREEN] HYP_D3: Before markAsRead - messages count: ${messagesStateAfter.messages.length}, isLoading: ${messagesStateAfter.isLoading}');
-      // #endregion
+      // STEP 5: Wait for messages to load, then mark as read
+      // Wait until messages are actually loaded (check isLoading state)
+      int waitAttempts = 0;
+      while (ref.read(messagesProvider(widget.chatId)).isLoading && waitAttempts < 10) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        waitAttempts++;
+      }
+      
+      print('[CHAT_SCREEN] Messages loaded, marking as read...');
       ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
-    });
-    
-    // Load user status in SEPARATE async task (fire-and-forget)
-    Future.microtask(() async {
+      
+      // STEP 6: Load user status immediately
+      await _loadUserStatus();
+      
+      // STEP 7: Start periodic status updates
+      _startPeriodicStatusUpdate();
+      
+      print('[CHAT_SCREEN] Reliable chat sync completed');
+    } catch (e) {
+      print('[CHAT_SCREEN] Error during reliable chat sync: $e');
+      // Non-fatal - continue with whatever data we have
+    }
+  }
+  
+  /// Load user online status from API
+  Future<void> _loadUserStatus() async {
+    try {
       final chatsState = ref.read(chatsProvider);
       final currentChat = chatsState.chats.where((chat) => chat.id == widget.chatId).firstOrNull;
       
       if (currentChat?.type == ChatType.private && 
           currentChat?.otherParticipantId != null) {
-        try {
-          final userRepository = ref.read(userRepositoryProvider);
-          final statuses = await userRepository.getUsersStatus([currentChat!.otherParticipantId!]);
+        final userRepository = ref.read(userRepositoryProvider);
+        final statuses = await userRepository.getUsersStatus([currentChat!.otherParticipantId!]);
+        
+        if (statuses.isNotEmpty && mounted) {
+          final status = statuses.first;
+          ref.read(onlineUsersProvider.notifier).setUserOnline(status.userId, status.isOnline);
           
-          if (statuses.isNotEmpty && mounted) {
-            final status = statuses.first;
-            ref.read(onlineUsersProvider.notifier).setUserOnline(status.userId, status.isOnline);
-            
-            if (status.lastSeenAt != null) {
-              ref.read(lastSeenMapProvider.notifier).setLastSeen(status.userId, status.lastSeenAt!);
-            }
+          if (status.lastSeenAt != null) {
+            ref.read(lastSeenMapProvider.notifier).setLastSeen(status.userId, status.lastSeenAt!);
           }
-        } catch (e) {
-          print('[ChatScreen] Failed to load user status: $e');
-          // Non-critical, don't break the app
+          
+          print('[CHAT_SCREEN] User status loaded: ${status.isOnline ? "online" : "offline"}');
         }
+      }
+    } catch (e) {
+      print('[CHAT_SCREEN] Failed to load user status: $e');
+    }
+  }
+  
+  /// Start periodic status updates every 30 seconds while chat is open
+  void _startPeriodicStatusUpdate() {
+    if (_isPeriodicStatusUpdateActive) return;
+    _isPeriodicStatusUpdateActive = true;
+    
+    Future.delayed(const Duration(seconds: 30), () {
+      if (!mounted) return;
+      
+      _loadUserStatus();
+      
+      // Continue periodic updates
+      if (mounted) {
+        _isPeriodicStatusUpdateActive = false;
+        _startPeriodicStatusUpdate();
       }
     });
   }
@@ -135,6 +172,41 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (maxScroll - currentScroll <= threshold) {
       // User is at the bottom, mark messages as read
       ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
+    }
+  }
+
+  void _updateScrollToBottomButton() {
+    if (!_scrollController.hasClients) return;
+    
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+    final threshold = 500.0; // Show FAB when scrolled up more than 500px from bottom
+    
+    final shouldShow = maxScroll - currentScroll > threshold;
+    if (shouldShow != _showScrollToBottomButton) {
+      setState(() {
+        _showScrollToBottomButton = shouldShow;
+      });
+    }
+  }
+
+  /// Check if user is near bottom of the list (for auto-scroll on new message)
+  bool _isNearBottom() {
+    if (!_scrollController.hasClients) return true;
+    
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+    final threshold = 150.0; // Consider "near bottom" if within 150px
+    
+    return maxScroll - currentScroll <= threshold;
+  }
+
+  /// Auto-scroll to bottom if user is near the bottom
+  void _autoScrollIfNearBottom() {
+    if (_isNearBottom()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottom();
+      });
     }
   }
 
@@ -234,6 +306,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final messagesState = ref.watch(messagesProvider(widget.chatId));
     final chatsState = ref.watch(chatsProvider);
     final contactsNames = ref.watch(contactsNamesProvider);
+
+    // Listen for new messages and auto-scroll if near bottom
+    ref.listen<MessagesState>(messagesProvider(widget.chatId), (previous, next) {
+      final prevCount = previous?.messages.length ?? 0;
+      final nextCount = next.messages.length;
+      
+      // Auto-scroll only when new messages are added (not on initial load or status updates)
+      if (nextCount > prevCount && _hasInitialScrolled) {
+        _autoScrollIfNearBottom();
+      }
+    });
 
     // Find current chat
     final currentChat = chatsState.chats.firstWhere(
@@ -342,70 +425,95 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
         ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage('assets/chat_background.png'),
-            fit: BoxFit.cover,
-            opacity: 0.3, // Subtle background, not too distracting
-          ),
-        ),
-        child: Column(
-          children: [
-            Expanded(
-              child: messagesState.isLoading && messagesState.messages.isEmpty
-                  ? const Center(child: CircularProgressIndicator())
-                  : messagesState.messages.isEmpty
-                      ? const Center(child: Text('Нет сообщений'))
-                      : ListView.builder(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.all(16),
-                          itemCount: messagesState.messages.length,
-                          itemBuilder: (context, index) {
-                            final message = messagesState.messages[index];
-                            final isHighlighted = message.id == _highlightedMessageId;
-                            return MessageBubble(
-                              message: message,
-                              isHighlighted: isHighlighted,
-                            );
-                          },
-                        ),
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              image: DecorationImage(
+                image: AssetImage('assets/chat_background.png'),
+                fit: BoxFit.cover,
+                opacity: 0.3, // Subtle background, not too distracting
+              ),
             ),
-            // Typing indicator
-            _buildTypingIndicator(),
-            MessageInput(
-            chatId: widget.chatId,
-            isSending: messagesState.isSending,
-            onSendMessage: (content) {
-              ref
-                  .read(messagesProvider(widget.chatId).notifier)
-                  .sendMessage(content);
-              // Scroll to bottom after sending message
-              Future.delayed(const Duration(milliseconds: 100), () {
-                if (mounted) _scrollToBottom();
-              });
-            },
-            onSendAudio: (audioPath) {
-              ref
-                  .read(messagesProvider(widget.chatId).notifier)
-                  .sendAudioMessage(audioPath);
-              // Scroll to bottom after sending audio
-              Future.delayed(const Duration(milliseconds: 100), () {
-                if (mounted) _scrollToBottom();
-              });
-            },
-            onSendImage: (imagePath) {
-              ref
-                  .read(messagesProvider(widget.chatId).notifier)
-                  .sendImageMessage(imagePath);
-              // Scroll to bottom after sending image
-              Future.delayed(const Duration(milliseconds: 100), () {
-                if (mounted) _scrollToBottom();
-              });
-            },
+            child: Column(
+              children: [
+                Expanded(
+                  child: messagesState.isLoading && messagesState.messages.isEmpty
+                      ? const Center(child: CircularProgressIndicator())
+                      : messagesState.messages.isEmpty
+                          ? const Center(child: Text('Нет сообщений'))
+                          : ListView.builder(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.all(16),
+                              itemCount: messagesState.messages.length,
+                              itemBuilder: (context, index) {
+                                final message = messagesState.messages[index];
+                                final isHighlighted = message.id == _highlightedMessageId;
+                                return MessageBubble(
+                                  message: message,
+                                  isHighlighted: isHighlighted,
+                                );
+                              },
+                            ),
+                ),
+                // Typing indicator
+                _buildTypingIndicator(),
+                MessageInput(
+                chatId: widget.chatId,
+                isSending: messagesState.isSending,
+                onSendMessage: (content) {
+                  ref
+                      .read(messagesProvider(widget.chatId).notifier)
+                      .sendMessage(content);
+                  // Scroll to bottom after sending message
+                  Future.delayed(const Duration(milliseconds: 100), () {
+                    if (mounted) _scrollToBottom();
+                  });
+                },
+                onSendAudio: (audioPath) {
+                  ref
+                      .read(messagesProvider(widget.chatId).notifier)
+                      .sendAudioMessage(audioPath);
+                  // Scroll to bottom after sending audio
+                  Future.delayed(const Duration(milliseconds: 100), () {
+                    if (mounted) _scrollToBottom();
+                  });
+                },
+                onSendImage: (imagePath) {
+                  ref
+                      .read(messagesProvider(widget.chatId).notifier)
+                      .sendImageMessage(imagePath);
+                  // Scroll to bottom after sending image
+                  Future.delayed(const Duration(milliseconds: 100), () {
+                    if (mounted) _scrollToBottom();
+                  });
+                },
+              ),
+              ],
+            ),
           ),
-          ],
-        ),
+          // Scroll to bottom FAB
+          Positioned(
+            bottom: 100,
+            right: 16,
+            child: AnimatedOpacity(
+              opacity: _showScrollToBottomButton ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 200),
+              child: AnimatedScale(
+                scale: _showScrollToBottomButton ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: FloatingActionButton.small(
+                  onPressed: _showScrollToBottomButton ? _scrollToBottom : null,
+                  backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                  child: Icon(
+                    Icons.keyboard_arrow_down,
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

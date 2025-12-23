@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/search_provider.dart';
 import '../providers/auth_provider.dart';
 import '../../core/utils/error_formatter.dart';
+import '../../data/models/chat_model.dart';
 import 'chat_screen.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
@@ -43,8 +44,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         title: TextField(
           controller: _searchController,
           focusNode: _searchFocus,
-          decoration: const InputDecoration(
-            hintText: 'Поиск контактов и сообщений...',
+          decoration:           const InputDecoration(
+            hintText: 'Поиск чатов, контактов и сообщений...',
             border: InputBorder.none,
             hintStyle: TextStyle(color: Colors.white70),
           ),
@@ -82,7 +83,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             ),
             SizedBox(height: 8),
             Text(
-              'Контакты • Сообщения',
+              'Чаты • Контакты • Сообщения',
               style: TextStyle(color: Colors.grey, fontSize: 12),
             ),
           ],
@@ -114,10 +115,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       );
     }
 
+    final hasChats = state.chatResults.isNotEmpty;
     final hasUsers = state.userResults.isNotEmpty;
     final hasMessages = state.messageResults.isNotEmpty;
 
-    if (!hasUsers && !hasMessages) {
+    if (!hasChats && !hasUsers && !hasMessages) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -140,6 +142,47 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
     return ListView(
       children: [
+        // Chats and groups section
+        if (hasChats) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text(
+              'Чаты (${state.chatResults.length})',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+          ...state.chatResults.map((chat) => ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: chat.type == ChatType.group
+                      ? Theme.of(context).colorScheme.tertiaryContainer
+                      : Theme.of(context).colorScheme.primaryContainer,
+                  child: Icon(
+                    chat.type == ChatType.group ? Icons.group : Icons.person,
+                    color: chat.type == ChatType.group
+                        ? Theme.of(context).colorScheme.onTertiaryContainer
+                        : Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                title: Text(chat.title),
+                subtitle: Text(
+                  chat.type == ChatType.group ? 'Группа' : 'Личный чат',
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+                onTap: () {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ChatScreen(chatId: chat.id),
+                    ),
+                  );
+                },
+              )),
+          if (hasUsers || hasMessages) const Divider(height: 32),
+        ],
+        // Contacts section
         if (hasUsers) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),

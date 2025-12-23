@@ -92,13 +92,39 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     this._ref,
   ) : super(MessagesState()) {
     _syncService = MessageSyncService(_messageRepository);
-    loadMessages();
+    loadMessages().then((_) => _applyCachedStatusUpdates());
     _monitorSignalRConnection();
     _startPeriodicSync();
     _startOutgoingStatusPolling();
     
     // Start status sync service
     _statusSyncService.startPeriodicSync();
+  }
+  
+  /// Apply any pending status updates from the global cache
+  /// This ensures we don't miss updates that arrived while this provider was not active
+  void _applyCachedStatusUpdates() {
+    try {
+      if (state.messages.isEmpty) return;
+      
+      // Get all message IDs in this chat
+      final messageIds = state.messages.map((m) => m.id).toList();
+      
+      // Consume cached status updates for these messages
+      final pendingUpdates = _ref.read(pendingStatusUpdatesProvider.notifier)
+          .consumeStatusUpdatesForMessages(messageIds);
+      
+      if (pendingUpdates.isEmpty) return;
+      
+      print('[STATUS_CACHE] Applying ${pendingUpdates.length} cached status updates for chat $chatId');
+      
+      // Apply each cached update
+      for (final entry in pendingUpdates.entries) {
+        updateMessageStatus(entry.key, entry.value);
+      }
+    } catch (e) {
+      print('[STATUS_CACHE] Error applying cached status updates: $e');
+    }
   }
 
 
@@ -132,6 +158,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   }
 
   /// Check and update statuses for recently sent messages
+  /// Uses batch API for efficiency instead of individual requests
   Future<void> _checkOutgoingMessageStatuses() async {
     try {
       // Get current user ID
@@ -155,41 +182,51 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         return;
       }
       
-      print('[OUTGOING_STATUS] Checking status for ${pendingMessages.length} pending outgoing messages');
+      // Separate local-only messages (handle individually) from synced messages (batch query)
+      final localOnlyMessages = pendingMessages.where((m) => m.isLocalOnly).toList();
+      final syncedMessages = pendingMessages.where((m) => !m.isLocalOnly).toList();
       
-      // Query server for each pending message's current status
-      for (final message in pendingMessages) {
-        try {
-          // Handle local-only messages (still syncing to server)
-          if (message.isLocalOnly) {
-            await _handleStuckLocalMessage(message, now);
-            continue;
-          }
-          
-          // Skip if we just sent it (give SignalR a chance first)
-          final sentAt = _recentlySentMessages[message.id];
-          if (sentAt != null && now.difference(sentAt).inSeconds < 3) {
-            continue;
-          }
-          
-          final serverMessage = await _messageRepository.getMessageById(message.id);
-          
-          // Check if status has changed
-          if (serverMessage.status != message.status) {
-            print('[OUTGOING_STATUS] Status updated via polling: ${message.id} ${message.status} -> ${serverMessage.status}');
-            updateMessageStatus(message.id, serverMessage.status);
+      // Handle local-only messages individually
+      for (final message in localOnlyMessages) {
+        await _handleStuckLocalMessage(message, now);
+      }
+      
+      // For synced messages, use batch status API
+      if (syncedMessages.isEmpty) return;
+      
+      // Filter out messages we just sent (give SignalR a chance first)
+      final messagesToCheck = syncedMessages.where((m) {
+        final sentAt = _recentlySentMessages[m.id];
+        return sentAt == null || now.difference(sentAt).inSeconds >= 3;
+      }).toList();
+      
+      if (messagesToCheck.isEmpty) return;
+      
+      print('[OUTGOING_STATUS] Batch checking status for ${messagesToCheck.length} pending outgoing messages');
+      
+      try {
+        // Use batch API for efficiency
+        final messageIds = messagesToCheck.map((m) => m.id).toList();
+        final statuses = await _messageRepository.getMessageStatuses(messageIds);
+        
+        // Update statuses for messages that changed
+        for (final message in messagesToCheck) {
+          final serverStatus = statuses[message.id];
+          if (serverStatus != null && serverStatus != message.status) {
+            print('[OUTGOING_STATUS] Status updated via batch polling: ${message.id} ${message.status} -> $serverStatus');
+            updateMessageStatus(message.id, serverStatus);
             
             // Remove from tracking if status is final
-            if (serverMessage.status == MessageStatus.delivered || 
-                serverMessage.status == MessageStatus.read ||
-                serverMessage.status == MessageStatus.played) {
+            if (serverStatus == MessageStatus.delivered || 
+                serverStatus == MessageStatus.read ||
+                serverStatus == MessageStatus.played) {
               _recentlySentMessages.remove(message.id);
             }
           }
-        } catch (e) {
-          print('[OUTGOING_STATUS] Failed to check status for message ${message.id}: $e');
-          // Don't fail the entire batch - continue with other messages
         }
+      } catch (e) {
+        print('[OUTGOING_STATUS] Batch status check failed: $e');
+        // Non-fatal, will retry on next poll
       }
     } catch (e) {
       print('[OUTGOING_STATUS] Error in status polling: $e');
@@ -444,7 +481,19 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       print('[MSG_LOAD] Loaded ${syncedMessages.length} synced messages from repository');
       
       // MERGE with cached messages, preserving local 'played' status
+      // First try LRU cache (in-memory)
       syncedMessages = _mergeMessagesPreservingPlayedStatus(cachedMessages, syncedMessages);
+      
+      // Also check Hive cache for played statuses (persisted across app restarts)
+      try {
+        final localDataSource = _ref.read(localDataSourceProvider);
+        final hiveStatuses = await localDataSource.getCachedMessageStatuses(chatId);
+        if (hiveStatuses.isNotEmpty) {
+          syncedMessages = _mergeMessagesWithHiveStatuses(syncedMessages, hiveStatuses);
+        }
+      } catch (e) {
+        print('[MSG_LOAD] Failed to merge with Hive statuses: $e');
+      }
       print('[MSG_LOAD] Merged with cached messages to preserve played status');
       
       for (final msg in syncedMessages.take(5)) {
@@ -1449,6 +1498,25 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
       
       return serverMsg;
+    }).toList();
+  }
+
+  /// Merge messages with Hive-cached statuses to preserve played status
+  /// This is used when LRU cache is empty (e.g., after exiting and re-entering chat)
+  List<Message> _mergeMessagesWithHiveStatuses(
+    List<Message> messages,
+    Map<String, MessageStatus> hiveStatuses
+  ) {
+    return messages.map((msg) {
+      final hiveStatus = hiveStatuses[msg.id];
+      
+      // If Hive has 'played' status and server doesn't, preserve the Hive status
+      if (hiveStatus == MessageStatus.played && msg.status != MessageStatus.played) {
+        print('[MSG_LOAD] Restoring played status from Hive for message ${msg.id}');
+        return msg.copyWith(status: MessageStatus.played);
+      }
+      
+      return msg;
     }).toList();
   }
 

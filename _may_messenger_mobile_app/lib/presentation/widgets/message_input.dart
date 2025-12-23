@@ -6,8 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
+import 'package:image_picker/image_picker.dart';
 import 'audio_recorder_widget.dart';
-import 'image_picker_buttons.dart';
 import '../providers/signalr_provider.dart';
 
 enum RecordingState { idle, recording, locked }
@@ -36,6 +37,8 @@ class MessageInput extends ConsumerStatefulWidget {
 class _MessageInputState extends ConsumerState<MessageInput> with TickerProviderStateMixin {
   final TextEditingController _textController = TextEditingController();
   final AudioRecorder _audioRecorder = AudioRecorder();
+  final FocusNode _textFocusNode = FocusNode();
+  final ImagePicker _imagePicker = ImagePicker();
   
   RecordingState _recordingState = RecordingState.idle;
   String? _audioPath;
@@ -51,6 +54,7 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
   bool _hasText = false; // Track if text field has content
   Timer? _typingTimer;
   bool _isCurrentlyTyping = false;
+  bool _showEmojiPicker = false; // Track emoji picker visibility
   
   @override
   void initState() {
@@ -107,6 +111,7 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
   @override
   void dispose() {
     _textController.dispose();
+    _textFocusNode.dispose();
     _timer?.cancel();
     _typingTimer?.cancel();
     if (_isCurrentlyTyping) {
@@ -116,6 +121,55 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
     _scaleController?.dispose();
     _slideController?.dispose();
     super.dispose();
+  }
+
+  void _toggleEmojiPicker() {
+    if (_showEmojiPicker) {
+      setState(() {
+        _showEmojiPicker = false;
+      });
+      _textFocusNode.requestFocus();
+    } else {
+      _textFocusNode.unfocus();
+      setState(() {
+        _showEmojiPicker = true;
+      });
+    }
+  }
+
+  void _onEmojiSelected(dynamic category, Emoji emoji) {
+    final text = _textController.text;
+    final selection = _textController.selection;
+    final newText = text.replaceRange(
+      selection.start,
+      selection.end,
+      emoji.emoji,
+    );
+    _textController.text = newText;
+    _textController.selection = TextSelection.collapsed(
+      offset: selection.start + emoji.emoji.length,
+    );
+  }
+
+  Future<void> _pickImage({bool fromCamera = false}) async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: fromCamera ? ImageSource.camera : ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 1920,
+        maxHeight: 1920,
+      );
+      
+      if (image != null) {
+        widget.onSendImage(image.path);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка: $e')),
+        );
+      }
+    }
   }
 
   void _sendMessage() {
@@ -314,66 +368,80 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
 
     return SafeArea(
       bottom: true,
-      child: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 4,
-                offset: const Offset(0, -2),
-              ),
-            ],
-          ),
-          clipBehavior: Clip.none,
-          child: Listener(
-            onPointerDown: (event) {
-              if (_recordingState == RecordingState.idle) {
-                // Save initial position when starting to press
-                _initialPointerPosition = event.localPosition;
-              }
-            },
-            onPointerMove: _recordingState == RecordingState.recording
-                ? (event) {
-                    if (_initialPointerPosition != null) {
-                      setState(() {
-                        // Calculate offset from the initial press position
-                        _dragOffset = Offset(
-                          event.localPosition.dx - _initialPointerPosition!.dx,
-                          event.localPosition.dy - _initialPointerPosition!.dy,
-                        );
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.none,
+            child: Listener(
+              onPointerDown: (event) {
+                if (_recordingState == RecordingState.idle) {
+                  // Save initial position when starting to press
+                  _initialPointerPosition = event.localPosition;
+                }
+              },
+              onPointerMove: _recordingState == RecordingState.recording
+                  ? (event) {
+                      if (_initialPointerPosition != null) {
+                        setState(() {
+                          // Calculate offset from the initial press position
+                          _dragOffset = Offset(
+                            event.localPosition.dx - _initialPointerPosition!.dx,
+                            event.localPosition.dy - _initialPointerPosition!.dy,
+                          );
+                          
+                          _showCancelHint = _dragOffset.dx < -50;
+                          _showLockHint = _dragOffset.dy < -50;
+                        });
                         
-                        _showCancelHint = _dragOffset.dx < -50;
-                        _showLockHint = _dragOffset.dy < -50;
-                      });
-                      
-                      if (_dragOffset.dy < -100) {
-                        _lockRecording();
-                      } else if (_dragOffset.dx < -150) {
-                        _cancelRecording();
+                        if (_dragOffset.dy < -100) {
+                          _lockRecording();
+                        } else if (_dragOffset.dx < -150) {
+                          _cancelRecording();
+                        }
                       }
                     }
+                  : null,
+              onPointerUp: (event) {
+                if (_recordingState == RecordingState.recording) {
+                  if (_dragOffset.dx > -150 && _dragOffset.dy > -100) {
+                    _sendAudio();
+                  } else {
+                    // Already cancelled by swipe, just clean up
+                    _initialPointerPosition = null;
                   }
-                : null,
-            onPointerUp: (event) {
-              if (_recordingState == RecordingState.recording) {
-                if (_dragOffset.dx > -150 && _dragOffset.dy > -100) {
-                  _sendAudio();
                 } else {
-                  // Already cancelled by swipe, just clean up
+                  // Pointer up without recording, just clean up
                   _initialPointerPosition = null;
                 }
-              } else {
-                // Pointer up without recording, just clean up
-                _initialPointerPosition = null;
-              }
-            },
-            child: _recordingState == RecordingState.recording
-                ? _buildRecordingUI()
-                : _buildNormalUI(),
+              },
+              child: _recordingState == RecordingState.recording
+                  ? _buildRecordingUI()
+                  : _buildNormalUI(),
+            ),
           ),
-        ),
+          // Emoji picker
+          if (_showEmojiPicker)
+            SizedBox(
+              height: 250,
+              child: EmojiPicker(
+                onEmojiSelected: _onEmojiSelected,
+                textEditingController: _textController,
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -383,15 +451,19 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Image picker buttons
-          ImagePickerButtons(
-            onImageSelected: (imagePath) {
-              widget.onSendImage(imagePath);
-            },
+          // Emoji button (left side)
+          IconButton(
+            onPressed: _toggleEmojiPicker,
+            icon: Icon(
+              _showEmojiPicker ? Icons.keyboard : Icons.emoji_emotions_outlined,
+              color: Theme.of(context).colorScheme.primary,
+            ),
           ),
+          // Text input field
           Expanded(
             child: TextField(
               controller: _textController,
+              focusNode: _textFocusNode,
               decoration: InputDecoration(
                 hintText: 'Сообщение',
                 border: OutlineInputBorder(
@@ -406,9 +478,53 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
               ),
               maxLines: null,
               textCapitalization: TextCapitalization.sentences,
+              onTap: () {
+                // Hide emoji picker when tapping text field
+                if (_showEmojiPicker) {
+                  setState(() {
+                    _showEmojiPicker = false;
+                  });
+                }
+              },
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
+          // Attachment button (camera/gallery popup)
+          PopupMenuButton<String>(
+            icon: Icon(
+              Icons.attach_file,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            onSelected: (value) {
+              if (value == 'camera') {
+                _pickImage(fromCamera: true);
+              } else if (value == 'gallery') {
+                _pickImage(fromCamera: false);
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'camera',
+                child: Row(
+                  children: [
+                    Icon(Icons.camera_alt, color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 12),
+                    const Text('Камера'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'gallery',
+                child: Row(
+                  children: [
+                    Icon(Icons.photo_library, color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 12),
+                    const Text('Галерея'),
+                  ],
+                ),
+              ),
+            ],
+          ),
           // Show send button if text exists, otherwise show mic button
           if (_hasText)
             IconButton(
