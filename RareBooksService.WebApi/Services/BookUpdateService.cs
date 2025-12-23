@@ -366,11 +366,15 @@ namespace RareBooksService.WebApi.Services
 
                 if (stoppingToken.IsCancellationRequested) break;
 
-                // Ждем 1 день
-                var nextRun = DateTime.UtcNow.AddDays(1);
+                // Вычисляем следующее время запуска: случайное время между 0:00 и 6:00 по московскому времени
+                var nextRun = CalculateNextRandomMoscowTimeRun();
                 _nextRunTimeUtc = nextRun;
                 var delay = nextRun - DateTime.UtcNow;
                 if (delay < TimeSpan.Zero) delay = TimeSpan.Zero;
+
+                _logger.LogInformation("Следующий плановый запуск запланирован на {NextRunTimeUtc} UTC ({NextRunMoscow} MSK)", 
+                    nextRun, 
+                    TimeZoneInfo.ConvertTimeFromUtc(nextRun, TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time")));
 
                 try
                 {
@@ -380,6 +384,92 @@ namespace RareBooksService.WebApi.Services
                 {
                     return;
                 }
+            }
+        }
+
+        // ==================================================================
+        // ========== ВЫЧИСЛЕНИЕ СЛЕДУЮЩЕГО ВРЕМЕНИ ЗАПУСКА ==================
+        // ==================================================================
+        /// <summary>
+        /// Вычисляет следующее время запуска в случайное время между 0:00 и 5:00 по московскому времени.
+        /// Если сейчас уже больше 5:00 MSK, то запланирует на следующий день.
+        /// </summary>
+        private DateTime CalculateNextRandomMoscowTimeRun()
+        {
+            try
+            {
+                var moscowTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
+                var nowMoscow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, moscowTimeZone);
+                
+                // Определяем дату следующего запуска
+                DateTime nextRunDateMoscow;
+                if (nowMoscow.Hour < 5)
+                {
+                    // Если сейчас еще не 6:00, можем запланировать на сегодня
+                    // Но только если случайное время будет больше текущего
+                    nextRunDateMoscow = nowMoscow.Date;
+                }
+                else
+                {
+                    // Если уже после 6:00, планируем на завтра
+                    nextRunDateMoscow = nowMoscow.Date.AddDays(1);
+                }
+                
+                // Генерируем случайное время между 0:00 и 6:00 (в минутах: от 0 до 360)
+                var random = new Random();
+                var randomMinutes = random.Next(0, 300); // 5 часов = 300 минут
+                var nextRunMoscow = nextRunDateMoscow.AddMinutes(randomMinutes);
+                
+                // Если получившееся время раньше текущего, добавляем день
+                if (nextRunMoscow <= nowMoscow)
+                {
+                    nextRunMoscow = nextRunMoscow.AddDays(1);
+                }
+                
+                // Конвертируем обратно в UTC
+                var nextRunUtc = TimeZoneInfo.ConvertTimeToUtc(nextRunMoscow, moscowTimeZone);
+                
+                _logger.LogInformation("Рассчитано время следующего запуска: {MoscowTime} MSK (UTC: {UtcTime})", 
+                    nextRunMoscow.ToString("dd.MM.yyyy HH:mm"), 
+                    nextRunUtc.ToString("dd.MM.yyyy HH:mm"));
+                
+                return nextRunUtc;
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                // Если не удалось найти московскую временную зону, используем ручной offset GMT+3
+                _logger.LogWarning("Не удалось найти временную зону 'Russian Standard Time', используется ручной расчет для GMT+3");
+                
+                var moscowOffset = TimeSpan.FromHours(3);
+                var nowMoscow = DateTime.UtcNow.Add(moscowOffset);
+                
+                DateTime nextRunDateMoscow;
+                if (nowMoscow.Hour < 5)
+                {
+                    nextRunDateMoscow = nowMoscow.Date;
+                }
+                else
+                {
+                    nextRunDateMoscow = nowMoscow.Date.AddDays(1);
+                }
+                
+                var random = new Random();
+                var randomMinutes = random.Next(0, 360);
+                var nextRunMoscow = nextRunDateMoscow.AddMinutes(randomMinutes);
+                
+                if (nextRunMoscow <= nowMoscow)
+                {
+                    nextRunMoscow = nextRunMoscow.AddDays(1);
+                }
+                
+                // Конвертируем обратно в UTC (вычитаем offset)
+                var nextRunUtc = nextRunMoscow.Subtract(moscowOffset);
+                
+                _logger.LogInformation("Рассчитано время следующего запуска: {MoscowTime} MSK (UTC: {UtcTime})", 
+                    nextRunMoscow.ToString("dd.MM.yyyy HH:mm"), 
+                    nextRunUtc.ToString("dd.MM.yyyy HH:mm"));
+                
+                return nextRunUtc;
             }
         }
 
@@ -512,9 +602,21 @@ namespace RareBooksService.WebApi.Services
             _cancellationRequested = false;
             _currentStepIndex = 0; // начинаем заново с первой операции
             
-            // Обновляем время следующего запуска
-            _nextRunTimeUtc = DateTime.UtcNow.AddDays(1);
-            _logger.LogInformation("Следующий плановый запуск запланирован на {NextRunTimeUtc}", _nextRunTimeUtc);
+            // Обновляем время следующего запуска (случайное время между 0:00 и 6:00 MSK)
+            _nextRunTimeUtc = CalculateNextRandomMoscowTimeRun();
+            
+            try
+            {
+                var moscowTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
+                var nextMoscowTime = TimeZoneInfo.ConvertTimeFromUtc(_nextRunTimeUtc.Value, moscowTimeZone);
+                _logger.LogInformation("Следующий плановый запуск запланирован на {NextRunTimeUtc} UTC ({NextMoscowTime} MSK)", 
+                    _nextRunTimeUtc, 
+                    nextMoscowTime);
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                _logger.LogInformation("Следующий плановый запуск запланирован на {NextRunTimeUtc} UTC", _nextRunTimeUtc);
+            }
 
             // Запускаем в фоне
             var token = new CancellationToken();
