@@ -75,6 +75,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   // Throttling: track pending sends to prevent spam
   final Set<String> _pendingSends = {};
   DateTime? _lastSendTime;
+  
+  // Track recently sent messages for status polling (messageId -> sentAt)
+  final Map<String, DateTime> _recentlySentMessages = {};
+  static const Duration _outgoingStatusPollInterval = Duration(seconds: 5);
+  static const Duration _maxTrackingDuration = Duration(minutes: 2);
 
   MessagesNotifier(
     this._messageRepository,
@@ -90,6 +95,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     loadMessages();
     _monitorSignalRConnection();
     _startPeriodicSync();
+    _startOutgoingStatusPolling();
     
     // Start status sync service
     _statusSyncService.startPeriodicSync();
@@ -110,6 +116,159 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       // Schedule next sync
       _startPeriodicSync();
     });
+  }
+
+  /// Polling fallback for outgoing message statuses
+  /// Checks status of messages that are still in 'sending' or 'sent' state
+  void _startOutgoingStatusPolling() {
+    Future.delayed(_outgoingStatusPollInterval, () {
+      if (!mounted) return;
+      
+      _checkOutgoingMessageStatuses();
+      
+      // Schedule next poll
+      _startOutgoingStatusPolling();
+    });
+  }
+
+  /// Check and update statuses for recently sent messages
+  Future<void> _checkOutgoingMessageStatuses() async {
+    try {
+      // Get current user ID
+      final profileState = _ref.read(profileProvider);
+      final currentUserId = profileState.profile?.id;
+      if (currentUserId == null) return;
+      
+      // Clean up old tracked messages
+      final now = DateTime.now();
+      _recentlySentMessages.removeWhere((id, sentAt) => 
+        now.difference(sentAt) > _maxTrackingDuration
+      );
+      
+      // Find messages that are still in 'sending' or 'sent' status from current user
+      final pendingMessages = state.messages.where((m) => 
+        m.senderId == currentUserId &&
+        (m.status == MessageStatus.sending || m.status == MessageStatus.sent)
+      ).toList();
+      
+      if (pendingMessages.isEmpty) {
+        return;
+      }
+      
+      print('[OUTGOING_STATUS] Checking status for ${pendingMessages.length} pending outgoing messages');
+      
+      // Query server for each pending message's current status
+      for (final message in pendingMessages) {
+        try {
+          // Handle local-only messages (still syncing to server)
+          if (message.isLocalOnly) {
+            await _handleStuckLocalMessage(message, now);
+            continue;
+          }
+          
+          // Skip if we just sent it (give SignalR a chance first)
+          final sentAt = _recentlySentMessages[message.id];
+          if (sentAt != null && now.difference(sentAt).inSeconds < 3) {
+            continue;
+          }
+          
+          final serverMessage = await _messageRepository.getMessageById(message.id);
+          
+          // Check if status has changed
+          if (serverMessage.status != message.status) {
+            print('[OUTGOING_STATUS] Status updated via polling: ${message.id} ${message.status} -> ${serverMessage.status}');
+            updateMessageStatus(message.id, serverMessage.status);
+            
+            // Remove from tracking if status is final
+            if (serverMessage.status == MessageStatus.delivered || 
+                serverMessage.status == MessageStatus.read ||
+                serverMessage.status == MessageStatus.played) {
+              _recentlySentMessages.remove(message.id);
+            }
+          }
+        } catch (e) {
+          print('[OUTGOING_STATUS] Failed to check status for message ${message.id}: $e');
+          // Don't fail the entire batch - continue with other messages
+        }
+      }
+    } catch (e) {
+      print('[OUTGOING_STATUS] Error in status polling: $e');
+    }
+  }
+
+  /// Handle messages stuck in 'sending' status (local-only, not yet synced)
+  Future<void> _handleStuckLocalMessage(Message message, DateTime now) async {
+    // Check how long the message has been stuck
+    final messageAge = now.difference(message.createdAt);
+    
+    // Timeout thresholds
+    const warningTimeout = Duration(seconds: 30);
+    const failureTimeout = Duration(seconds: 120);
+    
+    if (messageAge < warningTimeout) {
+      // Still within normal sync window
+      return;
+    }
+    
+    print('[OUTGOING_STATUS] Local message ${message.id} stuck in sending for ${messageAge.inSeconds}s');
+    
+    // Check if message is in outbox
+    try {
+      final pendingMessages = await _outboxRepository.getPendingMessagesForChat(chatId);
+      final outboxMessage = pendingMessages.where((pm) => 
+        pm.localId == message.id || pm.localId == message.localId
+      ).firstOrNull;
+      
+      if (outboxMessage != null) {
+        // Message is in outbox - check its state
+        if (outboxMessage.syncState == 'failed') {
+          // Already marked as failed, update UI
+          updateMessageStatus(message.id, MessageStatus.failed, force: true);
+          print('[OUTGOING_STATUS] Message ${message.id} marked as failed (outbox state: failed)');
+        } else if (messageAge >= failureTimeout) {
+          // Timeout exceeded - mark as failed
+          await _outboxRepository.markAsFailed(
+            message.id, 
+            'Message stuck in sending state for ${messageAge.inSeconds}s'
+          );
+          updateMessageStatus(message.id, MessageStatus.failed, force: true);
+          print('[OUTGOING_STATUS] Message ${message.id} marked as failed (timeout)');
+        } else {
+          // Still in sync queue - maybe trigger a retry
+          if (!_pendingSends.contains(message.id) && 
+              !_pendingSends.contains(message.localId ?? '')) {
+            print('[OUTGOING_STATUS] Message ${message.id} not in pending sends, may need manual retry');
+          }
+        }
+      } else {
+        // Not in outbox - message might have been synced but UI not updated
+        // Try to find it on server by clientMessageId
+        if (message.clientMessageId != null) {
+          try {
+            // This will update the UI if found
+            await _performIncrementalSync();
+          } catch (e) {
+            print('[OUTGOING_STATUS] Incremental sync failed for stuck message: $e');
+          }
+        }
+        
+        // If still in sending state after sync attempt and timeout exceeded, mark as failed
+        if (messageAge >= failureTimeout) {
+          final currentMessage = state.messages.where((m) => m.id == message.id).firstOrNull;
+          if (currentMessage != null && currentMessage.status == MessageStatus.sending) {
+            updateMessageStatus(message.id, MessageStatus.failed, force: true);
+            print('[OUTGOING_STATUS] Message ${message.id} marked as failed (not found on server after timeout)');
+          }
+        }
+      }
+    } catch (e) {
+      print('[OUTGOING_STATUS] Error handling stuck local message ${message.id}: $e');
+    }
+  }
+
+  /// Track a recently sent message for status polling
+  void _trackSentMessage(String messageId) {
+    _recentlySentMessages[messageId] = DateTime.now();
   }
 
   /// Monitor SignalR connection state and perform incremental sync on reconnect
@@ -565,6 +724,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         state = state.copyWith(messages: updatedMessages);
         print('[MSG_SEND] Message updated in UI with server ID: ${serverMessage.id}, status: $finalStatus');
         
+        // Track for outgoing status polling (fallback if SignalR misses status update)
+        _trackSentMessage(serverMessage.id);
+        
         // Update chat preview with server message (has correct server ID now)
         try {
           _ref.read(chatsProvider.notifier).updateChatLastMessage(
@@ -671,6 +833,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         updatedMessages[messageIndex] = finalServerMessage;
         state = state.copyWith(messages: updatedMessages);
         print('[MSG_SEND] Image message updated in UI with server ID: ${serverMessage.id}, status: $finalStatus');
+        
+        // Track for outgoing status polling (fallback if SignalR misses status update)
+        _trackSentMessage(serverMessage.id);
         
         // Update chat preview with server message
         try {
@@ -1068,9 +1233,28 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     }
   }
 
-  void updateMessageStatus(String messageId, MessageStatus status) {
+  /// Get priority of message status (higher = more final)
+  /// Used to prevent race conditions where a "lower" status overwrites a "higher" one
+  int _getStatusPriority(MessageStatus status) {
+    switch (status) {
+      case MessageStatus.sending:
+        return 0;
+      case MessageStatus.sent:
+        return 1;
+      case MessageStatus.failed:
+        return 1; // Same as sent - user can retry
+      case MessageStatus.delivered:
+        return 2;
+      case MessageStatus.read:
+        return 3;
+      case MessageStatus.played:
+        return 4; // Highest for audio messages
+    }
+  }
+
+  void updateMessageStatus(String messageId, MessageStatus status, {bool force = false}) {
     // #region agent log
-    print('[MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: $messageId, NewStatus: $status, ChatId: $chatId, Timestamp: ${DateTime.now().toIso8601String()}');
+    print('[MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: $messageId, NewStatus: $status, ChatId: $chatId, Force: $force, Timestamp: ${DateTime.now().toIso8601String()}');
     // #endregion
     final messageIndex = state.messages.indexWhere((m) => m.id == messageId);
     // #region agent log
@@ -1083,6 +1267,16 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       // #region agent log
       print('[MSG_STATUS] HYP_CLIENT: Old status: $oldStatus, New status: $status, SenderId: ${oldMessage.senderId}');
       // #endregion
+      
+      // Prevent race condition: don't downgrade status unless forced
+      // e.g., don't overwrite 'delivered' with 'sent' if SignalR already updated it
+      final oldPriority = _getStatusPriority(oldStatus);
+      final newPriority = _getStatusPriority(status);
+      
+      if (!force && newPriority < oldPriority) {
+        print('[MSG_STATUS] Ignoring status downgrade: $oldStatus (priority $oldPriority) -> $status (priority $newPriority)');
+        return;
+      }
       
       if (oldStatus != status) {
         // Debug: track where status update comes from
@@ -1098,6 +1292,13 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         
         // Update LRU cache
         _cache.update(updatedMessage);
+        
+        // Remove from tracking if status is final
+        if (status == MessageStatus.delivered || 
+            status == MessageStatus.read ||
+            status == MessageStatus.played) {
+          _recentlySentMessages.remove(messageId);
+        }
         
         // Сохраняем обновленный статус в Hive кэш
         try {
