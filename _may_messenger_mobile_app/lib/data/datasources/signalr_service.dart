@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:signalr_netcore/signalr_client.dart';
 import '../models/message_model.dart';
 import '../../core/constants/api_constants.dart';
@@ -14,12 +15,26 @@ class SignalRService {
   Timer? _heartbeatTimer;
   DateTime? _lastPongReceived;
   Function()? _onReconnectedCallback;
+  Function(bool isConnected)? _onConnectionStateChanged;
+  
+  // Connectivity monitoring
+  final Connectivity _connectivity = Connectivity();
+  StreamSubscription<ConnectivityResult>? _connectivitySubscription;
+  bool _hasInternetConnection = true;
+  
+  // Infinite reconnect with capped exponential backoff
+  static const int _maxReconnectDelay = 60; // Max delay capped at 60 seconds
+  static const int _baseReconnectDelay = 2; // Start with 2 seconds
+  Timer? _reconnectTimer;
 
   Future<void> connect(String token) async {
     // #region agent log - Hypothesis C: Track SignalR connect lifecycle
     print('[SIGNALR_CONNECT] HYP_C1: connect() called, timestamp: ${DateTime.now().toIso8601String()}');
     // #endregion
     _currentToken = token;
+    
+    // Start connectivity monitoring
+    _startConnectivityMonitoring();
     
     _hubConnection = HubConnectionBuilder()
         .withUrl(
@@ -32,7 +47,7 @@ class SignalRService {
           ),
         )
         // Faster retry intervals for better UX
-        .withAutomaticReconnect(retryDelays: [0, 500, 1000, 2000])
+        .withAutomaticReconnect(retryDelays: [0, 500, 1000, 2000, 5000])
         .build();
 
     // Обработчик разрыва соединения
@@ -42,16 +57,23 @@ class SignalRService {
       // #endregion
       print('[SignalR] Connection closed. Error: $error');
       _isReconnecting = false;
+      _isManualReconnecting = false;
+      
+      // Notify about disconnection
+      _notifyConnectionState(false);
       
       // Stop heartbeat timer
       _stopHeartbeatTimer();
       
       // Automatic reconnect will be handled by withAutomaticReconnect
-      // But if that fails completely, try manual reconnect
-      if (_currentToken != null) {
+      // But if that fails completely, try manual reconnect with infinite retry
+      if (_currentToken != null && _hasInternetConnection) {
         print('[SignalR] Scheduling manual reconnect attempt...');
-        Future.delayed(const Duration(seconds: 5), () {
-          if (_hubConnection?.state != HubConnectionState.Connected && !_isReconnecting) {
+        _reconnectTimer?.cancel();
+        _reconnectTimer = Timer(const Duration(seconds: 3), () {
+          if (_hubConnection?.state != HubConnectionState.Connected && 
+              !_isReconnecting && 
+              mounted) {
             _attemptReconnect();
           }
         });
@@ -76,6 +98,13 @@ class SignalRService {
       _isReconnecting = false;
       _isManualReconnecting = false;
       _reconnectAttempts = 0;
+      
+      // Cancel any pending reconnect timer
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
+      
+      // Notify about successful connection
+      _notifyConnectionState(true);
       
       // Restart heartbeat timer
       _startHeartbeatTimer();
@@ -107,6 +136,10 @@ class SignalRService {
       // #endregion
       print('[SignalR] Connected successfully');
       
+      // Notify about successful connection
+      _notifyConnectionState(true);
+      _reconnectAttempts = 0;
+      
       // Start heartbeat timer after successful connection
       _startHeartbeatTimer();
     } catch (e) {
@@ -114,6 +147,18 @@ class SignalRService {
       print('[SIGNALR_CONNECT] HYP_C_ERROR: Failed to connect: $e');
       // #endregion
       print('[SignalR] Failed to connect: $e');
+      _notifyConnectionState(false);
+      
+      // Schedule reconnect attempt
+      if (_hasInternetConnection) {
+        _reconnectTimer?.cancel();
+        _reconnectTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) {
+            _attemptReconnect();
+          }
+        });
+      }
+      
       rethrow;
     }
   }
@@ -232,10 +277,18 @@ class SignalRService {
       return;
     }
     
+    // Check if we have internet connection
+    if (!_hasInternetConnection) {
+      print('[SignalR] No internet connection, waiting for connectivity...');
+      _notifyConnectionState(false);
+      return;
+    }
+    
     // Check if already connected or reconnecting
     final currentState = _hubConnection?.state;
     if (currentState == HubConnectionState.Connected) {
       print('[SignalR] Already connected, skipping reconnect');
+      _notifyConnectionState(true);
       return;
     }
     
@@ -247,15 +300,17 @@ class SignalRService {
     _isManualReconnecting = true;
     _reconnectAttempts++;
     print('[SignalR] Manual reconnect attempt #$_reconnectAttempts started');
+    _notifyConnectionState(false);
     
     try {
       // Small delay to let automatic reconnect finish if it's in progress
-      await Future.delayed(const Duration(seconds: 2));
+      await Future.delayed(const Duration(seconds: 1));
       
       // Check state again after delay
       if (_hubConnection?.state == HubConnectionState.Connected) {
         print('[SignalR] Connection restored during wait, aborting manual reconnect');
         _reconnectAttempts = 0;
+        _notifyConnectionState(true);
         return;
       }
       
@@ -270,32 +325,88 @@ class SignalRService {
         await _hubConnection?.start();
         print('[SignalR] Manual reconnect successful via start()');
         _reconnectAttempts = 0;
+        _notifyConnectionState(true);
+        _startHeartbeatTimer();
       }
     } catch (e) {
       print('[SignalR] Manual reconnect failed: $e');
       
-      // Schedule another attempt if not too many attempts
-      if (_reconnectAttempts < 5) {
-        final retryDelay = min(pow(2, _reconnectAttempts).toInt(), 30);
-        print('[SignalR] Scheduling retry attempt #${_reconnectAttempts + 1} in ${retryDelay}s...');
-        
-        await Future.delayed(Duration(seconds: retryDelay));
-        
-        // Only retry if still disconnected
-        if (_hubConnection?.state != HubConnectionState.Connected && mounted) {
+      // INFINITE RETRY with exponential backoff (capped at _maxReconnectDelay)
+      // Calculate delay: 2^attempts seconds, capped at max
+      final retryDelay = min(
+        _baseReconnectDelay * pow(2, min(_reconnectAttempts - 1, 6)).toInt(),
+        _maxReconnectDelay
+      );
+      print('[SignalR] Scheduling retry attempt #${_reconnectAttempts + 1} in ${retryDelay}s...');
+      
+      // Cancel any existing timer
+      _reconnectTimer?.cancel();
+      
+      // Schedule next attempt using Timer instead of Future.delayed for cancellation support
+      _reconnectTimer = Timer(Duration(seconds: retryDelay), () {
+        // Only retry if still disconnected and has internet
+        if (_hubConnection?.state != HubConnectionState.Connected && 
+            mounted && 
+            _hasInternetConnection) {
           _isManualReconnecting = false; // Reset flag for retry
           _attemptReconnect();
         }
-      } else {
-        print('[SignalR] Max reconnect attempts reached. Relying on automatic reconnect.');
-        _reconnectAttempts = 0;
-      }
+      });
     } finally {
       _isManualReconnecting = false;
       if (_hubConnection?.state == HubConnectionState.Connected) {
         _isReconnecting = false;
+        _notifyConnectionState(true);
       }
     }
+  }
+  
+  /// Start monitoring network connectivity
+  void _startConnectivityMonitoring() {
+    _connectivitySubscription?.cancel();
+    
+    // Check initial connectivity
+    _connectivity.checkConnectivity().then((result) {
+      _hasInternetConnection = result != ConnectivityResult.none;
+      print('[SignalR] Initial connectivity: $_hasInternetConnection');
+    });
+    
+    // Listen for connectivity changes
+    _connectivitySubscription = _connectivity.onConnectivityChanged.listen((result) {
+      final wasConnected = _hasInternetConnection;
+      _hasInternetConnection = result != ConnectivityResult.none;
+      
+      print('[SignalR] Connectivity changed: $_hasInternetConnection (was: $wasConnected)');
+      
+      // If we just got internet back and SignalR is disconnected, trigger reconnect
+      if (!wasConnected && _hasInternetConnection) {
+        print('[SignalR] Internet restored, triggering reconnect...');
+        _reconnectAttempts = 0; // Reset attempts for fresh start
+        
+        // Small delay to let network stabilize
+        Future.delayed(const Duration(seconds: 1), () {
+          if (_hubConnection?.state != HubConnectionState.Connected && mounted) {
+            _attemptReconnect();
+          }
+        });
+      }
+    });
+  }
+  
+  /// Notify listeners about connection state changes
+  void _notifyConnectionState(bool isConnected) {
+    if (_onConnectionStateChanged != null) {
+      try {
+        _onConnectionStateChanged!(isConnected);
+      } catch (e) {
+        print('[SignalR] Error in connection state callback: $e');
+      }
+    }
+  }
+  
+  /// Set callback for connection state changes
+  void setOnConnectionStateChanged(Function(bool isConnected) callback) {
+    _onConnectionStateChanged = callback;
   }
   
   /// Perform incremental sync after reconnection to fetch missed events
@@ -623,7 +734,12 @@ class SignalRService {
 
   Future<void> disconnect() async {
     _stopHeartbeatTimer();
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _connectivitySubscription?.cancel();
+    _connectivitySubscription = null;
     await _hubConnection?.stop();
+    _notifyConnectionState(false);
   }
 
   bool get isConnected => _hubConnection?.state == HubConnectionState.Connected;
@@ -644,6 +760,16 @@ class SignalRService {
       'timeSinceLastPong': _lastPongReceived != null 
           ? DateTime.now().difference(_lastPongReceived!).inSeconds 
           : null,
+      'reconnectAttempts': _reconnectAttempts,
+      'hasInternetConnection': _hasInternetConnection,
+      'isReconnecting': _isReconnecting || _isManualReconnecting,
+      'connectionState': _hubConnection?.state.toString(),
     };
   }
+  
+  /// Get current internet connection status
+  bool get hasInternetConnection => _hasInternetConnection;
+  
+  /// Get current reconnect attempts count
+  int get reconnectAttempts => _reconnectAttempts;
 }

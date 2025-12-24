@@ -73,6 +73,47 @@ class AudioStorageService {
       return null;
     }
   }
+  
+  /// Save sent audio file locally before upload
+  /// This ensures the sender can play back their own audio even offline
+  Future<String?> cacheSentAudio(String messageId, String sourcePath) async {
+    try {
+      final sourceFile = File(sourcePath);
+      if (!await sourceFile.exists()) {
+        print('[AudioStorage] Source file does not exist: $sourcePath');
+        return null;
+      }
+      
+      final audioDir = await _getAudioDirectory();
+      final destPath = '${audioDir.path}/$messageId.m4a';
+      
+      // Copy file to audio storage
+      await sourceFile.copy(destPath);
+      
+      print('[AudioStorage] Cached sent audio: $messageId -> $destPath');
+      return destPath;
+    } catch (e) {
+      print('[AudioStorage] Error caching sent audio: $e');
+      return null;
+    }
+  }
+  
+  /// Save audio from bytes (for received audio that needs caching)
+  Future<String?> saveAudioFromBytes(String messageId, List<int> bytes) async {
+    try {
+      final audioDir = await _getAudioDirectory();
+      final filePath = '${audioDir.path}/$messageId.m4a';
+      
+      final file = File(filePath);
+      await file.writeAsBytes(bytes);
+      
+      print('[AudioStorage] Saved audio from bytes: $messageId');
+      return filePath;
+    } catch (e) {
+      print('[AudioStorage] Error saving audio from bytes: $e');
+      return null;
+    }
+  }
 
   /// Delete old audio files (older than 30 days)
   Future<void> deleteOldAudioFiles() async {

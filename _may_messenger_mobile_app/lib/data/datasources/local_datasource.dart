@@ -13,6 +13,59 @@ class LocalDataSource {
   static const String _outboxBox = 'outbox';
   static const String _statusUpdatesBox = 'status_updates';
   static const String _contactsCacheBox = 'contacts_cache';
+  static const String _userCacheBox = 'user_cache';
+  
+  // Track corrupted boxes to avoid repeated failures
+  final Set<String> _corruptedBoxes = {};
+  
+  /// Safely open a Hive box with automatic recovery on corruption
+  /// If the box is corrupted, it will be deleted and recreated
+  Future<Box<Map>> _openBoxSafely(String boxName) async {
+    try {
+      // Check if already open
+      if (Hive.isBoxOpen(boxName)) {
+        return Hive.box<Map>(boxName);
+      }
+      
+      // Try to open the box
+      return await Hive.openBox<Map>(boxName);
+    } catch (e) {
+      print('[LocalDataSource] Error opening box $boxName: $e');
+      
+      // Mark as corrupted
+      _corruptedBoxes.add(boxName);
+      
+      // Try to recover by deleting and recreating the box
+      try {
+        print('[LocalDataSource] Attempting to recover corrupted box: $boxName');
+        
+        // Close if partially open
+        if (Hive.isBoxOpen(boxName)) {
+          await Hive.box(boxName).close();
+        }
+        
+        // Delete the corrupted box from disk
+        await Hive.deleteBoxFromDisk(boxName);
+        print('[LocalDataSource] Deleted corrupted box: $boxName');
+        
+        // Open a fresh box
+        final box = await Hive.openBox<Map>(boxName);
+        print('[LocalDataSource] Successfully recovered box: $boxName');
+        
+        _corruptedBoxes.remove(boxName);
+        return box;
+      } catch (recoveryError) {
+        print('[LocalDataSource] Failed to recover box $boxName: $recoveryError');
+        rethrow;
+      }
+    }
+  }
+  
+  /// Check if a box was corrupted and recovered (data was lost)
+  bool wasBoxRecovered(String boxName) => _corruptedBoxes.contains(boxName);
+  
+  /// Get list of all corrupted boxes
+  Set<String> get corruptedBoxes => Set.unmodifiable(_corruptedBoxes);
 
   // Auth Storage
   Future<void> saveToken(String token) async {
@@ -33,7 +86,7 @@ class LocalDataSource {
   // Messages Cache
   Future<void> cacheMessages(String chatId, List<Message> messages) async {
     try {
-      final box = await Hive.openBox<Map>(_messagesBox);
+      final box = await _openBoxSafely(_messagesBox);
       
       await box.put(chatId, {
         'messages': messages.map((m) => m.toJson()).toList(),
@@ -44,13 +97,13 @@ class LocalDataSource {
       await box.flush();
     } catch (e) {
       print('[Cache] ERROR caching messages: $e');
-      rethrow;
+      // Don't rethrow - caching failure should not break the app
     }
   }
 
   Future<List<Message>?> getCachedMessages(String chatId) async {
     try {
-      final box = await Hive.openBox<Map>(_messagesBox);
+      final box = await _openBoxSafely(_messagesBox);
       
       final data = box.get(chatId);
       if (data == null) {
@@ -71,7 +124,7 @@ class LocalDataSource {
   // Add single message to cache
   Future<void> addMessageToCache(String chatId, Message message) async {
     try {
-      final box = await Hive.openBox<Map>(_messagesBox);
+      final box = await _openBoxSafely(_messagesBox);
       final data = box.get(chatId);
       
       List<Message> messages = [];
@@ -101,7 +154,7 @@ class LocalDataSource {
   // Merge multiple messages to cache (for incremental sync)
   Future<void> mergeMessagesToCache(String chatId, List<Message> newMessages) async {
     try {
-      final box = await Hive.openBox<Map>(_messagesBox);
+      final box = await _openBoxSafely(_messagesBox);
       final data = box.get(chatId);
       
       // Get existing messages
@@ -146,7 +199,7 @@ class LocalDataSource {
   // Get last sync timestamp for a chat
   Future<DateTime?> getLastSyncTimestamp(String chatId) async {
     try {
-      final box = await Hive.openBox<Map>(_messagesBox);
+      final box = await _openBoxSafely(_messagesBox);
       final data = box.get(chatId);
       if (data == null) return null;
       
@@ -164,7 +217,7 @@ class LocalDataSource {
   /// Save last sync timestamp for a chat
   Future<void> saveLastSyncTimestamp(String chatId, DateTime timestamp) async {
     try {
-      final box = await Hive.openBox<Map>(_messagesBox);
+      final box = await _openBoxSafely(_messagesBox);
       final data = box.get(chatId) ?? <String, dynamic>{};
       data['timestamp'] = timestamp.toIso8601String();
       await box.put(chatId, data);
@@ -176,16 +229,20 @@ class LocalDataSource {
 
   // Chats Cache
   Future<void> cacheChats(List<Chat> chats) async {
-    final box = await Hive.openBox<Map>(_chatsBox);
-    await box.put('chats', {
-      'chats': chats.map((c) => c.toJson()).toList(),
-      'timestamp': DateTime.now().toIso8601String(),
-    });
+    try {
+      final box = await _openBoxSafely(_chatsBox);
+      await box.put('chats', {
+        'chats': chats.map((c) => c.toJson()).toList(),
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print('[LocalDataSource] Failed to cache chats: $e');
+    }
   }
 
   Future<List<Chat>?> getCachedChats() async {
     try {
-      final box = await Hive.openBox<Map>(_chatsBox);
+      final box = await _openBoxSafely(_chatsBox);
       final data = box.get('chats');
       if (data == null) {
         return null;
@@ -205,7 +262,7 @@ class LocalDataSource {
   // Update local audio path for a message
   Future<void> updateMessageLocalAudioPath(String chatId, String messageId, String localPath) async {
     try {
-      final box = await Hive.openBox<Map>(_messagesBox);
+      final box = await _openBoxSafely(_messagesBox);
       final data = box.get(chatId);
       if (data == null) return;
 
@@ -233,7 +290,7 @@ class LocalDataSource {
   // Update message status in cache
   Future<void> updateMessageStatus(String chatId, String messageId, MessageStatus status) async {
     try {
-      final box = await Hive.openBox<Map>(_messagesBox);
+      final box = await _openBoxSafely(_messagesBox);
       final data = box.get(chatId);
       if (data == null) return;
 
@@ -265,7 +322,7 @@ class LocalDataSource {
   // Get cached message statuses for a chat (used to preserve played status)
   Future<Map<String, MessageStatus>> getCachedMessageStatuses(String chatId) async {
     try {
-      final box = await Hive.openBox<Map>(_messagesBox);
+      final box = await _openBoxSafely(_messagesBox);
       final data = box.get(chatId);
       if (data == null) return {};
 
@@ -293,7 +350,7 @@ class LocalDataSource {
   // Update chat last message in cache
   Future<void> updateChatLastMessage(String chatId, Message message) async {
     try {
-      final box = await Hive.openBox<Map>(_chatsBox);
+      final box = await _openBoxSafely(_chatsBox);
       final data = box.get('chats');
       if (data == null) return;
 
@@ -332,8 +389,9 @@ class LocalDataSource {
   /// Add a pending message to the outbox
   Future<void> addPendingMessage(PendingMessage message) async {
     try {
-      final box = await Hive.openBox<Map>(_outboxBox);
+      final box = await _openBoxSafely(_outboxBox);
       await box.put(message.localId, message.toJson());
+      await box.flush(); // Ensure persistence
     } catch (e) {
       print('[LocalDataSource] Failed to add pending message: $e');
       rethrow;
@@ -343,15 +401,21 @@ class LocalDataSource {
   /// Get all pending messages for a specific chat
   Future<List<PendingMessage>> getPendingMessagesForChat(String chatId) async {
     try {
-      final box = await Hive.openBox<Map>(_outboxBox);
+      final box = await _openBoxSafely(_outboxBox);
       final allMessages = <PendingMessage>[];
       
       for (var key in box.keys) {
         final data = box.get(key);
         if (data != null) {
-          final message = PendingMessage.fromJson(Map<String, dynamic>.from(data));
-          if (message.chatId == chatId) {
-            allMessages.add(message);
+          try {
+            final message = PendingMessage.fromJson(Map<String, dynamic>.from(data));
+            if (message.chatId == chatId) {
+              allMessages.add(message);
+            }
+          } catch (parseError) {
+            print('[LocalDataSource] Skipping corrupted pending message: $key');
+            // Delete corrupted entry
+            await box.delete(key);
           }
         }
       }
@@ -368,14 +432,20 @@ class LocalDataSource {
   /// Get all pending messages across all chats
   Future<List<PendingMessage>> getAllPendingMessages() async {
     try {
-      final box = await Hive.openBox<Map>(_outboxBox);
+      final box = await _openBoxSafely(_outboxBox);
       final allMessages = <PendingMessage>[];
       
       for (var key in box.keys) {
         final data = box.get(key);
         if (data != null) {
-          final message = PendingMessage.fromJson(Map<String, dynamic>.from(data));
-          allMessages.add(message);
+          try {
+            final message = PendingMessage.fromJson(Map<String, dynamic>.from(data));
+            allMessages.add(message);
+          } catch (parseError) {
+            print('[LocalDataSource] Skipping corrupted pending message: $key');
+            // Delete corrupted entry
+            await box.delete(key);
+          }
         }
       }
       
@@ -391,7 +461,7 @@ class LocalDataSource {
   /// Get a specific pending message by local ID
   Future<PendingMessage?> getPendingMessageById(String localId) async {
     try {
-      final box = await Hive.openBox<Map>(_outboxBox);
+      final box = await _openBoxSafely(_outboxBox);
       final data = box.get(localId);
       
       if (data != null) {
@@ -407,7 +477,7 @@ class LocalDataSource {
   /// Update a pending message
   Future<void> updatePendingMessage(PendingMessage message) async {
     try {
-      final box = await Hive.openBox<Map>(_outboxBox);
+      final box = await _openBoxSafely(_outboxBox);
       await box.put(message.localId, message.toJson());
     } catch (e) {
       print('[LocalDataSource] Failed to update pending message: $e');
@@ -418,7 +488,7 @@ class LocalDataSource {
   /// Remove a pending message from outbox
   Future<void> removePendingMessage(String localId) async {
     try {
-      final box = await Hive.openBox<Map>(_outboxBox);
+      final box = await _openBoxSafely(_outboxBox);
       await box.delete(localId);
     } catch (e) {
       print('[LocalDataSource] Failed to remove pending message: $e');
@@ -429,7 +499,7 @@ class LocalDataSource {
   /// Clear all pending messages (use with caution)
   Future<void> clearAllPendingMessages() async {
     try {
-      final box = await Hive.openBox<Map>(_outboxBox);
+      final box = await _openBoxSafely(_outboxBox);
       await box.clear();
       print('[LocalDataSource] Cleared all pending messages');
     } catch (e) {
@@ -442,7 +512,7 @@ class LocalDataSource {
   /// Save a status update to the queue
   Future<void> saveStatusUpdate(StatusUpdate statusUpdate) async {
     try {
-      final box = await Hive.openBox<Map>(_statusUpdatesBox);
+      final box = await _openBoxSafely(_statusUpdatesBox);
       await box.put(statusUpdate.id, statusUpdate.toJson());
       await box.flush();
     } catch (e) {
@@ -454,13 +524,18 @@ class LocalDataSource {
   /// Get all pending status updates
   Future<List<StatusUpdate>> getAllStatusUpdates() async {
     try {
-      final box = await Hive.openBox<Map>(_statusUpdatesBox);
+      final box = await _openBoxSafely(_statusUpdatesBox);
       final updates = <StatusUpdate>[];
       
       for (var key in box.keys) {
         final data = box.get(key);
         if (data != null) {
-          updates.add(StatusUpdate.fromJson(Map<String, dynamic>.from(data)));
+          try {
+            updates.add(StatusUpdate.fromJson(Map<String, dynamic>.from(data)));
+          } catch (parseError) {
+            print('[LocalDataSource] Skipping corrupted status update: $key');
+            await box.delete(key);
+          }
         }
       }
       
@@ -474,7 +549,7 @@ class LocalDataSource {
   /// Delete a status update from the queue
   Future<void> deleteStatusUpdate(String id) async {
     try {
-      final box = await Hive.openBox<Map>(_statusUpdatesBox);
+      final box = await _openBoxSafely(_statusUpdatesBox);
       await box.delete(id);
     } catch (e) {
       print('[LocalDataSource] Failed to delete status update: $e');
@@ -485,7 +560,7 @@ class LocalDataSource {
   /// Clear all status updates (use with caution)
   Future<void> clearAllStatusUpdates() async {
     try {
-      final box = await Hive.openBox<Map>(_statusUpdatesBox);
+      final box = await _openBoxSafely(_statusUpdatesBox);
       await box.clear();
       print('[LocalDataSource] Cleared all status updates');
     } catch (e) {
@@ -497,7 +572,7 @@ class LocalDataSource {
   /// Save contacts cache
   Future<void> saveContactsCache(List<ContactCache> contacts) async {
     try {
-      final box = await Hive.openBox<Map>(_contactsCacheBox);
+      final box = await _openBoxSafely(_contactsCacheBox);
       final data = {
         'contacts': contacts.map((c) => c.toJson()).toList(),
         'timestamp': DateTime.now().toIso8601String(),
@@ -507,14 +582,13 @@ class LocalDataSource {
       print('[ContactsCache] Saved ${contacts.length} contacts to cache');
     } catch (e) {
       print('[ContactsCache] Failed to save contacts cache: $e');
-      rethrow;
     }
   }
 
   /// Get cached contacts
   Future<List<ContactCache>?> getContactsCache() async {
     try {
-      final box = await Hive.openBox<Map>(_contactsCacheBox);
+      final box = await _openBoxSafely(_contactsCacheBox);
       final data = box.get('cache');
       if (data == null) {
         return null;
@@ -551,12 +625,51 @@ class LocalDataSource {
   /// Clear contacts cache
   Future<void> clearContactsCache() async {
     try {
-      final box = await Hive.openBox<Map>(_contactsCacheBox);
+      final box = await _openBoxSafely(_contactsCacheBox);
       await box.clear();
       print('[ContactsCache] Cleared contacts cache');
     } catch (e) {
       print('[ContactsCache] Failed to clear contacts cache: $e');
-      rethrow;
+    }
+  }
+  
+  // ==================== USER CACHE (for offline mode) ====================
+  
+  /// Save current user ID locally for offline mode
+  Future<void> saveCurrentUserId(String userId) async {
+    try {
+      final box = await _openBoxSafely(_userCacheBox);
+      await box.put('currentUserId', {'userId': userId});
+      await box.flush();
+      print('[LocalDataSource] Saved current user ID: $userId');
+    } catch (e) {
+      print('[LocalDataSource] Failed to save current user ID: $e');
+    }
+  }
+  
+  /// Get cached current user ID for offline mode
+  Future<String?> getCurrentUserId() async {
+    try {
+      final box = await _openBoxSafely(_userCacheBox);
+      final data = box.get('currentUserId');
+      if (data != null) {
+        return data['userId'] as String?;
+      }
+      return null;
+    } catch (e) {
+      print('[LocalDataSource] Failed to get current user ID: $e');
+      return null;
+    }
+  }
+  
+  /// Clear current user ID (on logout)
+  Future<void> clearCurrentUserId() async {
+    try {
+      final box = await _openBoxSafely(_userCacheBox);
+      await box.delete('currentUserId');
+      print('[LocalDataSource] Cleared current user ID');
+    } catch (e) {
+      print('[LocalDataSource] Failed to clear current user ID: $e');
     }
   }
 }

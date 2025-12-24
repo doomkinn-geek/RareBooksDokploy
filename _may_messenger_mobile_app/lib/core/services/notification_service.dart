@@ -163,7 +163,7 @@ class NotificationService {
       final totalUnread = _unreadCountByChat.values.fold(0, (sum, count) => sum + count);
       final chatCount = _unreadCountByChat.length;
       
-      final androidDetails = const AndroidNotificationDetails(
+      const androidDetails = AndroidNotificationDetails(
         'messages_channel',
         'Messages',
         channelDescription: 'New message notifications',

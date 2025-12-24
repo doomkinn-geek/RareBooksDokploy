@@ -1665,6 +1665,131 @@ public class MessagesController : ControllerBase
             ClientMessageId = message.ClientMessageId
         };
     }
+    
+    /// <summary>
+    /// Confirm push notification was delivered to mobile device
+    /// Called by mobile app when it receives a push notification
+    /// This ensures the sender sees "delivered" status even without SignalR
+    /// </summary>
+    [HttpPost("confirm-push-delivery")]
+    public async Task<IActionResult> ConfirmPushDelivery([FromBody] ConfirmPushDeliveryDto dto)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+            _logger.LogInformation($"[PUSH_CONFIRM] Confirming push delivery for message {dto.MessageId} from user {currentUserId}");
+            
+            if (!Guid.TryParse(dto.MessageId, out var messageId))
+            {
+                return BadRequest("Invalid messageId");
+            }
+            
+            if (!Guid.TryParse(dto.ChatId, out var chatId))
+            {
+                return BadRequest("Invalid chatId");
+            }
+            
+            var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
+            if (message == null)
+            {
+                _logger.LogWarning($"[PUSH_CONFIRM] Message {messageId} not found");
+                return NotFound("Message not found");
+            }
+            
+            // Verify user is a participant in the chat
+            var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+            if (chat == null)
+            {
+                return NotFound("Chat not found");
+            }
+            
+            var isParticipant = chat.Participants.Any(p => p.UserId == currentUserId);
+            if (!isParticipant)
+            {
+                return Forbid();
+            }
+            
+            // Create or update delivery receipt
+            var receipt = await _unitOfWork.DeliveryReceipts.GetByMessageAndUserAsync(messageId, currentUserId);
+            
+            if (receipt == null)
+            {
+                receipt = new DeliveryReceipt
+                {
+                    MessageId = messageId,
+                    UserId = currentUserId,
+                    DeliveredAt = DateTime.UtcNow
+                };
+                await _unitOfWork.DeliveryReceipts.AddAsync(receipt);
+                _logger.LogInformation($"[PUSH_CONFIRM] Created delivery receipt for user {currentUserId}");
+            }
+            else if (receipt.DeliveredAt == null)
+            {
+                receipt.DeliveredAt = DateTime.UtcNow;
+                await _unitOfWork.DeliveryReceipts.UpdateAsync(receipt);
+                _logger.LogInformation($"[PUSH_CONFIRM] Updated delivery receipt for user {currentUserId}");
+            }
+            else
+            {
+                // Already delivered, nothing to do
+                _logger.LogInformation($"[PUSH_CONFIRM] Message {messageId} already marked as delivered for user {currentUserId}");
+                return Ok(new { status = "already_delivered" });
+            }
+            
+            // Create status event (event sourcing pattern)
+            await _unitOfWork.MessageStatusEvents.CreateEventAsync(
+                messageId, 
+                MessageStatus.Delivered, 
+                currentUserId, 
+                "Push_Delivery_Confirmation");
+            
+            // Calculate aggregate status based on all events
+            var aggregateStatus = await _unitOfWork.MessageStatusEvents.CalculateAggregateStatusAsync(messageId);
+            
+            // Update message status if it changed
+            if (message.Status != aggregateStatus && message.Status < aggregateStatus)
+            {
+                var oldStatus = message.Status;
+                message.Status = aggregateStatus;
+                if (aggregateStatus == MessageStatus.Delivered && message.DeliveredAt == null)
+                {
+                    message.DeliveredAt = DateTime.UtcNow;
+                }
+                await _unitOfWork.Messages.UpdateAsync(message);
+                await _unitOfWork.SaveChangesAsync();
+                
+                _logger.LogInformation($"[PUSH_CONFIRM] Message {messageId} status changed: {oldStatus} -> {aggregateStatus}");
+                
+                // Notify sender via SignalR about status change
+                var senderConnectionIds = ChatHub.GetUserConnections(message.SenderId.ToString());
+                if (senderConnectionIds.Any())
+                {
+                    await _hubContext.Clients.Clients(senderConnectionIds)
+                        .SendAsync("MessageStatusUpdated", messageId.ToString(), (int)aggregateStatus);
+                    
+                    _logger.LogInformation($"[PUSH_CONFIRM] Notified sender {message.SenderId} about status change via SignalR");
+                }
+            }
+            
+            await _unitOfWork.SaveChangesAsync();
+            
+            return Ok(new { status = "confirmed", messageStatus = message.Status.ToString() });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"[PUSH_CONFIRM] Error confirming push delivery for message {dto.MessageId}");
+            return StatusCode(500, "Error confirming delivery");
+        }
+    }
+}
+
+/// <summary>
+/// DTO for confirming push delivery
+/// </summary>
+public class ConfirmPushDeliveryDto
+{
+    public string MessageId { get; set; } = string.Empty;
+    public string ChatId { get; set; } = string.Empty;
 }
 
 

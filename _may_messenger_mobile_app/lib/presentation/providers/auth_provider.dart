@@ -9,6 +9,7 @@ import '../../data/repositories/outbox_repository.dart';
 import '../../data/repositories/status_update_queue_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/services/audio_storage_service.dart';
+import '../../data/services/image_storage_service.dart';
 import '../../data/services/status_sync_service.dart';
 import '../../core/services/fcm_service.dart';
 
@@ -96,6 +97,10 @@ final localDataSourceProvider = Provider<LocalDataSource>((ref) => LocalDataSour
 // Services
 final audioStorageServiceProvider = Provider<AudioStorageService>((ref) {
   return AudioStorageService(Dio());
+});
+
+final imageStorageServiceProvider = Provider<ImageStorageService>((ref) {
+  return ImageStorageService(Dio());
 });
 
 // Repositories
@@ -357,6 +362,16 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
 
   Future<void> logout() async {
     await _authRepository.logout();
+    
+    // Clear cached user ID on logout
+    try {
+      final localDataSource = LocalDataSource();
+      await localDataSource.clearCurrentUserId();
+      print('[Auth] Cleared cached user ID on logout');
+    } catch (e) {
+      print('[Auth] Failed to clear cached user ID: $e');
+    }
+    
     state = AuthState();
   }
 }

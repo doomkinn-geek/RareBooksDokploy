@@ -30,6 +30,9 @@ class FcmService {
   final Map<String, List<String>> _notificationsByChat = {};
   final Map<String, int> _unreadCountByChat = {};
   
+  // Track already confirmed deliveries to avoid duplicates
+  final Set<String> _confirmedDeliveries = {};
+  
   // Проверка поддержки Firebase на текущей платформе
   bool get _isFirebaseSupported => kIsWeb || Platform.isAndroid || Platform.isIOS;
   
@@ -61,6 +64,8 @@ class FcmService {
     }
     
     // Initialize local notifications first
+    // Note: Using mipmap launcher icon for maximum compatibility
+    // Custom notification icon requires PNG files in drawable-* folders
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
@@ -260,6 +265,12 @@ class FcmService {
     final chatId = message.data['chatId'] as String?;
     final messageId = message.data['messageId'] as String?;
     
+    // IMPORTANT: Confirm delivery when push is received
+    // This sends an HTTP confirmation to backend that push was delivered
+    if (messageId != null && chatId != null) {
+      await _confirmPushDelivery(messageId, chatId);
+    }
+    
     // Trigger message fetch callback to ensure message is loaded
     if (messageId != null && chatId != null && onMessageReceived != null) {
       print('[FCM_FG] Triggering message fetch for messageId: $messageId');
@@ -278,6 +289,73 @@ class FcmService {
     
     if (chatId != null) {
       await _showGroupedNotification(chatId, title, body);
+    }
+  }
+  
+  /// Confirm push delivery to backend via HTTP
+  /// This ensures the sender sees "delivered" status even if SignalR is not connected
+  Future<void> _confirmPushDelivery(String messageId, String chatId) async {
+    // Skip if already confirmed
+    if (_confirmedDeliveries.contains(messageId)) {
+      print('[FCM] Delivery already confirmed for message: $messageId');
+      return;
+    }
+    
+    if (_jwtToken == null) {
+      print('[FCM] Cannot confirm delivery - no JWT token');
+      return;
+    }
+    
+    try {
+      print('[FCM] Confirming push delivery for message: $messageId, chat: $chatId');
+      
+      await _dio.post(
+        '${ApiConstants.baseUrl}/api/messages/confirm-push-delivery',
+        data: {
+          'messageId': messageId,
+          'chatId': chatId,
+        },
+        options: Options(
+          headers: {'Authorization': 'Bearer $_jwtToken'},
+        ),
+      );
+      
+      _confirmedDeliveries.add(messageId);
+      
+      // Limit cache size
+      if (_confirmedDeliveries.length > 1000) {
+        _confirmedDeliveries.clear();
+      }
+      
+      print('[FCM] Push delivery confirmed for message: $messageId');
+    } catch (e) {
+      print('[FCM] Failed to confirm push delivery: $e');
+      // Don't throw - this is best effort
+    }
+  }
+  
+  /// Static method for confirming delivery from background handler
+  /// Uses provided token since service instance may not be available
+  static Future<void> confirmPushDeliveryStatic(String messageId, String chatId, String jwtToken) async {
+    try {
+      final dio = Dio();
+      
+      print('[FCM_BG] Confirming push delivery for message: $messageId');
+      
+      await dio.post(
+        '${ApiConstants.baseUrl}/api/messages/confirm-push-delivery',
+        data: {
+          'messageId': messageId,
+          'chatId': chatId,
+        },
+        options: Options(
+          headers: {'Authorization': 'Bearer $jwtToken'},
+        ),
+      );
+      
+      print('[FCM_BG] Push delivery confirmed for message: $messageId');
+    } catch (e) {
+      print('[FCM_BG] Failed to confirm push delivery: $e');
     }
   }
 
@@ -348,7 +426,7 @@ class FcmService {
       final totalUnread = _unreadCountByChat.values.fold(0, (sum, count) => sum + count);
       final chatCount = _unreadCountByChat.length;
       
-      final androidDetails = const AndroidNotificationDetails(
+      const androidDetails = AndroidNotificationDetails(
         'messages_channel',
         'Messages',
         channelDescription: 'Notifications for new messages',

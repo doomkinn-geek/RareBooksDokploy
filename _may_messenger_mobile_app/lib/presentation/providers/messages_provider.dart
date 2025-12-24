@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../../data/models/message_model.dart';
 import '../../data/services/message_sync_service.dart';
 import '../../data/repositories/message_cache_repository.dart';
+import '../../core/services/notification_service.dart';
 import 'auth_provider.dart';
 import 'signalr_provider.dart';
 import 'profile_provider.dart';
@@ -163,7 +164,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     try {
       // Get current user ID
       final profileState = _ref.read(profileProvider);
-      final currentUserId = profileState.profile?.id;
+      final currentUserId = profileState.userId; // Uses cached userId for offline mode
       if (currentUserId == null) return;
       
       // Clean up old tracked messages
@@ -238,9 +239,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     // Check how long the message has been stuck
     final messageAge = now.difference(message.createdAt);
     
-    // Timeout thresholds
-    const warningTimeout = Duration(seconds: 30);
-    const failureTimeout = Duration(seconds: 120);
+    // REDUCED TIMEOUT thresholds for better UX
+    // User should not wait more than 45 seconds for feedback
+    const warningTimeout = Duration(seconds: 15);  // Reduced from 30s
+    const retryTimeout = Duration(seconds: 30);    // Trigger retry earlier
+    const failureTimeout = Duration(seconds: 45);  // Reduced from 120s
     
     if (messageAge < warningTimeout) {
       // Still within normal sync window
@@ -269,12 +272,19 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
             'Message stuck in sending state for ${messageAge.inSeconds}s'
           );
           updateMessageStatus(message.id, MessageStatus.failed, force: true);
-          print('[OUTGOING_STATUS] Message ${message.id} marked as failed (timeout)');
-        } else {
-          // Still in sync queue - maybe trigger a retry
+          print('[OUTGOING_STATUS] Message ${message.id} marked as failed (timeout after ${messageAge.inSeconds}s)');
+        } else if (messageAge >= retryTimeout) {
+          // Trigger retry if not already pending
           if (!_pendingSends.contains(message.id) && 
               !_pendingSends.contains(message.localId ?? '')) {
-            print('[OUTGOING_STATUS] Message ${message.id} not in pending sends, may need manual retry');
+            print('[OUTGOING_STATUS] Message ${message.id} triggering automatic retry after ${messageAge.inSeconds}s');
+            
+            // Attempt automatic retry
+            try {
+              await retryFailedMessage(message.localId ?? message.id);
+            } catch (e) {
+              print('[OUTGOING_STATUS] Automatic retry failed: $e');
+            }
           }
         }
       } else {
@@ -294,7 +304,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
           final currentMessage = state.messages.where((m) => m.id == message.id).firstOrNull;
           if (currentMessage != null && currentMessage.status == MessageStatus.sending) {
             updateMessageStatus(message.id, MessageStatus.failed, force: true);
-            print('[OUTGOING_STATUS] Message ${message.id} marked as failed (not found on server after timeout)');
+            print('[OUTGOING_STATUS] Message ${message.id} marked as failed (not found on server after ${messageAge.inSeconds}s)');
           }
         }
       }
@@ -1005,7 +1015,18 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         print('[MSG_SEND] Failed to update chat preview: $e');
       }
       
-      // STEP 3: Add to outbox queue for persistence
+      // STEP 3: Cache audio locally so it can be played offline even after sending
+      try {
+        final audioStorageService = _ref.read(audioStorageServiceProvider);
+        final cachedPath = await audioStorageService.cacheSentAudio(localId, audioPath);
+        if (cachedPath != null) {
+          print('[MSG_SEND] Audio cached locally for offline playback: $localId');
+        }
+      } catch (e) {
+        print('[MSG_SEND] Failed to cache sent audio (non-critical): $e');
+      }
+      
+      // STEP 4: Add to outbox queue for persistence
       final outboxEntry = await _outboxRepository.addToOutbox(
         chatId: chatId,
         type: MessageType.audio,
@@ -1013,7 +1034,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       );
       final outboxId = outboxEntry.localId; // Save outbox ID for later cleanup
       
-      // STEP 4: Send to backend asynchronously with clientMessageId
+      // STEP 5: Send to backend asynchronously with clientMessageId
       _syncMessageToBackend(localId, MessageType.audio, outboxId: outboxId, audioPath: audioPath, clientMessageId: clientMessageId);
       
     } catch (e) {
@@ -1099,7 +1120,18 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         print('[MSG_SEND] Failed to update chat preview: $e');
       }
       
-      // STEP 3: Send to backend asynchronously with clientMessageId
+      // STEP 3: Cache image locally so it can be viewed offline even after sending
+      try {
+        final imageStorageService = _ref.read(imageStorageServiceProvider);
+        final cachedPath = await imageStorageService.saveLocalImage(localId, imagePath);
+        if (cachedPath != null) {
+          print('[MSG_SEND] Image cached locally for offline viewing: $localId');
+        }
+      } catch (e) {
+        print('[MSG_SEND] Failed to cache sent image (non-critical): $e');
+      }
+      
+      // STEP 4: Send to backend asynchronously with clientMessageId
       _syncImageToBackend(localId, imagePath, clientMessageId: clientMessageId);
       
     } catch (e) {
@@ -1370,7 +1402,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       print('[STATUS_UPDATE] markMessagesAsRead called');
       // Get current user ID
       final profileState = _ref.read(profileProvider);
-      final currentUserId = profileState.profile?.id;
+      final currentUserId = profileState.userId; // Uses cached userId for offline mode
       
       if (currentUserId == null) {
         print('[STATUS_UPDATE] currentUserId is null, returning');
@@ -1378,6 +1410,15 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
       
       print('[STATUS_UPDATE] currentUserId: $currentUserId, total messages: ${state.messages.length}');
+      
+      // IMPORTANT: Cancel push notifications for this chat when messages are read
+      try {
+        final notificationService = _ref.read(notificationServiceProvider);
+        await notificationService.cancelNotificationsForChat(chatId);
+        print('[STATUS_UPDATE] Cancelled push notifications for chat: $chatId');
+      } catch (e) {
+        print('[STATUS_UPDATE] Failed to cancel notifications: $e');
+      }
       
       // Find all unread messages from other users
       final unreadMessages = state.messages.where((message) {

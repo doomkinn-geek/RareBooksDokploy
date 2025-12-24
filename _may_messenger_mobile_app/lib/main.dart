@@ -256,12 +256,27 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         notificationService.onNotificationTap = (chatId, messageId) async {
           print('[NOTIFICATION] Local notification tapped for chat: $chatId, message: $messageId');
           
+          // IMPORTANT: Validate chatId before navigating
+          if (chatId.isEmpty) {
+            print('[NOTIFICATION] Invalid chatId (empty), aborting navigation');
+            return;
+          }
+          
           try {
-            // Refresh chats list in background (non-blocking)
-            ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+            // STEP 1: Force refresh chats list first to ensure chat exists
+            print('[NOTIFICATION] Refreshing chats list...');
+            await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
             
-            // Navigate immediately - ChatScreen will handle message loading
-            print('[NOTIFICATION] Navigating to chat screen...');
+            // STEP 2: Verify chat exists
+            final chatsState = ref.read(chatsProvider);
+            final chatExists = chatsState.chats.any((chat) => chat.id == chatId);
+            
+            if (!chatExists) {
+              print('[NOTIFICATION] Chat $chatId not found in chats list');
+            }
+            
+            // STEP 3: Navigate to chat - ChatScreen will handle message loading
+            print('[NOTIFICATION] Navigating to chat screen: $chatId');
             navigatorKey.currentState?.pushAndRemoveUntil(
               MaterialPageRoute(
                 builder: (context) => ChatScreen(
@@ -275,15 +290,17 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
             print('[NOTIFICATION] Navigation completed');
           } catch (e) {
             print('[NOTIFICATION] Error handling notification tap: $e');
-            // Navigate anyway on error
-            navigatorKey.currentState?.push(
-              MaterialPageRoute(
-                builder: (context) => ChatScreen(
-                  chatId: chatId,
-                  highlightMessageId: messageId,
+            // Navigate anyway on error if chatId is valid
+            if (chatId.isNotEmpty) {
+              navigatorKey.currentState?.push(
+                MaterialPageRoute(
+                  builder: (context) => ChatScreen(
+                    chatId: chatId,
+                    highlightMessageId: messageId,
+                  ),
                 ),
-              ),
-            );
+              );
+            }
           }
         };
 
@@ -321,6 +338,12 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
               print('[PUSH_NAV] Push notification tapped for chat: $chatId');
               
               try {
+                // IMPORTANT: Validate chatId before navigating
+                if (chatId.isEmpty) {
+                  print('[PUSH_NAV] Invalid chatId (empty), aborting navigation');
+                  return;
+                }
+                
                 // Only ensure SignalR is connected before navigating
                 final signalRState = ref.read(signalRConnectionProvider);
                 print('[PUSH_NAV] SignalR connected: ${signalRState.isConnected}');
@@ -331,11 +354,21 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
                   await ref.read(signalRConnectionProvider.notifier).silentReconnect();
                 }
                 
-                // Refresh chats list in background (non-blocking)
-                ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+                // STEP 1: Force refresh chats list first to ensure chat exists
+                print('[PUSH_NAV] Refreshing chats list...');
+                await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
                 
-                // Navigate immediately - ChatScreen will handle message loading
-                print('[PUSH_NAV] Navigating to chat screen...');
+                // STEP 2: Verify chat exists in our list before navigating
+                final chatsState = ref.read(chatsProvider);
+                final chatExists = chatsState.chats.any((chat) => chat.id == chatId);
+                
+                if (!chatExists) {
+                  print('[PUSH_NAV] Chat $chatId not found in chats list, trying to load anyway...');
+                  // Chat might be new - still try to navigate
+                }
+                
+                // STEP 3: Navigate to chat screen
+                print('[PUSH_NAV] Navigating to chat screen: $chatId');
                 navigatorKey.currentState?.pushAndRemoveUntil(
                   MaterialPageRoute(
                     builder: (context) => ChatScreen(chatId: chatId),
@@ -346,12 +379,14 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
                 print('[PUSH_NAV] Navigation completed');
               } catch (e) {
                 print('[PUSH_NAV] Error handling notification tap: $e');
-                // Navigate anyway on error
-                navigatorKey.currentState?.push(
-                  MaterialPageRoute(
-                    builder: (context) => ChatScreen(chatId: chatId),
-                  ),
-                );
+                // Navigate anyway on error - ChatScreen will handle errors
+                if (chatId.isNotEmpty) {
+                  navigatorKey.currentState?.push(
+                    MaterialPageRoute(
+                      builder: (context) => ChatScreen(chatId: chatId),
+                    ),
+                  );
+                }
               }
             };
 
