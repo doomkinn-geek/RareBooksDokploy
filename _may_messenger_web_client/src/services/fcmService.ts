@@ -109,6 +109,57 @@ class FCMService {
   }
 
   /**
+   * Request basic browser notification permission (works without Firebase)
+   * Returns true if permission granted
+   */
+  async requestBrowserNotificationPermission(): Promise<boolean> {
+    if (!('Notification' in window)) {
+      console.warn('[FCM] Notifications not supported');
+      return false;
+    }
+
+    if (Notification.permission === 'granted') {
+      return true;
+    }
+
+    if (Notification.permission === 'denied') {
+      console.log('[FCM] Notification permission previously denied');
+      return false;
+    }
+
+    const permission = await Notification.requestPermission();
+    return permission === 'granted';
+  }
+
+  /**
+   * Show a browser notification (fallback when FCM is not available)
+   */
+  showLocalNotification(title: string, body: string, chatId?: string): void {
+    if (Notification.permission !== 'granted') {
+      return;
+    }
+
+    const notification = new Notification(title, {
+      body,
+      icon: '/icon-192.png',
+      badge: '/icon-96.png',
+      tag: chatId || 'default',
+    });
+
+    notification.onclick = () => {
+      window.focus();
+      if (chatId) {
+        // Navigate to chat
+        window.location.href = `/web/?chat=${chatId}`;
+      }
+      notification.close();
+    };
+
+    // Auto-close after 5 seconds
+    setTimeout(() => notification.close(), 5000);
+  }
+
+  /**
    * Request notification permission and get FCM token
    */
   async requestPermissionAndGetToken(): Promise<string | null> {

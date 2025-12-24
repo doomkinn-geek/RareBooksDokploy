@@ -22,4 +22,8 @@ export const chatApi = {
     const response = await apiClient.post<Chat>(ENDPOINTS.CREATE_OR_GET_CHAT, { targetUserId });
     return response.data;
   },
+
+  async deleteChat(chatId: string): Promise<void> {
+    await apiClient.delete(ENDPOINTS.CHAT_BY_ID(chatId));
+  },
 };

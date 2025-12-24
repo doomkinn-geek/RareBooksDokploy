@@ -14,6 +14,9 @@ interface AuthState {
   logout: () => Promise<void>;
   loadUserProfile: () => Promise<void>;
   clearError: () => void;
+  
+  // Computed
+  isAdmin: boolean;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -86,4 +89,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  // Computed property
+  get isAdmin() {
+    return get().user?.isAdmin || false;
+  },
 }));

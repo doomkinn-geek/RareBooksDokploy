@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { Message, MessageType, MessageStatus } from '../types/chat';
 import { messageApi } from '../api/messageApi';
 import { signalRService } from '../services/signalRService';
+import { notificationService } from '../services/notificationService';
 import { useChatStore } from './chatStore';
 import { useAuthStore } from './authStore';
 import { outboxRepository } from '../repositories/outboxRepository';
@@ -21,6 +22,8 @@ interface MessageState {
   addMessage: (message: Message) => void;
   updateMessageStatus: (messageId: string, status: number) => void;
   retryMessage: (localId: string) => Promise<void>;
+  deleteMessage: (chatId: string, messageId: string) => Promise<void>;
+  markAudioAsPlayed: (chatId: string, messageId: string) => Promise<void>;
   clearError: () => void;
 }
 
@@ -383,11 +386,39 @@ export const useMessageStore = create<MessageState>((set) => ({
       };
     });
     
-    // Update chat's last message
+    // Update chat's last message and unread count
     const chatStore = useChatStore.getState();
     const chat = chatStore.chats.find((c) => c.id === message.chatId);
     if (chat) {
       chatStore.updateChat({ ...chat, lastMessage: message });
+      
+      // Increment unread count if message is from someone else and chat is not selected
+      const authState = useAuthStore.getState();
+      const currentUserId = authState.user?.id;
+      const isFromMe = currentUserId && message.senderId === currentUserId;
+      const isChatSelected = chatStore.selectedChatId === message.chatId;
+      
+      if (!isFromMe && !isChatSelected) {
+        chatStore.incrementUnreadCount(message.chatId);
+        
+        // Show browser notification
+        const chatTitle = chat.title || 'Новое сообщение';
+        let messageBody = message.content || '';
+        if (message.type === MessageType.Audio) {
+          messageBody = '🎤 Голосовое сообщение';
+        } else if (message.type === MessageType.Image) {
+          messageBody = '🖼️ Изображение';
+        }
+        
+        notificationService.showMessageNotification(
+          chatTitle,
+          messageBody,
+          message.chatId,
+          () => {
+            chatStore.selectChat(message.chatId);
+          }
+        );
+      }
     }
   },
 
@@ -452,6 +483,52 @@ export const useMessageStore = create<MessageState>((set) => ({
       // Note: Audio retry would need special handling with stored blob
     } catch (error) {
       console.error('[MSG_SEND] Failed to retry message:', error);
+    }
+  },
+
+  deleteMessage: async (chatId: string, messageId: string) => {
+    try {
+      await messageApi.deleteMessage(messageId);
+      
+      // Remove message from state
+      set((state) => {
+        const chatMessages = state.messagesByChatId[chatId] || [];
+        return {
+          messagesByChatId: {
+            ...state.messagesByChatId,
+            [chatId]: chatMessages.filter((m) => m.id !== messageId),
+          },
+        };
+      });
+      
+      console.log('[MessageStore] Message deleted:', messageId);
+    } catch (error: any) {
+      console.error('[MessageStore] Delete message error:', error);
+      throw error;
+    }
+  },
+
+  markAudioAsPlayed: async (chatId: string, messageId: string) => {
+    try {
+      await messageApi.markAudioAsPlayed(messageId);
+      
+      // Update message status in state
+      set((state) => {
+        const chatMessages = state.messagesByChatId[chatId] || [];
+        return {
+          messagesByChatId: {
+            ...state.messagesByChatId,
+            [chatId]: chatMessages.map((m) =>
+              m.id === messageId ? { ...m, status: MessageStatus.Played } : m
+            ),
+          },
+        };
+      });
+      
+      console.log('[MessageStore] Audio marked as played:', messageId);
+    } catch (error: any) {
+      console.error('[MessageStore] Mark audio as played error:', error);
+      // Non-fatal, don't throw
     }
   },
 

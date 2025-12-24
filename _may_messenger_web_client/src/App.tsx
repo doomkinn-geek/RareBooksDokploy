@@ -9,6 +9,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { SearchPage } from './pages/SearchPage';
 import { NewChatPage } from './pages/NewChatPage';
 import { CreateGroupPage } from './pages/CreateGroupPage';
+import { DebugPage } from './pages/DebugPage';
 import { notificationService } from './services/notificationService';
 import { fcmService } from './services/fcmService';
 import { signalRService } from './services/signalRService';
@@ -170,6 +171,10 @@ function App() {
         <Route
           path="/create-group"
           element={token ? <CreateGroupPage /> : <Navigate to="/login" replace />}
+        />
+        <Route
+          path="/debug"
+          element={token ? <DebugPage /> : <Navigate to="/login" replace />}
         />
       </Routes>
     </BrowserRouter>

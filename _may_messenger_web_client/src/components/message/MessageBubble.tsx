@@ -2,20 +2,25 @@ import { Message, MessageType, MessageStatus } from '../../types/chat';
 import { useAuthStore } from '../../stores/authStore';
 import { useMessageStore } from '../../stores/messageStore';
 import { formatTime } from '../../utils/formatters';
-import { Check, CheckCheck, Clock, AlertCircle, RotateCw, Volume2 } from 'lucide-react';
+import { Check, CheckCheck, Clock, AlertCircle, RotateCw, Volume2, Trash2 } from 'lucide-react';
 import { AudioPlayer } from './AudioPlayer';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { API_BASE_URL } from '../../utils/constants';
 
 interface MessageBubbleProps {
   message: Message;
+  isHighlighted?: boolean;
 }
 
-export const MessageBubble = ({ message }: MessageBubbleProps) => {
+export const MessageBubble = ({ message, isHighlighted: propHighlighted }: MessageBubbleProps) => {
   const { user } = useAuthStore();
-  const { retryMessage } = useMessageStore();
+  const { retryMessage, deleteMessage, markAudioAsPlayed } = useMessageStore();
   const isOwnMessage = user?.id === message.senderId;
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const audioPlayedRef = useRef(false);
 
   const handleRetry = async () => {
     if (message.localId) {
@@ -24,6 +29,33 @@ export const MessageBubble = ({ message }: MessageBubbleProps) => {
       } catch (error) {
         console.error('[MessageBubble] Failed to retry message:', error);
       }
+    }
+  };
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (isOwnMessage) {
+      setShowContextMenu(true);
+    }
+  };
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await deleteMessage(message.chatId, message.id);
+      setShowDeleteDialog(false);
+    } catch (error) {
+      console.error('[MessageBubble] Failed to delete message:', error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Mark audio as played when listening (for incoming audio messages)
+  const handleAudioPlay = () => {
+    if (!isOwnMessage && message.type === MessageType.Audio && !audioPlayedRef.current) {
+      audioPlayedRef.current = true;
+      markAudioAsPlayed(message.chatId, message.id);
     }
   };
 
@@ -66,7 +98,11 @@ export const MessageBubble = ({ message }: MessageBubbleProps) => {
       
       case MessageType.Audio:
         return message.filePath ? (
-          <AudioPlayer filePath={message.filePath} isOwnMessage={isOwnMessage} />
+          <AudioPlayer 
+            filePath={message.filePath} 
+            isOwnMessage={isOwnMessage} 
+            onPlay={handleAudioPlay}
+          />
         ) : (
           <p className="text-sm opacity-70">Аудио недоступно</p>
         );
@@ -111,16 +147,19 @@ export const MessageBubble = ({ message }: MessageBubbleProps) => {
   return (
     <>
       <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mb-4`}>
-        <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} gap-1`}>
+        <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} gap-1 relative`}>
           <div
+            onContextMenu={handleContextMenu}
             className={`rounded-2xl px-4 py-2 transition-all duration-300 ${
-              message.isHighlighted ? 'ring-2 ring-yellow-400 bg-yellow-50' : ''
+              propHighlighted || message.isHighlighted 
+                ? 'ring-2 ring-yellow-400 bg-yellow-100 animate-pulse' 
+                : ''
             } ${
               isOwnMessage
                 ? message.status === MessageStatus.Failed
                   ? 'bg-red-600 text-white'
-                  : 'bg-indigo-600 text-white'
-                : 'bg-gray-200 text-gray-900'
+                  : propHighlighted ? 'bg-indigo-500 text-white' : 'bg-indigo-600 text-white'
+                : propHighlighted ? 'bg-yellow-100 text-gray-900' : 'bg-gray-200 text-gray-900'
             }`}
             style={{
               maxWidth: 'min(70%, 500px)',
@@ -145,6 +184,25 @@ export const MessageBubble = ({ message }: MessageBubbleProps) => {
             </div>
           </div>
           
+          {/* Context menu for own messages */}
+          {showContextMenu && (
+            <>
+              <div 
+                className="fixed inset-0 z-40" 
+                onClick={() => setShowContextMenu(false)}
+              />
+              <div className="absolute right-0 top-full mt-1 z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[140px]">
+                <button
+                  onClick={() => { setShowContextMenu(false); setShowDeleteDialog(true); }}
+                  className="w-full px-3 py-2 text-left text-red-600 hover:bg-red-50 flex items-center gap-2 text-sm"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Удалить
+                </button>
+              </div>
+            </>
+          )}
+          
           {/* Retry button for failed messages */}
           {isOwnMessage && message.status === MessageStatus.Failed && (
             <button
@@ -158,6 +216,34 @@ export const MessageBubble = ({ message }: MessageBubbleProps) => {
           )}
         </div>
       </div>
+      
+      {/* Delete confirmation dialog */}
+      {showDeleteDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Удалить сообщение</h3>
+            <p className="text-gray-600 mb-4">
+              Сообщение будет удалено у всех участников чата
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowDeleteDialog(false)}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
+                disabled={isDeleting}
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleDelete}
+                className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-lg transition disabled:opacity-50"
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Удаление...' : 'Удалить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Full screen image viewer */}
       {fullScreenImage && (

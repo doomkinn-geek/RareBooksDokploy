@@ -53,4 +53,12 @@ export const messageApi = {
     const response = await apiClient.get(`/api/messages/${chatId}/status-updates`, { params });
     return response.data;
   },
+
+  async deleteMessage(messageId: string): Promise<void> {
+    await apiClient.delete(`/api/messages/${messageId}`);
+  },
+
+  async markAudioAsPlayed(messageId: string): Promise<void> {
+    await apiClient.post(`/api/messages/${messageId}/played`);
+  },
 };

@@ -7,14 +7,16 @@ import { API_URL } from '../../utils/constants';
 interface AudioPlayerProps {
   filePath: string;
   isOwnMessage: boolean;
+  onPlay?: () => void;
 }
 
-export const AudioPlayer = ({ filePath, isOwnMessage }: AudioPlayerProps) => {
+export const AudioPlayer = ({ filePath, isOwnMessage, onPlay }: AudioPlayerProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const audioUrl = `${API_URL}${filePath}`;
   const cleanupRef = useRef<(() => void)[]>([]);
+  const hasTriggeredPlay = useRef(false);
 
   useEffect(() => {
     // Set up audio event listeners
@@ -41,6 +43,12 @@ export const AudioPlayer = ({ filePath, isOwnMessage }: AudioPlayerProps) => {
       } else {
         await audioPlayer.play(audioUrl);
         setIsPlaying(true);
+        
+        // Trigger onPlay callback when first starting playback
+        if (!hasTriggeredPlay.current && onPlay) {
+          hasTriggeredPlay.current = true;
+          onPlay();
+        }
         
         // Set up time update listener
         const cleanup1 = audioPlayer.onTimeUpdate((time) => {

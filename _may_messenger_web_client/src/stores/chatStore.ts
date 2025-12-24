@@ -7,25 +7,35 @@ import { signalRService } from '../services/signalRService';
 interface ChatState {
   chats: Chat[];
   selectedChatId: string | null;
+  highlightMessageId: string | null;
   isLoading: boolean;
   error: string | null;
   
   loadChats: () => Promise<void>;
   selectChat: (chatId: string) => void;
+  selectChatWithMessage: (chatId: string, messageId: string) => void;
+  clearHighlight: () => void;
   createChat: (title: string, participantIds: string[]) => Promise<Chat>;
   createOrGetPrivateChat: (targetUserId: string) => Promise<Chat>;
   updateChat: (chat: Chat) => void;
   updateParticipantOnlineStatus: (userId: string, isOnline: boolean, lastSeenAt?: string) => void;
+  deleteChat: (chatId: string) => Promise<void>;
   clearError: () => void;
+  
+  // Unread count management
+  clearUnreadCount: (chatId: string) => void;
+  incrementUnreadCount: (chatId: string) => void;
   
   // Computed properties
   privateChats: Chat[];
   groupChats: Chat[];
+  totalUnreadCount: number;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
   chats: [],
   selectedChatId: null,
+  highlightMessageId: null,
   isLoading: false,
   error: null,
 
@@ -73,7 +83,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   selectChat: (chatId: string) => {
-    set({ selectedChatId: chatId });
+    set({ selectedChatId: chatId, highlightMessageId: null });
+  },
+
+  selectChatWithMessage: (chatId: string, messageId: string) => {
+    set({ selectedChatId: chatId, highlightMessageId: messageId });
+    
+    // Clear highlight after 3 seconds
+    setTimeout(() => {
+      const state = get();
+      if (state.highlightMessageId === messageId) {
+        set({ highlightMessageId: null });
+      }
+    }, 3000);
+  },
+
+  clearHighlight: () => {
+    set({ highlightMessageId: null });
   },
 
   createChat: async (title: string, participantIds: string[]) => {
@@ -130,7 +156,42 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
   },
 
+  deleteChat: async (chatId: string) => {
+    try {
+      await chatApi.deleteChat(chatId);
+      set((state) => ({
+        chats: state.chats.filter((chat) => chat.id !== chatId),
+        selectedChatId: state.selectedChatId === chatId ? null : state.selectedChatId,
+      }));
+      console.log('[ChatStore] Chat deleted:', chatId);
+    } catch (error: any) {
+      console.error('[ChatStore] Delete error:', error);
+      const errorMessage = error.response?.data?.message || 'Ошибка удаления чата';
+      set({ error: errorMessage });
+      throw error;
+    }
+  },
+
   clearError: () => set({ error: null }),
+
+  // Unread count management
+  clearUnreadCount: (chatId: string) => {
+    set((state) => ({
+      chats: state.chats.map((chat) =>
+        chat.id === chatId ? { ...chat, unreadCount: 0 } : chat
+      ),
+    }));
+  },
+
+  incrementUnreadCount: (chatId: string) => {
+    set((state) => ({
+      chats: state.chats.map((chat) =>
+        chat.id === chatId 
+          ? { ...chat, unreadCount: (chat.unreadCount || 0) + 1 } 
+          : chat
+      ),
+    }));
+  },
 
   // Computed properties
   get privateChats() {
@@ -139,6 +200,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   get groupChats() {
     return get().chats.filter(chat => chat.type === ChatType.Group);
+  },
+
+  get totalUnreadCount() {
+    return get().chats.reduce((total, chat) => total + (chat.unreadCount || 0), 0);
   },
 }));
 

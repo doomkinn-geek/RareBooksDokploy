@@ -4,11 +4,11 @@ import { useAuthStore } from '../stores/authStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { ProfileCard } from '../components/settings/ProfileCard';
 import { InviteQRDialog } from '../components/settings/InviteQRDialog';
-import { ArrowLeft, QrCode, Gift, Copy, LogOut, Loader2 } from 'lucide-react';
+import { ArrowLeft, QrCode, Gift, Copy, LogOut, Loader2, Bug } from 'lucide-react';
 
 export const SettingsPage = () => {
   const navigate = useNavigate();
-  const { user, logout } = useAuthStore();
+  const { user, logout, isAdmin } = useAuthStore();
   const { inviteLinks, isLoading, isCreating, loadInviteLinks, createInviteLink, validInviteLinks } = useSettingsStore();
   const [showQRDialog, setShowQRDialog] = useState(false);
   const [selectedInvite, setSelectedInvite] = useState<{ code: string; link: string } | null>(null);
@@ -185,6 +185,30 @@ export const SettingsPage = () => {
             </div>
           )}
         </div>
+
+        {/* Admin Section */}
+        {isAdmin && (
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <Bug className="w-6 h-6 text-orange-600" />
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Администрирование
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Инструменты для администраторов
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate('/debug')}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-900 text-white hover:bg-gray-800 rounded-lg transition font-medium"
+            >
+              <Bug className="w-5 h-5" />
+              Диагностика
+            </button>
+          </div>
+        )}
 
         {/* Logout */}
         <div className="bg-white rounded-lg shadow-sm p-6">

@@ -59,9 +59,9 @@ export const SearchPage = () => {
   };
 
   const handleMessageClick = (result: MessageSearchResult) => {
-    selectChat(result.chatId);
+    const { selectChatWithMessage } = useChatStore.getState();
+    selectChatWithMessage(result.chatId, result.messageId);
     navigate('/');
-    // TODO: можно добавить прокрутку к конкретному сообщению
   };
 
   const handleClearQuery = () => {

@@ -144,6 +144,24 @@ export class OutboxRepository {
   }
 
   /**
+   * Get all pending messages (alias for getAllPendingMessages)
+   */
+  async getAllPending(): Promise<PendingMessage[]> {
+    return await this.getAllPendingMessages();
+  }
+
+  /**
+   * Clear all messages from outbox
+   */
+  async clearAll(): Promise<void> {
+    const allPending = await this.getAllPendingMessages();
+    for (const msg of allPending) {
+      await this.removePendingMessage(msg.localId);
+    }
+    console.log('[OUTBOX] Cleared all messages');
+  }
+
+  /**
    * Convert PendingMessage to Message for UI display
    */
   toMessage(pending: PendingMessage, currentUserId: string, currentUserName: string): Message {

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Mic, Image as ImageIcon, X } from 'lucide-react';
 import { AudioRecorder } from './AudioRecorder';
+import { EmojiPicker } from '../common/EmojiPicker';
 import { useTypingIndicator } from '../../hooks/useTypingIndicator';
 import { useChatStore } from '../../stores/chatStore';
 
@@ -93,6 +94,11 @@ export const MessageInput = ({ onSendText, onSendAudio, onSendImage, disabled }:
     setImagePreview(null);
   };
 
+  const handleEmojiSelect = (emoji: string) => {
+    setText((prev) => prev + emoji);
+    onTyping();
+  };
+
   if (isRecording) {
     return <AudioRecorder onSend={handleSendAudio} onCancel={handleCancelRecording} />;
   }
@@ -154,6 +160,8 @@ export const MessageInput = ({ onSendText, onSendAudio, onSendImage, disabled }:
       >
         <ImageIcon className="w-6 h-6" />
       </button>
+
+      <EmojiPicker onEmojiSelect={handleEmojiSelect} />
       
       <input
         type="text"
