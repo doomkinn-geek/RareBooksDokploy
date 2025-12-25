@@ -20,20 +20,41 @@ class FullScreenImageViewer extends StatefulWidget {
   State<FullScreenImageViewer> createState() => _FullScreenImageViewerState();
 }
 
-class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
+class _FullScreenImageViewerState extends State<FullScreenImageViewer>
+    with SingleTickerProviderStateMixin {
   double _dragOffset = 0.0;
   double _opacity = 1.0;
   double _currentScale = 1.0; // Track current zoom scale
   final TransformationController _transformationController = TransformationController();
+  
+  // Animation controller for smooth double-tap zoom
+  late AnimationController _animationController;
+  Animation<Matrix4>? _animation;
+  
+  // Track double-tap position for zoom to point
+  Offset? _doubleTapPosition;
+  
+  // Target scale for double-tap zoom
+  static const double _doubleTapZoomScale = 2.5;
 
   @override
   void initState() {
     super.initState();
     _transformationController.addListener(_onTransformationChanged);
+    
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    )..addListener(() {
+        if (_animation != null) {
+          _transformationController.value = _animation!.value;
+        }
+      });
   }
 
   @override
   void dispose() {
+    _animationController.dispose();
     _transformationController.removeListener(_onTransformationChanged);
     _transformationController.dispose();
     super.dispose();
@@ -47,6 +68,59 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
         _currentScale = scale;
       });
     }
+  }
+
+  /// Handle double-tap to zoom in/out
+  void _handleDoubleTap() {
+    final position = _doubleTapPosition ?? Offset.zero;
+    
+    if (_currentScale > 1.05) {
+      // Already zoomed - zoom out to 1x
+      _animateToScale(1.0, position);
+    } else {
+      // Not zoomed - zoom in to target scale at tap position
+      _animateToScale(_doubleTapZoomScale, position);
+    }
+  }
+  
+  /// Animate zoom to target scale, centered on the given position
+  void _animateToScale(double targetScale, Offset focalPoint) {
+    // Get the current transformation
+    final Matrix4 currentMatrix = _transformationController.value;
+    
+    // Calculate the target transformation
+    Matrix4 targetMatrix;
+    
+    if (targetScale <= 1.0) {
+      // Reset to identity (no zoom, no pan)
+      targetMatrix = Matrix4.identity();
+    } else {
+      // Calculate zoom centered on focal point
+      final size = MediaQuery.of(context).size;
+      final centerX = size.width / 2;
+      final centerY = size.height / 2;
+      
+      // Calculate offset to center the focal point after zoom
+      final dx = (centerX - focalPoint.dx) * (targetScale - 1);
+      final dy = (centerY - focalPoint.dy) * (targetScale - 1);
+      
+      targetMatrix = Matrix4.identity()
+        ..translate(dx, dy)
+        ..scale(targetScale);
+    }
+    
+    // Create the animation
+    _animation = Matrix4Tween(
+      begin: currentMatrix,
+      end: targetMatrix,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOutCubic,
+    ));
+    
+    // Reset and start animation
+    _animationController.reset();
+    _animationController.forward();
   }
 
   void _handleVerticalDragUpdate(DragUpdateDetails details) {
@@ -94,17 +168,21 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
         // Only intercept vertical drags when not zoomed
         onVerticalDragUpdate: enableSwipeToDismiss ? _handleVerticalDragUpdate : null,
         onVerticalDragEnd: enableSwipeToDismiss ? _handleVerticalDragEnd : null,
+        // Double-tap detection - save position first
+        onDoubleTapDown: (details) {
+          _doubleTapPosition = details.localPosition;
+        },
+        onDoubleTap: _handleDoubleTap,
         child: Transform.translate(
           offset: Offset(0, _dragOffset),
           child: Stack(
             children: [
-              // Image viewer with zoom
+              // Image viewer with zoom (pinch-to-zoom)
               Center(
                 child: InteractiveViewer(
                   transformationController: _transformationController,
                   minScale: 0.5,
                   maxScale: 4.0,
-                  // Double-tap to reset zoom
                   onInteractionEnd: (details) {
                     // Reset drag offset when zooming is done
                     if (_currentScale <= 1.0 && _dragOffset != 0) {
@@ -170,6 +248,30 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
               ),
             ),
               ),
+              
+              // Zoom indicator (shows current zoom level when zoomed)
+              if (_currentScale > 1.05)
+                Positioned(
+                  bottom: 80,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(
+                        '${_currentScale.toStringAsFixed(1)}x',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -227,4 +329,3 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
     }
   }
 }
-

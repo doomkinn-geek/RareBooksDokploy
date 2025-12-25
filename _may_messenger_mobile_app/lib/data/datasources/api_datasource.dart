@@ -4,6 +4,7 @@ import '../models/chat_model.dart';
 import '../models/message_model.dart';
 import '../models/user_profile_model.dart';
 import '../models/invite_link_model.dart';
+import '../models/participant_model.dart';
 import '../../core/constants/api_constants.dart';
 
 class ApiDataSource {
@@ -440,6 +441,70 @@ class ApiDataSource {
       return inviteLinks;
     } catch (e) {
       throw Exception('Failed to get invite links: $e');
+    }
+  }
+  
+  // Group Participants Management
+  
+  /// Get all participants of a chat
+  Future<List<Participant>> getParticipants(String chatId) async {
+    try {
+      final response = await _dio.get('${ApiConstants.chats}/$chatId/participants');
+      final List<Participant> participants = (response.data as List)
+          .map((json) => Participant.fromJson(json as Map<String, dynamic>))
+          .toList()
+          .cast<Participant>();
+      return participants;
+    } catch (e) {
+      throw Exception('Failed to get participants: $e');
+    }
+  }
+  
+  /// Add participants to a group chat
+  Future<void> addParticipants(String chatId, List<String> userIds) async {
+    try {
+      await _dio.post(
+        '${ApiConstants.chats}/$chatId/participants',
+        data: {'userIds': userIds},
+      );
+    } catch (e) {
+      throw Exception('Failed to add participants: $e');
+    }
+  }
+  
+  /// Remove a participant from a group chat
+  Future<void> removeParticipant(String chatId, String userId) async {
+    try {
+      await _dio.delete('${ApiConstants.chats}/$chatId/participants/$userId');
+    } catch (e) {
+      throw Exception('Failed to remove participant: $e');
+    }
+  }
+  
+  /// Promote a participant to admin
+  Future<void> promoteToAdmin(String chatId, String userId) async {
+    try {
+      await _dio.post('${ApiConstants.chats}/$chatId/admins/$userId');
+    } catch (e) {
+      throw Exception('Failed to promote to admin: $e');
+    }
+  }
+  
+  /// Demote an admin to regular participant
+  Future<void> demoteAdmin(String chatId, String userId) async {
+    try {
+      await _dio.delete('${ApiConstants.chats}/$chatId/admins/$userId');
+    } catch (e) {
+      throw Exception('Failed to demote admin: $e');
+    }
+  }
+  
+  /// Leave a group chat
+  Future<void> leaveChat(String chatId) async {
+    try {
+      await _dio.post('${ApiConstants.chats}/$chatId/leave');
+    } catch (e) {
+      throw Exception('Failed to leave chat: $e');
     }
   }
 }

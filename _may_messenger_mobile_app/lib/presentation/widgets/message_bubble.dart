@@ -8,6 +8,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../data/models/message_model.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/services/logger_service.dart';
+import '../../data/services/proximity_audio_service.dart';
 import '../providers/profile_provider.dart';
 import '../providers/contacts_names_provider.dart';
 import '../providers/auth_provider.dart';
@@ -36,6 +37,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   bool _isPlaying = false;
   bool _isDownloadingAudio = false; // Track audio download state
   bool _hasMarkedAsPlayed = false; // Track if we've already marked as played
+  bool _isNearEar = false; // Track proximity sensor state
   Duration? _duration;
   Duration? _position;
   Timer? _markAsPlayedTimer; // Debounce timer for mark as played
@@ -56,9 +58,22 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       setState(() => _position = p);
     });
     _audioPlayer.playerStateStream.listen((state) {
+      final wasPlaying = _isPlaying;
       setState(() {
         _isPlaying = state.playing;
       });
+      
+      // Start/stop proximity sensor based on playback state
+      final proximityService = ref.read(proximityAudioServiceProvider);
+      if (state.playing && !wasPlaying) {
+        // Started playing - enable proximity sensor for earpiece mode
+        proximityService.startListening();
+        proximityService.addListener(_onProximityChanged);
+      } else if (!state.playing && wasPlaying) {
+        // Stopped playing - disable proximity sensor
+        proximityService.removeListener(_onProximityChanged);
+        proximityService.stopListening();
+      }
       
       // Mark as played when first started playing (and user is not the sender)
       // Use debounce to prevent multiple rapid calls
@@ -81,6 +96,15 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         _audioPlayer.pause();
       }
     });
+  }
+  
+  /// Handle proximity sensor changes
+  void _onProximityChanged(bool isNearEar) {
+    if (mounted) {
+      setState(() {
+        _isNearEar = isNearEar;
+      });
+    }
   }
 
   Future<void> _playPauseAudio() async {
@@ -204,6 +228,12 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   @override
   void dispose() {
     _markAsPlayedTimer?.cancel();
+    // Clean up proximity sensor if still listening
+    if (_isPlaying) {
+      final proximityService = ref.read(proximityAudioServiceProvider);
+      proximityService.removeListener(_onProximityChanged);
+      proximityService.stopListening();
+    }
     _audioPlayer.dispose();
     super.dispose();
   }
@@ -345,14 +375,28 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          _position != null
-                              ? '${_position!.inMinutes}:${(_position!.inSeconds % 60).toString().padLeft(2, '0')}'
-                              : '0:00',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: textColor,
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _position != null
+                                  ? '${_position!.inMinutes}:${(_position!.inSeconds % 60).toString().padLeft(2, '0')}'
+                                  : '0:00',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: textColor,
+                              ),
+                            ),
+                            // Show earpiece indicator when phone is near ear
+                            if (_isPlaying && _isNearEar) ...[
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.hearing,
+                                size: 12,
+                                color: textColor,
+                              ),
+                            ],
+                          ],
                         ),
                         Text(
                           _duration != null

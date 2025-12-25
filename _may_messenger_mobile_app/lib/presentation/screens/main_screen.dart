@@ -5,6 +5,7 @@ import '../providers/contacts_names_provider.dart';
 import '../providers/user_status_sync_service.dart';
 import '../widgets/chat_list_item.dart';
 import '../widgets/connection_status_indicator.dart';
+import '../../data/services/battery_optimization_service.dart';
 import 'chat_screen.dart';
 import 'settings_screen.dart';
 import 'create_group_screen.dart';
@@ -41,6 +42,13 @@ class _MainScreenState extends ConsumerState<MainScreen> {
             
             // Start periodic sync as fallback
             ref.read(userStatusSyncServiceProvider).startPeriodicSync();
+          }
+        });
+        
+        // Check battery optimization (show dialog on second launch)
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) {
+            ref.read(batteryOptimizationServiceProvider).showOptimizationDialog(context);
           }
         });
       }

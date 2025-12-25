@@ -137,20 +137,6 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
     }
   }
 
-  void _onEmojiSelected(dynamic category, Emoji emoji) {
-    final text = _textController.text;
-    final selection = _textController.selection;
-    final newText = text.replaceRange(
-      selection.start,
-      selection.end,
-      emoji.emoji,
-    );
-    _textController.text = newText;
-    _textController.selection = TextSelection.collapsed(
-      offset: selection.start + emoji.emoji.length,
-    );
-  }
-
   Future<void> _pickImage({bool fromCamera = false}) async {
     try {
       final XFile? image = await _imagePicker.pickImage(
@@ -436,7 +422,8 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
             SizedBox(
               height: 250,
               child: EmojiPicker(
-                onEmojiSelected: _onEmojiSelected,
+                // Only use textEditingController - it handles emoji insertion automatically
+                // Removed onEmojiSelected to prevent double insertion
                 textEditingController: _textController,
               ),
             ),

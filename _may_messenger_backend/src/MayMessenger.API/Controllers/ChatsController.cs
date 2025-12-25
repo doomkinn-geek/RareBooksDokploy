@@ -179,12 +179,16 @@ public class ChatsController : ControllerBase
         await _unitOfWork.Chats.AddAsync(chat);
         await _unitOfWork.SaveChangesAsync(); // Save chat first to get ID
         
+        // For group chats, creator is owner; for private chats, no owner/admin
+        var isGroupChat = dto.ParticipantIds.Count > 1;
+        
         // Add creator as participant
         var creatorParticipant = new ChatParticipant
         {
             ChatId = chat.Id,
             UserId = userId,
-            IsAdmin = true
+            IsOwner = isGroupChat, // Owner only for group chats
+            IsAdmin = isGroupChat  // Admin only for group chats
         };
         await _context.ChatParticipants.AddAsync(creatorParticipant);
         
@@ -195,6 +199,7 @@ public class ChatsController : ControllerBase
             {
                 ChatId = chat.Id,
                 UserId = participantId,
+                IsOwner = false,
                 IsAdmin = false
             };
             await _context.ChatParticipants.AddAsync(participant);
@@ -429,11 +434,303 @@ public class ChatsController : ControllerBase
         
         return Ok(new { message = "All chats reset successfully" });
     }
+
+    #region Group Participants Management
+    
+    /// <summary>
+    /// Get all participants of a chat with their roles
+    /// </summary>
+    [HttpGet("{chatId}/participants")]
+    public async Task<ActionResult<IEnumerable<ParticipantDto>>> GetParticipants(Guid chatId)
+    {
+        var userId = GetCurrentUserId();
+        var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+        
+        if (chat == null)
+            return NotFound(new { message = "Чат не найден" });
+        
+        // Check if user is a participant
+        var isParticipant = chat.Participants.Any(p => p.UserId == userId);
+        if (!isParticipant)
+            return Forbid();
+        
+        var participants = chat.Participants.Select(p => new ParticipantDto
+        {
+            UserId = p.UserId,
+            DisplayName = p.User.DisplayName,
+            IsOwner = p.IsOwner,
+            IsAdmin = p.IsAdmin,
+            JoinedAt = p.JoinedAt
+        }).ToList();
+        
+        return Ok(participants);
+    }
+    
+    /// <summary>
+    /// Add participants to a group chat (owner or admin only)
+    /// </summary>
+    [HttpPost("{chatId}/participants")]
+    public async Task<IActionResult> AddParticipants(Guid chatId, [FromBody] AddParticipantsDto dto)
+    {
+        var userId = GetCurrentUserId();
+        var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+        
+        if (chat == null)
+            return NotFound(new { message = "Чат не найден" });
+        
+        if (chat.Type != ChatType.Group)
+            return BadRequest(new { message = "Можно добавлять участников только в групповые чаты" });
+        
+        // Check if user is owner or admin
+        var currentParticipant = chat.Participants.FirstOrDefault(p => p.UserId == userId);
+        if (currentParticipant == null || (!currentParticipant.IsOwner && !currentParticipant.IsAdmin))
+            return Forbid();
+        
+        var addedCount = 0;
+        foreach (var newUserId in dto.UserIds)
+        {
+            // Check if user exists
+            var user = await _unitOfWork.Users.GetByIdAsync(newUserId);
+            if (user == null) continue;
+            
+            // Check if already a participant
+            if (chat.Participants.Any(p => p.UserId == newUserId)) continue;
+            
+            var newParticipant = new ChatParticipant
+            {
+                ChatId = chatId,
+                UserId = newUserId,
+                IsOwner = false,
+                IsAdmin = false
+            };
+            await _context.ChatParticipants.AddAsync(newParticipant);
+            addedCount++;
+            
+            // Notify the new participant via SignalR
+            await _hubContext.Clients.User(newUserId.ToString())
+                .SendAsync("AddedToChat", new { chatId, addedBy = userId });
+        }
+        
+        await _unitOfWork.SaveChangesAsync();
+        
+        // Notify all chat participants about changes
+        await _hubContext.Clients.Group(chatId.ToString())
+            .SendAsync("ParticipantsChanged", new { chatId, action = "added", count = addedCount });
+        
+        return Ok(new { message = $"Добавлено {addedCount} участников" });
+    }
+    
+    /// <summary>
+    /// Remove a participant from a group chat (owner or admin only)
+    /// </summary>
+    [HttpDelete("{chatId}/participants/{targetUserId}")]
+    public async Task<IActionResult> RemoveParticipant(Guid chatId, Guid targetUserId)
+    {
+        var userId = GetCurrentUserId();
+        var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+        
+        if (chat == null)
+            return NotFound(new { message = "Чат не найден" });
+        
+        if (chat.Type != ChatType.Group)
+            return BadRequest(new { message = "Нельзя удалить участника из приватного чата" });
+        
+        // Check if user is owner or admin
+        var currentParticipant = chat.Participants.FirstOrDefault(p => p.UserId == userId);
+        if (currentParticipant == null || (!currentParticipant.IsOwner && !currentParticipant.IsAdmin))
+            return Forbid();
+        
+        // Find target participant
+        var targetParticipant = chat.Participants.FirstOrDefault(p => p.UserId == targetUserId);
+        if (targetParticipant == null)
+            return NotFound(new { message = "Участник не найден в чате" });
+        
+        // Owners cannot be removed
+        if (targetParticipant.IsOwner)
+            return BadRequest(new { message = "Нельзя удалить создателя группы" });
+        
+        // Admins can only be removed by owners
+        if (targetParticipant.IsAdmin && !currentParticipant.IsOwner)
+            return Forbid();
+        
+        _context.ChatParticipants.Remove(targetParticipant);
+        await _unitOfWork.SaveChangesAsync();
+        
+        // Notify the removed participant
+        await _hubContext.Clients.User(targetUserId.ToString())
+            .SendAsync("RemovedFromChat", new { chatId, removedBy = userId });
+        
+        // Notify all chat participants about changes
+        await _hubContext.Clients.Group(chatId.ToString())
+            .SendAsync("ParticipantsChanged", new { chatId, action = "removed", userId = targetUserId });
+        
+        return Ok(new { message = "Участник удален" });
+    }
+    
+    /// <summary>
+    /// Promote a participant to admin (owner only)
+    /// </summary>
+    [HttpPost("{chatId}/admins/{targetUserId}")]
+    public async Task<IActionResult> PromoteToAdmin(Guid chatId, Guid targetUserId)
+    {
+        var userId = GetCurrentUserId();
+        var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+        
+        if (chat == null)
+            return NotFound(new { message = "Чат не найден" });
+        
+        if (chat.Type != ChatType.Group)
+            return BadRequest(new { message = "Администраторы есть только в групповых чатах" });
+        
+        // Check if user is owner (only owner can promote)
+        var currentParticipant = chat.Participants.FirstOrDefault(p => p.UserId == userId);
+        if (currentParticipant == null || !currentParticipant.IsOwner)
+            return Forbid();
+        
+        // Find target participant
+        var targetParticipant = chat.Participants.FirstOrDefault(p => p.UserId == targetUserId);
+        if (targetParticipant == null)
+            return NotFound(new { message = "Участник не найден в чате" });
+        
+        if (targetParticipant.IsAdmin)
+            return BadRequest(new { message = "Участник уже является администратором" });
+        
+        targetParticipant.IsAdmin = true;
+        await _unitOfWork.SaveChangesAsync();
+        
+        // Notify the promoted participant
+        await _hubContext.Clients.User(targetUserId.ToString())
+            .SendAsync("PromotedToAdmin", new { chatId, promotedBy = userId });
+        
+        // Notify all chat participants
+        await _hubContext.Clients.Group(chatId.ToString())
+            .SendAsync("ParticipantsChanged", new { chatId, action = "promoted", userId = targetUserId });
+        
+        return Ok(new { message = "Участник назначен администратором" });
+    }
+    
+    /// <summary>
+    /// Demote an admin to regular participant (owner only)
+    /// </summary>
+    [HttpDelete("{chatId}/admins/{targetUserId}")]
+    public async Task<IActionResult> DemoteAdmin(Guid chatId, Guid targetUserId)
+    {
+        var userId = GetCurrentUserId();
+        var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+        
+        if (chat == null)
+            return NotFound(new { message = "Чат не найден" });
+        
+        if (chat.Type != ChatType.Group)
+            return BadRequest(new { message = "Администраторы есть только в групповых чатах" });
+        
+        // Check if user is owner (only owner can demote)
+        var currentParticipant = chat.Participants.FirstOrDefault(p => p.UserId == userId);
+        if (currentParticipant == null || !currentParticipant.IsOwner)
+            return Forbid();
+        
+        // Find target participant
+        var targetParticipant = chat.Participants.FirstOrDefault(p => p.UserId == targetUserId);
+        if (targetParticipant == null)
+            return NotFound(new { message = "Участник не найден в чате" });
+        
+        if (!targetParticipant.IsAdmin)
+            return BadRequest(new { message = "Участник не является администратором" });
+        
+        // Cannot demote owner
+        if (targetParticipant.IsOwner)
+            return BadRequest(new { message = "Нельзя снять права создателя группы" });
+        
+        targetParticipant.IsAdmin = false;
+        await _unitOfWork.SaveChangesAsync();
+        
+        // Notify the demoted participant
+        await _hubContext.Clients.User(targetUserId.ToString())
+            .SendAsync("DemotedFromAdmin", new { chatId, demotedBy = userId });
+        
+        // Notify all chat participants
+        await _hubContext.Clients.Group(chatId.ToString())
+            .SendAsync("ParticipantsChanged", new { chatId, action = "demoted", userId = targetUserId });
+        
+        return Ok(new { message = "Права администратора сняты" });
+    }
+    
+    /// <summary>
+    /// Leave a group chat
+    /// </summary>
+    [HttpPost("{chatId}/leave")]
+    public async Task<IActionResult> LeaveChat(Guid chatId)
+    {
+        var userId = GetCurrentUserId();
+        var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+        
+        if (chat == null)
+            return NotFound(new { message = "Чат не найден" });
+        
+        if (chat.Type != ChatType.Group)
+            return BadRequest(new { message = "Можно покинуть только групповой чат" });
+        
+        var participant = chat.Participants.FirstOrDefault(p => p.UserId == userId);
+        if (participant == null)
+            return NotFound(new { message = "Вы не являетесь участником этого чата" });
+        
+        // If owner is leaving, transfer ownership to another admin or oldest member
+        if (participant.IsOwner && chat.Participants.Count > 1)
+        {
+            var newOwner = chat.Participants
+                .Where(p => p.UserId != userId && p.IsAdmin)
+                .OrderBy(p => p.JoinedAt)
+                .FirstOrDefault();
+            
+            if (newOwner == null)
+            {
+                newOwner = chat.Participants
+                    .Where(p => p.UserId != userId)
+                    .OrderBy(p => p.JoinedAt)
+                    .FirstOrDefault();
+            }
+            
+            if (newOwner != null)
+            {
+                newOwner.IsOwner = true;
+                newOwner.IsAdmin = true;
+                
+                // Notify new owner
+                await _hubContext.Clients.User(newOwner.UserId.ToString())
+                    .SendAsync("PromotedToOwner", new { chatId });
+            }
+        }
+        
+        _context.ChatParticipants.Remove(participant);
+        await _unitOfWork.SaveChangesAsync();
+        
+        // Notify chat participants
+        await _hubContext.Clients.Group(chatId.ToString())
+            .SendAsync("ParticipantsChanged", new { chatId, action = "left", userId });
+        
+        return Ok(new { message = "Вы покинули чат" });
+    }
+    
+    #endregion
 }
 
 public class CreateDirectChatRequest
 {
     public Guid TargetUserId { get; set; }
+}
+
+public class ParticipantDto
+{
+    public Guid UserId { get; set; }
+    public string DisplayName { get; set; } = string.Empty;
+    public bool IsOwner { get; set; }
+    public bool IsAdmin { get; set; }
+    public DateTime JoinedAt { get; set; }
+}
+
+public class AddParticipantsDto
+{
+    public List<Guid> UserIds { get; set; } = new();
 }
 
 

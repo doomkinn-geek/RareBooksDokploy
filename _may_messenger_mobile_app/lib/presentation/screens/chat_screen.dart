@@ -15,6 +15,7 @@ import '../widgets/message_bubble.dart';
 import '../widgets/message_input.dart';
 import '../widgets/connection_status_indicator.dart';
 import '../widgets/typing_animation.dart';
+import 'group_settings_screen.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final String chatId;
@@ -420,7 +421,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           IconButton(
             icon: const Icon(Icons.info_outline),
             onPressed: () {
-              // Show chat info
+              // For group chats, open group settings screen
+              if (currentChat.type == ChatType.group) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => GroupSettingsScreen(chatId: widget.chatId),
+                  ),
+                );
+              }
+              // For private chats, could show user profile in the future
             },
           ),
         ],
