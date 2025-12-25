@@ -1761,14 +1761,10 @@ public class MessagesController : ControllerBase
                 _logger.LogInformation($"[PUSH_CONFIRM] Message {messageId} status changed: {oldStatus} -> {aggregateStatus}");
                 
                 // Notify sender via SignalR about status change
-                var senderConnectionIds = ChatHub.GetUserConnections(message.SenderId.ToString());
-                if (senderConnectionIds.Any())
-                {
-                    await _hubContext.Clients.Clients(senderConnectionIds)
-                        .SendAsync("MessageStatusUpdated", messageId.ToString(), (int)aggregateStatus);
-                    
-                    _logger.LogInformation($"[PUSH_CONFIRM] Notified sender {message.SenderId} about status change via SignalR");
-                }
+                await _hubContext.Clients.User(message.SenderId.ToString())
+                    .SendAsync("MessageStatusUpdated", messageId.ToString(), (int)aggregateStatus);
+
+                _logger.LogInformation($"[PUSH_CONFIRM] Notified sender {message.SenderId} about status change via SignalR");
             }
             
             await _unitOfWork.SaveChangesAsync();
