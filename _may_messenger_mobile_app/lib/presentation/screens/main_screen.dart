@@ -45,10 +45,14 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           }
         });
         
-        // Check battery optimization (show dialog on second launch)
-        Future.delayed(const Duration(seconds: 2), () {
+        // Check battery optimization (show dialog if optimization is enabled)
+        Future.delayed(const Duration(seconds: 2), () async {
           if (mounted) {
-            ref.read(batteryOptimizationServiceProvider).showOptimizationDialog(context);
+            final batteryService = ref.read(batteryOptimizationServiceProvider);
+            final isDisabled = await batteryService.isBatteryOptimizationDisabled();
+            if (!isDisabled) {
+              batteryService.showOptimizationDialog(context);
+            }
           }
         });
       }

@@ -41,12 +41,68 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   Duration? _duration;
   Duration? _position;
   Timer? _markAsPlayedTimer; // Debounce timer for mark as played
+  Timer? _sendingTimeoutTimer; // Fallback timer for stuck "sending" status
+  bool _showRetryForStuck = false; // Show retry button for messages stuck in sending
 
   @override
   void initState() {
     super.initState();
     if (widget.message.type == MessageType.audio) {
       _initAudio();
+    }
+    // Start timeout timer for messages in "sending" status
+    _startSendingTimeoutCheck();
+  }
+  
+  /// Start a timer to show retry button if message stays in "sending" too long
+  void _startSendingTimeoutCheck() {
+    if (widget.message.status == MessageStatus.sending) {
+      // Check how old the message is
+      final messageAge = DateTime.now().difference(widget.message.createdAt);
+      
+      if (messageAge.inSeconds >= 30) {
+        // Already past timeout, show retry immediately
+        if (mounted) {
+          setState(() {
+            _showRetryForStuck = true;
+          });
+        }
+      } else {
+        // Schedule timer for remaining time
+        final remainingTime = Duration(seconds: 30) - messageAge;
+        _sendingTimeoutTimer = Timer(remainingTime, () {
+          if (mounted && widget.message.status == MessageStatus.sending) {
+            setState(() {
+              _showRetryForStuck = true;
+            });
+            print('[UI_FALLBACK] Message ${widget.message.id} stuck in sending, showing retry button');
+          }
+        });
+      }
+    }
+  }
+  
+  @override
+  void didUpdateWidget(MessageBubble oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // If status changed from sending, cancel the timeout timer and hide retry
+    if (oldWidget.message.status == MessageStatus.sending && 
+        widget.message.status != MessageStatus.sending) {
+      _sendingTimeoutTimer?.cancel();
+      _sendingTimeoutTimer = null;
+      if (_showRetryForStuck) {
+        setState(() {
+          _showRetryForStuck = false;
+        });
+      }
+    }
+    
+    // If status changed TO sending (e.g., retry), restart timeout
+    if (oldWidget.message.status != MessageStatus.sending && 
+        widget.message.status == MessageStatus.sending) {
+      _showRetryForStuck = false;
+      _startSendingTimeoutCheck();
     }
   }
 
@@ -228,6 +284,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   @override
   void dispose() {
     _markAsPlayedTimer?.cancel();
+    _sendingTimeoutTimer?.cancel();
     // Clean up proximity sensor if still listening
     if (_isPlaying) {
       final proximityService = ref.read(proximityAudioServiceProvider);
@@ -241,6 +298,31 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   Widget _buildMessageStatusIcon() {
     switch (widget.message.status) {
       case MessageStatus.sending:
+        // If stuck in sending for too long, show retry button instead of spinner
+        if (_showRetryForStuck) {
+          return GestureDetector(
+            onTap: _handleRetry,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.refresh,
+                  size: 14,
+                  color: Colors.orange[300],
+                ),
+                const SizedBox(width: 2),
+                Text(
+                  'Retry',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.orange[300],
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
         return const SizedBox(
           width: 14,
           height: 14,

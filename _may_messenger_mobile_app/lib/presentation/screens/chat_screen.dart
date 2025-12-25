@@ -440,7 +440,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         decoration: const BoxDecoration(
           image: DecorationImage(
             image: AssetImage('assets/chat_background.png'),
-            fit: BoxFit.cover,
+            fit: BoxFit.contain, // Вписываем изображение полностью с сохранением пропорций
             opacity: 0.3, // Subtle background, not too distracting
           ),
         ),

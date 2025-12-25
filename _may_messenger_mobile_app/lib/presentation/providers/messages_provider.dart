@@ -79,8 +79,48 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
 
   // Track recently sent messages for status polling (messageId -> sentAt)
   final Map<String, DateTime> _recentlySentMessages = {};
-  static const Duration _outgoingStatusPollInterval = Duration(seconds: 5);
+  // Increased from 5s to 10s - SignalR is primary, polling is fallback only
+  static const Duration _outgoingStatusPollInterval = Duration(seconds: 10);
   static const Duration _maxTrackingDuration = Duration(minutes: 2);
+  
+  // Centralized mapping localId -> serverId for reliable message lookup
+  final Map<String, String> _localToServerIdMap = {};
+  
+  /// Register a mapping from localId to serverId
+  void _registerIdMapping(String localId, String serverId) {
+    if (localId != serverId) {
+      _localToServerIdMap[localId] = serverId;
+      print('[ID_MAP] Registered mapping: $localId -> $serverId');
+    }
+  }
+  
+  /// Find message index by ID, checking both id, localId, and the mapping
+  int _findMessageIndex(String messageId) {
+    // First try direct match by id
+    var index = state.messages.indexWhere((m) => m.id == messageId);
+    if (index != -1) return index;
+    
+    // Try by localId
+    index = state.messages.indexWhere((m) => m.localId == messageId);
+    if (index != -1) return index;
+    
+    // Try resolving through mapping
+    final resolvedId = _localToServerIdMap[messageId];
+    if (resolvedId != null) {
+      index = state.messages.indexWhere((m) => m.id == resolvedId);
+      if (index != -1) return index;
+    }
+    
+    // Try reverse lookup - check if messageId is a serverId and find by localId
+    for (final entry in _localToServerIdMap.entries) {
+      if (entry.value == messageId) {
+        index = state.messages.indexWhere((m) => m.id == messageId || m.localId == entry.key);
+        if (index != -1) return index;
+      }
+    }
+    
+    return -1;
+  }
 
   MessagesNotifier(
     this._messageRepository,
@@ -239,11 +279,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     // Check how long the message has been stuck
     final messageAge = now.difference(message.createdAt);
     
-    // REDUCED TIMEOUT thresholds for better UX
-    // User should not wait more than 45 seconds for feedback
-    const warningTimeout = Duration(seconds: 15);  // Reduced from 30s
-    const retryTimeout = Duration(seconds: 30);    // Trigger retry earlier
-    const failureTimeout = Duration(seconds: 45);  // Reduced from 120s
+    // OPTIMIZED TIMEOUT thresholds for better UX
+    // User should get feedback quickly, but not falsely mark as failed
+    const warningTimeout = Duration(seconds: 10);  // Log warning early
+    const retryTimeout = Duration(seconds: 20);    // Trigger retry if still stuck
+    const failureTimeout = Duration(seconds: 30);  // Mark as failed after 30s
     
     if (messageAge < warningTimeout) {
       // Still within normal sync window
@@ -783,8 +823,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         print('[MSG_SEND] ⚠️ Removed message from outbox using localId (no outboxId): $localId');
       }
       
+      // Register ID mapping for future lookups
+      _registerIdMapping(localId, serverMessage.id);
+      
       // Update message in UI: replace local ID with server ID and update status
-      final messageIndex = state.messages.indexWhere((m) => m.id == localId);
+      final messageIndex = _findMessageIndex(localId);
       if (messageIndex != -1) {
         final updatedMessages = [...state.messages];
         final finalServerMessage = serverMessage.copyWith(
@@ -795,6 +838,10 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         updatedMessages[messageIndex] = finalServerMessage;
         state = state.copyWith(messages: updatedMessages);
         print('[MSG_SEND] Message updated in UI with server ID: ${serverMessage.id}, status: $finalStatus');
+        
+        // FORCE update status to ensure UI reflects the change
+        // This is a safety net in case the state update didn't trigger rebuild
+        updateMessageStatus(serverMessage.id, finalStatus, force: true);
         
         // Track for outgoing status polling (fallback if SignalR misses status update)
         _trackSentMessage(serverMessage.id);
@@ -809,6 +856,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         } catch (e) {
           print('[MSG_SEND] Failed to update chat preview with server message: $e');
         }
+      } else {
+        print('[MSG_SEND] ⚠️ Message not found for update: localId=$localId, serverId=${serverMessage.id}');
+        // Still register the mapping for future reference
       }
       
     } catch (e) {
@@ -847,8 +897,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         _pendingSends.remove(localId);
         await _outboxRepository.markAsFailed(localId, 'Failed after $maxAttempts attempts: ${e.toString()}');
         
-        // Update message status to failed in UI
-        final messageIndex = state.messages.indexWhere((m) => m.id == localId);
+        // Update message status to failed in UI using improved lookup
+        final messageIndex = _findMessageIndex(localId);
         if (messageIndex != -1) {
           final updatedMessages = [...state.messages];
           updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
@@ -893,8 +943,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       await _outboxRepository.removePendingMessage(localId);
       print('[MSG_SEND] Removed image message from outbox: $localId');
       
+      // Register ID mapping for future lookups
+      _registerIdMapping(localId, serverMessage.id);
+      
       // Update message in UI: replace local ID with server ID and update status
-      final messageIndex = state.messages.indexWhere((m) => m.id == localId);
+      final messageIndex = _findMessageIndex(localId);
       if (messageIndex != -1) {
         final updatedMessages = [...state.messages];
         final finalServerMessage = serverMessage.copyWith(
@@ -905,6 +958,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         updatedMessages[messageIndex] = finalServerMessage;
         state = state.copyWith(messages: updatedMessages);
         print('[MSG_SEND] Image message updated in UI with server ID: ${serverMessage.id}, status: $finalStatus');
+        
+        // FORCE update status to ensure UI reflects the change
+        updateMessageStatus(serverMessage.id, finalStatus, force: true);
         
         // Track for outgoing status polling (fallback if SignalR misses status update)
         _trackSentMessage(serverMessage.id);
@@ -919,6 +975,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         } catch (e) {
           print('[MSG_SEND] Failed to update chat preview with server message: $e');
         }
+      } else {
+        print('[MSG_SEND] ⚠️ Image message not found for update: localId=$localId, serverId=${serverMessage.id}');
       }
       
     } catch (e) {
@@ -943,8 +1001,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         print('[MSG_SEND] Max retry attempts reached for image: $localId');
         _pendingSends.remove(localId);
         
-        // Update message status to failed in UI
-        final messageIndex = state.messages.indexWhere((m) => m.id == localId);
+        // Update message status to failed in UI using improved lookup
+        final messageIndex = _findMessageIndex(localId);
         if (messageIndex != -1) {
           final updatedMessages = [...state.messages];
           updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
@@ -1199,6 +1257,14 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         state = state.copyWith(messages: updatedMessages);
         print('[MSG_RECV] Replaced local message with server message: ${message.id}');
         
+        // Register ID mapping for future lookups
+        if (localMessage.localId != null) {
+          _registerIdMapping(localMessage.localId!, message.id);
+        }
+        if (message.clientMessageId != null) {
+          _registerIdMapping(message.clientMessageId!, message.id);
+        }
+        
         // Update LRU cache
         _cache.update(serverMessage);
         
@@ -1350,9 +1416,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     // #region agent log
     print('[MSG_STATUS] HYP_CLIENT: updateMessageStatus called - MessageId: $messageId, NewStatus: $status, ChatId: $chatId, Force: $force, Timestamp: ${DateTime.now().toIso8601String()}');
     // #endregion
-    final messageIndex = state.messages.indexWhere((m) => m.id == messageId);
+    
+    // Use improved message lookup that checks id, localId, and mapping
+    final messageIndex = _findMessageIndex(messageId);
     // #region agent log
-    print('[MSG_STATUS] HYP_CLIENT: Message found at index: $messageIndex');
+    print('[MSG_STATUS] HYP_CLIENT: Message found at index: $messageIndex (searched by id, localId, and mapping)');
     // #endregion
     if (messageIndex != -1) {
       final updatedMessages = [...state.messages];

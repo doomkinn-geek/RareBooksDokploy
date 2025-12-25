@@ -2,13 +2,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:disable_battery_optimization/disable_battery_optimization.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 /// Service to manage battery optimization settings
 /// Requesting exemption from battery optimization ensures reliable
 /// message delivery and push notifications
 class BatteryOptimizationService {
-  static const String _keyAskedForOptimization = 'asked_battery_optimization';
   
   /// Check if battery optimization is disabled for this app
   Future<bool> isBatteryOptimizationDisabled() async {
@@ -47,21 +45,11 @@ class BatteryOptimizationService {
   /// and offer to open settings
   Future<void> showOptimizationDialog(BuildContext context) async {
     if (!Platform.isAndroid) return;
-    
-    // Check if already asked before
-    final prefs = await SharedPreferences.getInstance();
-    final alreadyAsked = prefs.getBool(_keyAskedForOptimization) ?? false;
-    
+
     // Check if already disabled
     final isDisabled = await isBatteryOptimizationDisabled();
     if (isDisabled) return;
-    
-    // Don't show dialog immediately on first launch - wait for second launch
-    if (!alreadyAsked) {
-      await prefs.setBool(_keyAskedForOptimization, true);
-      return;
-    }
-    
+
     if (!context.mounted) return;
     
     final result = await showDialog<bool>(
