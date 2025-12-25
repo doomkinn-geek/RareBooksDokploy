@@ -1761,9 +1761,10 @@ public class MessagesController : ControllerBase
                 _logger.LogInformation($"[PUSH_CONFIRM] Message {messageId} status changed: {oldStatus} -> {aggregateStatus}");
                 
                 // Notify sender via SignalR about status change
-                await _hubContext.Clients.User(message.SenderId.ToString())
+                // Use user group (user_{senderId}) to send notification
+                await _hubContext.Clients.Group($"user_{message.SenderId}")
                     .SendAsync("MessageStatusUpdated", messageId.ToString(), (int)aggregateStatus);
-
+                
                 _logger.LogInformation($"[PUSH_CONFIRM] Notified sender {message.SenderId} about status change via SignalR");
             }
             

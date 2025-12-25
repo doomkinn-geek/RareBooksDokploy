@@ -42,6 +42,9 @@ public class ChatHub : Hub
             await NotifyUserStatusChanged(userId, true, DateTime.UtcNow);
         }
         
+        // Join user-specific group for direct notifications
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"user_{userId}");
+        
         // Join user's chats
         var chats = await _unitOfWork.Chats.GetUserChatsAsync(userId);
         
@@ -50,7 +53,7 @@ public class ChatHub : Hub
             await Groups.AddToGroupAsync(Context.ConnectionId, chat.Id.ToString());
         }
         
-        Console.WriteLine($"[ChatHub] User {userId} connected. ConnectionId: {Context.ConnectionId}");
+        Console.WriteLine($"[ChatHub] User {userId} connected to group user_{userId}. ConnectionId: {Context.ConnectionId}");
         
         await base.OnConnectedAsync();
     }
