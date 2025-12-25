@@ -11,6 +11,7 @@ import '../../data/repositories/user_repository.dart';
 import '../../data/services/audio_storage_service.dart';
 import '../../data/services/image_storage_service.dart';
 import '../../data/services/status_sync_service.dart';
+import '../../data/services/outbox_sync_service.dart';
 import '../../core/services/fcm_service.dart';
 
 // Утилита для форматирования ошибок
@@ -146,6 +147,13 @@ final userRepositoryProvider = Provider<UserRepository>((ref) {
 final statusSyncServiceProvider = Provider((ref) {
   return StatusSyncService(
     ref.read(statusUpdateQueueRepositoryProvider),
+    ref.read(messageRepositoryProvider),
+  );
+});
+
+final outboxSyncServiceProvider = Provider((ref) {
+  return OutboxSyncService(
+    ref.read(outboxRepositoryProvider),
     ref.read(messageRepositoryProvider),
   );
 });

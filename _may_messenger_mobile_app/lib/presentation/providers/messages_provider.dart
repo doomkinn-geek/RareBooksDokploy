@@ -607,6 +607,19 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       } catch (e) {
         print('[MSG_LOAD] Failed to cache messages in Hive: $e');
       }
+      
+      // STEP 7: Trigger sync of pending messages if connected
+      // This ensures stuck messages are retried when user opens the chat
+      if (pendingMessages.isNotEmpty && _isSignalRConnected) {
+        print('[MSG_LOAD] Triggering sync of ${pendingMessages.length} pending messages');
+        try {
+          final outboxSyncService = _ref.read(outboxSyncServiceProvider);
+          // Don't await - sync happens in background
+          outboxSyncService.syncMessagesForChat(chatId);
+        } catch (e) {
+          print('[MSG_LOAD] Failed to trigger outbox sync: $e');
+        }
+      }
     } catch (e) {
       print('[MSG_LOAD] Load messages error: $e');
       state = state.copyWith(

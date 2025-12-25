@@ -41,7 +41,8 @@ class ApiDataSource {
       );
       return AuthResponse.fromJson(response.data);
     } catch (e) {
-      throw Exception('Registration failed: $e');
+      // Rethrow to preserve DioException for proper error handling
+      rethrow;
     }
   }
 
@@ -59,7 +60,8 @@ class ApiDataSource {
       );
       return AuthResponse.fromJson(response.data);
     } catch (e) {
-      throw Exception('Login failed: $e');
+      // Rethrow to preserve DioException for proper error handling
+      rethrow;
     }
   }
 

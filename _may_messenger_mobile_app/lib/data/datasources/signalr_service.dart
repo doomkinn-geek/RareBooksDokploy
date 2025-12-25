@@ -368,7 +368,7 @@ class SignalRService {
     // Check initial connectivity
     _connectivity.checkConnectivity().then((result) {
       _hasInternetConnection = result != ConnectivityResult.none;
-      print('[SignalR] Initial connectivity: $_hasInternetConnection');
+      print('[SignalR] Initial connectivity: $_hasInternetConnection (result: $result)');
     });
     
     // Listen for connectivity changes
@@ -376,7 +376,7 @@ class SignalRService {
       final wasConnected = _hasInternetConnection;
       _hasInternetConnection = result != ConnectivityResult.none;
       
-      print('[SignalR] Connectivity changed: $_hasInternetConnection (was: $wasConnected)');
+      print('[SignalR] Connectivity changed: $_hasInternetConnection (was: $wasConnected, result: $result)');
       
       // If we just got internet back and SignalR is disconnected, trigger reconnect
       if (!wasConnected && _hasInternetConnection) {
@@ -389,6 +389,12 @@ class SignalRService {
             _attemptReconnect();
           }
         });
+      }
+      
+      // If we just lost internet, notify about disconnection
+      if (wasConnected && !_hasInternetConnection) {
+        print('[SignalR] Internet lost, notifying disconnection...');
+        _notifyConnectionState(false);
       }
     });
   }

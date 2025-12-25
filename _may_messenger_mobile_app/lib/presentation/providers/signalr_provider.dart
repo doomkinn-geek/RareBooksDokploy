@@ -161,9 +161,25 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
         print('[SIGNALR_INIT] HYP_C_CONNECTED: Connected in ${connectDuration}ms');
         // #endregion
         
-        // Setup reconnected callback for status sync
+        // Setup connection state callback to keep provider state in sync
+        _signalRService.setOnConnectionStateChanged((isConnected) {
+          print('[SignalR] Connection state changed: $isConnected');
+          state = state.copyWith(isConnected: isConnected);
+          
+          // Update outbox sync service connection state
+          try {
+            final outboxSyncService = _ref.read(outboxSyncServiceProvider);
+            outboxSyncService.setConnected(isConnected);
+          } catch (e) {
+            print('[SignalR] Error updating outbox sync connection state: $e');
+          }
+        });
+        
+        // Setup reconnected callback for status sync AND outbox sync
         _signalRService.setOnReconnectedCallback(() async {
-          print('[SignalR] Reconnected callback triggered - syncing pending status updates');
+          print('[SignalR] Reconnected callback triggered - syncing pending updates');
+          
+          // Sync pending status updates
           try {
             final statusSyncService = _ref.read(statusSyncServiceProvider);
             await statusSyncService.forceSync();
@@ -171,9 +187,29 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
           } catch (e) {
             print('[SignalR] Error syncing status updates after reconnect: $e');
           }
+          
+          // Sync pending outbox messages
+          try {
+            final outboxSyncService = _ref.read(outboxSyncServiceProvider);
+            outboxSyncService.setConnected(true);
+            await outboxSyncService.syncPendingMessages();
+            print('[SignalR] Pending outbox messages synced after reconnect');
+          } catch (e) {
+            print('[SignalR] Error syncing outbox after reconnect: $e');
+          }
         });
         
         _setupListeners();
+        
+        // Initialize outbox sync service
+        try {
+          final outboxSyncService = _ref.read(outboxSyncServiceProvider);
+          outboxSyncService.setConnected(true);
+          outboxSyncService.startPeriodicSync();
+          print('[SignalR] Outbox sync service started');
+        } catch (e) {
+          print('[SignalR] Error starting outbox sync service: $e');
+        }
         
         state = state.copyWith(isConnected: true);
         print('[SignalR] Provider initialized and listeners setup');
@@ -503,6 +539,15 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
   }
 
   Future<void> disconnect() async {
+    // Stop outbox sync service
+    try {
+      final outboxSyncService = _ref.read(outboxSyncServiceProvider);
+      outboxSyncService.setConnected(false);
+      outboxSyncService.stopPeriodicSync();
+    } catch (e) {
+      print('[SignalR] Error stopping outbox sync service: $e');
+    }
+    
     await _signalRService.disconnect();
     state = SignalRConnectionState();
   }
