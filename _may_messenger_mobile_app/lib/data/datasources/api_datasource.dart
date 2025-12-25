@@ -430,6 +430,7 @@ class ApiDataSource {
 
   Future<UserProfile> uploadAvatar(String filePath) async {
     try {
+      print('[API] Uploading avatar from: $filePath');
       final formData = FormData.fromMap({
         'file': await MultipartFile.fromFile(filePath),
       });
@@ -438,8 +439,16 @@ class ApiDataSource {
         '/users/me/avatar',
         data: formData,
       );
-      return UserProfile.fromJson(response.data);
+      
+      print('[API] Upload response: ${response.data}');
+      print('[API] Avatar URL in response: ${response.data['avatar']}');
+      
+      final profile = UserProfile.fromJson(response.data);
+      print('[API] Parsed profile avatar: ${profile.avatar}');
+      
+      return profile;
     } catch (e) {
+      print('[API] Avatar upload error: $e');
       throw Exception('Failed to upload avatar: $e');
     }
   }

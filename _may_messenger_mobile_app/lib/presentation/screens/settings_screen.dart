@@ -61,7 +61,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               radius: 50,
                               backgroundColor: Theme.of(context).colorScheme.primary,
                               backgroundImage: profile.avatar != null
-                                  ? NetworkImage('${ApiConstants.baseUrl}${profile.avatar}')
+                                  ? NetworkImage(
+                                      '${ApiConstants.baseUrl}${profile.avatar}',
+                                      headers: const {'Cache-Control': 'no-cache'},
+                                    )
                                   : null,
                               child: profile.avatar == null
                                   ? Text(

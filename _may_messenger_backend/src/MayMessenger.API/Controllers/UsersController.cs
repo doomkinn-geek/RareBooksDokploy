@@ -146,10 +146,14 @@ public class UsersController : ControllerBase
         
         try
         {
+            Console.WriteLine($"[Avatar] Starting avatar upload for user {userId}");
+            Console.WriteLine($"[Avatar] WebRootPath: {_environment.WebRootPath}");
+            
             // Delete old avatar if exists
             if (!string.IsNullOrEmpty(user.Avatar))
             {
                 var oldAvatarPath = Path.Combine(_environment.WebRootPath, user.Avatar.TrimStart('/'));
+                Console.WriteLine($"[Avatar] Deleting old avatar: {oldAvatarPath}");
                 if (System.IO.File.Exists(oldAvatarPath))
                 {
                     System.IO.File.Delete(oldAvatarPath);
@@ -158,33 +162,49 @@ public class UsersController : ControllerBase
             
             // Create avatars directory if not exists
             var avatarsDir = Path.Combine(_environment.WebRootPath, "avatars", "users");
+            Console.WriteLine($"[Avatar] Avatars directory: {avatarsDir}");
             if (!Directory.Exists(avatarsDir))
             {
+                Console.WriteLine($"[Avatar] Creating directory: {avatarsDir}");
                 Directory.CreateDirectory(avatarsDir);
             }
             
             // Generate unique filename
             var fileName = $"{userId}_{DateTime.UtcNow.Ticks}.webp";
             var filePath = Path.Combine(avatarsDir, fileName);
+            Console.WriteLine($"[Avatar] Target file path: {filePath}");
             
             // Read and compress image
             using var stream = file.OpenReadStream();
             using var memoryStream = new MemoryStream();
             await stream.CopyToAsync(memoryStream);
             var imageData = memoryStream.ToArray();
+            Console.WriteLine($"[Avatar] Read {imageData.Length} bytes from upload");
             
             // Compress to WebP with max 512x512 for avatar
             var compressedData = await _imageCompressionService.CompressImageAsync(imageData, 512, 512);
+            Console.WriteLine($"[Avatar] Compressed to {compressedData.Length} bytes");
+            
             await System.IO.File.WriteAllBytesAsync(filePath, compressedData);
+            Console.WriteLine($"[Avatar] File saved successfully");
+            
+            // Verify file exists
+            if (!System.IO.File.Exists(filePath))
+            {
+                Console.WriteLine($"[Avatar] ERROR: File was not saved!");
+                return StatusCode(500, "Файл не был сохранён");
+            }
             
             // Update user avatar URL
             user.Avatar = $"/avatars/users/{fileName}";
             user.UpdatedAt = DateTime.UtcNow;
+            Console.WriteLine($"[Avatar] Setting avatar URL: {user.Avatar}");
             
             await _unitOfWork.Users.UpdateAsync(user);
             await _unitOfWork.SaveChangesAsync();
+            Console.WriteLine($"[Avatar] Database updated successfully");
             
-            return Ok(new UserDto
+            var result = new UserDto
             {
                 Id = user.Id,
                 PhoneNumber = user.PhoneNumber,
@@ -196,10 +216,15 @@ public class UsersController : ControllerBase
                 Bio = user.Bio,
                 Status = user.Status,
                 CreatedAt = user.CreatedAt
-            });
+            };
+            
+            Console.WriteLine($"[Avatar] Returning UserDto with Avatar: {result.Avatar}");
+            return Ok(result);
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"[Avatar] ERROR: {ex.Message}");
+            Console.WriteLine($"[Avatar] Stack trace: {ex.StackTrace}");
             return StatusCode(500, $"Ошибка загрузки: {ex.Message}");
         }
     }

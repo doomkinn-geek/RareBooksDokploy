@@ -133,12 +133,18 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
   Future<bool> uploadAvatar(String filePath) async {
     state = state.copyWith(isSaving: true, error: null);
     try {
+      print('[Profile] Starting avatar upload from: $filePath');
       final profile = await _apiDataSource.uploadAvatar(filePath);
+      
+      print('[Profile] Upload successful, new avatar URL: ${profile.avatar}');
+      print('[Profile] Full profile: id=${profile.id}, displayName=${profile.displayName}, avatar=${profile.avatar}');
       
       state = state.copyWith(
         profile: profile,
         isSaving: false,
       );
+      
+      print('[Profile] State updated, current avatar: ${state.profile?.avatar}');
       return true;
     } catch (e) {
       print('[Profile] Failed to upload avatar: $e');
