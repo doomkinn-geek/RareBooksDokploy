@@ -35,7 +35,7 @@ public static class DbInitializer
         var inviteLink = new InviteLink
         {
             Id = Guid.NewGuid(),
-            Code = "WELCOME2024",
+            Code = "WELCOME1",
             CreatedBy = adminUser.Id,
             UsesLeft = 100,
             ExpiresAt = null,

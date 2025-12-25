@@ -43,17 +43,30 @@ public class AuthService : IAuthService
         // Проверка существования пользователя
         if (await _unitOfWork.Users.PhoneNumberExistsAsync(phoneNumber, cancellationToken))
         {
-            return (false, string.Empty, "Phone number already registered");
+            return (false, string.Empty, "Этот номер телефона уже зарегистрирован. Попробуйте войти.");
         }
         
         // Проверка инвайт-кода
-        var isValidInvite = await _unitOfWork.InviteLinks.ValidateInviteCodeAsync(inviteCode, cancellationToken);
-        if (!isValidInvite)
+        var invite = await _unitOfWork.InviteLinks.GetByCodeAsync(inviteCode, cancellationToken);
+        if (invite == null)
         {
-            return (false, string.Empty, "Invalid or expired invite code");
+            return (false, string.Empty, "Код приглашения не найден. Проверьте правильность ввода.");
         }
         
-        var invite = await _unitOfWork.InviteLinks.GetByCodeAsync(inviteCode, cancellationToken);
+        if (!invite.IsActive)
+        {
+            return (false, string.Empty, "Код приглашения деактивирован.");
+        }
+        
+        if (invite.ExpiresAt.HasValue && invite.ExpiresAt.Value < DateTime.UtcNow)
+        {
+            return (false, string.Empty, "Срок действия кода приглашения истёк. Попросите новый код.");
+        }
+        
+        if (invite.UsesLeft.HasValue && invite.UsesLeft.Value <= 0)
+        {
+            return (false, string.Empty, "Код приглашения уже использован. Попросите новый код.");
+        }
         
         // Создание пользователя
         var user = new User
@@ -82,7 +95,7 @@ public class AuthService : IAuthService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         
         var token = _tokenService.GenerateAccessToken(user);
-        return (true, token, "Registration successful");
+        return (true, token, "Регистрация выполнена успешно");
     }
     
     public async Task<(bool Success, string Token, string Message)> LoginAsync(
@@ -94,16 +107,16 @@ public class AuthService : IAuthService
         
         if (user == null)
         {
-            return (false, string.Empty, "Invalid phone number or password");
+            return (false, string.Empty, "Неверный номер телефона или пароль");
         }
         
         if (!_passwordHasher.VerifyPassword(password, user.PasswordHash))
         {
-            return (false, string.Empty, "Invalid phone number or password");
+            return (false, string.Empty, "Неверный номер телефона или пароль");
         }
         
         var token = _tokenService.GenerateAccessToken(user);
-        return (true, token, "Login successful");
+        return (true, token, "Вход выполнен успешно");
     }
 }
 

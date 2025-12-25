@@ -18,6 +18,9 @@ class Chat {
   // Online status for other participant (private chats only)
   final bool? otherParticipantIsOnline;
   final DateTime? otherParticipantLastSeenAt;
+  
+  // Avatar of other participant (private chats only)
+  final String? otherParticipantAvatar;
 
   Chat({
     required this.id,
@@ -30,6 +33,7 @@ class Chat {
     this.otherParticipantId,
     this.otherParticipantIsOnline,
     this.otherParticipantLastSeenAt,
+    this.otherParticipantAvatar,
   });
 
   factory Chat.fromJson(Map<String, dynamic> json) {
@@ -48,6 +52,7 @@ class Chat {
       otherParticipantLastSeenAt: json['otherParticipantLastSeenAt'] != null
           ? DateTime.parse(json['otherParticipantLastSeenAt'])
           : null,
+      otherParticipantAvatar: json['otherParticipantAvatar'],
     );
   }
 
@@ -63,7 +68,17 @@ class Chat {
       'otherParticipantId': otherParticipantId,
       'otherParticipantIsOnline': otherParticipantIsOnline,
       'otherParticipantLastSeenAt': otherParticipantLastSeenAt?.toIso8601String(),
+      'otherParticipantAvatar': otherParticipantAvatar,
     };
+  }
+  
+  /// Get the effective avatar URL for display
+  /// For private chats, uses other participant's avatar; for group chats, uses chat avatar
+  String? get displayAvatar {
+    if (type == ChatType.private) {
+      return otherParticipantAvatar;
+    }
+    return avatar;
   }
   
   /// Get formatted status text for private chats
@@ -129,6 +144,7 @@ class Chat {
     String? otherParticipantId,
     bool? otherParticipantIsOnline,
     DateTime? otherParticipantLastSeenAt,
+    String? otherParticipantAvatar,
   }) {
     return Chat(
       id: id ?? this.id,
@@ -141,6 +157,7 @@ class Chat {
       otherParticipantId: otherParticipantId ?? this.otherParticipantId,
       otherParticipantIsOnline: otherParticipantIsOnline ?? this.otherParticipantIsOnline,
       otherParticipantLastSeenAt: otherParticipantLastSeenAt ?? this.otherParticipantLastSeenAt,
+      otherParticipantAvatar: otherParticipantAvatar ?? this.otherParticipantAvatar,
     );
   }
 }

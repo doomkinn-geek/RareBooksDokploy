@@ -5,6 +5,8 @@ class InviteLink {
   final DateTime? expiresAt;
   final bool isActive;
   final DateTime createdAt;
+  final String? createdById;
+  final String? createdByName;
 
   InviteLink({
     required this.id,
@@ -13,6 +15,8 @@ class InviteLink {
     this.expiresAt,
     required this.isActive,
     required this.createdAt,
+    this.createdById,
+    this.createdByName,
   });
 
   factory InviteLink.fromJson(Map<String, dynamic> json) {
@@ -25,6 +29,8 @@ class InviteLink {
           : null,
       isActive: json['isActive'],
       createdAt: DateTime.parse(json['createdAt']),
+      createdById: json['createdById'],
+      createdByName: json['createdByName'],
     );
   }
 
@@ -36,6 +42,8 @@ class InviteLink {
       'expiresAt': expiresAt?.toIso8601String(),
       'isActive': isActive,
       'createdAt': createdAt.toIso8601String(),
+      'createdById': createdById,
+      'createdByName': createdByName,
     };
   }
 
@@ -56,26 +64,65 @@ class InviteLink {
     return isActive && !isExpired && !isUsedUp;
   }
 
+  /// Статус для отображения
+  String get statusMessage {
+    if (!isActive) return 'Деактивирован';
+    if (isExpired) return 'Истёк';
+    if (isUsedUp) return 'Использован';
+    return 'Активен';
+  }
+
   /// Форматированная строка для отображения
   String get displayText {
-    final buffer = StringBuffer('Код: $code');
+    final buffer = StringBuffer();
     
     if (usesLeft != null) {
-      buffer.write(' (осталось: $usesLeft)');
+      buffer.write('Осталось использований: $usesLeft');
+    } else {
+      buffer.write('Неограниченные использования');
     }
     
     if (expiresAt != null) {
       final daysLeft = expiresAt!.difference(DateTime.now()).inDays;
       if (daysLeft > 0) {
-        buffer.write(' - истекает через $daysLeft дн.');
+        buffer.write(' • Истекает через $daysLeft дн.');
       } else if (daysLeft == 0) {
-        buffer.write(' - истекает сегодня');
+        buffer.write(' • Истекает сегодня');
       } else {
-        buffer.write(' - истек');
+        buffer.write(' • Истёк');
       }
     }
     
     return buffer.toString();
+  }
+}
+
+/// Response from invite code validation
+class InviteCodeValidation {
+  final bool isValid;
+  final String message;
+  final String? creatorName;
+  final int? usesLeft;
+  final DateTime? expiresAt;
+
+  InviteCodeValidation({
+    required this.isValid,
+    required this.message,
+    this.creatorName,
+    this.usesLeft,
+    this.expiresAt,
+  });
+
+  factory InviteCodeValidation.fromJson(Map<String, dynamic> json) {
+    return InviteCodeValidation(
+      isValid: json['isValid'] ?? false,
+      message: json['message'] ?? '',
+      creatorName: json['creatorName'],
+      usesLeft: json['usesLeft'],
+      expiresAt: json['expiresAt'] != null 
+          ? DateTime.parse(json['expiresAt']) 
+          : null,
+    );
   }
 }
 

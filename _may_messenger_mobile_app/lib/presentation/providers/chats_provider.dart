@@ -78,6 +78,24 @@ class ChatsNotifier extends StateNotifier<ChatsState> {
     }
   }
 
+  /// Create or get existing direct chat with a user
+  Future<Chat> createOrGetDirectChat(String targetUserId) async {
+    try {
+      final chat = await _chatRepository.createOrGetDirectChat(targetUserId);
+      
+      // Add chat to state if not already present
+      final exists = state.chats.any((c) => c.id == chat.id);
+      if (!exists) {
+        state = state.copyWith(chats: [chat, ...state.chats]);
+      }
+      
+      return chat;
+    } catch (e) {
+      state = state.copyWith(error: formatUserFriendlyError(e));
+      rethrow;
+    }
+  }
+
   Future<void> deleteChat(String chatId) async {
     try {
       await _chatRepository.deleteChat(chatId);

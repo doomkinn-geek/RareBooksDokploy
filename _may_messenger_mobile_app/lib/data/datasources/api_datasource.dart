@@ -408,6 +408,60 @@ class ApiDataSource {
     }
   }
 
+  Future<UserProfile> updateProfile({
+    String? displayName,
+    String? bio,
+    String? status,
+  }) async {
+    try {
+      final response = await _dio.put(
+        '/users/me',
+        data: {
+          if (displayName != null) 'displayName': displayName,
+          if (bio != null) 'bio': bio,
+          if (status != null) 'status': status,
+        },
+      );
+      return UserProfile.fromJson(response.data);
+    } catch (e) {
+      throw Exception('Failed to update profile: $e');
+    }
+  }
+
+  Future<UserProfile> uploadAvatar(String filePath) async {
+    try {
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(filePath),
+      });
+      
+      final response = await _dio.post(
+        '/users/me/avatar',
+        data: formData,
+      );
+      return UserProfile.fromJson(response.data);
+    } catch (e) {
+      throw Exception('Failed to upload avatar: $e');
+    }
+  }
+
+  Future<UserProfile> deleteAvatar() async {
+    try {
+      final response = await _dio.delete('/users/me/avatar');
+      return UserProfile.fromJson(response.data);
+    } catch (e) {
+      throw Exception('Failed to delete avatar: $e');
+    }
+  }
+
+  Future<UserProfile> getUserById(String userId) async {
+    try {
+      final response = await _dio.get('/users/$userId');
+      return UserProfile.fromJson(response.data);
+    } catch (e) {
+      throw Exception('Failed to get user profile: $e');
+    }
+  }
+
   Future<List<UserProfile>> getUsers() async {
     try {
       final response = await _dio.get('/users');
@@ -441,6 +495,19 @@ class ApiDataSource {
       return inviteLinks;
     } catch (e) {
       throw Exception('Failed to get invite links: $e');
+    }
+  }
+
+  /// Validate an invite code before registration
+  Future<InviteCodeValidation> validateInviteCode(String code) async {
+    try {
+      final response = await _dio.get('/auth/validate-invite/$code');
+      return InviteCodeValidation.fromJson(response.data);
+    } catch (e) {
+      return InviteCodeValidation(
+        isValid: false,
+        message: 'Не удалось проверить код приглашения',
+      );
     }
   }
   
@@ -505,6 +572,48 @@ class ApiDataSource {
       await _dio.post('${ApiConstants.chats}/$chatId/leave');
     } catch (e) {
       throw Exception('Failed to leave chat: $e');
+    }
+  }
+  
+  // Group Avatar Management
+  
+  /// Upload group avatar
+  Future<Chat> uploadGroupAvatar(String chatId, String filePath) async {
+    try {
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(filePath),
+      });
+      
+      final response = await _dio.post(
+        '${ApiConstants.chats}/$chatId/avatar',
+        data: formData,
+      );
+      return Chat.fromJson(response.data);
+    } catch (e) {
+      throw Exception('Failed to upload group avatar: $e');
+    }
+  }
+  
+  /// Delete group avatar
+  Future<Chat> deleteGroupAvatar(String chatId) async {
+    try {
+      final response = await _dio.delete('${ApiConstants.chats}/$chatId/avatar');
+      return Chat.fromJson(response.data);
+    } catch (e) {
+      throw Exception('Failed to delete group avatar: $e');
+    }
+  }
+  
+  /// Update group title
+  Future<Chat> updateGroupTitle(String chatId, String title) async {
+    try {
+      final response = await _dio.put(
+        '${ApiConstants.chats}/$chatId/title',
+        data: {'title': title},
+      );
+      return Chat.fromJson(response.data);
+    } catch (e) {
+      throw Exception('Failed to update group title: $e');
     }
   }
 }

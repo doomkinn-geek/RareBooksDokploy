@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../data/models/chat_model.dart';
+import '../../core/constants/api_constants.dart';
 import '../providers/contacts_names_provider.dart';
 import '../providers/chats_provider.dart';
 
@@ -97,6 +98,10 @@ class ChatListItem extends ConsumerWidget {
       displayTitle = chat.type == ChatType.private ? 'Приватный чат' : 'Без названия';
     }
     
+    // Get avatar URL - for private chats use otherParticipantAvatar
+    final avatarPath = chat.displayAvatar;
+    final avatarUrl = avatarPath != null ? '${ApiConstants.baseUrl}$avatarPath' : null;
+    
     return InkWell(
       onTap: onTap,
       onLongPress: () => _showDeleteDialog(context, ref),
@@ -104,11 +109,15 @@ class ChatListItem extends ConsumerWidget {
         leading: Stack(
           children: [
             CircleAvatar(
-              backgroundImage: chat.avatar != null
-                  ? NetworkImage(chat.avatar!)
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              backgroundImage: avatarUrl != null
+                  ? NetworkImage(avatarUrl)
                   : null,
-              child: chat.avatar == null
-                  ? Text(displayTitle[0].toUpperCase())
+              child: avatarUrl == null
+                  ? Text(
+                      displayTitle.isNotEmpty ? displayTitle[0].toUpperCase() : '?',
+                      style: const TextStyle(color: Colors.white),
+                    )
                   : null,
             ),
             // Online status indicator for private chats

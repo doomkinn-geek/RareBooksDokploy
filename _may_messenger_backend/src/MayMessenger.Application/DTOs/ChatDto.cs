@@ -19,6 +19,9 @@ public class ChatDto
     // Online status for private chats (other participant)
     public bool? OtherParticipantIsOnline { get; set; }
     public DateTime? OtherParticipantLastSeenAt { get; set; }
+    
+    // Avatar of the other participant for private chats
+    public string? OtherParticipantAvatar { get; set; }
 }
 
 

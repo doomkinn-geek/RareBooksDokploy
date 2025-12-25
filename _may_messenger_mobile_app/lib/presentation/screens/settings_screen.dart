@@ -3,11 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/user_model.dart';
+import '../../core/constants/api_constants.dart';
 import '../providers/profile_provider.dart';
 import '../providers/invite_provider.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/qr_invite_dialog.dart';
 import 'debug_screen.dart';
+import 'edit_profile_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -43,38 +45,87 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 // Профиль
                 if (profile != null) ...[
                   const SizedBox(height: 16),
-                  Center(
-                    child: CircleAvatar(
-                      radius: 50,
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      backgroundImage: profile.avatar != null
-                          ? NetworkImage(profile.avatar!)
-                          : null,
-                      child: profile.avatar == null
-                          ? Text(
-                              profile.displayName[0].toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: 40,
-                                color: Colors.white,
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const EditProfileScreen(),
+                        ),
+                      );
+                    },
+                    child: Column(
+                      children: [
+                        Stack(
+                          children: [
+                            CircleAvatar(
+                              radius: 50,
+                              backgroundColor: Theme.of(context).colorScheme.primary,
+                              backgroundImage: profile.avatar != null
+                                  ? NetworkImage('${ApiConstants.baseUrl}${profile.avatar}')
+                                  : null,
+                              child: profile.avatar == null
+                                  ? Text(
+                                      profile.displayName[0].toUpperCase(),
+                                      style: const TextStyle(
+                                        fontSize: 40,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.edit,
+                                  size: 16,
+                                  color: Colors.white,
+                                ),
                               ),
-                            )
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Center(
-                    child: Text(
-                      profile.displayName,
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Center(
-                    child: Text(
-                      profile.phoneNumber,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            color: Colors.grey[600],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          profile.displayName,
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                        if (profile.status != null && profile.status!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            profile.status!,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Colors.grey[600],
+                            ),
                           ),
+                        ],
+                        const SizedBox(height: 8),
+                        Text(
+                          profile.phoneNumber,
+                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                color: Colors.grey[600],
+                              ),
+                        ),
+                        if (profile.bio != null && profile.bio!.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 32),
+                            child: Text(
+                              profile.bio!,
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                   if (profile.isAdmin)
@@ -91,6 +142,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ],
 
                 const Divider(height: 32),
+
+                // Редактировать профиль
+                ListTile(
+                  leading: const Icon(Icons.edit),
+                  title: const Text('Редактировать профиль'),
+                  subtitle: const Text('Изменить имя, статус и аватарку'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const EditProfileScreen(),
+                      ),
+                    );
+                  },
+                ),
+
+                const Divider(),
 
                 // Пригласить друга
                 ListTile(

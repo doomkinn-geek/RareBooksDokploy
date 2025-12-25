@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../data/models/participant_model.dart';
 import '../../data/services/contacts_service.dart';
+import '../../core/constants/api_constants.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chats_provider.dart';
 import '../providers/profile_provider.dart';
@@ -20,8 +22,10 @@ class GroupSettingsScreen extends ConsumerStatefulWidget {
 class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
   List<Participant> _participants = [];
   bool _isLoading = true;
+  bool _isSaving = false;
   String? _error;
   Participant? _currentUserParticipant;
+  final ImagePicker _picker = ImagePicker();
   
   @override
   void initState() {
@@ -65,6 +69,181 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
   /// Check if current user can manage admins
   bool get canManageAdmins {
     return _currentUserParticipant?.isOwner == true;
+  }
+  
+  /// Check if current user is owner (can change avatar)
+  bool get isOwner {
+    return _currentUserParticipant?.isOwner == true;
+  }
+  
+  Future<void> _pickGroupAvatar(ImageSource source) async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+      
+      if (image != null && mounted) {
+        setState(() => _isSaving = true);
+        
+        try {
+          final apiDataSource = ref.read(apiDataSourceProvider);
+          await apiDataSource.uploadGroupAvatar(widget.chatId, image.path);
+          
+          // Refresh chats to get updated avatar
+          await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Аватарка группы обновлена')),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
+          if (mounted) setState(() => _isSaving = false);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+  
+  void _showAvatarOptions() {
+    final chatsState = ref.read(chatsProvider);
+    final currentChat = chatsState.chats.where((c) => c.id == widget.chatId).firstOrNull;
+    
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Выбрать из галереи'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickGroupAvatar(ImageSource.gallery);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Сделать фото'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickGroupAvatar(ImageSource.camera);
+              },
+            ),
+            if (currentChat?.avatar != null) ...[
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('Удалить аватарку', style: TextStyle(color: Colors.red)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _deleteGroupAvatar();
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Future<void> _deleteGroupAvatar() async {
+    setState(() => _isSaving = true);
+    
+    try {
+      final apiDataSource = ref.read(apiDataSourceProvider);
+      await apiDataSource.deleteGroupAvatar(widget.chatId);
+      
+      // Refresh chats to get updated avatar
+      await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Аватарка группы удалена')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+  
+  Future<void> _editGroupTitle() async {
+    final chatsState = ref.read(chatsProvider);
+    final currentChat = chatsState.chats.where((c) => c.id == widget.chatId).firstOrNull;
+    
+    final controller = TextEditingController(text: currentChat?.title ?? '');
+    
+    final newTitle = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Изменить название группы'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Название группы',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
+    
+    if (newTitle != null && newTitle.trim().isNotEmpty && mounted) {
+      setState(() => _isSaving = true);
+      
+      try {
+        final apiDataSource = ref.read(apiDataSourceProvider);
+        await apiDataSource.updateGroupTitle(widget.chatId, newTitle.trim());
+        
+        // Refresh chats to get updated title
+        await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Название группы обновлено')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isSaving = false);
+      }
+    }
   }
   
   Future<void> _addParticipants() async {
@@ -256,10 +435,114 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
       );
     }
     
+    final chatsState = ref.watch(chatsProvider);
+    final currentChat = chatsState.chats.where((c) => c.id == widget.chatId).firstOrNull;
+    final avatarUrl = currentChat?.avatar != null 
+        ? '${ApiConstants.baseUrl}${currentChat!.avatar}' 
+        : null;
+    
     return RefreshIndicator(
       onRefresh: _loadParticipants,
       child: ListView(
         children: [
+          // Group Header
+          Container(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                // Group Avatar
+                GestureDetector(
+                  onTap: isOwner && !_isSaving ? _showAvatarOptions : null,
+                  child: Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 50,
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        backgroundImage: avatarUrl != null 
+                            ? NetworkImage(avatarUrl) 
+                            : null,
+                        child: avatarUrl == null
+                            ? Text(
+                                currentChat?.title.isNotEmpty == true 
+                                    ? currentChat!.title[0].toUpperCase() 
+                                    : 'G',
+                                style: const TextStyle(
+                                  fontSize: 40,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : null,
+                      ),
+                      if (isOwner)
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.primary,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.camera_alt,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      if (_isSaving)
+                        const Positioned.fill(
+                          child: Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // Group Title
+                GestureDetector(
+                  onTap: canManageParticipants && !_isSaving ? _editGroupTitle : null,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          currentChat?.title ?? 'Группа',
+                          style: Theme.of(context).textTheme.headlineSmall,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      if (canManageParticipants) ...[
+                        const SizedBox(width: 8),
+                        Icon(
+                          Icons.edit,
+                          size: 20,
+                          color: Colors.grey[600],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                
+                if (isOwner)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Нажмите на аватарку, чтобы изменить',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          
+          const Divider(),
+          
           // Participants section
           Padding(
             padding: const EdgeInsets.all(16.0),

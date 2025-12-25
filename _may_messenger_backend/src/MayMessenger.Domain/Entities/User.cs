@@ -12,6 +12,11 @@ public class User : BaseEntity
     public Guid? InvitedBy { get; set; }
     public string PasswordHash { get; set; } = string.Empty;
     
+    // Profile fields
+    public string? Bio { get; set; } // Short description about user
+    public string? Status { get; set; } // Custom status text (e.g. "Busy", "At work")
+    public DateTime? UpdatedAt { get; set; } // When profile was last updated
+    
     // Online status tracking
     public bool IsOnline { get; set; } = false;
     public DateTime? LastSeenAt { get; set; }

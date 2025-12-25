@@ -16,6 +16,7 @@ import '../widgets/message_input.dart';
 import '../widgets/connection_status_indicator.dart';
 import '../widgets/typing_animation.dart';
 import 'group_settings_screen.dart';
+import 'user_profile_screen.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final String chatId;
@@ -398,38 +399,72 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(displayTitle),
-            if (onlineStatusText != null)
-              Text(
-                onlineStatusText,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: onlineStatusText == 'онлайн' 
-                      ? Colors.green 
-                      : Colors.grey[400],
-                  fontWeight: FontWeight.normal,
+        title: GestureDetector(
+          onTap: () {
+            // Navigate to profile on tap for private chats
+            if (currentChat.type == ChatType.private && 
+                currentChat.otherParticipantId != null) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => UserProfileScreen(
+                    userId: currentChat.otherParticipantId!,
+                    initialDisplayName: displayTitle,
+                    initialAvatar: currentChat.otherParticipantAvatar,
+                  ),
                 ),
-              ),
-          ],
+              );
+            } else if (currentChat.type == ChatType.group) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => GroupSettingsScreen(chatId: widget.chatId),
+                ),
+              );
+            }
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(displayTitle),
+              if (onlineStatusText != null)
+                Text(
+                  onlineStatusText,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: onlineStatusText == 'онлайн' 
+                        ? Colors.green 
+                        : Colors.grey[400],
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+            ],
+          ),
         ),
         actions: [
           const ConnectionStatusIndicator(),
           IconButton(
             icon: const Icon(Icons.info_outline),
             onPressed: () {
-              // For group chats, open group settings screen
               if (currentChat.type == ChatType.group) {
+                // For group chats, open group settings screen
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (context) => GroupSettingsScreen(chatId: widget.chatId),
                   ),
                 );
+              } else if (currentChat.type == ChatType.private && 
+                         currentChat.otherParticipantId != null) {
+                // For private chats, open user profile screen
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => UserProfileScreen(
+                      userId: currentChat.otherParticipantId!,
+                      initialDisplayName: displayTitle,
+                      initialAvatar: currentChat.otherParticipantAvatar,
+                    ),
+                  ),
+                );
               }
-              // For private chats, could show user profile in the future
             },
           ),
         ],

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MayMessenger.Application.DTOs;
+using MayMessenger.Application.Services;
 using MayMessenger.Domain.Entities;
 using MayMessenger.Domain.Interfaces;
 
@@ -13,10 +14,17 @@ namespace MayMessenger.API.Controllers;
 public class UsersController : ControllerBase
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IImageCompressionService _imageCompressionService;
+    private readonly IWebHostEnvironment _environment;
     
-    public UsersController(IUnitOfWork unitOfWork)
+    public UsersController(
+        IUnitOfWork unitOfWork, 
+        IImageCompressionService imageCompressionService,
+        IWebHostEnvironment environment)
     {
         _unitOfWork = unitOfWork;
+        _imageCompressionService = imageCompressionService;
+        _environment = environment;
     }
     
     private Guid GetCurrentUserId()
@@ -47,7 +55,225 @@ public class UsersController : ControllerBase
             Avatar = user.Avatar,
             Role = user.Role,
             IsOnline = user.IsOnline,
-            LastSeenAt = user.LastSeenAt
+            LastSeenAt = user.LastSeenAt,
+            Bio = user.Bio,
+            Status = user.Status,
+            CreatedAt = user.CreatedAt
+        });
+    }
+    
+    /// <summary>
+    /// Обновить профиль текущего пользователя
+    /// </summary>
+    [HttpPut("me")]
+    public async Task<ActionResult<UserDto>> UpdateMyProfile([FromBody] UpdateProfileDto dto)
+    {
+        var userId = GetCurrentUserId();
+        var user = await _unitOfWork.Users.GetByIdAsync(userId);
+        
+        if (user == null)
+        {
+            return NotFound("Пользователь не найден");
+        }
+        
+        // Update only provided fields
+        if (!string.IsNullOrEmpty(dto.DisplayName))
+        {
+            user.DisplayName = dto.DisplayName;
+        }
+        
+        if (dto.Bio != null)
+        {
+            user.Bio = dto.Bio;
+        }
+        
+        if (dto.Status != null)
+        {
+            user.Status = dto.Status;
+        }
+        
+        user.UpdatedAt = DateTime.UtcNow;
+        
+        await _unitOfWork.Users.UpdateAsync(user);
+        await _unitOfWork.SaveChangesAsync();
+        
+        return Ok(new UserDto
+        {
+            Id = user.Id,
+            PhoneNumber = user.PhoneNumber,
+            DisplayName = user.DisplayName,
+            Avatar = user.Avatar,
+            Role = user.Role,
+            IsOnline = user.IsOnline,
+            LastSeenAt = user.LastSeenAt,
+            Bio = user.Bio,
+            Status = user.Status,
+            CreatedAt = user.CreatedAt
+        });
+    }
+    
+    /// <summary>
+    /// Загрузить аватарку
+    /// </summary>
+    [HttpPost("me/avatar")]
+    public async Task<ActionResult<UserDto>> UploadAvatar(IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest("Файл не выбран");
+        }
+        
+        // Validate file type
+        var allowedTypes = new[] { "image/jpeg", "image/png", "image/gif", "image/webp" };
+        if (!allowedTypes.Contains(file.ContentType.ToLower()))
+        {
+            return BadRequest("Разрешены только изображения (JPEG, PNG, GIF, WebP)");
+        }
+        
+        // Validate file size (max 10MB)
+        if (file.Length > 10 * 1024 * 1024)
+        {
+            return BadRequest("Файл слишком большой. Максимум 10 МБ");
+        }
+        
+        var userId = GetCurrentUserId();
+        var user = await _unitOfWork.Users.GetByIdAsync(userId);
+        
+        if (user == null)
+        {
+            return NotFound("Пользователь не найден");
+        }
+        
+        try
+        {
+            // Delete old avatar if exists
+            if (!string.IsNullOrEmpty(user.Avatar))
+            {
+                var oldAvatarPath = Path.Combine(_environment.WebRootPath, user.Avatar.TrimStart('/'));
+                if (System.IO.File.Exists(oldAvatarPath))
+                {
+                    System.IO.File.Delete(oldAvatarPath);
+                }
+            }
+            
+            // Create avatars directory if not exists
+            var avatarsDir = Path.Combine(_environment.WebRootPath, "avatars", "users");
+            if (!Directory.Exists(avatarsDir))
+            {
+                Directory.CreateDirectory(avatarsDir);
+            }
+            
+            // Generate unique filename
+            var fileName = $"{userId}_{DateTime.UtcNow.Ticks}.webp";
+            var filePath = Path.Combine(avatarsDir, fileName);
+            
+            // Read and compress image
+            using var stream = file.OpenReadStream();
+            using var memoryStream = new MemoryStream();
+            await stream.CopyToAsync(memoryStream);
+            var imageData = memoryStream.ToArray();
+            
+            // Compress to WebP with max 512x512 for avatar
+            var compressedData = await _imageCompressionService.CompressImageAsync(imageData, 512, 512);
+            await System.IO.File.WriteAllBytesAsync(filePath, compressedData);
+            
+            // Update user avatar URL
+            user.Avatar = $"/avatars/users/{fileName}";
+            user.UpdatedAt = DateTime.UtcNow;
+            
+            await _unitOfWork.Users.UpdateAsync(user);
+            await _unitOfWork.SaveChangesAsync();
+            
+            return Ok(new UserDto
+            {
+                Id = user.Id,
+                PhoneNumber = user.PhoneNumber,
+                DisplayName = user.DisplayName,
+                Avatar = user.Avatar,
+                Role = user.Role,
+                IsOnline = user.IsOnline,
+                LastSeenAt = user.LastSeenAt,
+                Bio = user.Bio,
+                Status = user.Status,
+                CreatedAt = user.CreatedAt
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Ошибка загрузки: {ex.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// Удалить аватарку
+    /// </summary>
+    [HttpDelete("me/avatar")]
+    public async Task<ActionResult<UserDto>> DeleteAvatar()
+    {
+        var userId = GetCurrentUserId();
+        var user = await _unitOfWork.Users.GetByIdAsync(userId);
+        
+        if (user == null)
+        {
+            return NotFound("Пользователь не найден");
+        }
+        
+        // Delete avatar file if exists
+        if (!string.IsNullOrEmpty(user.Avatar))
+        {
+            var avatarPath = Path.Combine(_environment.WebRootPath, user.Avatar.TrimStart('/'));
+            if (System.IO.File.Exists(avatarPath))
+            {
+                System.IO.File.Delete(avatarPath);
+            }
+            
+            user.Avatar = null;
+            user.UpdatedAt = DateTime.UtcNow;
+            
+            await _unitOfWork.Users.UpdateAsync(user);
+            await _unitOfWork.SaveChangesAsync();
+        }
+        
+        return Ok(new UserDto
+        {
+            Id = user.Id,
+            PhoneNumber = user.PhoneNumber,
+            DisplayName = user.DisplayName,
+            Avatar = user.Avatar,
+            Role = user.Role,
+            IsOnline = user.IsOnline,
+            LastSeenAt = user.LastSeenAt,
+            Bio = user.Bio,
+            Status = user.Status,
+            CreatedAt = user.CreatedAt
+        });
+    }
+    
+    /// <summary>
+    /// Получить профиль пользователя по ID (публичный)
+    /// </summary>
+    [HttpGet("{userId}")]
+    public async Task<ActionResult<UserDto>> GetUserProfile(Guid userId)
+    {
+        var user = await _unitOfWork.Users.GetByIdAsync(userId);
+        
+        if (user == null)
+        {
+            return NotFound("Пользователь не найден");
+        }
+        
+        return Ok(new UserDto
+        {
+            Id = user.Id,
+            PhoneNumber = user.PhoneNumber,
+            DisplayName = user.DisplayName,
+            Avatar = user.Avatar,
+            Role = user.Role,
+            IsOnline = user.IsOnline,
+            LastSeenAt = user.LastSeenAt,
+            Bio = user.Bio,
+            Status = user.Status,
+            CreatedAt = user.CreatedAt
         });
     }
     
@@ -61,7 +287,7 @@ public class UsersController : ControllerBase
         
         var inviteLink = new InviteLink
         {
-            Code = Guid.NewGuid().ToString("N")[..10].ToUpper(),
+            Code = Guid.NewGuid().ToString("N")[..8].ToUpper(),
             CreatedBy = userId,
             UsesLeft = 1, // Одно использование
             ExpiresAt = DateTime.UtcNow.AddDays(7), // Срок 7 дней

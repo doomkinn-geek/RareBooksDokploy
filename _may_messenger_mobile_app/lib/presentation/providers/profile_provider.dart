@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/user_profile_model.dart';
 import '../../data/datasources/local_datasource.dart';
+import '../../data/datasources/api_datasource.dart';
 import 'auth_provider.dart';
 
 final profileProvider = StateNotifierProvider<ProfileNotifier, ProfileState>(
@@ -15,12 +16,14 @@ final profileProvider = StateNotifierProvider<ProfileNotifier, ProfileState>(
 class ProfileState {
   final UserProfile? profile;
   final bool isLoading;
+  final bool isSaving;
   final String? error;
   final String? cachedUserId; // Cached user ID for offline mode
 
   ProfileState({
     this.profile,
     this.isLoading = false,
+    this.isSaving = false,
     this.error,
     this.cachedUserId,
   });
@@ -28,12 +31,14 @@ class ProfileState {
   ProfileState copyWith({
     UserProfile? profile,
     bool? isLoading,
+    bool? isSaving,
     String? error,
     String? cachedUserId,
   }) {
     return ProfileState(
       profile: profile ?? this.profile,
       isLoading: isLoading ?? this.isLoading,
+      isSaving: isSaving ?? this.isSaving,
       error: error,
       cachedUserId: cachedUserId ?? this.cachedUserId,
     );
@@ -45,7 +50,7 @@ class ProfileState {
 }
 
 class ProfileNotifier extends StateNotifier<ProfileState> {
-  final dynamic _apiDataSource;
+  final ApiDataSource _apiDataSource;
   final LocalDataSource _localDataSource;
 
   ProfileNotifier(this._apiDataSource, this._localDataSource) : super(ProfileState()) {
@@ -72,10 +77,8 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
       final profile = await _apiDataSource.getUserProfile();
       
       // Cache user ID for offline mode
-      if (profile.id != null) {
-        await _localDataSource.saveCurrentUserId(profile.id);
-        print('[Profile] Saved user ID to cache: ${profile.id}');
-      }
+      await _localDataSource.saveCurrentUserId(profile.id);
+      print('[Profile] Saved user ID to cache: ${profile.id}');
       
       state = state.copyWith(
         profile: profile,
@@ -95,6 +98,77 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
 
   Future<void> refresh() async {
     await loadProfile();
+  }
+  
+  /// Update profile
+  Future<bool> updateProfile({
+    String? displayName,
+    String? bio,
+    String? status,
+  }) async {
+    state = state.copyWith(isSaving: true, error: null);
+    try {
+      final profile = await _apiDataSource.updateProfile(
+        displayName: displayName,
+        bio: bio,
+        status: status,
+      );
+      
+      state = state.copyWith(
+        profile: profile,
+        isSaving: false,
+      );
+      return true;
+    } catch (e) {
+      print('[Profile] Failed to update profile: $e');
+      state = state.copyWith(
+        isSaving: false,
+        error: 'Не удалось обновить профиль',
+      );
+      return false;
+    }
+  }
+  
+  /// Upload avatar
+  Future<bool> uploadAvatar(String filePath) async {
+    state = state.copyWith(isSaving: true, error: null);
+    try {
+      final profile = await _apiDataSource.uploadAvatar(filePath);
+      
+      state = state.copyWith(
+        profile: profile,
+        isSaving: false,
+      );
+      return true;
+    } catch (e) {
+      print('[Profile] Failed to upload avatar: $e');
+      state = state.copyWith(
+        isSaving: false,
+        error: 'Не удалось загрузить аватарку',
+      );
+      return false;
+    }
+  }
+  
+  /// Delete avatar
+  Future<bool> deleteAvatar() async {
+    state = state.copyWith(isSaving: true, error: null);
+    try {
+      final profile = await _apiDataSource.deleteAvatar();
+      
+      state = state.copyWith(
+        profile: profile,
+        isSaving: false,
+      );
+      return true;
+    } catch (e) {
+      print('[Profile] Failed to delete avatar: $e');
+      state = state.copyWith(
+        isSaving: false,
+        error: 'Не удалось удалить аватарку',
+      );
+      return false;
+    }
   }
   
   /// Clear cached user ID (call on logout)

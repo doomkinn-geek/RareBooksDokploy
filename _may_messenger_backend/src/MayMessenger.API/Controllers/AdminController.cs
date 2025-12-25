@@ -61,17 +61,61 @@ public class AdminController : ControllerBase
     public async Task<ActionResult<IEnumerable<UserDto>>> GetUsers()
     {
         var users = await _unitOfWork.Users.GetAllAsync();
+        var usersList = users.ToList();
         
-        var userDtos = users.Select(u => new UserDto
+        // Create a dictionary for quick lookup of inviter names
+        var userIdToName = usersList.ToDictionary(u => u.Id, u => u.DisplayName);
+        
+        var userDtos = usersList.Select(u => new UserDto
         {
             Id = u.Id,
             PhoneNumber = u.PhoneNumber,
             DisplayName = u.DisplayName,
             Avatar = u.Avatar,
-            Role = u.Role
+            Role = u.Role,
+            IsOnline = u.IsOnline,
+            LastSeenAt = u.LastSeenAt,
+            InvitedByUserId = u.InvitedBy,
+            InvitedByUserName = u.InvitedBy.HasValue && userIdToName.ContainsKey(u.InvitedBy.Value) 
+                ? userIdToName[u.InvitedBy.Value] 
+                : null,
+            CreatedAt = u.CreatedAt
         });
         
         return Ok(userDtos);
+    }
+    
+    /// <summary>
+    /// Get users invited by a specific user
+    /// </summary>
+    [HttpGet("users/{userId}/invited")]
+    public async Task<ActionResult<IEnumerable<UserDto>>> GetInvitedUsers(Guid userId)
+    {
+        var users = await _unitOfWork.Users.GetAllAsync();
+        var inviterUser = await _unitOfWork.Users.GetByIdAsync(userId);
+        
+        if (inviterUser == null)
+        {
+            return NotFound("User not found");
+        }
+        
+        var invitedUsers = users
+            .Where(u => u.InvitedBy == userId)
+            .Select(u => new UserDto
+            {
+                Id = u.Id,
+                PhoneNumber = u.PhoneNumber,
+                DisplayName = u.DisplayName,
+                Avatar = u.Avatar,
+                Role = u.Role,
+                IsOnline = u.IsOnline,
+                LastSeenAt = u.LastSeenAt,
+                InvitedByUserId = u.InvitedBy,
+                InvitedByUserName = inviterUser.DisplayName,
+                CreatedAt = u.CreatedAt
+            });
+        
+        return Ok(invitedUsers);
     }
     
     [HttpPost("invite-links")]
@@ -81,7 +125,7 @@ public class AdminController : ControllerBase
         
         var inviteLink = new InviteLink
         {
-            Code = Guid.NewGuid().ToString("N")[..10].ToUpper(),
+            Code = Guid.NewGuid().ToString("N")[..8].ToUpper(),
             CreatedBy = userId,
             UsesLeft = dto.UsesLeft,
             ExpiresAt = dto.ExpiresAt,
@@ -106,15 +150,23 @@ public class AdminController : ControllerBase
     public async Task<ActionResult<IEnumerable<InviteLinkDto>>> GetInviteLinks()
     {
         var links = await _unitOfWork.InviteLinks.GetAllAsync();
+        var linksList = links.ToList();
         
-        var linkDtos = links.Select(l => new InviteLinkDto
+        // Get creator names
+        var creatorIds = linksList.Select(l => l.CreatedBy).Distinct().ToList();
+        var users = await _unitOfWork.Users.GetAllAsync();
+        var userDict = users.ToDictionary(u => u.Id, u => u.DisplayName);
+        
+        var linkDtos = linksList.Select(l => new InviteLinkDto
         {
             Id = l.Id,
             Code = l.Code,
             UsesLeft = l.UsesLeft,
             ExpiresAt = l.ExpiresAt,
             IsActive = l.IsActive,
-            CreatedAt = l.CreatedAt
+            CreatedAt = l.CreatedAt,
+            CreatedById = l.CreatedBy,
+            CreatedByName = userDict.ContainsKey(l.CreatedBy) ? userDict[l.CreatedBy] : null
         });
         
         return Ok(linkDtos);

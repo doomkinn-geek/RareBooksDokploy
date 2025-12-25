@@ -21,9 +21,32 @@ String _formatError(dynamic error) {
     if (error.response?.data != null) {
       final data = error.response!.data;
       if (data is Map) {
+        // Handle FluentValidation errors format
+        // { "errors": { "PhoneNumber": ["error1"], "Password": ["error2"] }, "title": "..." }
+        if (data['errors'] != null && data['errors'] is Map) {
+          final errors = data['errors'] as Map;
+          final errorMessages = <String>[];
+          
+          for (final entry in errors.entries) {
+            if (entry.value is List && (entry.value as List).isNotEmpty) {
+              // Take only the first error message for each field
+              errorMessages.add((entry.value as List).first.toString());
+            }
+          }
+          
+          if (errorMessages.isNotEmpty) {
+            // Return first error for cleaner display
+            return errorMessages.first;
+          }
+        }
+        
         // Extract message from various fields
         final message = data['message'] ?? data['error'] ?? data['title'];
         if (message != null && message is String) {
+          // Don't show generic "One or more validation errors occurred"
+          if (message.contains('validation errors occurred')) {
+            return 'Проверьте правильность введённых данных';
+          }
           return _simplifyMessage(message);
         }
       }
@@ -46,7 +69,7 @@ String _formatError(dynamic error) {
         final statusCode = error.response?.statusCode;
         switch (statusCode) {
           case 400:
-            return 'Неверные данные';
+            return 'Проверьте правильность введённых данных';
           case 401:
             return 'Неверный логин или пароль';
           case 403:

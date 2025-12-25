@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using MayMessenger.Application.DTOs;
+using MayMessenger.Application.Services;
 using MayMessenger.Domain.Entities;
 using MayMessenger.Domain.Enums;
 using MayMessenger.Domain.Interfaces;
@@ -19,12 +20,21 @@ public class ChatsController : ControllerBase
     private readonly IUnitOfWork _unitOfWork;
     private readonly AppDbContext _context;
     private readonly IHubContext<ChatHub> _hubContext;
+    private readonly IImageCompressionService _imageCompressionService;
+    private readonly IWebHostEnvironment _environment;
     
-    public ChatsController(IUnitOfWork unitOfWork, AppDbContext context, IHubContext<ChatHub> hubContext)
+    public ChatsController(
+        IUnitOfWork unitOfWork, 
+        AppDbContext context, 
+        IHubContext<ChatHub> hubContext,
+        IImageCompressionService imageCompressionService,
+        IWebHostEnvironment environment)
     {
         _unitOfWork = unitOfWork;
         _context = context;
         _hubContext = hubContext;
+        _imageCompressionService = imageCompressionService;
+        _environment = environment;
     }
     
     private Guid GetCurrentUserId()
@@ -48,6 +58,9 @@ public class ChatsController : ControllerBase
             // For private chats, generate title from other participant's name
             var displayTitle = chat.Title;
             Guid? otherParticipantId = null;
+            string? otherParticipantAvatar = null;
+            bool? otherParticipantIsOnline = null;
+            DateTime? otherParticipantLastSeenAt = null;
             
             if (chat.Type == ChatType.Private)
             {
@@ -58,6 +71,9 @@ public class ChatsController : ControllerBase
                 {
                     displayTitle = otherParticipant.User.DisplayName;
                     otherParticipantId = otherParticipant.UserId;
+                    otherParticipantAvatar = otherParticipant.User.Avatar;
+                    otherParticipantIsOnline = otherParticipant.User.IsOnline;
+                    otherParticipantLastSeenAt = otherParticipant.User.LastSeenAt;
                 }
             }
             
@@ -70,6 +86,9 @@ public class ChatsController : ControllerBase
                 CreatedAt = chat.CreatedAt,
                 UnreadCount = unreadCount,
                 OtherParticipantId = otherParticipantId,
+                OtherParticipantAvatar = otherParticipantAvatar,
+                OtherParticipantIsOnline = otherParticipantIsOnline,
+                OtherParticipantLastSeenAt = otherParticipantLastSeenAt,
                 LastMessage = lastMessage != null ? new MessageDto
                 {
                     Id = lastMessage.Id,
@@ -712,6 +731,225 @@ public class ChatsController : ControllerBase
     }
     
     #endregion
+    
+    #region Group Avatar Management
+    
+    /// <summary>
+    /// Upload group avatar (owner only)
+    /// </summary>
+    [HttpPost("{chatId}/avatar")]
+    public async Task<ActionResult<ChatDto>> UploadGroupAvatar(Guid chatId, IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest(new { message = "Файл не выбран" });
+        }
+        
+        // Validate file type
+        var allowedTypes = new[] { "image/jpeg", "image/png", "image/gif", "image/webp" };
+        if (!allowedTypes.Contains(file.ContentType.ToLower()))
+        {
+            return BadRequest(new { message = "Разрешены только изображения (JPEG, PNG, GIF, WebP)" });
+        }
+        
+        // Validate file size (max 10MB)
+        if (file.Length > 10 * 1024 * 1024)
+        {
+            return BadRequest(new { message = "Файл слишком большой. Максимум 10 МБ" });
+        }
+        
+        var userId = GetCurrentUserId();
+        var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+        
+        if (chat == null)
+        {
+            return NotFound(new { message = "Чат не найден" });
+        }
+        
+        if (chat.Type != ChatType.Group)
+        {
+            return BadRequest(new { message = "Аватарку можно изменить только для группового чата" });
+        }
+        
+        // Check if user is owner
+        var participant = chat.Participants.FirstOrDefault(p => p.UserId == userId);
+        if (participant == null || !participant.IsOwner)
+        {
+            return Forbid();
+        }
+        
+        try
+        {
+            // Delete old avatar if exists
+            if (!string.IsNullOrEmpty(chat.Avatar))
+            {
+                var oldAvatarPath = Path.Combine(_environment.WebRootPath, chat.Avatar.TrimStart('/'));
+                if (System.IO.File.Exists(oldAvatarPath))
+                {
+                    System.IO.File.Delete(oldAvatarPath);
+                }
+            }
+            
+            // Create avatars directory if not exists
+            var avatarsDir = Path.Combine(_environment.WebRootPath, "avatars", "groups");
+            if (!Directory.Exists(avatarsDir))
+            {
+                Directory.CreateDirectory(avatarsDir);
+            }
+            
+            // Generate unique filename
+            var fileName = $"{chatId}_{DateTime.UtcNow.Ticks}.webp";
+            var filePath = Path.Combine(avatarsDir, fileName);
+            
+            // Read and compress image
+            using var stream = file.OpenReadStream();
+            using var memoryStream = new MemoryStream();
+            await stream.CopyToAsync(memoryStream);
+            var imageData = memoryStream.ToArray();
+            
+            // Compress to WebP with max 512x512 for avatar
+            var compressedData = await _imageCompressionService.CompressImageAsync(imageData, 512, 512);
+            await System.IO.File.WriteAllBytesAsync(filePath, compressedData);
+            
+            // Update chat avatar URL
+            chat.Avatar = $"/avatars/groups/{fileName}";
+            
+            await _unitOfWork.Chats.UpdateAsync(chat);
+            await _unitOfWork.SaveChangesAsync();
+            
+            // Notify all chat participants about avatar change
+            await _hubContext.Clients.Group(chatId.ToString())
+                .SendAsync("ChatUpdated", new { chatId, avatar = chat.Avatar });
+            
+            return Ok(new ChatDto
+            {
+                Id = chat.Id,
+                Type = chat.Type,
+                Title = chat.Title,
+                Avatar = chat.Avatar,
+                CreatedAt = chat.CreatedAt,
+                UnreadCount = 0
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = $"Ошибка загрузки: {ex.Message}" });
+        }
+    }
+    
+    /// <summary>
+    /// Delete group avatar (owner only)
+    /// </summary>
+    [HttpDelete("{chatId}/avatar")]
+    public async Task<ActionResult<ChatDto>> DeleteGroupAvatar(Guid chatId)
+    {
+        var userId = GetCurrentUserId();
+        var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+        
+        if (chat == null)
+        {
+            return NotFound(new { message = "Чат не найден" });
+        }
+        
+        if (chat.Type != ChatType.Group)
+        {
+            return BadRequest(new { message = "Аватарку можно изменить только для группового чата" });
+        }
+        
+        // Check if user is owner
+        var participant = chat.Participants.FirstOrDefault(p => p.UserId == userId);
+        if (participant == null || !participant.IsOwner)
+        {
+            return Forbid();
+        }
+        
+        // Delete avatar file if exists
+        if (!string.IsNullOrEmpty(chat.Avatar))
+        {
+            var avatarPath = Path.Combine(_environment.WebRootPath, chat.Avatar.TrimStart('/'));
+            if (System.IO.File.Exists(avatarPath))
+            {
+                System.IO.File.Delete(avatarPath);
+            }
+            
+            chat.Avatar = null;
+            
+            await _unitOfWork.Chats.UpdateAsync(chat);
+            await _unitOfWork.SaveChangesAsync();
+            
+            // Notify all chat participants about avatar removal
+            await _hubContext.Clients.Group(chatId.ToString())
+                .SendAsync("ChatUpdated", new { chatId, avatar = (string?)null });
+        }
+        
+        return Ok(new ChatDto
+        {
+            Id = chat.Id,
+            Type = chat.Type,
+            Title = chat.Title,
+            Avatar = chat.Avatar,
+            CreatedAt = chat.CreatedAt,
+            UnreadCount = 0
+        });
+    }
+    
+    /// <summary>
+    /// Update group title (owner or admin only)
+    /// </summary>
+    [HttpPut("{chatId}/title")]
+    public async Task<ActionResult<ChatDto>> UpdateGroupTitle(Guid chatId, [FromBody] UpdateGroupTitleDto dto)
+    {
+        var userId = GetCurrentUserId();
+        var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+        
+        if (chat == null)
+        {
+            return NotFound(new { message = "Чат не найден" });
+        }
+        
+        if (chat.Type != ChatType.Group)
+        {
+            return BadRequest(new { message = "Название можно изменить только для группового чата" });
+        }
+        
+        // Check if user is owner or admin
+        var participant = chat.Participants.FirstOrDefault(p => p.UserId == userId);
+        if (participant == null || (!participant.IsOwner && !participant.IsAdmin))
+        {
+            return Forbid();
+        }
+        
+        if (string.IsNullOrWhiteSpace(dto.Title))
+        {
+            return BadRequest(new { message = "Название группы не может быть пустым" });
+        }
+        
+        chat.Title = dto.Title.Trim();
+        
+        await _unitOfWork.Chats.UpdateAsync(chat);
+        await _unitOfWork.SaveChangesAsync();
+        
+        // Notify all chat participants about title change
+        await _hubContext.Clients.Group(chatId.ToString())
+            .SendAsync("ChatUpdated", new { chatId, title = chat.Title });
+        
+        return Ok(new ChatDto
+        {
+            Id = chat.Id,
+            Type = chat.Type,
+            Title = chat.Title,
+            Avatar = chat.Avatar,
+            CreatedAt = chat.CreatedAt,
+            UnreadCount = 0
+        });
+    }
+    
+    #endregion
+}
+
+public class UpdateGroupTitleDto
+{
+    public string Title { get; set; } = string.Empty;
 }
 
 public class CreateDirectChatRequest

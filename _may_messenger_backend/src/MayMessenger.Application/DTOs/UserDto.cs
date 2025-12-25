@@ -13,6 +13,15 @@ public class UserDto
     // Online status
     public bool IsOnline { get; set; }
     public DateTime? LastSeenAt { get; set; }
+    
+    // Profile fields
+    public string? Bio { get; set; }
+    public string? Status { get; set; }
+    
+    // Invitation info (for admin)
+    public Guid? InvitedByUserId { get; set; }
+    public string? InvitedByUserName { get; set; }
+    public DateTime CreatedAt { get; set; }
 }
 
 
