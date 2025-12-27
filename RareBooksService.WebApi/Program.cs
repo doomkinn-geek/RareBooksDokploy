@@ -89,48 +89,69 @@ namespace RareBooksService.WebApi
                 });
 
                 // 3) JWT Authentication - должен быть настроен ДО Identity!
+                // ВСЕГДА регистрируем JWT authentication, даже если ключ не настроен
+                // (контроллеры требуют JWT схему)
                 var jwtKey = builder.Configuration["Jwt:Key"];
-                if (!string.IsNullOrWhiteSpace(jwtKey))
+                var jwtIssuer = builder.Configuration["Jwt:Issuer"];
+                var jwtAudience = builder.Configuration["Jwt:Audience"];
+                
+                // Проверяем что JWT настройки присутствуют
+                if (string.IsNullOrWhiteSpace(jwtKey))
                 {
-                    builder.Services.AddAuthentication(options =>
-                    {
-                        // JWT - primary scheme for API (mobile app)
-                        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-                        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-                        options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
-                    })
-                    .AddJwtBearer(options =>
-                    {
-                        options.RequireHttpsMetadata = false;
-                        options.SaveToken = true;
-                        options.TokenValidationParameters = new TokenValidationParameters
-                        {
-                            ValidateIssuer = true,
-                            ValidateAudience = true,
-                            ValidateLifetime = true,
-                            ValidateIssuerSigningKey = true,
-
-                            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-                            ValidAudience = builder.Configuration["Jwt:Audience"],
-                            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-                            NameClaimType = ClaimTypes.NameIdentifier,
-                            RoleClaimType = ClaimTypes.Role
-                        };
-                        options.Events = new JwtBearerEvents
-                        {
-                            OnAuthenticationFailed = context =>
-                            {
-                                Console.WriteLine("Authentication failed: " + context.Exception.Message);
-                                return Task.CompletedTask;
-                            },
-                            OnTokenValidated = context =>
-                            {
-                                Console.WriteLine("Token validated: " + context.SecurityToken.Id);
-                                return Task.CompletedTask;
-                            }
-                        };
-                    });
+                    Console.WriteLine("WARNING: JWT:Key не настроен в конфигурации! JWT authentication будет работать с дефолтным ключом (НЕ для production!)");
+                    jwtKey = "DefaultJwtKeyForDevelopmentOnly_ChangeInProduction_123456789012345678901234567890"; // 64 символа для HS256
                 }
+                
+                if (string.IsNullOrWhiteSpace(jwtIssuer))
+                {
+                    Console.WriteLine("WARNING: Jwt:Issuer не настроен, используется значение по умолчанию");
+                    jwtIssuer = "https://rare-books.ru";
+                }
+                
+                if (string.IsNullOrWhiteSpace(jwtAudience))
+                {
+                    Console.WriteLine("WARNING: Jwt:Audience не настроен, используется значение по умолчанию");
+                    jwtAudience = "https://rare-books-app.ru";
+                }
+                
+                builder.Services.AddAuthentication(options =>
+                {
+                    // JWT - primary scheme for API (mobile app and web)
+                    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+                    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+                })
+                .AddJwtBearer(options =>
+                {
+                    options.RequireHttpsMetadata = false;
+                    options.SaveToken = true;
+                    options.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        ValidateIssuer = true,
+                        ValidateAudience = true,
+                        ValidateLifetime = true,
+                        ValidateIssuerSigningKey = true,
+
+                        ValidIssuer = jwtIssuer,
+                        ValidAudience = jwtAudience,
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+                        NameClaimType = ClaimTypes.NameIdentifier,
+                        RoleClaimType = ClaimTypes.Role
+                    };
+                    options.Events = new JwtBearerEvents
+                    {
+                        OnAuthenticationFailed = context =>
+                        {
+                            Console.WriteLine("Authentication failed: " + context.Exception.Message);
+                            return Task.CompletedTask;
+                        },
+                        OnTokenValidated = context =>
+                        {
+                            Console.WriteLine("Token validated: " + context.SecurityToken.Id);
+                            return Task.CompletedTask;
+                        }
+                    };
+                });
 
                 // 4) Identity - добавляется ПОСЛЕ Authentication, чтобы не переопределять default schemes
                 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
