@@ -8,12 +8,12 @@ part of 'subscription.dart';
 
 SubscriptionPlan _$SubscriptionPlanFromJson(Map<String, dynamic> json) =>
     SubscriptionPlan(
-      id: (json['id'] as num).toInt(),
-      name: json['name'] as String,
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      name: json['name'] as String? ?? '',
       description: json['description'] as String?,
-      price: (json['price'] as num).toDouble(),
-      durationDays: (json['durationDays'] as num).toInt(),
-      searchLimit: (json['searchLimit'] as num?)?.toInt(),
+      price: (json['price'] as num?)?.toDouble() ?? 0.0,
+      durationDays: (json['durationDays'] as num?)?.toInt() ?? 30,
+      searchLimit: (json['monthlyRequestLimit'] as num?)?.toInt(),
       hasCollectionAccess: json['hasCollectionAccess'] as bool? ?? false,
       isActive: json['isActive'] as bool? ?? true,
       sortOrder: (json['sortOrder'] as num?)?.toInt(),
@@ -26,7 +26,7 @@ Map<String, dynamic> _$SubscriptionPlanToJson(SubscriptionPlan instance) =>
       'description': instance.description,
       'price': instance.price,
       'durationDays': instance.durationDays,
-      'searchLimit': instance.searchLimit,
+      'monthlyRequestLimit': instance.searchLimit,
       'hasCollectionAccess': instance.hasCollectionAccess,
       'isActive': instance.isActive,
       'sortOrder': instance.sortOrder,

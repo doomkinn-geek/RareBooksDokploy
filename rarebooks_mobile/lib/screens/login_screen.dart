@@ -48,10 +48,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.login),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/'),
-        ),
+        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => context.go('/')),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -62,19 +59,13 @@ class _LoginScreenState extends State<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 32),
-                
+
                 // Logo/Title
-                Icon(
-                  Icons.menu_book,
-                  size: 80,
-                  color: AppTheme.primaryColor,
-                ),
+                Icon(Icons.menu_book, size: 80, color: AppTheme.primaryColor),
                 const SizedBox(height: 16),
                 Text(
                   l10n.appTitle,
-                  style: AppTheme.headlineMedium.copyWith(
-                    color: AppTheme.primaryColor,
-                  ),
+                  style: AppTheme.headlineMedium.copyWith(color: AppTheme.primaryColor),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 48),
@@ -138,10 +129,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     padding: const EdgeInsets.only(bottom: 16),
                     child: Text(
                       authProvider.errorMessage!,
-                      style: const TextStyle(
-                        color: AppTheme.errorColor,
-                        fontSize: 14,
-                      ),
+                      style: const TextStyle(color: AppTheme.errorColor, fontSize: 14),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -155,10 +143,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ? const SizedBox(
                             height: 24,
                             width: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                           )
                         : Text(l10n.login),
                   ),
@@ -169,10 +154,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      l10n.noAccount,
-                      style: AppTheme.bodyMedium,
-                    ),
+                    Text(l10n.noAccount, style: AppTheme.bodyMedium),
                     TextButton(
                       onPressed: () => context.go('/register'),
                       child: Text(l10n.register),
@@ -187,4 +169,3 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
-

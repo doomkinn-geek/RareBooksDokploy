@@ -5,22 +5,27 @@ part 'subscription.g.dart';
 /// Subscription plan model
 @JsonSerializable()
 class SubscriptionPlan {
+  @JsonKey(defaultValue: 0)
   final int id;
+  @JsonKey(defaultValue: '')
   final String name;
   final String? description;
+  @JsonKey(defaultValue: 0.0)
   final double price;
+  @JsonKey(name: 'durationDays', defaultValue: 30)
   final int durationDays;
+  @JsonKey(name: 'monthlyRequestLimit')
   final int? searchLimit;
   final bool hasCollectionAccess;
   final bool isActive;
   final int? sortOrder;
   
   SubscriptionPlan({
-    required this.id,
-    required this.name,
+    this.id = 0,
+    this.name = '',
     this.description,
-    required this.price,
-    required this.durationDays,
+    this.price = 0.0,
+    this.durationDays = 30,
     this.searchLimit,
     this.hasCollectionAccess = false,
     this.isActive = true,

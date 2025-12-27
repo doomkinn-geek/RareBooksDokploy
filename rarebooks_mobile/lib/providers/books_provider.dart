@@ -89,7 +89,8 @@ class BooksProvider extends ChangeNotifier {
       'exactPhrase': exactPhrase,
       'categoryIds': categoryIds,
     };
-    notifyListeners();
+    // Schedule notification after current build frame
+    Future.microtask(() => notifyListeners());
     
     try {
       final response = await _apiService.searchByTitle(
@@ -135,7 +136,8 @@ class BooksProvider extends ChangeNotifier {
       'exactPhrase': exactPhrase,
       'categoryIds': categoryIds,
     };
-    notifyListeners();
+    // Schedule notification after current build frame
+    Future.microtask(() => notifyListeners());
     
     try {
       final response = await _apiService.searchByDescription(
@@ -179,7 +181,8 @@ class BooksProvider extends ChangeNotifier {
       'minPrice': minPrice,
       'maxPrice': maxPrice,
     };
-    notifyListeners();
+    // Schedule notification after current build frame
+    Future.microtask(() => notifyListeners());
     
     try {
       final response = await _apiService.searchByPriceRange(
@@ -215,7 +218,8 @@ class BooksProvider extends ChangeNotifier {
     _errorMessage = null;
     _currentSearchType = SearchType.category;
     _currentSearchParams = {'categoryId': categoryId};
-    notifyListeners();
+    // Schedule notification after current build frame
+    Future.microtask(() => notifyListeners());
     
     try {
       final response = await _apiService.searchByCategory(
@@ -250,7 +254,8 @@ class BooksProvider extends ChangeNotifier {
     _errorMessage = null;
     _currentSearchType = SearchType.seller;
     _currentSearchParams = {'sellerName': sellerName};
-    notifyListeners();
+    // Schedule notification after current build frame
+    Future.microtask(() => notifyListeners());
     
     try {
       final response = await _apiService.searchBySeller(
@@ -325,7 +330,8 @@ class BooksProvider extends ChangeNotifier {
     _errorMessage = null;
     _currentBook = null;
     _currentBookImages = [];
-    notifyListeners();
+    // Schedule notification after current build frame
+    Future.microtask(() => notifyListeners());
     
     try {
       // Load book and favorite status in parallel
@@ -390,7 +396,8 @@ class BooksProvider extends ChangeNotifier {
     
     _isLoading = true;
     _errorMessage = null;
-    notifyListeners();
+    // Schedule notification after current build frame
+    Future.microtask(() => notifyListeners());
     
     try {
       final response = await _apiService.getFavorites(
@@ -418,7 +425,8 @@ class BooksProvider extends ChangeNotifier {
     
     _isLoading = true;
     _errorMessage = null;
-    notifyListeners();
+    // Schedule notification after current build frame
+    Future.microtask(() => notifyListeners());
     
     try {
       _categories = await _apiService.getCategories();

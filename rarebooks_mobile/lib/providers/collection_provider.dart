@@ -36,7 +36,8 @@ class CollectionProvider extends ChangeNotifier {
   Future<void> loadCollection() async {
     _isLoading = true;
     _errorMessage = null;
-    notifyListeners();
+    // Schedule notification after current build frame
+    Future.microtask(() => notifyListeners());
     
     try {
       final results = await Future.wait([
@@ -60,7 +61,8 @@ class CollectionProvider extends ChangeNotifier {
     _errorMessage = null;
     _currentBook = null;
     _currentBookMatches = null;
-    notifyListeners();
+    // Schedule notification after current build frame
+    Future.microtask(() => notifyListeners());
     
     try {
       // Find book in local list first
@@ -83,7 +85,8 @@ class CollectionProvider extends ChangeNotifier {
   Future<CollectionBook?> addBook(CollectionBookRequest request) async {
     _isLoading = true;
     _errorMessage = null;
-    notifyListeners();
+    // Schedule notification after current build frame
+    Future.microtask(() => notifyListeners());
     
     try {
       final book = await _apiService.addToCollection(request);
@@ -107,7 +110,8 @@ class CollectionProvider extends ChangeNotifier {
   Future<bool> updateBook(int bookId, CollectionBookRequest request) async {
     _isLoading = true;
     _errorMessage = null;
-    notifyListeners();
+    // Schedule notification after current build frame
+    Future.microtask(() => notifyListeners());
     
     try {
       final updatedBook = await _apiService.updateCollectionBook(bookId, request);
@@ -141,7 +145,8 @@ class CollectionProvider extends ChangeNotifier {
   Future<bool> deleteBook(int bookId) async {
     _isLoading = true;
     _errorMessage = null;
-    notifyListeners();
+    // Schedule notification after current build frame
+    Future.microtask(() => notifyListeners());
     
     try {
       await _apiService.deleteCollectionBook(bookId);
@@ -180,7 +185,8 @@ class CollectionProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       _errorMessage = _parseError(e);
-      notifyListeners();
+      // Schedule notification after current build frame
+      Future.microtask(() => notifyListeners());
       return false;
     }
   }
@@ -189,7 +195,8 @@ class CollectionProvider extends ChangeNotifier {
   void clearCurrentBook() {
     _currentBook = null;
     _currentBookMatches = null;
-    notifyListeners();
+    // Schedule notification after current build frame
+    Future.microtask(() => notifyListeners());
   }
   
   /// Sort books
@@ -225,7 +232,8 @@ class CollectionProvider extends ChangeNotifier {
         });
         break;
     }
-    notifyListeners();
+    // Schedule notification after current build frame
+    Future.microtask(() => notifyListeners());
   }
   
   /// Search books in collection
