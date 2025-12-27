@@ -89,34 +89,16 @@ namespace RareBooksService.WebApi
                 });
 
                 // 3) JWT Authentication - должен быть настроен ДО Identity!
-                // ВСЕГДА регистрируем JWT authentication, даже если ключ не настроен
-                // (контроллеры требуют JWT схему)
                 var jwtKey = builder.Configuration["Jwt:Key"];
-                var jwtIssuer = builder.Configuration["Jwt:Issuer"];
-                var jwtAudience = builder.Configuration["Jwt:Audience"];
-                
-                // Проверяем что JWT настройки присутствуют
                 if (string.IsNullOrWhiteSpace(jwtKey))
                 {
-                    Console.WriteLine("WARNING: JWT:Key не настроен в конфигурации! JWT authentication будет работать с дефолтным ключом (НЕ для production!)");
-                    jwtKey = "DefaultJwtKeyForDevelopmentOnly_ChangeInProduction_123456789012345678901234567890"; // 64 символа для HS256
+                    throw new InvalidOperationException(
+                        "JWT Key is not configured. Please set 'Jwt:Key' in appsettings.json or environment variable 'Jwt__Key'.");
                 }
-                
-                if (string.IsNullOrWhiteSpace(jwtIssuer))
-                {
-                    Console.WriteLine("WARNING: Jwt:Issuer не настроен, используется значение по умолчанию");
-                    jwtIssuer = "https://rare-books.ru";
-                }
-                
-                if (string.IsNullOrWhiteSpace(jwtAudience))
-                {
-                    Console.WriteLine("WARNING: Jwt:Audience не настроен, используется значение по умолчанию");
-                    jwtAudience = "https://rare-books-app.ru";
-                }
-                
+
                 builder.Services.AddAuthentication(options =>
                 {
-                    // JWT - primary scheme for API (mobile app and web)
+                    // JWT - primary scheme for API (mobile app and web frontend)
                     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
                     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
                     options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -132,8 +114,8 @@ namespace RareBooksService.WebApi
                         ValidateLifetime = true,
                         ValidateIssuerSigningKey = true,
 
-                        ValidIssuer = jwtIssuer,
-                        ValidAudience = jwtAudience,
+                        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+                        ValidAudience = builder.Configuration["Jwt:Audience"],
                         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
                         NameClaimType = ClaimTypes.NameIdentifier,
                         RoleClaimType = ClaimTypes.Role
@@ -177,6 +159,14 @@ namespace RareBooksService.WebApi
                         context.Response.Redirect(context.RedirectUri);
                         return Task.CompletedTask;
                     };
+                });
+
+                // Принудительно устанавливаем JWT как default scheme после того как AddIdentity мог их переопределить
+                builder.Services.PostConfigure<Microsoft.AspNetCore.Authentication.AuthenticationOptions>(options =>
+                {
+                    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+                    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
                 });
 
                 // 5) Настройки YandexKassa, TypeOfAccessImages и т.д.

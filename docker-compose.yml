@@ -66,6 +66,10 @@ services:
       - ConnectionStrings__UsersDb=Host=db_users;Port=5432;Database=RareBooks_Users;Username=postgres;Password=123456
       - ASPNETCORE_URLS=http://+:80
       - ASPNETCORE_ENVIRONMENT=Production
+      # JWT Authentication settings
+      - Jwt__Key=YourStrong(!)SecretKeyThatIsAtLeast32CharsLong
+      - Jwt__Issuer=https://rare-books.ru
+      - Jwt__Audience=https://rare-books-app.ru
     volumes:
       # Постоянное хранилище для изображений коллекций пользователей
       - collection_images:/app/wwwroot/collection_images

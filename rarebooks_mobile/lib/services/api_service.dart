@@ -26,7 +26,7 @@ class ApiService {
         return status != null && status < 500;
       },
     ));
-
+    
     // Add interceptors
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
