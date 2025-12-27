@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
@@ -9,7 +10,7 @@ namespace RareBooksService.WebApi.Controllers
 {
     [ApiController]
     [Route("api/admin/telegram")]
-    [Authorize(Roles = "Admin")] // Только для администраторов
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin")]
     public class TelegramAdminController : ControllerBase
     {
         private readonly ITelegramNotificationService _telegramService;

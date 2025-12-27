@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RareBooksService.Data.Interfaces;
@@ -7,7 +8,7 @@ namespace RareBooksService.WebApi.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Roles = "Admin")] // Только администраторы могут удалять категории
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin")]
     public class CategoryCleanupController : ControllerBase
     {
         private readonly ICategoryCleanupService _categoryCleanupService;
