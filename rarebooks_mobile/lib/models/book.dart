@@ -3,6 +3,7 @@ import 'package:json_annotation/json_annotation.dart';
 part 'book.g.dart';
 
 /// Book model representing a rare book listing
+/// Used for both search results (BookSearchResultDto) and details (BookDetailDto)
 @JsonSerializable()
 class Book {
   final int id;
@@ -23,7 +24,12 @@ class Book {
   final String? language;
   final String? publisher;
   final int? categoryId;
+  // API returns 'category' in search results, 'categoryName' in details
+  @JsonKey(name: 'category')
+  final String? category;
   final String? categoryName;
+  // API returns 'firstImageName' in search results for thumbnails
+  final String? firstImageName;
   final List<String>? images;
   final List<String>? thumbnails;
   
@@ -46,7 +52,9 @@ class Book {
     this.language,
     this.publisher,
     this.categoryId,
+    this.category,
     this.categoryName,
+    this.firstImageName,
     this.images,
     this.thumbnails,
   });
@@ -57,27 +65,29 @@ class Book {
   /// Get display price (finalPrice or price)
   double? get displayPrice => finalPrice ?? price;
   
+  /// Get category display name
+  String? get displayCategory => categoryName ?? category;
+  
   /// Check if price data is subscription-only
   bool get isPriceRestricted => 
-      finalPrice?.toString() == 'Только для подписчиков' ||
-      price?.toString() == 'Только для подписчиков';
+      date == 'Только для подписчиков' ||
+      (finalPrice == null && price == null);
 }
 
 /// Paginated book response
+/// Matches API response: { items, totalPages, remainingRequests }
 @JsonSerializable()
 class BookSearchResponse {
   final List<Book> items;
-  final int totalCount;
-  final int page;
-  final int pageSize;
   final int totalPages;
+  final int? totalCount;  // Optional - not always returned
+  final int? remainingRequests;
   
   BookSearchResponse({
     required this.items,
-    required this.totalCount,
-    required this.page,
-    required this.pageSize,
     required this.totalPages,
+    this.totalCount,
+    this.remainingRequests,
   });
   
   factory BookSearchResponse.fromJson(Map<String, dynamic> json) => 
@@ -144,4 +154,3 @@ class PriceStatistics {
       _$PriceStatisticsFromJson(json);
   Map<String, dynamic> toJson() => _$PriceStatisticsToJson(this);
 }
-

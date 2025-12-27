@@ -25,7 +25,9 @@ Book _$BookFromJson(Map<String, dynamic> json) => Book(
   language: json['language'] as String?,
   publisher: json['publisher'] as String?,
   categoryId: (json['categoryId'] as num?)?.toInt(),
+  category: json['category'] as String?,
   categoryName: json['categoryName'] as String?,
+  firstImageName: json['firstImageName'] as String?,
   images: (json['images'] as List<dynamic>?)?.map((e) => e as String).toList(),
   thumbnails: (json['thumbnails'] as List<dynamic>?)
       ?.map((e) => e as String)
@@ -51,7 +53,9 @@ Map<String, dynamic> _$BookToJson(Book instance) => <String, dynamic>{
   'language': instance.language,
   'publisher': instance.publisher,
   'categoryId': instance.categoryId,
+  'category': instance.category,
   'categoryName': instance.categoryName,
+  'firstImageName': instance.firstImageName,
   'images': instance.images,
   'thumbnails': instance.thumbnails,
 };
@@ -61,19 +65,17 @@ BookSearchResponse _$BookSearchResponseFromJson(Map<String, dynamic> json) =>
       items: (json['items'] as List<dynamic>)
           .map((e) => Book.fromJson(e as Map<String, dynamic>))
           .toList(),
-      totalCount: (json['totalCount'] as num).toInt(),
-      page: (json['page'] as num).toInt(),
-      pageSize: (json['pageSize'] as num).toInt(),
       totalPages: (json['totalPages'] as num).toInt(),
+      totalCount: (json['totalCount'] as num?)?.toInt(),
+      remainingRequests: (json['remainingRequests'] as num?)?.toInt(),
     );
 
 Map<String, dynamic> _$BookSearchResponseToJson(BookSearchResponse instance) =>
     <String, dynamic>{
       'items': instance.items,
-      'totalCount': instance.totalCount,
-      'page': instance.page,
-      'pageSize': instance.pageSize,
       'totalPages': instance.totalPages,
+      'totalCount': instance.totalCount,
+      'remainingRequests': instance.remainingRequests,
     };
 
 BookImagesResponse _$BookImagesResponseFromJson(Map<String, dynamic> json) =>

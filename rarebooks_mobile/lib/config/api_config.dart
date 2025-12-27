@@ -39,11 +39,13 @@ class ApiConfig {
   
   static const String notificationPreferences = '/notification/preferences';
   static const String notificationHistory = '/notification/history';
+  static const String notificationTest = '/notification/test';
   static const String telegramConnect = '/notification/telegram/connect';
   static const String telegramDisconnect = '/notification/telegram/disconnect';
   static const String telegramStatus = '/notification/telegram/status';
+  static const String telegramGenerateLinkToken = '/notification/telegram/generate-link-token';
   
-  static const String userProfile = '/user/profile';
+  static const String userProfile = '/auth/user';
   
   static const String feedback = '/feedback';
   

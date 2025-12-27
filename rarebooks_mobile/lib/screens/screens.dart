@@ -14,4 +14,7 @@ export 'add_collection_book_screen.dart';
 export 'subscription_screen.dart';
 export 'profile_screen.dart';
 export 'notifications_screen.dart';
-
+export 'contacts_screen.dart';
+export 'terms_of_service_screen.dart';
+export 'telegram_guide_screen.dart';
+export 'collection_matches_screen.dart';

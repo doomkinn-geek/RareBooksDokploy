@@ -4,32 +4,25 @@ import 'subscription.dart';
 part 'user.g.dart';
 
 /// User model representing an authenticated user
+/// API returns camelCase JSON fields
 @JsonSerializable()
 class User {
-  @JsonKey(name: 'Id')
-  final String id;
-  
-  @JsonKey(name: 'Email')
+  final String? id;
   final String? email;
-  
-  @JsonKey(name: 'UserName')
   final String? userName;
-  
-  @JsonKey(name: 'Role')
   final String? role;
-  
-  @JsonKey(name: 'HasSubscription')
   final bool hasSubscription;
-  
   final bool hasCollectionAccess;
   final String? subscriptionType;
   final DateTime? subscriptionExpiryDate;
   final CurrentSubscription? currentSubscription;
-  final String? telegramUserId;
-  final bool isTelegramConnected;
+  final String? telegramId;
+  final String? telegramUsername;
+  @JsonKey(name: 'createdAt')
+  final DateTime? createdAt;
   
   User({
-    required this.id,
+    this.id,
     this.email,
     this.userName,
     this.role,
@@ -38,8 +31,9 @@ class User {
     this.subscriptionType,
     this.subscriptionExpiryDate,
     this.currentSubscription,
-    this.telegramUserId,
-    this.isTelegramConnected = false,
+    this.telegramId,
+    this.telegramUsername,
+    this.createdAt,
   });
   
   factory User.fromJson(Map<String, dynamic> json) => _$UserFromJson(json);
@@ -51,20 +45,29 @@ class User {
   /// Get numeric ID (parse from string ID)
   int get numericId {
     try {
-      return int.tryParse(id) ?? 0;
+      return int.tryParse(id ?? '') ?? 0;
     } catch (e) {
       return 0;
     }
   }
   
   /// Check if user is admin
-  bool get isAdmin => role?.toLowerCase() == 'admin';
+  bool get isAdmin => (role ?? '').toLowerCase() == 'admin';
+  
+  /// Check if Telegram is connected
+  bool get isTelegramConnected => telegramId != null && telegramId!.isNotEmpty;
   
   /// Check if subscription is active
   bool get isSubscriptionActive {
     if (!hasSubscription) return false;
-    if (subscriptionExpiryDate == null) return false;
-    return subscriptionExpiryDate!.isAfter(DateTime.now());
+    // Check via currentSubscription if available
+    if (currentSubscription != null) {
+      return currentSubscription!.isActive && 
+             currentSubscription!.endDate != null &&
+             currentSubscription!.endDate!.isAfter(DateTime.now());
+    }
+    // Fallback to hasSubscription flag
+    return hasSubscription;
   }
 }
 
@@ -77,6 +80,8 @@ class CurrentSubscription {
   final DateTime? endDate;
   final bool isActive;
   final bool autoRenew;
+  final int? usedRequestsThisPeriod;
+  final String? paymentId;
   final SubscriptionPlan? subscriptionPlan;
   
   CurrentSubscription({
@@ -86,6 +91,8 @@ class CurrentSubscription {
     this.endDate,
     this.isActive = false,
     this.autoRenew = false,
+    this.usedRequestsThisPeriod,
+    this.paymentId,
     this.subscriptionPlan,
   });
   
@@ -111,12 +118,11 @@ class LoginRequest {
 }
 
 /// Login response model
+/// Note: The user object from login response only contains basic fields
+/// (email, userName, hasSubscription, role). Call getCurrentUser() for full data.
 @JsonSerializable()
 class LoginResponse {
-  @JsonKey(name: 'Token')
-  final String token;
-  
-  @JsonKey(name: 'User')
+  final String? token;
   final User? user;
   
   LoginResponse({
@@ -135,7 +141,9 @@ class RegisterRequest {
   final String email;
   final String password;
   final String? name;
+  @JsonKey(name: 'captchaToken')
   final String? captchaId;
+  @JsonKey(name: 'captchaCode')
   final String? captchaAnswer;
   
   RegisterRequest({
@@ -172,4 +180,3 @@ class SearchHistoryItem {
       _$SearchHistoryItemFromJson(json);
   Map<String, dynamic> toJson() => _$SearchHistoryItemToJson(this);
 }
-

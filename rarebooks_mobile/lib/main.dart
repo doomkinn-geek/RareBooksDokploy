@@ -71,23 +71,9 @@ class RareBooksApp extends StatelessWidget {
       ],
       child: Consumer<LanguageProvider>(
         builder: (context, languageProvider, _) {
-          return MaterialApp.router(
-            title: 'Rare Books',
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.lightTheme,
-            
-            // Localization
-            locale: languageProvider.locale,
-            supportedLocales: LanguageProvider.supportedLocales,
-            localizationsDelegates: const [
-              AppLocalizations.delegate,
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            
-            // Routing
+          return _AppInitializer(
             routerConfig: _createRouter(context),
+            languageProvider: languageProvider,
           );
         },
       ),
@@ -98,11 +84,8 @@ class RareBooksApp extends StatelessWidget {
     return GoRouter(
       initialLocation: '/',
       redirect: (context, state) {
-        // Initialize auth on first load
-        final authProvider = context.read<AuthProvider>();
-        if (!authProvider.isInitialized) {
-          authProvider.initialize();
-        }
+        // Don't call initialize() here - it causes setState during build
+        // Initialize will be called in _AppInitializer widget
         return null;
       },
       routes: [
@@ -238,7 +221,85 @@ class RareBooksApp extends StatelessWidget {
           path: '/notifications',
           builder: (context, state) => const NotificationsScreen(),
         ),
+        
+        // Contacts
+        GoRoute(
+          path: '/contacts',
+          builder: (context, state) => const ContactsScreen(),
+        ),
+        
+        // Terms of Service
+        GoRoute(
+          path: '/terms',
+          builder: (context, state) => const TermsOfServiceScreen(),
+        ),
+        
+        // Telegram Bot Guide
+        GoRoute(
+          path: '/telegram-guide',
+          builder: (context, state) => const TelegramGuideScreen(),
+        ),
+        
+        // Collection book matches
+        GoRoute(
+          path: '/collection/:id/matches',
+          builder: (context, state) {
+            final id = int.tryParse(state.pathParameters['id'] ?? '0') ?? 0;
+            final title = state.uri.queryParameters['title'];
+            return CollectionMatchesScreen(bookId: id, bookTitle: title);
+          },
+        ),
       ],
+    );
+  }
+}
+
+/// Widget to initialize auth after build phase
+class _AppInitializer extends StatefulWidget {
+  final GoRouter routerConfig;
+  final LanguageProvider languageProvider;
+  
+  const _AppInitializer({
+    required this.routerConfig,
+    required this.languageProvider,
+  });
+  
+  @override
+  State<_AppInitializer> createState() => _AppInitializerState();
+}
+
+class _AppInitializerState extends State<_AppInitializer> {
+  @override
+  void initState() {
+    super.initState();
+    // Initialize auth after first frame is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authProvider = context.read<AuthProvider>();
+      if (!authProvider.isInitialized) {
+        authProvider.initialize();
+      }
+    });
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp.router(
+      title: 'Rare Books',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.lightTheme,
+      
+      // Localization
+      locale: widget.languageProvider.locale,
+      supportedLocales: LanguageProvider.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      
+      // Routing
+      routerConfig: widget.routerConfig,
     );
   }
 }

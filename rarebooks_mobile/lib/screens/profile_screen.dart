@@ -4,11 +4,84 @@ import 'package:go_router/go_router.dart';
 import '../config/theme.dart';
 import '../providers/providers.dart';
 import '../l10n/app_localizations.dart';
+import '../services/api_service.dart';
+import '../services/storage_service.dart';
 import 'package:intl/intl.dart';
 
 /// User profile screen
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  ApiService? _apiService;
+
+  @override
+  void initState() {
+    super.initState();
+    _initApiService();
+  }
+
+  Future<void> _initApiService() async {
+    final storageService = StorageService();
+    await storageService.init();
+    _apiService = ApiService(storageService: storageService);
+  }
+
+  Future<void> _showFeedbackDialog() async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Обратная связь'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: 'Напишите ваше сообщение...',
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 5,
+          minLines: 3,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Отправить'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.trim().isNotEmpty && _apiService != null) {
+      try {
+        await _apiService!.sendFeedback(result.trim());
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Сообщение отправлено. Спасибо!'),
+              backgroundColor: AppTheme.successColor,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Ошибка отправки: $e'),
+              backgroundColor: AppTheme.errorColor,
+            ),
+          );
+        }
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -142,7 +215,7 @@ class ProfileScreen extends StatelessWidget {
           const SizedBox(height: 16),
 
           // Settings section
-          Text('Настройки', style: AppTheme.titleLarge),
+          Text(l10n.settings, style: AppTheme.titleLarge),
           const SizedBox(height: 8),
 
           // Language
@@ -168,6 +241,59 @@ class ProfileScreen extends StatelessWidget {
               title: Text(l10n.notifications),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/notifications'),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Info & Support section
+          Text('Информация', style: AppTheme.titleLarge),
+          const SizedBox(height: 8),
+
+          // Telegram Bot Guide
+          Card(
+            child: ListTile(
+              leading: Icon(
+                Icons.telegram,
+                color: const Color(0xFF0088CC),
+              ),
+              title: Text(l10n.telegramBot),
+              subtitle: const Text('Инструкция по настройке бота'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/telegram-guide'),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Contacts
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.contact_support),
+              title: Text(l10n.contacts),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/contacts'),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Terms of Service
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.description),
+              title: Text(l10n.termsOfService),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/terms'),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Feedback
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.feedback),
+              title: const Text('Обратная связь'),
+              subtitle: const Text('Напишите нам'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _showFeedbackDialog,
             ),
           ),
           const SizedBox(height: 24),
@@ -218,4 +344,3 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 }
-

@@ -166,12 +166,70 @@ class _CollectionBookDetailScreenState
             const SizedBox(height: 16),
           ],
 
-          // Similar books
+          // Find similar books button
+          Card(
+            child: InkWell(
+              onTap: () => context.push(
+                '/collection/${widget.bookId}/matches?title=${Uri.encodeComponent(book.title ?? '')}',
+              ),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(Icons.search, color: AppTheme.primaryColor),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l10n.similarBooks,
+                            style: AppTheme.titleMedium.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Найти похожие книги в базе данных',
+                            style: AppTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Similar books preview
           if (provider.currentBookMatches != null &&
               provider.currentBookMatches!.isNotEmpty) ...[
-            Text(l10n.similarBooks, style: AppTheme.titleLarge),
-            const SizedBox(height: 12),
-            ...provider.currentBookMatches!.map(
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(l10n.similarBooks, style: AppTheme.titleLarge),
+                TextButton(
+                  onPressed: () => context.push(
+                    '/collection/${widget.bookId}/matches?title=${Uri.encodeComponent(book.title ?? '')}',
+                  ),
+                  child: const Text('Все →'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ...provider.currentBookMatches!.take(3).map(
               (match) => Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(

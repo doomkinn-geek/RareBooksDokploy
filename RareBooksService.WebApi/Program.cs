@@ -88,57 +88,16 @@ namespace RareBooksService.WebApi
                     options.UseNpgsql(builder.Configuration.GetConnectionString("UsersDb"));
                 });
 
-                // 3) Identity
-                builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
-                    .AddEntityFrameworkStores<UsersDbContext>()
-                    .AddDefaultTokenProviders();
-
-                // 4) ���� � ��� ���� ��������� ��������� YandexKassa, TypeOfAccessImages � ��
-                //    ������� ����� ��� �� "YandexCloud" -> YandexCloudSettings:
-                builder.Services.Configure<YandexKassaSettings>(builder.Configuration.GetSection("YandexKassa"));
-
-                
-                builder.Services.Configure<TypeOfAccessImages>(options =>
-                {
-                    // �������� ����� ������
-                    var section = builder.Configuration.GetSection("TypeOfAccessImages");
-                    // ���� ������ �� ���������� ��� ����� � ����� ����������
-                    if (!section.Exists())
-                    {
-                        // ������ �������� �� ���������
-                        options.UseLocalFiles = false;
-                        options.LocalPathOfImages = "default_path";
-                        return;
-                    }
-
-                    try
-                    {
-                        section.Bind(options);
-                    }
-                    catch (Exception ex)
-                    {
-                        // ��������, ������ default
-                        Console.WriteLine("������ ��� ������������ TypeOfAccessImages: " + ex.Message);
-                        options.UseLocalFiles = false;
-                        options.LocalPathOfImages = "default_path";
-                    }
-                });
-
-
-
-                builder.Services.Configure<YandexCloudSettings>(builder.Configuration.GetSection("YandexCloud"));
-                builder.Services.Configure<YandexKassaSettings>(builder.Configuration.GetSection("YandexKassa"));
-                //                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                // ��� �� �����������, ��� ��� ��������� � IOptions<YandexCloudSettings> ����� �������� �� appsettings.json
-
-                // 5) JWT
+                // 3) JWT Authentication - должен быть настроен ДО Identity!
                 var jwtKey = builder.Configuration["Jwt:Key"];
                 if (!string.IsNullOrWhiteSpace(jwtKey))
                 {
                     builder.Services.AddAuthentication(options =>
                     {
+                        // JWT - primary scheme for API (mobile app)
                         options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
                         options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+                        options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
                     })
                     .AddJwtBearer(options =>
                     {
@@ -172,6 +131,63 @@ namespace RareBooksService.WebApi
                         };
                     });
                 }
+
+                // 4) Identity - добавляется ПОСЛЕ Authentication, чтобы не переопределять default schemes
+                builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
+                {
+                    // Отключаем автоматическое назначение Cookie как default scheme
+                })
+                    .AddEntityFrameworkStores<UsersDbContext>()
+                    .AddDefaultTokenProviders();
+
+                // Переопределяем schemes ПОСЛЕ AddIdentity, чтобы гарантировать JWT как default
+                builder.Services.ConfigureApplicationCookie(options =>
+                {
+                    options.LoginPath = "/Account/Login";
+                    options.LogoutPath = "/Account/Logout";
+                    // Для API вызовов возвращаем 401 вместо редиректа
+                    options.Events.OnRedirectToLogin = context =>
+                    {
+                        if (context.Request.Path.StartsWithSegments("/api"))
+                        {
+                            context.Response.StatusCode = 401;
+                            return Task.CompletedTask;
+                        }
+                        context.Response.Redirect(context.RedirectUri);
+                        return Task.CompletedTask;
+                    };
+                });
+
+                // 5) Настройки YandexKassa, TypeOfAccessImages и т.д.
+                builder.Services.Configure<YandexKassaSettings>(builder.Configuration.GetSection("YandexKassa"));
+
+                
+                builder.Services.Configure<TypeOfAccessImages>(options =>
+                {
+                    var section = builder.Configuration.GetSection("TypeOfAccessImages");
+                    if (!section.Exists())
+                    {
+                        options.UseLocalFiles = false;
+                        options.LocalPathOfImages = "default_path";
+                        return;
+                    }
+
+                    try
+                    {
+                        section.Bind(options);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("Ошибка при конфигурировании TypeOfAccessImages: " + ex.Message);
+                        options.UseLocalFiles = false;
+                        options.LocalPathOfImages = "default_path";
+                    }
+                });
+
+
+
+                builder.Services.Configure<YandexCloudSettings>(builder.Configuration.GetSection("YandexCloud"));
+                builder.Services.Configure<YandexKassaSettings>(builder.Configuration.GetSection("YandexKassa"));
 
                 // 6) Authorization 
                 builder.Services.AddAuthorization(options =>

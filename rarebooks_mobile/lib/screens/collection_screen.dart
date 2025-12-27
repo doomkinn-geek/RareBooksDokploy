@@ -1,9 +1,15 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../config/theme.dart';
 import '../providers/providers.dart';
 import '../l10n/app_localizations.dart';
+import '../services/api_service.dart';
+import '../services/storage_service.dart';
 import 'package:intl/intl.dart';
 
 /// User collection screen
@@ -18,15 +24,161 @@ class _CollectionScreenState extends State<CollectionScreen> {
   String _searchQuery = '';
   String _sortBy = 'purchaseDate';
   bool _sortAscending = false;
+  bool _isExporting = false;
+  bool _isImporting = false;
+  bool _isDeleting = false;
+  ApiService? _apiService;
 
   @override
   void initState() {
     super.initState();
+    _initApiService();
     _loadCollection();
+  }
+
+  Future<void> _initApiService() async {
+    final storageService = StorageService();
+    await storageService.init();
+    _apiService = ApiService(storageService: storageService);
   }
 
   void _loadCollection() {
     context.read<CollectionProvider>().loadCollection();
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? AppTheme.errorColor : AppTheme.successColor,
+      ),
+    );
+  }
+
+  Future<void> _exportPdf() async {
+    if (_apiService == null) return;
+    
+    setState(() => _isExporting = true);
+    try {
+      final bytes = await _apiService!.exportCollectionPdf();
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/collection_${DateTime.now().millisecondsSinceEpoch}.pdf');
+      await file.writeAsBytes(bytes);
+      
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        subject: 'Моя коллекция редких книг',
+      );
+      _showSnackBar('PDF экспортирован');
+    } catch (e) {
+      _showSnackBar('Ошибка экспорта PDF: $e', isError: true);
+    } finally {
+      setState(() => _isExporting = false);
+    }
+  }
+
+  Future<void> _exportJson() async {
+    if (_apiService == null) return;
+    
+    setState(() => _isExporting = true);
+    try {
+      final bytes = await _apiService!.exportCollectionJson();
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/collection_${DateTime.now().millisecondsSinceEpoch}.zip');
+      await file.writeAsBytes(bytes);
+      
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        subject: 'Моя коллекция редких книг (JSON)',
+      );
+      _showSnackBar('JSON экспортирован');
+    } catch (e) {
+      _showSnackBar('Ошибка экспорта JSON: $e', isError: true);
+    } finally {
+      setState(() => _isExporting = false);
+    }
+  }
+
+  Future<void> _importCollection() async {
+    if (_apiService == null) return;
+    
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json', 'zip'],
+      );
+      
+      if (result == null || result.files.isEmpty) return;
+      
+      final file = result.files.first;
+      if (file.bytes == null && file.path == null) return;
+      
+      setState(() => _isImporting = true);
+      
+      final bytes = file.bytes ?? await File(file.path!).readAsBytes();
+      await _apiService!.importCollection(bytes, file.name);
+      
+      _showSnackBar('Коллекция импортирована');
+      _loadCollection();
+    } catch (e) {
+      _showSnackBar('Ошибка импорта: $e', isError: true);
+    } finally {
+      setState(() => _isImporting = false);
+    }
+  }
+
+  Future<void> _deleteAllCollection() async {
+    if (_apiService == null) return;
+    
+    final collectionProvider = context.read<CollectionProvider>();
+    final booksCount = collectionProvider.books.length;
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Удалить всю коллекцию?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Это действие необратимо! Будут удалены:',
+              style: TextStyle(color: Colors.red),
+            ),
+            const SizedBox(height: 12),
+            Text('• Все книги ($booksCount шт.)'),
+            const Text('• Все изображения'),
+            const Text('• Все связи с референсными книгами'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: const Text('Удалить всё'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() => _isDeleting = true);
+      try {
+        await _apiService!.deleteAllCollection();
+        _showSnackBar('Коллекция удалена');
+        _loadCollection();
+      } catch (e) {
+        _showSnackBar('Ошибка удаления: $e', isError: true);
+      } finally {
+        setState(() => _isDeleting = false);
+      }
+    }
   }
 
   @override
@@ -72,8 +224,10 @@ class _CollectionScreenState extends State<CollectionScreen> {
       appBar: AppBar(
         title: Text(l10n.myCollection),
         actions: [
+          // Sort menu
           PopupMenuButton<String>(
             icon: const Icon(Icons.sort),
+            tooltip: 'Сортировка',
             onSelected: (value) {
               setState(() {
                 if (_sortBy == value) {
@@ -86,52 +240,151 @@ class _CollectionScreenState extends State<CollectionScreen> {
               collectionProvider.sortBooks(_sortBy, _sortAscending);
             },
             itemBuilder: (context) => [
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'title',
                 child: Text('По названию'),
               ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'purchaseDate',
                 child: Text('По дате покупки'),
               ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'purchasePrice',
                 child: Text('По цене покупки'),
               ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'estimatedValue',
                 child: Text('По оценке'),
               ),
             ],
           ),
+          // Actions menu
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            tooltip: 'Действия',
+            onSelected: (value) async {
+              switch (value) {
+                case 'export_pdf':
+                  await _exportPdf();
+                  break;
+                case 'export_json':
+                  await _exportJson();
+                  break;
+                case 'import':
+                  await _importCollection();
+                  break;
+                case 'delete_all':
+                  await _deleteAllCollection();
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'export_pdf',
+                enabled: collectionProvider.books.isNotEmpty && !_isExporting,
+                child: Row(
+                  children: [
+                    Icon(Icons.picture_as_pdf, color: Colors.red.shade400),
+                    const SizedBox(width: 12),
+                    Text(l10n.exportPdf),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'export_json',
+                enabled: collectionProvider.books.isNotEmpty && !_isExporting,
+                child: Row(
+                  children: [
+                    Icon(Icons.archive, color: Colors.blue.shade400),
+                    const SizedBox(width: 12),
+                    Text(l10n.exportJson),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              PopupMenuItem(
+                value: 'import',
+                enabled: !_isImporting,
+                child: Row(
+                  children: [
+                    Icon(Icons.upload, color: Colors.green.shade400),
+                    const SizedBox(width: 12),
+                    Text(l10n.importCollection),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              PopupMenuItem(
+                value: 'delete_all',
+                enabled: collectionProvider.books.isNotEmpty && !_isDeleting,
+                child: Row(
+                  children: [
+                    const Icon(Icons.delete_forever, color: Colors.red),
+                    const SizedBox(width: 12),
+                    const Text('Удалить всё', style: TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          // Statistics card
-          if (collectionProvider.statistics != null)
-            _buildStatisticsCard(collectionProvider, l10n),
+          Column(
+            children: [
+              // Statistics card
+              if (collectionProvider.statistics != null)
+                _buildStatisticsCard(collectionProvider, l10n),
 
-          // Search
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: '${l10n.search}...',
-                prefixIcon: const Icon(Icons.search),
+              // Search
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: '${l10n.search}...',
+                    prefixIcon: const Icon(Icons.search),
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value;
+                    });
+                  },
+                ),
               ),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                });
-              },
-            ),
-          ),
 
-          // Books list
-          Expanded(
-            child: _buildBody(collectionProvider, l10n),
+              // Books list
+              Expanded(
+                child: _buildBody(collectionProvider, l10n),
+              ),
+            ],
           ),
+          // Loading overlay
+          if (_isExporting || _isImporting || _isDeleting)
+            Container(
+              color: Colors.black26,
+              child: Center(
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(),
+                        const SizedBox(height: 16),
+                        Text(
+                          _isExporting
+                              ? 'Экспорт...'
+                              : _isImporting
+                                  ? 'Импорт...'
+                                  : 'Удаление...',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -383,4 +636,3 @@ class _CollectionScreenState extends State<CollectionScreen> {
     );
   }
 }
-

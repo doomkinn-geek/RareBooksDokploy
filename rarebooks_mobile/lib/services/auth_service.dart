@@ -54,14 +54,20 @@ class AuthService {
   Future<User> login(String email, String password) async {
     final request = LoginRequest(email: email, password: password);
     final response = await _apiService.login(request);
-    
+
     // Save token
-    await _storageService.saveToken(response.token);
-    
-    // Get user details
+    if (response.token != null) {
+      await _storageService.saveToken(response.token!);
+    } else {
+      throw Exception('Token is null in login response');
+    }
+
+    // ALWAYS fetch full user data after login because login response 
+    // only contains basic fields (email, userName, hasSubscription, role)
+    // and does NOT contain id, hasCollectionAccess, currentSubscription, etc.
     _currentUser = await _apiService.getCurrentUser();
     await _storageService.saveUserId(_currentUser!.numericId);
-    
+
     return _currentUser!;
   }
   

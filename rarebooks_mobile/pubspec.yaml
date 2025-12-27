@@ -48,6 +48,9 @@ dependencies:
   # Share functionality
   share_plus: ^10.1.4
 
+  # File picker
+  file_picker: ^8.1.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

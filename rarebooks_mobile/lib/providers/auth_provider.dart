@@ -45,7 +45,7 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
-    
+
     try {
       await _authService.login(email, password);
       _isLoading = false;

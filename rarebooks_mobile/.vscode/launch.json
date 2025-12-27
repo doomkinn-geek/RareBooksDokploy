@@ -1,0 +1,62 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "RareBooks Mobile (Debug)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": [],
+      "flutterMode": "debug",
+      "cwd": "${workspaceFolder}",
+      "console": "debugConsole",
+      "toolArgs": [
+        "--verbose"
+      ]
+    },
+    {
+      "name": "RareBooks Mobile (Profile)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": [],
+      "flutterMode": "profile",
+      "cwd": "${workspaceFolder}",
+      "console": "debugConsole"
+    },
+    {
+      "name": "RareBooks Mobile (Release)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": [],
+      "flutterMode": "release",
+      "cwd": "${workspaceFolder}",
+      "console": "debugConsole"
+    },
+    {
+      "name": "RareBooks Mobile (Debug) - Specific Device",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": [
+        "-d",
+        "${input:deviceId}"
+      ],
+      "flutterMode": "debug",
+      "cwd": "${workspaceFolder}",
+      "console": "debugConsole",
+      "toolArgs": [
+        "--verbose"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "id": "deviceId",
+      "type": "promptString",
+      "description": "Enter device ID (use 'flutter devices' to list)"
+    }
+  ]
+}
+

@@ -11,12 +11,13 @@ NotificationPreference _$NotificationPreferenceFromJson(
 ) => NotificationPreference(
   id: (json['id'] as num).toInt(),
   userId: (json['userId'] as num).toInt(),
-  searchQuery: json['searchQuery'] as String?,
-  categoryName: json['categoryName'] as String?,
-  minPrice: (json['minPrice'] as num?)?.toDouble(),
-  maxPrice: (json['maxPrice'] as num?)?.toDouble(),
-  deliveryMethod: json['deliveryMethod'] as String,
-  isActive: json['isActive'] as bool? ?? true,
+  isEnabled: json['isEnabled'] as bool? ?? true,
+  keywords: json['keywords'] as String?,
+  categoryIds: json['categoryIds'] as String?,
+  notificationFrequencyMinutes:
+      (json['notificationFrequencyMinutes'] as num?)?.toInt() ?? 60,
+  deliveryMethod: (json['deliveryMethod'] as num?)?.toInt() ?? 1,
+  isExactMatch: json['isExactMatch'] as bool? ?? false,
   createdAt: json['createdAt'] == null
       ? null
       : DateTime.parse(json['createdAt'] as String),
@@ -30,12 +31,12 @@ Map<String, dynamic> _$NotificationPreferenceToJson(
 ) => <String, dynamic>{
   'id': instance.id,
   'userId': instance.userId,
-  'searchQuery': instance.searchQuery,
-  'categoryName': instance.categoryName,
-  'minPrice': instance.minPrice,
-  'maxPrice': instance.maxPrice,
+  'isEnabled': instance.isEnabled,
+  'keywords': instance.keywords,
+  'categoryIds': instance.categoryIds,
+  'notificationFrequencyMinutes': instance.notificationFrequencyMinutes,
   'deliveryMethod': instance.deliveryMethod,
-  'isActive': instance.isActive,
+  'isExactMatch': instance.isExactMatch,
   'createdAt': instance.createdAt?.toIso8601String(),
   'lastNotificationSent': instance.lastNotificationSent?.toIso8601String(),
 };
@@ -43,81 +44,114 @@ Map<String, dynamic> _$NotificationPreferenceToJson(
 NotificationPreferenceRequest _$NotificationPreferenceRequestFromJson(
   Map<String, dynamic> json,
 ) => NotificationPreferenceRequest(
-  searchQuery: json['searchQuery'] as String?,
-  categoryName: json['categoryName'] as String?,
-  minPrice: (json['minPrice'] as num?)?.toDouble(),
-  maxPrice: (json['maxPrice'] as num?)?.toDouble(),
-  deliveryMethod: json['deliveryMethod'] as String,
-  isActive: json['isActive'] as bool? ?? true,
+  isEnabled: json['isEnabled'] as bool? ?? true,
+  keywords: json['keywords'] as String?,
+  categoryIds: json['categoryIds'] as String?,
+  notificationFrequencyMinutes:
+      (json['notificationFrequencyMinutes'] as num?)?.toInt() ?? 60,
+  deliveryMethod: (json['deliveryMethod'] as num?)?.toInt() ?? 1,
+  isExactMatch: json['isExactMatch'] as bool? ?? false,
 );
 
 Map<String, dynamic> _$NotificationPreferenceRequestToJson(
   NotificationPreferenceRequest instance,
 ) => <String, dynamic>{
-  'searchQuery': instance.searchQuery,
-  'categoryName': instance.categoryName,
-  'minPrice': instance.minPrice,
-  'maxPrice': instance.maxPrice,
+  'isEnabled': instance.isEnabled,
+  'keywords': instance.keywords,
+  'categoryIds': instance.categoryIds,
+  'notificationFrequencyMinutes': instance.notificationFrequencyMinutes,
   'deliveryMethod': instance.deliveryMethod,
-  'isActive': instance.isActive,
+  'isExactMatch': instance.isExactMatch,
 };
 
 NotificationHistoryItem _$NotificationHistoryItemFromJson(
   Map<String, dynamic> json,
 ) => NotificationHistoryItem(
   id: (json['id'] as num).toInt(),
-  userId: (json['userId'] as num).toInt(),
-  title: json['title'] as String?,
-  message: json['message'] as String?,
-  deliveryMethod: json['deliveryMethod'] as String,
-  isRead: json['isRead'] as bool? ?? false,
-  sentAt: json['sentAt'] == null
-      ? null
-      : DateTime.parse(json['sentAt'] as String),
-  relatedBookId: (json['relatedBookId'] as num?)?.toInt(),
+  createdAt: DateTime.parse(json['createdAt'] as String),
+  bookTitle: json['bookTitle'] as String?,
+  bookPrice: (json['bookPrice'] as num?)?.toDouble(),
+  deliveryMethod: (json['deliveryMethod'] as num).toInt(),
+  status: (json['status'] as num).toInt(),
+  matchedKeywords: json['matchedKeywords'] as String?,
+  bookId: (json['bookId'] as num?)?.toInt(),
 );
 
 Map<String, dynamic> _$NotificationHistoryItemToJson(
   NotificationHistoryItem instance,
 ) => <String, dynamic>{
   'id': instance.id,
-  'userId': instance.userId,
-  'title': instance.title,
-  'message': instance.message,
+  'createdAt': instance.createdAt.toIso8601String(),
+  'bookTitle': instance.bookTitle,
+  'bookPrice': instance.bookPrice,
   'deliveryMethod': instance.deliveryMethod,
-  'isRead': instance.isRead,
-  'sentAt': instance.sentAt?.toIso8601String(),
-  'relatedBookId': instance.relatedBookId,
+  'status': instance.status,
+  'matchedKeywords': instance.matchedKeywords,
+  'bookId': instance.bookId,
 };
 
 TelegramStatus _$TelegramStatusFromJson(Map<String, dynamic> json) =>
     TelegramStatus(
       isConnected: json['isConnected'] as bool? ?? false,
-      telegramUserId: json['telegramUserId'] as String?,
+      telegramId: json['telegramId'] as String?,
       telegramUsername: json['telegramUsername'] as String?,
-      connectedAt: json['connectedAt'] == null
-          ? null
-          : DateTime.parse(json['connectedAt'] as String),
+      botUsername: json['botUsername'] as String?,
     );
 
 Map<String, dynamic> _$TelegramStatusToJson(TelegramStatus instance) =>
     <String, dynamic>{
       'isConnected': instance.isConnected,
-      'telegramUserId': instance.telegramUserId,
+      'telegramId': instance.telegramId,
       'telegramUsername': instance.telegramUsername,
-      'connectedAt': instance.connectedAt?.toIso8601String(),
+      'botUsername': instance.botUsername,
     };
 
 ConnectTelegramRequest _$ConnectTelegramRequestFromJson(
   Map<String, dynamic> json,
 ) => ConnectTelegramRequest(
-  telegramUserId: json['telegramUserId'] as String,
+  telegramId: json['telegramId'] as String,
   telegramUsername: json['telegramUsername'] as String?,
 );
 
 Map<String, dynamic> _$ConnectTelegramRequestToJson(
   ConnectTelegramRequest instance,
 ) => <String, dynamic>{
-  'telegramUserId': instance.telegramUserId,
+  'telegramId': instance.telegramId,
   'telegramUsername': instance.telegramUsername,
+};
+
+TelegramLinkToken _$TelegramLinkTokenFromJson(Map<String, dynamic> json) =>
+    TelegramLinkToken(
+      token: json['token'] as String,
+      expiresAt: DateTime.parse(json['expiresAt'] as String),
+      instructions: (json['instructions'] as List<dynamic>)
+          .map((e) => e as String)
+          .toList(),
+    );
+
+Map<String, dynamic> _$TelegramLinkTokenToJson(TelegramLinkToken instance) =>
+    <String, dynamic>{
+      'token': instance.token,
+      'expiresAt': instance.expiresAt.toIso8601String(),
+      'instructions': instance.instructions,
+    };
+
+NotificationHistoryResponse _$NotificationHistoryResponseFromJson(
+  Map<String, dynamic> json,
+) => NotificationHistoryResponse(
+  items: (json['items'] as List<dynamic>)
+      .map((e) => NotificationHistoryItem.fromJson(e as Map<String, dynamic>))
+      .toList(),
+  totalCount: (json['totalCount'] as num).toInt(),
+  page: (json['page'] as num).toInt(),
+  pageSize: (json['pageSize'] as num).toInt(),
+);
+
+Map<String, dynamic> _$NotificationHistoryResponseToJson(
+  NotificationHistoryResponse instance,
+) => <String, dynamic>{
+  'items': instance.items,
+  'totalCount': instance.totalCount,
+  'page': instance.page,
+  'pageSize': instance.pageSize,
 };

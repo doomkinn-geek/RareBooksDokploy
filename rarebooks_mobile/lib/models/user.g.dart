@@ -7,11 +7,11 @@ part of 'user.dart';
 // **************************************************************************
 
 User _$UserFromJson(Map<String, dynamic> json) => User(
-  id: json['Id'] as String,
-  email: json['Email'] as String?,
-  userName: json['UserName'] as String?,
-  role: json['Role'] as String?,
-  hasSubscription: json['HasSubscription'] as bool? ?? false,
+  id: json['id'] as String?,
+  email: json['email'] as String?,
+  userName: json['userName'] as String?,
+  role: json['role'] as String?,
+  hasSubscription: json['hasSubscription'] as bool? ?? false,
   hasCollectionAccess: json['hasCollectionAccess'] as bool? ?? false,
   subscriptionType: json['subscriptionType'] as String?,
   subscriptionExpiryDate: json['subscriptionExpiryDate'] == null
@@ -22,22 +22,26 @@ User _$UserFromJson(Map<String, dynamic> json) => User(
       : CurrentSubscription.fromJson(
           json['currentSubscription'] as Map<String, dynamic>,
         ),
-  telegramUserId: json['telegramUserId'] as String?,
-  isTelegramConnected: json['isTelegramConnected'] as bool? ?? false,
+  telegramId: json['telegramId'] as String?,
+  telegramUsername: json['telegramUsername'] as String?,
+  createdAt: json['createdAt'] == null
+      ? null
+      : DateTime.parse(json['createdAt'] as String),
 );
 
 Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
-  'Id': instance.id,
-  'Email': instance.email,
-  'UserName': instance.userName,
-  'Role': instance.role,
-  'HasSubscription': instance.hasSubscription,
+  'id': instance.id,
+  'email': instance.email,
+  'userName': instance.userName,
+  'role': instance.role,
+  'hasSubscription': instance.hasSubscription,
   'hasCollectionAccess': instance.hasCollectionAccess,
   'subscriptionType': instance.subscriptionType,
   'subscriptionExpiryDate': instance.subscriptionExpiryDate?.toIso8601String(),
   'currentSubscription': instance.currentSubscription,
-  'telegramUserId': instance.telegramUserId,
-  'isTelegramConnected': instance.isTelegramConnected,
+  'telegramId': instance.telegramId,
+  'telegramUsername': instance.telegramUsername,
+  'createdAt': instance.createdAt?.toIso8601String(),
 };
 
 CurrentSubscription _$CurrentSubscriptionFromJson(Map<String, dynamic> json) =>
@@ -52,6 +56,8 @@ CurrentSubscription _$CurrentSubscriptionFromJson(Map<String, dynamic> json) =>
           : DateTime.parse(json['endDate'] as String),
       isActive: json['isActive'] as bool? ?? false,
       autoRenew: json['autoRenew'] as bool? ?? false,
+      usedRequestsThisPeriod: (json['usedRequestsThisPeriod'] as num?)?.toInt(),
+      paymentId: json['paymentId'] as String?,
       subscriptionPlan: json['subscriptionPlan'] == null
           ? null
           : SubscriptionPlan.fromJson(
@@ -68,6 +74,8 @@ Map<String, dynamic> _$CurrentSubscriptionToJson(
   'endDate': instance.endDate?.toIso8601String(),
   'isActive': instance.isActive,
   'autoRenew': instance.autoRenew,
+  'usedRequestsThisPeriod': instance.usedRequestsThisPeriod,
+  'paymentId': instance.paymentId,
   'subscriptionPlan': instance.subscriptionPlan,
 };
 
@@ -81,22 +89,22 @@ Map<String, dynamic> _$LoginRequestToJson(LoginRequest instance) =>
 
 LoginResponse _$LoginResponseFromJson(Map<String, dynamic> json) =>
     LoginResponse(
-      token: json['Token'] as String,
-      user: json['User'] == null
+      token: json['token'] as String?,
+      user: json['user'] == null
           ? null
-          : User.fromJson(json['User'] as Map<String, dynamic>),
+          : User.fromJson(json['user'] as Map<String, dynamic>),
     );
 
 Map<String, dynamic> _$LoginResponseToJson(LoginResponse instance) =>
-    <String, dynamic>{'Token': instance.token, 'User': instance.user};
+    <String, dynamic>{'token': instance.token, 'user': instance.user};
 
 RegisterRequest _$RegisterRequestFromJson(Map<String, dynamic> json) =>
     RegisterRequest(
       email: json['email'] as String,
       password: json['password'] as String,
       name: json['name'] as String?,
-      captchaId: json['captchaId'] as String?,
-      captchaAnswer: json['captchaAnswer'] as String?,
+      captchaId: json['captchaToken'] as String?,
+      captchaAnswer: json['captchaCode'] as String?,
     );
 
 Map<String, dynamic> _$RegisterRequestToJson(RegisterRequest instance) =>
@@ -104,8 +112,8 @@ Map<String, dynamic> _$RegisterRequestToJson(RegisterRequest instance) =>
       'email': instance.email,
       'password': instance.password,
       'name': instance.name,
-      'captchaId': instance.captchaId,
-      'captchaAnswer': instance.captchaAnswer,
+      'captchaToken': instance.captchaId,
+      'captchaCode': instance.captchaAnswer,
     };
 
 SearchHistoryItem _$SearchHistoryItemFromJson(Map<String, dynamic> json) =>

@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-import 'dart:developer' as developer;
 import 'package:dio/dio.dart';
 import '../config/api_config.dart';
 import '../models/models.dart';
@@ -20,13 +19,14 @@ class ApiService {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'User-Agent': 'RareBooksApp/1.0',
       },
+      responseType: ResponseType.json,
       validateStatus: (status) {
-        // Accept all status codes to handle them manually
         return status != null && status < 500;
       },
     ));
-    
+
     // Add interceptors
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
@@ -35,26 +35,12 @@ class ApiService {
         if (token != null && token.isNotEmpty) {
           options.headers['Authorization'] = 'Bearer $token';
         }
-        developer.log(
-          'API Request: ${options.method} ${options.baseUrl}${options.path}',
-          name: 'ApiService',
-        );
         return handler.next(options);
       },
       onResponse: (response, handler) {
-        developer.log(
-          'API Response: ${response.statusCode} ${response.requestOptions.path}',
-          name: 'ApiService',
-        );
         return handler.next(response);
       },
       onError: (error, handler) {
-        developer.log(
-          'API Error: ${error.type} ${error.message}',
-          name: 'ApiService',
-          error: error,
-        );
-        
         // Handle common errors
         if (error.response?.statusCode == 401) {
           // Token expired or invalid - could trigger logout
@@ -74,9 +60,10 @@ class ApiService {
         ApiConfig.authLogin,
         data: request.toJson(),
       );
-      
+
       if (response.statusCode == 200) {
-        return LoginResponse.fromJson(response.data);
+        final loginResponse = LoginResponse.fromJson(response.data);
+        return loginResponse;
       } else if (response.statusCode == 401) {
         throw Exception('Неверный email или пароль');
       } else if (response.statusCode == 400) {
@@ -85,12 +72,6 @@ class ApiService {
         throw Exception('Ошибка сервера: ${response.statusCode}');
       }
     } on DioException catch (e) {
-      developer.log(
-        'Login error: ${e.type} - ${e.message}',
-        name: 'ApiService',
-        error: e,
-      );
-      
       if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout ||
           e.type == DioExceptionType.sendTimeout) {
@@ -111,11 +92,6 @@ class ApiService {
         throw Exception('Ошибка соединения: ${e.message}');
       }
     } catch (e) {
-      developer.log(
-        'Unexpected login error: $e',
-        name: 'ApiService',
-        error: e,
-      );
       throw Exception('Ошибка соединения. Проверьте интернет-подключение');
     }
   }
@@ -130,7 +106,13 @@ class ApiService {
   
   /// Get current user
   Future<User> getCurrentUser() async {
-    final response = await _dio.get(ApiConfig.authUser);
+    final response = await _dio.get(ApiConfig.userProfile);
+    
+    // Check if response is HTML instead of JSON
+    if (response.data is String && response.data.toString().trim().startsWith('<!')) {
+      throw Exception('Сервер вернул HTML вместо JSON. Backend может быть недоступен.');
+    }
+    
     return User.fromJson(response.data);
   }
   
@@ -408,6 +390,44 @@ class ApiService {
         .toList();
   }
   
+  /// Export collection as PDF
+  Future<Uint8List> exportCollectionPdf() async {
+    final response = await _dio.get(
+      ApiConfig.collectionExportPdf,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response.data;
+  }
+  
+  /// Export collection as JSON (returns ZIP file)
+  Future<Uint8List> exportCollectionJson() async {
+    final response = await _dio.get(
+      ApiConfig.collectionExportJson,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response.data;
+  }
+  
+  /// Import collection from JSON
+  Future<void> importCollection(Uint8List data, String fileName) async {
+    final formData = FormData.fromMap({
+      'file': MultipartFile.fromBytes(data, filename: fileName),
+    });
+    
+    await _dio.post(
+      '${ApiConfig.userCollection}/import',
+      data: formData,
+      options: Options(
+        contentType: 'multipart/form-data',
+      ),
+    );
+  }
+  
+  /// Delete all collection books
+  Future<void> deleteAllCollection() async {
+    await _dio.delete('${ApiConfig.userCollection}/all');
+  }
+  
   // ==================== Subscription ====================
   
   /// Get subscription plans
@@ -477,7 +497,7 @@ class ApiService {
   }
   
   /// Get notification history
-  Future<List<NotificationHistoryItem>> getNotificationHistory({
+  Future<NotificationHistoryResponse> getNotificationHistory({
     int page = 1,
     int pageSize = 20,
   }) async {
@@ -488,15 +508,19 @@ class ApiService {
         'pageSize': pageSize,
       },
     );
-    return (response.data as List)
-        .map((json) => NotificationHistoryItem.fromJson(json))
-        .toList();
+    return NotificationHistoryResponse.fromJson(response.data);
   }
   
   /// Get Telegram status
   Future<TelegramStatus> getTelegramStatus() async {
     final response = await _dio.get(ApiConfig.telegramStatus);
     return TelegramStatus.fromJson(response.data);
+  }
+  
+  /// Generate Telegram link token
+  Future<TelegramLinkToken> generateTelegramLinkToken() async {
+    final response = await _dio.post(ApiConfig.telegramGenerateLinkToken);
+    return TelegramLinkToken.fromJson(response.data);
   }
   
   /// Connect Telegram
@@ -510,6 +534,14 @@ class ApiService {
   /// Disconnect Telegram
   Future<void> disconnectTelegram() async {
     await _dio.post(ApiConfig.telegramDisconnect);
+  }
+  
+  /// Send test notification
+  Future<void> sendTestNotification(int deliveryMethod) async {
+    await _dio.post(
+      ApiConfig.notificationTest,
+      data: {'deliveryMethod': deliveryMethod},
+    );
   }
   
   // ==================== User Profile ====================

@@ -104,7 +104,8 @@ class BooksProvider extends ChangeNotifier {
       } else {
         _searchResults.addAll(response.items);
       }
-      _totalCount = response.totalCount;
+      // totalCount is optional in API response
+      _totalCount = response.totalCount ?? response.items.length;
       _totalPages = response.totalPages;
     } catch (e) {
       _errorMessage = e.toString();
@@ -149,7 +150,8 @@ class BooksProvider extends ChangeNotifier {
       } else {
         _searchResults.addAll(response.items);
       }
-      _totalCount = response.totalCount;
+      // totalCount is optional in API response
+      _totalCount = response.totalCount ?? response.items.length;
       _totalPages = response.totalPages;
     } catch (e) {
       _errorMessage = e.toString();
@@ -191,7 +193,8 @@ class BooksProvider extends ChangeNotifier {
       } else {
         _searchResults.addAll(response.items);
       }
-      _totalCount = response.totalCount;
+      // totalCount is optional in API response
+      _totalCount = response.totalCount ?? response.items.length;
       _totalPages = response.totalPages;
     } catch (e) {
       _errorMessage = e.toString();
@@ -225,7 +228,8 @@ class BooksProvider extends ChangeNotifier {
       } else {
         _searchResults.addAll(response.items);
       }
-      _totalCount = response.totalCount;
+      // totalCount is optional in API response
+      _totalCount = response.totalCount ?? response.items.length;
       _totalPages = response.totalPages;
     } catch (e) {
       _errorMessage = e.toString();
@@ -259,7 +263,8 @@ class BooksProvider extends ChangeNotifier {
       } else {
         _searchResults.addAll(response.items);
       }
-      _totalCount = response.totalCount;
+      // totalCount is optional in API response
+      _totalCount = response.totalCount ?? response.items.length;
       _totalPages = response.totalPages;
     } catch (e) {
       _errorMessage = e.toString();
@@ -397,7 +402,8 @@ class BooksProvider extends ChangeNotifier {
       } else {
         _favorites.addAll(response.items);
       }
-      _favoritesTotalCount = response.totalCount;
+      // totalCount is optional in API response
+      _favoritesTotalCount = response.totalCount ?? response.items.length;
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
