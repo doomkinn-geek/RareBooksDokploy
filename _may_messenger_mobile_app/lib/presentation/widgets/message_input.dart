@@ -14,6 +14,10 @@ import '../providers/signalr_provider.dart';
 enum RecordingState { idle, recording, locked }
 enum HapticType { light, medium, heavy, selection }
 
+// Пороговые значения для жестов (в dp, конвертируются в пиксели)
+const double _cancelThreshold = 55.0; // ~20-30dp
+const double _lockThreshold = 55.0; // ~20-30dp
+
 class MessageInput extends ConsumerStatefulWidget {
   final String chatId;
   final bool isSending;
@@ -34,7 +38,7 @@ class MessageInput extends ConsumerStatefulWidget {
   ConsumerState<MessageInput> createState() => _MessageInputState();
 }
 
-class _MessageInputState extends ConsumerState<MessageInput> with TickerProviderStateMixin {
+class _MessageInputState extends ConsumerState<MessageInput> with TickerProviderStateMixin, WidgetsBindingObserver {
   final TextEditingController _textController = TextEditingController();
   final AudioRecorder _audioRecorder = AudioRecorder();
   final FocusNode _textFocusNode = FocusNode();
@@ -44,29 +48,44 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
   String? _audioPath;
   Duration _recordDuration = Duration.zero;
   Timer? _timer;
-  DateTime? _recordingStartTime; // Track when recording started
+  Timer? _amplitudeTimer;
+  DateTime? _recordingStartTime;
   Offset _dragOffset = Offset.zero;
   Offset? _initialPointerPosition;
   AnimationController? _scaleController;
+  AnimationController? _pulseController;
   AnimationController? _slideController;
   bool _showCancelHint = false;
   bool _showLockHint = false;
-  bool _hasText = false; // Track if text field has content
+  bool _hasText = false;
   Timer? _typingTimer;
   bool _isCurrentlyTyping = false;
-  bool _showEmojiPicker = false; // Track emoji picker visibility
+  bool _showEmojiPicker = false;
+  double _amplitude = 0.0; // Для waveform/pulsating ring
+  bool _microphonePermissionGranted = false;
+  bool _isPointerDown = false; // Отслеживание нажатия
   
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    
+    // Быстрые анимации для мгновенного фидбека (16-32ms визуальный отклик)
     _scaleController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 150),
+      duration: const Duration(milliseconds: 100),
+    );
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
     );
     _slideController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 200),
+      duration: const Duration(milliseconds: 150),
     );
+    
+    // Запрашиваем разрешения заранее
+    _requestMicrophonePermission();
     
     // Listen to text changes to toggle send/mic button and send typing indicator
     _textController.addListener(() {
@@ -80,6 +99,53 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
       // Send typing indicator
       _onTextChanged(hasText);
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _textController.dispose();
+    _textFocusNode.dispose();
+    _timer?.cancel();
+    _amplitudeTimer?.cancel();
+    _typingTimer?.cancel();
+    if (_isCurrentlyTyping) {
+      _sendTypingIndicator(false);
+    }
+    _audioRecorder.dispose();
+    _scaleController?.dispose();
+    _pulseController?.dispose();
+    _slideController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Обработка прерываний (входящий звонок, сворачивание приложения)
+    if (state == AppLifecycleState.paused || 
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      if (_recordingState == RecordingState.recording || 
+          _recordingState == RecordingState.locked) {
+        _cancelRecording();
+      }
+    }
+  }
+
+  /// Запрашивает разрешение микрофона заранее
+  Future<void> _requestMicrophonePermission() async {
+    final status = await Permission.microphone.status;
+    if (status.isGranted) {
+      setState(() {
+        _microphonePermissionGranted = true;
+      });
+    } else if (status.isDenied) {
+      // Запрашиваем разрешение заранее, но не навязчиво
+      final result = await Permission.microphone.request();
+      setState(() {
+        _microphonePermissionGranted = result.isGranted;
+      });
+    }
   }
 
   void _onTextChanged(bool hasText) {
@@ -108,20 +174,6 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
     }
   }
 
-  @override
-  void dispose() {
-    _textController.dispose();
-    _textFocusNode.dispose();
-    _timer?.cancel();
-    _typingTimer?.cancel();
-    if (_isCurrentlyTyping) {
-      _sendTypingIndicator(false);
-    }
-    _audioRecorder.dispose();
-    _scaleController?.dispose();
-    _slideController?.dispose();
-    super.dispose();
-  }
 
   void _toggleEmojiPicker() {
     if (_showEmojiPicker) {
@@ -166,36 +218,58 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
     }
   }
 
+  /// Начинает запись немедленно при touch down (< 100ms latency)
   Future<void> _startRecording() async {
-    final status = await Permission.microphone.status;
-    if (!status.isGranted) {
-      final result = await Permission.microphone.request();
-      if (!result.isGranted) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Требуется разрешение на использование микрофона'),
-            ),
-          );
+    // Мгновенный визуальный фидбек и haptic на touch down (до проверки разрешений)
+    _triggerHaptic(HapticType.light);
+    _scaleController?.forward();
+    
+    // Немедленно обновляем состояние для визуального фидбека
+    setState(() {
+      _recordDuration = Duration.zero;
+      _recordingStartTime = DateTime.now();
+      _amplitude = 0.0;
+    });
+
+    // Проверяем разрешение (должно быть уже запрошено заранее)
+    if (!_microphonePermissionGranted) {
+      final status = await Permission.microphone.status;
+      if (!status.isGranted) {
+        final result = await Permission.microphone.request();
+        if (!result.isGranted) {
+          // Откатываем изменения, если разрешение не предоставлено
+          _scaleController?.reverse();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Требуется разрешение на использование микрофона'),
+              ),
+            );
+            setState(() {
+              _recordingState = RecordingState.idle;
+              _isPointerDown = false;
+              _recordDuration = Duration.zero;
+              _recordingStartTime = null;
+            });
+          }
+          return;
         }
-        return;
+        setState(() {
+          _microphonePermissionGranted = true;
+        });
+      } else {
+        setState(() {
+          _microphonePermissionGranted = true;
+        });
       }
     }
 
-    // Haptic feedback on start
-    _triggerHaptic(HapticType.medium);
-
     try {
       if (await _audioRecorder.hasPermission()) {
-        // Reset duration and start time BEFORE starting
-        setState(() {
-          _recordDuration = Duration.zero;
-          _recordingStartTime = DateTime.now();
-        });
-
         final tempDir = await getTemporaryDirectory();
         final audioPath = '${tempDir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
         
+        // Старт записи без задержек
         await _audioRecorder.start(
           const RecordConfig(
             encoder: AudioEncoder.aacLc,
@@ -209,12 +283,12 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
           _recordingState = RecordingState.recording;
           _audioPath = audioPath;
           _dragOffset = Offset.zero;
-          // Don't reset _initialPointerPosition as it was set by onPointerDown
         });
 
-        _scaleController?.forward();
         _slideController?.forward();
+        _pulseController?.repeat(reverse: true); // Запускаем пульсацию во время записи
 
+        // Таймер для отображения длительности (обновление каждые 100ms для плавности)
         _timer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
           if (mounted && _recordingStartTime != null) {
             setState(() {
@@ -222,23 +296,73 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
             });
           }
         });
+
+        // Таймер для получения уровня сигнала (waveform)
+        _amplitudeTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) async {
+          if (mounted && _recordingState == RecordingState.recording) {
+            try {
+              final amplitude = await _audioRecorder.getAmplitude();
+              if (mounted) {
+                setState(() {
+                  // Нормализуем амплитуду (обычно -160 до 0 dB)
+                  _amplitude = (amplitude.current + 160) / 160.0; // 0.0 - 1.0
+                  _amplitude = _amplitude.clamp(0.0, 1.0);
+                });
+              }
+            } catch (e) {
+              // Игнорируем ошибки получения амплитуды
+            }
+          }
+        });
+      } else {
+        // Нет разрешения после проверки - откатываем
+        _scaleController?.reverse();
+        _slideController?.reverse();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Требуется разрешение на использование микрофона'),
+            ),
+          );
+          setState(() {
+            _recordingState = RecordingState.idle;
+            _isPointerDown = false;
+            _recordDuration = Duration.zero;
+            _recordingStartTime = null;
+          });
+        }
       }
     } catch (e) {
+      // Откатываем состояние при ошибке
+      _scaleController?.reverse();
+      _slideController?.reverse();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Ошибка записи: $e')),
         );
+        setState(() {
+          _recordingState = RecordingState.idle;
+          _isPointerDown = false;
+          _recordDuration = Duration.zero;
+          _recordingStartTime = null;
+        });
       }
     }
   }
 
   Future<void> _stopRecording() async {
     _timer?.cancel();
+    _amplitudeTimer?.cancel();
+    _pulseController?.stop(); // Останавливаем пульсацию
     await _audioRecorder.stop();
+    setState(() {
+      _amplitude = 0.0;
+    });
   }
 
   Future<void> _sendAudio() async {
-    if (_recordingState != RecordingState.recording) return;
+    if (_recordingState != RecordingState.recording && 
+        _recordingState != RecordingState.locked) return;
     
     // Haptic feedback on send
     _triggerHaptic(HapticType.light);
@@ -255,11 +379,12 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
       _recordingState = RecordingState.idle;
       _audioPath = null;
       _recordDuration = Duration.zero;
-      _recordingStartTime = null; // Reset start time
+      _recordingStartTime = null;
       _dragOffset = Offset.zero;
       _initialPointerPosition = null;
       _showCancelHint = false;
       _showLockHint = false;
+      _isPointerDown = false;
     });
   }
 
@@ -271,19 +396,25 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
     _scaleController?.reverse();
     _slideController?.reverse();
     
+    // Немедленно удаляем временный файл
     if (_audioPath != null && File(_audioPath!).existsSync()) {
-      await File(_audioPath!).delete();
+      try {
+        await File(_audioPath!).delete();
+      } catch (e) {
+        // Игнорируем ошибки удаления
+      }
     }
     
     setState(() {
       _recordingState = RecordingState.idle;
       _audioPath = null;
       _recordDuration = Duration.zero;
-      _recordingStartTime = null; // Reset start time
+      _recordingStartTime = null;
       _dragOffset = Offset.zero;
       _initialPointerPosition = null;
       _showCancelHint = false;
       _showLockHint = false;
+      _isPointerDown = false;
     });
   }
 
@@ -372,45 +503,65 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
           clipBehavior: Clip.none,
           child: Listener(
             onPointerDown: (event) {
-              if (_recordingState == RecordingState.idle) {
-                // Save initial position when starting to press
+              if (_recordingState == RecordingState.idle && !_hasText) {
+                // Сохраняем начальную позицию и немедленно начинаем запись
                 _initialPointerPosition = event.localPosition;
+                _isPointerDown = true;
+                
+                // Мгновенный старт записи на touch down (не на long press!)
+                _startRecording();
               }
             },
-            onPointerMove: _recordingState == RecordingState.recording
+            onPointerMove: _recordingState == RecordingState.recording && _isPointerDown
                 ? (event) {
                     if (_initialPointerPosition != null) {
+                      // Вычисляем смещение от начальной позиции (уже в логических пикселях/dp)
+                      final offset = Offset(
+                        event.localPosition.dx - _initialPointerPosition!.dx,
+                        event.localPosition.dy - _initialPointerPosition!.dy,
+                      );
+                      
                       setState(() {
-                        // Calculate offset from the initial press position
-                        _dragOffset = Offset(
-                          event.localPosition.dx - _initialPointerPosition!.dx,
-                          event.localPosition.dy - _initialPointerPosition!.dy,
-                        );
+                        _dragOffset = offset;
                         
-                        _showCancelHint = _dragOffset.dx < -50;
-                        _showLockHint = _dragOffset.dy < -50;
+                        // Пороги для подсказок (чуть меньше порогов активации)
+                        _showCancelHint = offset.dx < -_cancelThreshold * 0.6;
+                        _showLockHint = offset.dy < -_lockThreshold * 0.6;
                       });
                       
-                      if (_dragOffset.dy < -100) {
+                      // Активация жестов при достижении порогов
+                      if (offset.dy < -_lockThreshold) {
                         _lockRecording();
-                      } else if (_dragOffset.dx < -150) {
+                      } else if (offset.dx < -_cancelThreshold) {
                         _cancelRecording();
                       }
                     }
                   }
                 : null,
             onPointerUp: (event) {
+              _isPointerDown = false;
+              
               if (_recordingState == RecordingState.recording) {
-                if (_dragOffset.dx > -150 && _dragOffset.dy > -100) {
+                // Если не было отмены или блокировки, отправляем
+                if (_dragOffset.dx > -_cancelThreshold && 
+                    _dragOffset.dy > -_lockThreshold) {
                   _sendAudio();
                 } else {
-                  // Already cancelled by swipe, just clean up
+                  // Уже отменено жестом, просто очищаем
                   _initialPointerPosition = null;
                 }
               } else {
-                // Pointer up without recording, just clean up
+                // Pointer up без записи, очищаем
                 _initialPointerPosition = null;
               }
+            },
+            onPointerCancel: (event) {
+              // Отмена жеста (например, системное прерывание)
+              _isPointerDown = false;
+              if (_recordingState == RecordingState.recording) {
+                _cancelRecording();
+              }
+              _initialPointerPosition = null;
             },
             child: _recordingState == RecordingState.recording
                 ? _buildRecordingUI()
@@ -526,25 +677,21 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
               color: Theme.of(context).colorScheme.primary,
             )
           else
-            GestureDetector(
-              onLongPressStart: (details) {
-                _startRecording();
-              },
-              child: ScaleTransition(
-                scale: Tween<double>(begin: 1.0, end: 1.3).animate(
-                  CurvedAnimation(
-                    parent: _scaleController!,
-                    curve: Curves.elasticOut,
+            // Кнопка микрофона с минимальным размером 48x48dp для touch target
+            Semantics(
+              label: 'Кнопка записи голосового сообщения',
+              button: true,
+              child: Container(
+                width: 48,
+                height: 48,
+                margin: const EdgeInsets.all(4),
+                child: ScaleTransition(
+                  scale: Tween<double>(begin: 1.0, end: 1.2).animate(
+                    CurvedAnimation(
+                      parent: _scaleController!,
+                      curve: Curves.easeOut,
+                    ),
                   ),
-                ),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: _recordingState == RecordingState.recording
-                      ? BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        )
-                      : null,
                   child: Icon(
                     Icons.mic,
                     size: 28,
@@ -562,29 +709,25 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
     final minutes = _recordDuration.inMinutes;
     final seconds = _recordDuration.inSeconds % 60;
     
-    // Calculate mic position based on drag
-    final micOffsetX = _dragOffset.dx.clamp(-150.0, 0.0);
-    final micOffsetY = _dragOffset.dy.clamp(-100.0, 0.0);
+    // Вычисляем позицию микрофона на основе жеста (offset уже в логических пикселях)
+    final micOffsetX = _dragOffset.dx.clamp(-_cancelThreshold, 0.0);
+    final micOffsetY = _dragOffset.dy.clamp(-_lockThreshold, 0.0);
 
     return SizedBox(
-      height: 56, // Fixed height to match normal UI
+      height: 56, // Фиксированная высота для соответствия обычному UI
       child: Stack(
-        clipBehavior: Clip.none, // Allow overflow
+        clipBehavior: Clip.none,
         children: [
-        // Main recording UI (fixed position)
-        Row(
-          children: [
-            const SizedBox(width: 16),
-            
-            // Red dot with blink animation
-            TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0.0, end: 1.0),
-              duration: const Duration(milliseconds: 800),
-              curve: Curves.easeInOut,
-              builder: (context, value, child) {
-                return Opacity(
-                  opacity: value,
-                  child: Container(
+          // Основной UI записи (фиксированная позиция)
+          Row(
+            children: [
+              const SizedBox(width: 16),
+              
+              // Красная точка с пульсацией (индикатор записи)
+              AnimatedBuilder(
+                animation: _pulseController!,
+                builder: (context, child) {
+                  return Container(
                     width: 10,
                     height: 10,
                     decoration: BoxDecoration(
@@ -592,97 +735,138 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.red.withOpacity(0.6),
-                          blurRadius: 6,
-                          spreadRadius: 2,
+                          color: Colors.red.withOpacity(0.6 * (0.5 + _pulseController!.value * 0.5)),
+                          blurRadius: 6 + _pulseController!.value * 4,
+                          spreadRadius: 2 + _pulseController!.value * 2,
                         ),
                       ],
                     ),
+                  );
+                },
+              ),
+              
+              const SizedBox(width: 12),
+              
+              // Таймер записи (мм:сс)
+              Text(
+                '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              
+              const SizedBox(width: 12),
+              
+              // Waveform / Pulsating ring (визуализация уровня сигнала)
+              AnimatedBuilder(
+                animation: _pulseController!,
+                builder: (context, child) {
+                  // Используем амплитуду для создания waveform эффекта
+                  final pulseScale = 0.8 + (_amplitude * 0.4) + (_pulseController!.value * 0.2);
+                  return Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.primary.withOpacity(
+                          0.3 + (_amplitude * 0.7),
+                        ),
+                        width: 2 * pulseScale,
+                      ),
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: 8 * (0.5 + _amplitude * 0.5),
+                        height: 8 * (0.5 + _amplitude * 0.5),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary.withOpacity(
+                            0.5 + (_amplitude * 0.5),
+                          ),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              
+              const Spacer(),
+              
+              // Подсказка жестов
+              AnimatedOpacity(
+                opacity: _showCancelHint ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 150),
+                child: Text(
+                  'Смахни влево — отмена',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: _showCancelHint ? Colors.red : Colors.grey[600],
                   ),
-                );
-              },
-              onEnd: () {
-                if (mounted && _recordingState == RecordingState.recording) {
-                  setState(() {});
-                }
-              },
-            ),
-            
-            const SizedBox(width: 12),
-            
-            // Timer
-            Text(
-              '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            
-            const Spacer(),
-            
-            // Cancel hint text
-            AnimatedOpacity(
-              opacity: _showCancelHint ? 1.0 : 0.7,
-              duration: const Duration(milliseconds: 150),
-              child: Text(
-                'Влево — отмена',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: _showCancelHint ? Colors.red : Colors.grey[600],
                 ),
               ),
-            ),
-            
-            const SizedBox(width: 80), // Space for mic button
-          ],
-        ),
-        
-        // Lock indicator (top, above the UI)
-        Positioned(
-          right: 30,
-          bottom: 70,
-          child: AnimatedOpacity(
-            opacity: _showLockHint ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 150),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.lock_open,
-                  color: _showLockHint 
-                      ? Theme.of(context).colorScheme.primary 
-                      : Colors.grey,
-                  size: 28,
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: 2,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        _showLockHint 
-                            ? Theme.of(context).colorScheme.primary 
-                            : Colors.grey,
-                        Colors.transparent,
-                      ],
+              
+              if (!_showCancelHint && _showLockHint)
+                AnimatedOpacity(
+                  opacity: _showLockHint ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 150),
+                  child: Text(
+                    'Вверх — блокировка',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
                 ),
-              ],
+              
+              const SizedBox(width: 80), // Место для кнопки микрофона
+            ],
+          ),
+          
+          // Индикатор блокировки (над UI)
+          Positioned(
+            right: 30,
+            bottom: 70,
+            child: AnimatedOpacity(
+              opacity: _showLockHint ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 150),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.lock_open,
+                    color: _showLockHint 
+                        ? Theme.of(context).colorScheme.primary 
+                        : Colors.grey,
+                    size: 28,
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: 2,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          _showLockHint 
+                              ? Theme.of(context).colorScheme.primary 
+                              : Colors.grey,
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-        
-        // Microphone button (moves with drag)
-        Positioned(
-          right: 8 - micOffsetX, // Invert X for correct direction
-          bottom: 0 - micOffsetY, // Invert Y for correct direction
-          child: Transform.translate(
-            offset: Offset.zero,
+          
+          // Кнопка микрофона (движется с жестом)
+          Positioned(
+            right: 8 - micOffsetX,
+            bottom: 0 - micOffsetY,
             child: Container(
               width: 56,
               height: 56,
@@ -704,7 +888,6 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
               ),
             ),
           ),
-        ),
         ],
       ),
     );
