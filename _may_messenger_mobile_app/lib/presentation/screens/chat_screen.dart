@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../main.dart' show navigatorKey;
 import '../providers/messages_provider.dart';
 import '../providers/signalr_provider.dart';
 import '../providers/chats_provider.dart';
@@ -15,6 +16,7 @@ import '../widgets/message_bubble.dart';
 import '../widgets/message_input.dart';
 import '../widgets/connection_status_indicator.dart';
 import '../widgets/typing_animation.dart';
+import '../widgets/date_separator.dart';
 import 'group_settings_screen.dart';
 import 'user_profile_screen.dart';
 
@@ -38,6 +40,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _hasInitialScrolled = false; // Track if we've scrolled on first load
   bool _isPeriodicStatusUpdateActive = false;
   bool _showScrollToBottomButton = false; // Show FAB when scrolled up
+  DateTime? _currentVisibleDate; // For sticky date header
+  bool _showStickyDateHeader = false; // Show/hide sticky date header
 
   @override
   void initState() {
@@ -59,13 +63,50 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
     
     // Add scroll listener to mark messages as read when scrolled to bottom
-    // and to show/hide scroll-to-bottom FAB
+    // and to show/hide scroll-to-bottom FAB and sticky date header
     _scrollController.addListener(_onScroll);
     _scrollController.addListener(_updateScrollToBottomButton);
+    _scrollController.addListener(_onScrollForPagination);
+    _scrollController.addListener(_updateStickyDateHeader);
     
     // CRITICAL: Perform reliable sync when opening chat
     // This ensures we have the latest data even after push notification
     _performReliableChatSync();
+  }
+  
+  /// Scroll listener for loading older messages when near top
+  /// With reverse: true ListView, "top" in user terms is maxScrollExtent
+  void _onScrollForPagination() {
+    if (!_scrollController.hasClients) return;
+    
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+    final threshold = 200.0; // Start loading when within 200px of top (oldest messages)
+    
+    // With reverse: true, scrolling UP (toward older messages) increases pixels toward maxScrollExtent
+    if (maxScroll - currentScroll < threshold) {
+      // Near top (oldest messages), load older messages
+      final messagesState = ref.read(messagesProvider(widget.chatId));
+      if (!messagesState.isLoadingOlder && messagesState.hasMoreOlder) {
+        print('[CHAT_SCREEN] Near top (oldest), loading older messages...');
+        ref.read(messagesProvider(widget.chatId).notifier).loadOlderMessages();
+      }
+    }
+  }
+  
+  /// Update sticky date header based on currently visible messages
+  void _updateStickyDateHeader() {
+    if (!_scrollController.hasClients) return;
+    
+    // Show sticky header only when scrolled (not at bottom/newest messages)
+    final currentScroll = _scrollController.position.pixels;
+    final shouldShow = currentScroll > 50; // Show when scrolled more than 50px from newest
+    
+    if (shouldShow != _showStickyDateHeader) {
+      setState(() {
+        _showStickyDateHeader = shouldShow;
+      });
+    }
   }
   
   /// Perform reliable synchronization when chat screen opens
@@ -166,13 +207,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _onScroll() {
     if (!_scrollController.hasClients) return;
     
-    // Check if scrolled to bottom (with small threshold)
-    final maxScroll = _scrollController.position.maxScrollExtent;
+    // With reverse: true, "bottom" (newest messages) is at pixels = 0
     final currentScroll = _scrollController.position.pixels;
-    final threshold = 100.0; // pixels from bottom
+    final threshold = 100.0; // pixels from bottom (newest)
     
-    if (maxScroll - currentScroll <= threshold) {
-      // User is at the bottom, mark messages as read
+    if (currentScroll <= threshold) {
+      // User is at the bottom (newest messages), mark messages as read
       ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
     }
   }
@@ -180,11 +220,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _updateScrollToBottomButton() {
     if (!_scrollController.hasClients) return;
     
-    final maxScroll = _scrollController.position.maxScrollExtent;
+    // With reverse: true, "bottom" (newest) is at pixels = 0
     final currentScroll = _scrollController.position.pixels;
     final threshold = 500.0; // Show FAB when scrolled up more than 500px from bottom
     
-    final shouldShow = maxScroll - currentScroll > threshold;
+    final shouldShow = currentScroll > threshold;
     if (shouldShow != _showScrollToBottomButton) {
       setState(() {
         _showScrollToBottomButton = shouldShow;
@@ -193,14 +233,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   /// Check if user is near bottom of the list (for auto-scroll on new message)
+  /// With reverse: true, bottom is at pixels = 0
   bool _isNearBottom() {
     if (!_scrollController.hasClients) return true;
     
-    final maxScroll = _scrollController.position.maxScrollExtent;
     final currentScroll = _scrollController.position.pixels;
     final threshold = 150.0; // Consider "near bottom" if within 150px
     
-    return maxScroll - currentScroll <= threshold;
+    return currentScroll <= threshold;
   }
 
   /// Auto-scroll to bottom if user is near the bottom
@@ -214,15 +254,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
-    // Don't force refresh chats here - let local updates handle it
-    // ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+    // IMPORTANT: Clear unread count BEFORE widget is disposed
+    // Use WidgetsBinding to execute after current frame but before provider is disposed
+    final chatId = widget.chatId;
     
-    // Очистить текущий чат при выходе
-    final notificationService = ref.read(notificationServiceProvider);
-    notificationService.setCurrentChat(null);
+    // Clear notification context
+    try {
+      ref.read(notificationServiceProvider).setCurrentChat(null);
+      ref.read(fcmServiceProvider).setCurrentChat(null);
+    } catch (e) {
+      print('[CHAT_SCREEN] Failed to clear notification context: $e');
+    }
     
-    final fcmService = ref.read(fcmServiceProvider);
-    fcmService.setCurrentChat(null);
+    // Clear unread count - schedule for after dispose to ensure state update
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        // Force refresh the chat list to get accurate unread counts from server
+        final container = ProviderScope.containerOf(navigatorKey.currentContext!);
+        container.read(chatsProvider.notifier).clearUnreadCount(chatId);
+        
+        // Also trigger a background refresh to sync with server
+        container.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+      } catch (e) {
+        print('[CHAT_SCREEN] Failed to clear unread count on dispose: $e');
+      }
+    });
     
     _scrollController.dispose();
     super.dispose();
@@ -258,19 +314,41 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
   
   String _formatTypingText(List<TypingUser> users) {
+    // Get contact names from phone book
+    final contactNames = ref.read(contactsNamesProvider);
+    
+    // Helper to get display name (from phone book or fallback to server name)
+    String getDisplayName(TypingUser user) {
+      return contactNames[user.userId] ?? user.userName;
+    }
+    
+    // Helper to get activity text based on activity type
+    String getActivityText(TypingUser user, bool isPlural) {
+      if (user.activityType == ActivityType.recordingAudio) {
+        return isPlural ? 'записывают аудио...' : 'записывает аудио...';
+      }
+      return isPlural ? 'пишут...' : 'пишет...';
+    }
+    
     if (users.length == 1) {
-      return '${users[0].userName} пишет...';
+      return '${getDisplayName(users[0])} ${getActivityText(users[0], false)}';
     } else if (users.length == 2) {
-      return '${users[0].userName} и ${users[1].userName} пишут...';
+      // Check if both have same activity type
+      final sameActivity = users[0].activityType == users[1].activityType;
+      if (sameActivity) {
+        return '${getDisplayName(users[0])} и ${getDisplayName(users[1])} ${getActivityText(users[0], true)}';
+      }
+      return '${getDisplayName(users[0])} и ${getDisplayName(users[1])} активны...';
     } else {
-      return '${users[0].userName} и еще ${users.length - 1} пишут...';
+      return '${getDisplayName(users[0])} и еще ${users.length - 1} активны...';
     }
   }
 
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
+      // With reverse: true, bottom (newest messages) is at 0
       _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
+        0,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
       );
@@ -282,14 +360,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     
     final index = messages.indexWhere((m) => m.id == _highlightedMessageId);
     if (index == -1) {
-      // Message not found, scroll to bottom
+      // Message not found, scroll to bottom (newest)
       _scrollToBottom();
       return;
     }
     
-    // Calculate approximate scroll position (assuming each message is ~100px)
+    // With reverse: true, we need to calculate from the end
+    // Index 0 is the oldest, last index is newest (at bottom/0 scroll position)
+    final distanceFromNewest = messages.length - 1 - index;
     final approximateItemHeight = 100.0;
-    final scrollPosition = index * approximateItemHeight;
+    final scrollPosition = distanceFromNewest * approximateItemHeight;
     
     Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollController.hasClients) {
@@ -301,6 +381,114 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         );
       }
     });
+  }
+  
+  /// Build messages list with date separators using reverse: true for performance
+  /// With reverse: true, newest messages are at the bottom (index 0) and render first
+  Widget _buildMessagesList(MessagesState messagesState) {
+    final messages = messagesState.messages;
+    
+    // Build items list with date separators (in normal order, oldest first)
+    // We'll reverse the display order in ListView
+    final List<dynamic> items = []; // Either Message or DateTime for separator
+    
+    for (int i = 0; i < messages.length; i++) {
+      final message = messages[i];
+      
+      // Check if we need a date separator before this message
+      if (i == 0) {
+        // First (oldest) message always gets a separator
+        items.add(message.createdAt);
+      } else {
+        final prevMessage = messages[i - 1];
+        if (!MessageDateUtils.isSameDay(message.createdAt, prevMessage.createdAt)) {
+          // Different day, add separator
+          items.add(message.createdAt);
+        }
+      }
+      
+      // Add the message
+      items.add(message);
+    }
+    
+    // With reverse: true, we need to reverse our items so newest is at index 0
+    final reversedItems = items.reversed.toList();
+    final itemCount = reversedItems.length + (messagesState.isLoadingOlder ? 1 : 0);
+    
+    // Update current visible date for sticky header
+    _updateVisibleDate(messages);
+    
+    return ListView.builder(
+      controller: _scrollController,
+      reverse: true, // Newest messages at bottom, renders from newest
+      padding: const EdgeInsets.all(16),
+      itemCount: itemCount,
+      itemBuilder: (context, index) {
+        // Loading indicator for older messages (now at the END because of reverse)
+        if (messagesState.isLoadingOlder && index == itemCount - 1) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16.0),
+            child: Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          );
+        }
+        
+        if (index >= reversedItems.length) {
+          return const SizedBox.shrink();
+        }
+        
+        final item = reversedItems[index];
+        
+        if (item is DateTime) {
+          // It's a date separator
+          return DateSeparator(date: item);
+        } else if (item is Message) {
+          // It's a message
+          final isHighlighted = item.id == _highlightedMessageId;
+          // Use localId if available (stable during sync), fallback to id
+          // Include status in key to force rebuild when status changes
+          final stableKey = item.localId ?? item.id;
+          return MessageBubble(
+            key: ValueKey('${stableKey}_${item.status.name}'),
+            message: item,
+            isHighlighted: isHighlighted,
+          );
+        }
+        
+        return const SizedBox.shrink();
+      },
+    );
+  }
+  
+  /// Update the currently visible date for sticky header
+  void _updateVisibleDate(List<Message> messages) {
+    if (messages.isEmpty) return;
+    
+    // Estimate which message is currently visible based on scroll position
+    if (!_scrollController.hasClients) {
+      _currentVisibleDate = messages.last.createdAt;
+      return;
+    }
+    
+    final currentScroll = _scrollController.position.pixels;
+    final approximateItemHeight = 80.0;
+    
+    // Calculate approximate visible message index (from newest)
+    final visibleIndexFromNewest = (currentScroll / approximateItemHeight).floor();
+    final visibleIndex = messages.length - 1 - visibleIndexFromNewest;
+    
+    if (visibleIndex >= 0 && visibleIndex < messages.length) {
+      final newDate = messages[visibleIndex.clamp(0, messages.length - 1)].createdAt;
+      if (_currentVisibleDate == null || 
+          !MessageDateUtils.isSameDay(_currentVisibleDate!, newDate)) {
+        _currentVisibleDate = newDate;
+      }
+    }
   }
 
   @override
@@ -344,18 +532,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       displayTitle = 'Чат';
     }
 
-    // Scroll to bottom only on first load (not on every rebuild)
+    // With reverse: true, newest messages are already at bottom (no scroll needed)
+    // Only scroll if we have a highlighted message to navigate to
     if (!_hasInitialScrolled && 
         messagesState.messages.isNotEmpty && 
         !messagesState.isLoading) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_highlightedMessageId != null) {
+      _hasInitialScrolled = true;
+      if (_highlightedMessageId != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
           _scrollToHighlightedMessage(messagesState.messages);
-        } else {
-          _scrollToBottom();
-        }
-        _hasInitialScrolled = true;
-      });
+        });
+      }
+      // No need to scroll to bottom - reverse: true handles this automatically
     }
 
     // Build online status subtitle for private chats
@@ -486,18 +674,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   ? const Center(child: CircularProgressIndicator())
                   : messagesState.messages.isEmpty
                       ? const Center(child: Text('Нет сообщений'))
-                      : ListView.builder(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.all(16),
-                          itemCount: messagesState.messages.length,
-                          itemBuilder: (context, index) {
-                            final message = messagesState.messages[index];
-                            final isHighlighted = message.id == _highlightedMessageId;
-                            return MessageBubble(
-                              message: message,
-                              isHighlighted: isHighlighted,
-                            );
-                          },
+                      : Stack(
+                          children: [
+                            _buildMessagesList(messagesState),
+                            // Sticky date header
+                            if (_showStickyDateHeader && _currentVisibleDate != null)
+                              Positioned(
+                                top: 8,
+                                left: 0,
+                                right: 0,
+                                child: Center(
+                                  child: AnimatedOpacity(
+                                    opacity: _showStickyDateHeader ? 1.0 : 0.0,
+                                    duration: const Duration(milliseconds: 200),
+                                    child: DateSeparator(date: _currentVisibleDate!),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
             ),
             // Typing indicator

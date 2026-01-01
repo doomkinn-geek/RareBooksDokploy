@@ -11,7 +11,7 @@ import '../providers/auth_provider.dart';
 /// Debug settings screen for diagnostics
 /// Available for administrators in production
 class DebugScreen extends ConsumerStatefulWidget {
-  const DebugScreen({Key? key}) : super(key: key);
+  const DebugScreen({super.key});
 
   @override
   ConsumerState<DebugScreen> createState() => _DebugScreenState();
@@ -350,7 +350,7 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 
-                final stats = snapshot.data as Map<String, dynamic>? ?? {};
+                final stats = snapshot.data ?? {};
                 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

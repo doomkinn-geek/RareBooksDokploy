@@ -1,12 +1,25 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 
+/// Activity types for user indicators
+/// 0 = typing text, 1 = recording audio
+enum ActivityType {
+  typing,       // 0 - typing text message
+  recordingAudio, // 1 - recording audio message
+}
+
 class TypingUser {
   final String userId;
   final String userName;
   final DateTime lastTypingAt;
+  final ActivityType activityType; // What activity the user is doing
   
-  TypingUser({required this.userId, required this.userName, required this.lastTypingAt});
+  TypingUser({
+    required this.userId, 
+    required this.userName, 
+    required this.lastTypingAt,
+    this.activityType = ActivityType.typing,
+  });
 }
 
 class TypingState {
@@ -39,13 +52,21 @@ class TypingNotifier extends StateNotifier<TypingState> {
     });
   }
   
-  void setUserTyping(String chatId, String userId, String userName, bool isTyping) {
+  /// Set user activity status
+  /// activityType: 0 = typing text, 1 = recording audio
+  void setUserTyping(String chatId, String userId, String userName, bool isTyping, {int activityType = 0}) {
     final currentUsers = state.typingUsersByChat[chatId] ?? [];
     
     if (isTyping) {
       // Add or update user
       final existingIndex = currentUsers.indexWhere((u) => u.userId == userId);
-      final newUser = TypingUser(userId: userId, userName: userName, lastTypingAt: DateTime.now());
+      final activity = activityType == 1 ? ActivityType.recordingAudio : ActivityType.typing;
+      final newUser = TypingUser(
+        userId: userId, 
+        userName: userName, 
+        lastTypingAt: DateTime.now(),
+        activityType: activity,
+      );
       
       List<TypingUser> updatedUsers;
       if (existingIndex >= 0) {

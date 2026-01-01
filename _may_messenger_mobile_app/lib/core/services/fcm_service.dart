@@ -23,7 +23,6 @@ class FcmService {
   String? _currentChatId; // Track current open chat to suppress notifications
   String? _jwtToken; // Store JWT token for auto-registration
   Function(String chatId)? onMessageTap;
-  Function(String chatId, String text)? onMessageReply;
   Function(String messageId, String chatId)? onMessageReceived; // Callback to fetch message
   
   // Track notifications per chat for grouping
@@ -81,13 +80,12 @@ class FcmService {
     await _localNotifications.initialize(
       initSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) async {
-        print('[FCM] Notification tapped with payload: ${response.payload}');
-        if (response.payload != null) {
-          if (response.input != null && response.input!.isNotEmpty && onMessageReply != null) {
-             onMessageReply!(response.payload!, response.input!);
-          } else if (onMessageTap != null) {
-             onMessageTap!(response.payload!);
-          }
+        print('[FCM] Notification response received: payload=${response.payload}');
+        
+        // Only handle tap action - reply functionality removed
+        if (response.payload != null && onMessageTap != null) {
+          print('[FCM] Tap action, opening chat');
+          onMessageTap!(response.payload!);
         }
       },
     );
@@ -391,13 +389,7 @@ class FcmService {
               : title,
           summaryText: title,
         ),
-        actions: [
-          AndroidNotificationAction(
-            'reply_action',
-            'Ответить',
-            inputs: [AndroidNotificationActionInput(label: 'Введите сообщение')],
-          ),
-        ],
+        // Reply action removed - not reliable enough
       );
       
       final notificationDetails = NotificationDetails(android: androidDetails);

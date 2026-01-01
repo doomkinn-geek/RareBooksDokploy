@@ -179,6 +179,9 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
         _signalRService.setOnReconnectedCallback(() async {
           print('[SignalR] Reconnected callback triggered - syncing pending updates');
           
+          // CRITICAL: Re-join all chats after reconnection
+          await _joinAllUserChats();
+          
           // Sync pending status updates
           try {
             final statusSyncService = _ref.read(statusSyncServiceProvider);
@@ -211,6 +214,10 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
           print('[SignalR] Error starting outbox sync service: $e');
         }
         
+        // CRITICAL: Auto-join all user's chats to receive status updates
+        // This ensures the sender sees when their messages are read
+        await _joinAllUserChats();
+        
         state = state.copyWith(isConnected: true);
         print('[SignalR] Provider initialized and listeners setup');
       }
@@ -220,6 +227,33 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
       // #endregion
       print('[SignalR] Failed to initialize: $e');
       state = state.copyWith(error: e.toString(), isConnected: false);
+    }
+  }
+  
+  /// Auto-join all user's chats so we receive status updates for all messages
+  /// This is critical for seeing when your messages are read by recipients
+  Future<void> _joinAllUserChats() async {
+    try {
+      final chatsState = _ref.read(chatsProvider);
+      if (chatsState.chats.isEmpty) {
+        // Try to load chats first if not yet loaded
+        await _ref.read(chatsProvider.notifier).loadChats();
+      }
+      
+      final chats = _ref.read(chatsProvider).chats;
+      print('[SignalR] Auto-joining ${chats.length} chats');
+      
+      for (final chat in chats) {
+        try {
+          await _signalRService.joinChat(chat.id);
+        } catch (e) {
+          print('[SignalR] Failed to auto-join chat ${chat.id}: $e');
+        }
+      }
+      
+      print('[SignalR] Auto-joined all ${chats.length} chats');
+    } catch (e) {
+      print('[SignalR] Error auto-joining chats: $e');
     }
   }
   
@@ -388,8 +422,9 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
         });
 
         // Setup typing indicator listener
-        _signalRService.onUserTyping((chatId, userId, userName, isTyping) {
-          print('[SignalR] User typing indicator: $userName ($userId) in chat $chatId - $isTyping');
+        // activityType: 0 = typing text, 1 = recording audio
+        _signalRService.onUserTyping((chatId, userId, userName, isTyping, activityType) {
+          print('[SignalR] User activity indicator: $userName ($userId) in chat $chatId - active: $isTyping, type: $activityType');
           
           try {
             // Update typing state only for the specific chat
@@ -397,7 +432,8 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
               chatId, 
               userId, 
               userName, 
-              isTyping
+              isTyping,
+              activityType: activityType, // 0 = typing, 1 = recording audio
             );
           } catch (e) {
             print('[SignalR] Failed to process typing indicator: $e');

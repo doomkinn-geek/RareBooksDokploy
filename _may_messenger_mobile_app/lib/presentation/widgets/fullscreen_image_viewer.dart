@@ -20,6 +20,14 @@ class FullScreenImageViewer extends StatefulWidget {
   State<FullScreenImageViewer> createState() => _FullScreenImageViewerState();
 }
 
+/// Gesture state for distinguishing between swipe and pinch
+enum _GestureState {
+  idle,           // No gesture in progress
+  detecting,      // First touch, waiting to determine intent
+  swiping,        // Confirmed vertical swipe (single finger, vertical)
+  pinching,       // Confirmed pinch/zoom (two fingers or interaction started)
+}
+
 class _FullScreenImageViewerState extends State<FullScreenImageViewer>
     with SingleTickerProviderStateMixin {
   double _dragOffset = 0.0;
@@ -31,11 +39,19 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
   late AnimationController _animationController;
   Animation<Matrix4>? _animation;
   
-  // Track double-tap position for zoom to point
-  Offset? _doubleTapPosition;
-  
   // Target scale for double-tap zoom
   static const double _doubleTapZoomScale = 2.5;
+  
+  // Gesture detection state machine
+  _GestureState _gestureState = _GestureState.idle;
+  Offset? _gestureStartPosition;
+  DateTime? _gestureStartTime;
+  int _pointerCount = 0;
+  
+  // Thresholds for gesture detection
+  static const double _swipeDetectionThreshold = 20.0; // px before determining intent
+  static const double _swipeAngleThreshold = 0.7; // cos of max angle from vertical (about 45 degrees)
+  static const Duration _swipeDetectionTimeout = Duration(milliseconds: 150);
 
   @override
   void initState() {
@@ -70,21 +86,20 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
     }
   }
 
-  /// Handle double-tap to zoom in/out
+  /// Handle double-tap to zoom in/out relative to center
   void _handleDoubleTap() {
-    final position = _doubleTapPosition ?? Offset.zero;
-    
     if (_currentScale > 1.05) {
-      // Already zoomed - zoom out to 1x
-      _animateToScale(1.0, position);
+      // Already zoomed - zoom out to 1x (reset to center)
+      _animateToScaleCenter(1.0);
     } else {
-      // Not zoomed - zoom in to target scale at tap position
-      _animateToScale(_doubleTapZoomScale, position);
+      // Not zoomed - zoom in to target scale relative to center
+      _animateToScaleCenter(_doubleTapZoomScale);
     }
   }
   
-  /// Animate zoom to target scale, centered on the given position
-  void _animateToScale(double targetScale, Offset focalPoint) {
+  /// Animate zoom to target scale, centered on the image center
+  /// This provides a consistent zoom experience regardless of tap position
+  void _animateToScaleCenter(double targetScale) {
     // Get the current transformation
     final Matrix4 currentMatrix = _transformationController.value;
     
@@ -95,14 +110,17 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
       // Reset to identity (no zoom, no pan)
       targetMatrix = Matrix4.identity();
     } else {
-      // Calculate zoom centered on focal point
+      // Zoom centered on screen center (image center)
+      // When zooming to center, we need to translate so the center stays fixed
       final size = MediaQuery.of(context).size;
       final centerX = size.width / 2;
       final centerY = size.height / 2;
       
-      // Calculate offset to center the focal point after zoom
-      final dx = (centerX - focalPoint.dx) * (targetScale - 1);
-      final dy = (centerY - focalPoint.dy) * (targetScale - 1);
+      // Calculate the translation needed to keep center fixed after scaling
+      // For center-based zoom, we translate by -(center * (scale - 1))
+      // This is equivalent to zooming "into" the center
+      final dx = -centerX * (targetScale - 1);
+      final dy = -centerY * (targetScale - 1);
       
       targetMatrix = Matrix4.identity()
         ..translate(dx, dy)
@@ -123,78 +141,164 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
     _animationController.forward();
   }
 
-  void _handleVerticalDragUpdate(DragUpdateDetails details) {
-    // Only allow swipe-to-dismiss when image is not zoomed
-    if (_currentScale <= 1.05) {
+  /// Handle pointer down - start gesture detection
+  void _onPointerDown(PointerDownEvent event) {
+    _pointerCount++;
+    
+    if (_pointerCount == 1) {
+      // First finger - start detection phase
+      _gestureState = _GestureState.detecting;
+      _gestureStartPosition = event.localPosition;
+      _gestureStartTime = DateTime.now();
+    } else if (_pointerCount >= 2) {
+      // Second finger - it's a pinch, not a swipe
+      _gestureState = _GestureState.pinching;
+      // Reset any swipe progress
+      if (_dragOffset != 0) {
+        setState(() {
+          _dragOffset = 0;
+          _opacity = 1.0;
+        });
+      }
+    }
+  }
+  
+  /// Handle pointer move - determine gesture intent
+  void _onPointerMove(PointerMoveEvent event) {
+    if (_currentScale > 1.05) {
+      // Zoomed in - don't allow swipe
+      _gestureState = _GestureState.pinching;
+      return;
+    }
+    
+    if (_pointerCount >= 2) {
+      // Multiple fingers - it's a pinch
+      _gestureState = _GestureState.pinching;
+      return;
+    }
+    
+    if (_gestureState == _GestureState.detecting && _gestureStartPosition != null) {
+      final delta = event.localPosition - _gestureStartPosition!;
+      final distance = delta.distance;
+      
+      // Wait for movement to exceed threshold before determining intent
+      if (distance > _swipeDetectionThreshold) {
+        // Calculate if movement is predominantly vertical
+        final verticalRatio = delta.dy.abs() / distance;
+        
+        if (verticalRatio > _swipeAngleThreshold) {
+          // Predominantly vertical movement - it's a swipe
+          _gestureState = _GestureState.swiping;
+        } else {
+          // Horizontal or diagonal - let InteractiveViewer handle it
+          _gestureState = _GestureState.pinching;
+        }
+      } else {
+        // Check timeout - if finger stayed still too long, it might be a pinch start
+        final elapsed = DateTime.now().difference(_gestureStartTime!);
+        if (elapsed > _swipeDetectionTimeout) {
+          // Timeout without clear vertical movement - default to pinching
+          _gestureState = _GestureState.pinching;
+        }
+      }
+    }
+    
+    // Apply swipe movement
+    if (_gestureState == _GestureState.swiping) {
+      final delta = event.localPosition - _gestureStartPosition!;
       setState(() {
-        _dragOffset += details.delta.dy;
-        // Calculate opacity based on drag distance (fade out as dragging down)
+        _dragOffset = delta.dy;
         _opacity = (1.0 - (_dragOffset.abs() / 300)).clamp(0.0, 1.0);
       });
     }
   }
-
-  void _handleVerticalDragEnd(DragEndDetails details) {
-    // Only handle dismiss when not zoomed
-    if (_currentScale <= 1.05) {
-      // Dismiss if dragged more than 100 pixels or fast velocity
-      if (_dragOffset.abs() > 100 || 
-          details.velocity.pixelsPerSecond.dy.abs() > 500) {
-        Navigator.of(context).pop();
-      } else {
-        // Reset position if not enough drag
-        setState(() {
-          _dragOffset = 0.0;
-          _opacity = 1.0;
-        });
+  
+  /// Handle pointer up - finalize gesture
+  void _onPointerUp(PointerUpEvent event) {
+    _pointerCount = (_pointerCount - 1).clamp(0, 10);
+    
+    if (_pointerCount == 0) {
+      // All fingers lifted
+      if (_gestureState == _GestureState.swiping) {
+        // Check if we should dismiss
+        if (_dragOffset.abs() > 100) {
+          Navigator.of(context).pop();
+        } else {
+          // Reset position
+          setState(() {
+            _dragOffset = 0.0;
+            _opacity = 1.0;
+          });
+        }
       }
-    } else {
-      // Reset if zoomed
+      
+      // Reset state
+      _gestureState = _GestureState.idle;
+      _gestureStartPosition = null;
+      _gestureStartTime = null;
+    }
+  }
+  
+  /// Handle pointer cancel
+  void _onPointerCancel(PointerCancelEvent event) {
+    _pointerCount = (_pointerCount - 1).clamp(0, 10);
+    
+    if (_pointerCount == 0) {
+      // Reset everything
       setState(() {
         _dragOffset = 0.0;
         _opacity = 1.0;
       });
+      _gestureState = _GestureState.idle;
+      _gestureStartPosition = null;
+      _gestureStartTime = null;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Determine if swipe gestures should be enabled
-    final bool enableSwipeToDismiss = _currentScale <= 1.05;
-    
     return Scaffold(
       backgroundColor: Colors.black.withOpacity(_opacity),
-      body: GestureDetector(
-        // Only intercept vertical drags when not zoomed
-        onVerticalDragUpdate: enableSwipeToDismiss ? _handleVerticalDragUpdate : null,
-        onVerticalDragEnd: enableSwipeToDismiss ? _handleVerticalDragEnd : null,
-        // Double-tap detection - save position first
-        onDoubleTapDown: (details) {
-          _doubleTapPosition = details.localPosition;
-        },
-        onDoubleTap: _handleDoubleTap,
-        child: Transform.translate(
-          offset: Offset(0, _dragOffset),
-          child: Stack(
-            children: [
-              // Image viewer with zoom (pinch-to-zoom)
-              Center(
-                child: InteractiveViewer(
-                  transformationController: _transformationController,
-                  minScale: 0.5,
-                  maxScale: 4.0,
-                  onInteractionEnd: (details) {
-                    // Reset drag offset when zooming is done
-                    if (_currentScale <= 1.0 && _dragOffset != 0) {
-                      setState(() {
-                        _dragOffset = 0.0;
-                        _opacity = 1.0;
-                      });
-                    }
-                  },
-                  child: _buildImage(),
+      body: Listener(
+        // Use Listener for low-level pointer events to properly detect gesture intent
+        onPointerDown: _onPointerDown,
+        onPointerMove: _onPointerMove,
+        onPointerUp: _onPointerUp,
+        onPointerCancel: _onPointerCancel,
+        child: GestureDetector(
+          // Double-tap detection only - swipe is handled by Listener
+          onDoubleTap: _handleDoubleTap,
+          // Prevent GestureDetector from absorbing gestures
+          behavior: HitTestBehavior.translucent,
+          child: Transform.translate(
+            offset: Offset(0, _dragOffset),
+            child: Stack(
+              children: [
+                // Image viewer with zoom (pinch-to-zoom)
+                // InteractiveViewer handles its own gestures
+                Center(
+                  child: InteractiveViewer(
+                    transformationController: _transformationController,
+                    minScale: 0.5,
+                    maxScale: 4.0,
+                    onInteractionStart: (details) {
+                      // When InteractiveViewer starts interaction, mark as pinching
+                      if (details.pointerCount >= 2) {
+                        _gestureState = _GestureState.pinching;
+                      }
+                    },
+                    onInteractionEnd: (details) {
+                      // Reset drag offset when zooming is done
+                      if (_currentScale <= 1.0 && _dragOffset != 0) {
+                        setState(() {
+                          _dragOffset = 0.0;
+                          _opacity = 1.0;
+                        });
+                      }
+                    },
+                    child: _buildImage(),
+                  ),
                 ),
-              ),
           
           // Top app bar
           Positioned(
@@ -272,7 +376,8 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
                     ),
                   ),
                 ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

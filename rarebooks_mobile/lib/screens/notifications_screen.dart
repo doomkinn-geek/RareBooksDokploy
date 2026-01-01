@@ -880,7 +880,7 @@ class _PreferenceEditDialogState extends State<_PreferenceEditDialog> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<int>(
-              value: _frequencyMinutes,
+              initialValue: _frequencyMinutes,
               decoration: const InputDecoration(
                 labelText: 'Частота проверки',
               ),
@@ -903,7 +903,7 @@ class _PreferenceEditDialogState extends State<_PreferenceEditDialog> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<int>(
-              value: _deliveryMethod,
+              initialValue: _deliveryMethod,
               decoration: const InputDecoration(
                 labelText: 'Способ доставки',
               ),

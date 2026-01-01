@@ -611,7 +611,8 @@ class SignalRService {
     }
   }
 
-  void onUserTyping(Function(String chatId, String userId, String userName, bool isTyping) callback) {
+  /// activityType: 0 = typing text, 1 = recording audio
+  void onUserTyping(Function(String chatId, String userId, String userName, bool isTyping, int activityType) callback) {
     _hubConnection?.off('UserTyping');
     
     _hubConnection?.on('UserTyping', (arguments) {
@@ -620,7 +621,9 @@ class SignalRService {
         final userName = arguments[1] as String;
         final isTyping = arguments[2] as bool;
         final chatId = arguments[3] as String;
-        callback(chatId, userId, userName, isTyping);
+        // activityType: 0 = typing text (default), 1 = recording audio
+        final activityType = arguments.length >= 5 ? (arguments[4] as int? ?? 0) : 0;
+        callback(chatId, userId, userName, isTyping, activityType);
       }
     });
   }
@@ -701,6 +704,19 @@ class SignalRService {
       await _hubConnection?.invoke('TypingIndicator', args: [chatId, isTyping]);
     } catch (e) {
       // Игнорируем ошибки typing indicator
+    }
+  }
+  
+  /// Send activity indicator with type (0 = typing text, 1 = recording audio)
+  Future<void> sendActivityIndicator(String chatId, bool isActive, int activityType) async {
+    if (!isConnected) {
+      return; // Не логируем - это не критично
+    }
+    
+    try {
+      await _hubConnection?.invoke('ActivityIndicator', args: [chatId, isActive, activityType]);
+    } catch (e) {
+      // Игнорируем ошибки activity indicator
     }
   }
 

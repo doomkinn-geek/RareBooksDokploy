@@ -78,14 +78,16 @@ class ContactsNamesNotifier extends StateNotifier<Map<String, String>> {
       for (final registered in registeredContacts) {
         // Try to find matching local contact by phone hash
         String? phoneBookName;
+        String? phoneNumber;
         
         for (final local in localContacts) {
           if (local.phones.isNotEmpty) {
             final hash = _contactsService.hashPhoneNumber(local.phones.first.number);
             
             if (hash == registered.phoneNumberHash) {
-              // Found match - use phone book name
+              // Found match - use phone book name and phone number
               phoneBookName = local.displayName;
+              phoneNumber = local.phones.first.number;
               break;
             }
           }
@@ -95,11 +97,12 @@ class ContactsNamesNotifier extends StateNotifier<Map<String, String>> {
         final displayName = phoneBookName ?? registered.displayName;
         mapping[registered.userId] = displayName;
         
-        // Add to cache list
+        // Add to cache list with phone number for search display
         cacheList.add(ContactCache(
           userId: registered.userId,
           displayName: displayName,
           phoneNumberHash: registered.phoneNumberHash,
+          phoneNumber: phoneNumber,
           cachedAt: DateTime.now(),
         ));
       }

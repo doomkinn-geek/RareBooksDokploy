@@ -265,7 +265,22 @@ public class ChatHub : Hub
         
         // Notify others in the chat (except sender)
         // Include chatId so clients know which chat the typing indicator is for
-        await Clients.OthersInGroup(chatId.ToString()).SendAsync("UserTyping", userId, user?.DisplayName ?? "Unknown", isTyping, chatId.ToString());
+        // activityType: 0 = typing, 1 = recording audio
+        await Clients.OthersInGroup(chatId.ToString()).SendAsync("UserTyping", userId, user?.DisplayName ?? "Unknown", isTyping, chatId.ToString(), 0);
+    }
+    
+    /// <summary>
+    /// Extended activity indicator with type (typing text or recording audio)
+    /// activityType: 0 = typing text, 1 = recording audio
+    /// </summary>
+    public async Task ActivityIndicator(Guid chatId, bool isActive, int activityType)
+    {
+        var userId = GetCurrentUserId();
+        var user = await _unitOfWork.Users.GetByIdAsync(userId);
+        
+        // Notify others in the chat (except sender)
+        // Include chatId and activityType so clients know what kind of activity is happening
+        await Clients.OthersInGroup(chatId.ToString()).SendAsync("UserTyping", userId, user?.DisplayName ?? "Unknown", isActive, chatId.ToString(), activityType);
     }
     
     /// <summary>

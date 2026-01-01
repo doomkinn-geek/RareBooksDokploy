@@ -43,13 +43,17 @@ class _AudioRecorderWidgetState extends State<AudioRecorderWidget> {
       _audioPath = widget.audioPath;
       _duration = widget.initialDuration!;
       _isRecording = true;
-      _recordingStartTime = DateTime.now(); // Set start time for continuation
       
-      // Continue timer from current duration using real-time calculation
+      // Calculate when recording actually started based on initial duration
+      // This ensures the timer continues correctly from where it left off
+      _recordingStartTime = DateTime.now().subtract(widget.initialDuration!);
+      
+      // Continue timer using real-time calculation from actual start
       _timer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
         if (mounted && _recordingStartTime != null) {
           setState(() {
-            _duration = widget.initialDuration! + DateTime.now().difference(_recordingStartTime!);
+            // Calculate duration from actual recording start time
+            _duration = DateTime.now().difference(_recordingStartTime!);
           });
         }
       });

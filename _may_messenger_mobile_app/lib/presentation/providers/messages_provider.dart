@@ -35,12 +35,16 @@ final messagesProvider = StateNotifierProvider.family<MessagesNotifier, Messages
 class MessagesState {
   final List<Message> messages;
   final bool isLoading;
+  final bool isLoadingOlder; // Loading older messages (pagination)
+  final bool hasMoreOlder; // Are there more older messages to load?
   final bool isSending;
   final String? error;
 
   MessagesState({
     this.messages = const [],
     this.isLoading = false,
+    this.isLoadingOlder = false,
+    this.hasMoreOlder = true,
     this.isSending = false,
     this.error,
   });
@@ -48,12 +52,16 @@ class MessagesState {
   MessagesState copyWith({
     List<Message>? messages,
     bool? isLoading,
+    bool? isLoadingOlder,
+    bool? hasMoreOlder,
     bool? isSending,
     String? error,
   }) {
     return MessagesState(
       messages: messages ?? this.messages,
       isLoading: isLoading ?? this.isLoading,
+      isLoadingOlder: isLoadingOlder ?? this.isLoadingOlder,
+      hasMoreOlder: hasMoreOlder ?? this.hasMoreOlder,
       isSending: isSending ?? this.isSending,
       error: error,
     );
@@ -213,10 +221,13 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         now.difference(sentAt) > _maxTrackingDuration
       );
       
-      // Find messages that are still in 'sending' or 'sent' status from current user
+      // Find messages that may need status updates from current user
+      // Include 'sending', 'sent', AND 'delivered' to catch 'read' updates
       final pendingMessages = state.messages.where((m) => 
         m.senderId == currentUserId &&
-        (m.status == MessageStatus.sending || m.status == MessageStatus.sent)
+        (m.status == MessageStatus.sending || 
+         m.status == MessageStatus.sent ||
+         m.status == MessageStatus.delivered) // Also check delivered for 'read' updates
       ).toList();
       
       if (pendingMessages.isEmpty) {
@@ -257,9 +268,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
             print('[OUTGOING_STATUS] Status updated via batch polling: ${message.id} ${message.status} -> $serverStatus');
             updateMessageStatus(message.id, serverStatus);
             
-            // Remove from tracking if status is final
-            if (serverStatus == MessageStatus.delivered || 
-                serverStatus == MessageStatus.read ||
+            // Remove from tracking only if status is fully final (read or played)
+            // Keep 'delivered' in tracking so we continue polling for 'read'
+            if (serverStatus == MessageStatus.read ||
                 serverStatus == MessageStatus.played) {
               _recentlySentMessages.remove(message.id);
             }
@@ -1366,7 +1377,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final audioUrl = '${message.filePath}';
       final localPath = await audioStorageService.saveAudioLocally(
         message.id,
-        audioUrl.startsWith('http') ? audioUrl : 'https://messenger.rare-books.ru${audioUrl}'
+        audioUrl.startsWith('http') ? audioUrl : 'https://messenger.rare-books.ru$audioUrl'
       );
       
       if (localPath != null) {
@@ -1455,9 +1466,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         // Update LRU cache
         _cache.update(updatedMessage);
         
-        // Remove from tracking if status is final
-        if (status == MessageStatus.delivered || 
-            status == MessageStatus.read ||
+        // Remove from tracking only if status is fully final (read or played)
+        // Keep 'delivered' in tracking to continue polling for 'read' status
+        if (status == MessageStatus.read ||
             status == MessageStatus.played) {
           _recentlySentMessages.remove(messageId);
         }
@@ -1697,18 +1708,26 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   /// Load older messages using cursor pagination (for "Load More")
   Future<void> loadOlderMessages() async {
     // Prevent concurrent loads
-    if (_isLoadingOlder || state.isLoading) {
+    if (_isLoadingOlder || state.isLoading || state.isLoadingOlder) {
       print('[MSG_LOAD] Already loading, skipping...');
+      return;
+    }
+    
+    // Check if we already know there are no more messages
+    if (!state.hasMoreOlder) {
+      print('[MSG_LOAD] No more older messages available');
       return;
     }
 
     _isLoadingOlder = true;
+    state = state.copyWith(isLoadingOlder: true);
     
     try {
       // Get the oldest message as cursor
       if (state.messages.isEmpty) {
         print('[MSG_LOAD] No messages to use as cursor');
         _isLoadingOlder = false;
+        state = state.copyWith(isLoadingOlder: false, hasMoreOlder: false);
         return;
       }
 
@@ -1727,6 +1746,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       if (olderMessages.isEmpty) {
         print('[MSG_LOAD] No more older messages');
         _isLoadingOlder = false;
+        state = state.copyWith(isLoadingOlder: false, hasMoreOlder: false);
         return;
       }
       
@@ -1739,6 +1759,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       if (newMessages.isEmpty) {
         print('[MSG_LOAD] All loaded messages were duplicates');
         _isLoadingOlder = false;
+        state = state.copyWith(isLoadingOlder: false, hasMoreOlder: false);
         return;
       }
       
@@ -1749,19 +1770,29 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       // Update LRU cache
       _cache.putAll(newMessages);
       
-      state = state.copyWith(messages: allMessages);
+      // Determine if there might be more messages
+      final hasMore = olderMessages.length >= 30;
       
-      print('[MSG_LOAD] Cursor pagination completed: added ${newMessages.length} messages');
+      state = state.copyWith(
+        messages: allMessages,
+        isLoadingOlder: false,
+        hasMoreOlder: hasMore,
+      );
+      
+      print('[MSG_LOAD] Cursor pagination completed: added ${newMessages.length} messages, hasMoreOlder: $hasMore');
     } catch (e) {
       print('[MSG_LOAD] Failed to load older messages: $e');
-      state = state.copyWith(error: e.toString());
+      state = state.copyWith(
+        isLoadingOlder: false,
+        error: e.toString(),
+      );
     } finally {
       _isLoadingOlder = false;
     }
   }
 
   /// Check if there are potentially more older messages to load
-  bool get canLoadMore => state.messages.length >= 30; // Arbitrary threshold
+  bool get canLoadMore => state.hasMoreOlder;
 }
 
 

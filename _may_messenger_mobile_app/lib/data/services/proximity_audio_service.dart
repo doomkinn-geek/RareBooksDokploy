@@ -108,9 +108,7 @@ class ProximityAudioService {
   
   /// Set audio route to speaker or earpiece
   Future<void> _setAudioRoute({required bool speakerMode}) async {
-    if (_audioSession == null) {
-      _audioSession = await AudioSession.instance;
-    }
+    _audioSession ??= await AudioSession.instance;
     
     try {
       if (speakerMode) {

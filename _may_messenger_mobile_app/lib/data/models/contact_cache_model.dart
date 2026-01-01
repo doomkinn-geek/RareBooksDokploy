@@ -2,12 +2,14 @@ class ContactCache {
   final String userId;
   final String displayName; // from phone book
   final String phoneNumberHash;
+  final String? phoneNumber; // original phone number for display
   final DateTime cachedAt;
 
   ContactCache({
     required this.userId,
     required this.displayName,
     required this.phoneNumberHash,
+    this.phoneNumber,
     required this.cachedAt,
   });
 
@@ -16,6 +18,7 @@ class ContactCache {
       'userId': userId,
       'displayName': displayName,
       'phoneNumberHash': phoneNumberHash,
+      'phoneNumber': phoneNumber,
       'cachedAt': cachedAt.toIso8601String(),
     };
   }
@@ -25,6 +28,7 @@ class ContactCache {
       userId: json['userId'] as String,
       displayName: json['displayName'] as String,
       phoneNumberHash: json['phoneNumberHash'] as String,
+      phoneNumber: json['phoneNumber'] as String?,
       cachedAt: DateTime.parse(json['cachedAt'] as String),
     );
   }

@@ -4,11 +4,13 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'core/themes/app_theme.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/fcm_service.dart';
+import 'core/services/avatar_cache_service.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/providers/signalr_provider.dart';
 import 'presentation/providers/chats_provider.dart';
@@ -36,7 +38,13 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   final body = message.data['body'] ?? message.notification?.body ?? '';
   final chatId = message.data['chatId'] as String?;
   
-  // Show local notification with grouping support
+  // Initialize local notifications for background handler
+  const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const initSettings = InitializationSettings(android: androidSettings);
+  
+  await _localNotifications.initialize(initSettings);
+  
+  // Show local notification with grouping support (reply action disabled)
   try {
     const androidDetails = AndroidNotificationDetails(
       'messages_channel',
@@ -46,13 +54,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       priority: Priority.high,
       showWhen: true,
       groupKey: 'messages_group', // Group all messages together
-      actions: [
-        AndroidNotificationAction(
-          'reply_action',
-          'Ответить',
-          inputs: [AndroidNotificationActionInput(label: 'Введите сообщение')],
-        ),
-      ],
+      // Reply action removed - not reliable enough
     );
     
     const notificationDetails = NotificationDetails(android: androidDetails);
@@ -76,6 +78,12 @@ void main() async {
   
   // Initialize Hive for local storage
   await Hive.initFlutter();
+  
+  // Initialize avatar cache for local storage
+  await avatarCacheService.init();
+  
+  // Initialize date formatting for Russian locale
+  await initializeDateFormatting('ru', null);
   
   // Initialize Firebase только на поддерживаемых платформах (Android, iOS, Web)
   // На Desktop (Windows, Linux, macOS) Firebase пропускаем
@@ -424,24 +432,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
               }
             };
 
-            fcmService.onMessageReply = (chatId, text) async {
-              print('[FCM] Reply received for chat $chatId: $text');
-              try {
-                if (text.trim().isEmpty) {
-                  print('[FCM] Empty reply text, ignoring');
-                  return;
-                }
-                
-                await ref.read(messagesProvider(chatId).notifier).sendMessage(text);
-                print('[FCM] Reply sent successfully');
-                
-                // Clear the notification after reply
-                fcmService.setCurrentChat(chatId);
-                fcmService.setCurrentChat(null);
-              } catch (e) {
-                print('[FCM] Error handling reply: $e');
-              }
-            };
+            // Reply action removed - not reliable enough
             
             // Register token immediately after initialization
             final authRepo = ref.read(authRepositoryProvider);

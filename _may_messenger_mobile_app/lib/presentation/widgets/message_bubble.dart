@@ -55,30 +55,58 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   }
   
   /// Start a timer to show retry button if message stays in "sending" too long
+  /// Only for messages that are actually stuck (not already sent/delivered)
   void _startSendingTimeoutCheck() {
-    if (widget.message.status == MessageStatus.sending) {
-      // Check how old the message is
-      final messageAge = DateTime.now().difference(widget.message.createdAt);
-      
-      if (messageAge.inSeconds >= 30) {
-        // Already past timeout, show retry immediately
-        if (mounted) {
+    // Cancel any existing timer first
+    _sendingTimeoutTimer?.cancel();
+    _sendingTimeoutTimer = null;
+    
+    // Only start timer for messages in sending status
+    // Do NOT show retry for sent, delivered, read, or played messages
+    if (widget.message.status != MessageStatus.sending) {
+      if (_showRetryForStuck) {
+        setState(() {
+          _showRetryForStuck = false;
+        });
+      }
+      return;
+    }
+    
+    // Check how old the message is
+    final messageAge = DateTime.now().difference(widget.message.createdAt);
+    
+    // Increase timeout to 90 seconds to avoid false positives
+    // Server roundtrip + network latency + push delivery can take time
+    const timeoutSeconds = 90;
+    
+    if (messageAge.inSeconds >= timeoutSeconds) {
+      // Already past timeout, but double-check status is still sending
+      if (mounted && widget.message.status == MessageStatus.sending) {
+        setState(() {
+          _showRetryForStuck = true;
+        });
+      }
+    } else {
+      // Schedule timer for remaining time
+      final remainingTime = Duration(seconds: timeoutSeconds) - messageAge;
+      _sendingTimeoutTimer = Timer(remainingTime, () {
+        // CRITICAL: Re-check status when timer fires
+        // Widget might have been updated while timer was running
+        // Check both widget.message.status AND that we're still in sending state
+        if (mounted && widget.message.status == MessageStatus.sending) {
           setState(() {
             _showRetryForStuck = true;
           });
-        }
-      } else {
-        // Schedule timer for remaining time
-        final remainingTime = Duration(seconds: 30) - messageAge;
-        _sendingTimeoutTimer = Timer(remainingTime, () {
-          if (mounted && widget.message.status == MessageStatus.sending) {
+          print('[UI_FALLBACK] Message ${widget.message.id} stuck in sending after ${timeoutSeconds}s, showing retry button');
+        } else if (mounted) {
+          // Status changed, make sure retry is hidden
+          if (_showRetryForStuck) {
             setState(() {
-              _showRetryForStuck = true;
+              _showRetryForStuck = false;
             });
-            print('[UI_FALLBACK] Message ${widget.message.id} stuck in sending, showing retry button');
           }
-        });
-      }
+        }
+      });
     }
   }
   
@@ -86,9 +114,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   void didUpdateWidget(MessageBubble oldWidget) {
     super.didUpdateWidget(oldWidget);
     
-    // If status changed from sending, cancel the timeout timer and hide retry
-    if (oldWidget.message.status == MessageStatus.sending && 
-        widget.message.status != MessageStatus.sending) {
+    // CRITICAL: If status is no longer sending, always hide retry and cancel timer
+    if (widget.message.status != MessageStatus.sending) {
       _sendingTimeoutTimer?.cancel();
       _sendingTimeoutTimer = null;
       if (_showRetryForStuck) {
@@ -96,6 +123,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           _showRetryForStuck = false;
         });
       }
+      return; // No need to start timeout check for non-sending status
     }
     
     // If status changed TO sending (e.g., retry), restart timeout

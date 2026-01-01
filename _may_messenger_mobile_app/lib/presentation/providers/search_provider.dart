@@ -121,12 +121,16 @@ class SearchNotifier extends StateNotifier<SearchState> {
     // Debounce backend search
     _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
       try {
-        // Search backend for contacts (contactsOnly=true)
-        final users = await _searchService.searchUsers(query.trim(), contactsOnly: true);
+        // Get current local contacts results first
+        final localContacts = state.userResults;
+        
+        // Search backend for messages only
+        // Contacts search is done locally from phone book cache
         final messages = await _searchService.searchMessages(query.trim());
         
+        // Keep local contacts, only update messages
         state = state.copyWith(
-          userResults: users,
+          userResults: localContacts, // Keep local contacts from phone book
           messageResults: messages,
           isLoading: false,
           error: null,
@@ -146,6 +150,7 @@ class SearchNotifier extends StateNotifier<SearchState> {
           errorMessage = e.toString();
         }
         
+        // Keep local results even on error
         state = state.copyWith(
           isLoading: false,
           error: errorMessage,
@@ -159,16 +164,17 @@ class SearchNotifier extends StateNotifier<SearchState> {
       final cachedContacts = await _localDataSource.searchContactsCache(query);
       if (cachedContacts.isNotEmpty) {
         // Convert ContactCache to User for display
+        // Use phone number from cache for display in search results
         final users = cachedContacts.map((c) => User(
           id: c.userId,
           displayName: c.displayName,
-          phoneNumber: '', // Not needed for search results
+          phoneNumber: c.phoneNumber ?? '', // Use cached phone number
           role: UserRole.user,
           isOnline: false,
           lastSeenAt: null,
         )).toList();
         
-        // Update state with local results (will be replaced by backend results)
+        // Update state with local results (kept for contacts, not replaced by backend)
         state = state.copyWith(
           userResults: users.cast<User>(),
           isLoading: true, // Still loading backend results

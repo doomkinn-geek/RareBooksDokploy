@@ -30,7 +30,7 @@ class BooksProvider extends ChangeNotifier {
   // Current book detail
   Book? _currentBook;
   List<String> _currentBookImages = [];
-  Map<String, Uint8List> _imageCache = {};
+  final Map<String, Uint8List> _imageCache = {};
   bool _isCurrentBookFavorite = false;
   
   // Favorites

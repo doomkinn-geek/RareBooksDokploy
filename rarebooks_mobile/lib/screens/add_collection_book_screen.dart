@@ -179,7 +179,7 @@ class _AddCollectionBookScreenState extends State<AddCollectionBookScreen> {
 
             // Condition dropdown
             DropdownButtonFormField<String>(
-              value: _condition,
+              initialValue: _condition,
               decoration: InputDecoration(
                 labelText: l10n.condition,
                 prefixIcon: const Icon(Icons.star),

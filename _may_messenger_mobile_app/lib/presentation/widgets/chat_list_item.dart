@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../data/models/chat_model.dart';
-import '../../core/constants/api_constants.dart';
 import '../providers/contacts_names_provider.dart';
 import '../providers/chats_provider.dart';
+import 'cached_avatar.dart';
 
 class ChatListItem extends ConsumerWidget {
   final Chat chat;
@@ -98,9 +98,11 @@ class ChatListItem extends ConsumerWidget {
       displayTitle = chat.type == ChatType.private ? 'Приватный чат' : 'Без названия';
     }
     
-    // Get avatar URL - for private chats use otherParticipantAvatar
+    // Get avatar path and user ID for caching
     final avatarPath = chat.displayAvatar;
-    final avatarUrl = avatarPath != null ? '${ApiConstants.baseUrl}$avatarPath' : null;
+    final avatarUserId = chat.type == ChatType.private 
+        ? chat.otherParticipantId 
+        : chat.id; // Use chat ID for group avatars
     
     return InkWell(
       onTap: onTap,
@@ -108,17 +110,12 @@ class ChatListItem extends ConsumerWidget {
       child: ListTile(
         leading: Stack(
           children: [
-            CircleAvatar(
+            CachedAvatar(
+              userId: avatarUserId,
+              avatarPath: avatarPath,
+              fallbackText: displayTitle,
+              radius: 24,
               backgroundColor: Theme.of(context).colorScheme.primary,
-              backgroundImage: avatarUrl != null
-                  ? NetworkImage(avatarUrl)
-                  : null,
-              child: avatarUrl == null
-                  ? Text(
-                      displayTitle.isNotEmpty ? displayTitle[0].toUpperCase() : '?',
-                      style: const TextStyle(color: Colors.white),
-                    )
-                  : null,
             ),
             // Online status indicator for private chats
             if (chat.type == ChatType.private && 

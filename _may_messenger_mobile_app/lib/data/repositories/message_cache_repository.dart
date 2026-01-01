@@ -11,7 +11,7 @@ class MessageCacheRepository {
   final _logger = Logger('MessageCacheRepository');
   
   // LRU cache: ключ - ID сообщения, значение - сообщение
-  final _cache = LinkedHashMap<String, Message>();
+  final _cache = <String, Message>{};
   
   // Индекс по chatId для быстрого поиска
   final _chatIndex = <String, LinkedHashSet<String>>{};
