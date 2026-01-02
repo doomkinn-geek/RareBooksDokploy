@@ -421,6 +421,42 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
           }
         });
 
+        // Setup batch message status update listener (for efficiency when marking multiple messages)
+        _signalRService.onBatchMessageStatusUpdated((messageIds, status) {
+          print('[SignalR] Batch message status updated: ${messageIds.length} messages -> $status');
+          
+          // Cache all updates first
+          for (final messageId in messageIds) {
+            try {
+              _ref.read(pendingStatusUpdatesProvider.notifier).cacheStatusUpdate(messageId, status);
+            } catch (e) {
+              print('[SignalR] Failed to cache batch status update for $messageId: $e');
+            }
+          }
+          
+          // Try to apply to all active providers
+          try {
+            final chatsState = _ref.read(chatsProvider);
+            
+            for (final chat in chatsState.chats) {
+              try {
+                for (final messageId in messageIds) {
+                  _ref.read(messagesProvider(chat.id).notifier).updateMessageStatus(messageId, status);
+                }
+              } catch (e) {
+                // Provider not active - status is cached
+              }
+            }
+            
+            // Consume cached updates that were applied
+            for (final messageId in messageIds) {
+              _ref.read(pendingStatusUpdatesProvider.notifier).consumeStatusUpdate(messageId);
+            }
+          } catch (e) {
+            print('[SignalR] Failed to apply batch status updates: $e');
+          }
+        });
+
         // Setup typing indicator listener
         // activityType: 0 = typing text, 1 = recording audio
         _signalRService.onUserTyping((chatId, userId, userName, isTyping, activityType) {

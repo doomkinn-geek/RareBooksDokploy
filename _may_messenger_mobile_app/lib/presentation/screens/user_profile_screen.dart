@@ -4,6 +4,7 @@ import '../../data/models/user_profile_model.dart';
 import '../../core/constants/api_constants.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chats_provider.dart';
+import '../widgets/fullscreen_avatar_viewer.dart';
 import 'chat_screen.dart';
 
 /// Provider for loading a user profile by ID
@@ -118,38 +119,44 @@ class UserProfileScreen extends ConsumerWidget {
         children: [
           const SizedBox(height: 32),
           
-          // Avatar
-          Stack(
-            children: [
-              CircleAvatar(
-                radius: 60,
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
-                child: avatarUrl == null
-                    ? Text(
-                        displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
-                        style: const TextStyle(fontSize: 48, color: Colors.white),
-                      )
-                    : null,
-              ),
-              if (isOnline)
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: Colors.green,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Theme.of(context).scaffoldBackgroundColor,
-                        width: 3,
+          // Avatar (tappable for fullscreen view)
+          GestureDetector(
+            onTap: () => _openFullScreenAvatar(context, displayName, avatarUrl),
+            child: Stack(
+              children: [
+                Hero(
+                  tag: 'avatar_$userId',
+                  child: CircleAvatar(
+                    radius: 60,
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                    child: avatarUrl == null
+                        ? Text(
+                            displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                            style: const TextStyle(fontSize: 48, color: Colors.white),
+                          )
+                        : null,
+                  ),
+                ),
+                if (isOnline)
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: Colors.green,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Theme.of(context).scaffoldBackgroundColor,
+                          width: 3,
+                        ),
                       ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
           
           const SizedBox(height: 16),
@@ -263,6 +270,24 @@ class UserProfileScreen extends ConsumerWidget {
     } else {
       return 'был(а) ${difference.inDays} дн. назад';
     }
+  }
+  
+  void _openFullScreenAvatar(BuildContext context, String displayName, String? avatarUrl) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => FullScreenAvatarViewer(
+          avatarUrl: avatarUrl,
+          displayName: displayName,
+        ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: animation,
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 200),
+      ),
+    );
   }
 
   Future<void> _startChat(BuildContext context, WidgetRef ref, UserProfile profile) async {

@@ -518,6 +518,33 @@ class SignalRService {
       }
     });
   }
+
+  /// Handle batch message status updates (optimized for multiple messages at once)
+  void onBatchMessageStatusUpdated(Function(List<String> messageIds, MessageStatus status) callback) {
+    _hubConnection?.off('BatchMessageStatusUpdated');
+    
+    _hubConnection?.on('BatchMessageStatusUpdated', (arguments) async {
+      print('[SignalR] BatchMessageStatusUpdated received: $arguments');
+      if (arguments != null && arguments.length >= 2) {
+        final messageIdsList = arguments[0] as List;
+        final statusIndex = arguments[1] as int;
+        final status = MessageStatus.values[statusIndex];
+        final messageIds = messageIdsList.map((id) => id.toString()).toList();
+        
+        print('[SignalR] Batch status update: ${messageIds.length} messages -> $status');
+        callback(messageIds, status);
+        
+        // Send ACKs for all updated messages
+        for (final messageId in messageIds) {
+          try {
+            await ackStatusUpdate(messageId, statusIndex);
+          } catch (e) {
+            print('[SignalR] Failed to ACK batch status for $messageId: $e');
+          }
+        }
+      }
+    });
+  }
   
   /// Register callback for user status changes (online/offline)
   void onUserStatusChanged(Function(String userId, bool isOnline, DateTime? lastSeenAt) callback) {
@@ -578,6 +605,22 @@ class SignalRService {
       print('[SignalR] Message marked as read: $messageId');
     } catch (e) {
       print('[SignalR] Failed to mark as read: $e');
+    }
+  }
+
+  /// Mark audio message as played
+  Future<void> markAudioAsPlayed(String messageId, String chatId) async {
+    if (!isConnected) {
+      print('[SignalR] Cannot mark audio as played - not connected');
+      return;
+    }
+    
+    try {
+      await _hubConnection?.invoke('MessagePlayed', args: [messageId, chatId]);
+      print('[SignalR] Audio marked as played: $messageId');
+    } catch (e) {
+      print('[SignalR] Failed to mark audio as played: $e');
+      // Fallback to REST API will be handled by StatusSyncService
     }
   }
 

@@ -23,7 +23,7 @@ public class AckRetryService : BackgroundService
     
     // Retry configuration with exponential backoff
     private const int RetryIntervalSeconds = 3;
-    private const int MaxRetries = 5;
+    private const int MaxRetries = 10; // Increased from 5 to 10 for more reliable delivery
     private const int CleanupAfterHours = 24;
     
     // FCM fallback configuration

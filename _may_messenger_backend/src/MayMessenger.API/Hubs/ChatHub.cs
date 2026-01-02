@@ -258,6 +258,82 @@ public class ChatHub : Hub
         await _unitOfWork.SaveChangesAsync();
     }
     
+    /// <summary>
+    /// Mark audio message as played (highest status for audio messages)
+    /// </summary>
+    public async Task MessagePlayed(Guid messageId, Guid chatId)
+    {
+        var userId = GetCurrentUserId();
+        var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
+        var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+        
+        if (message == null || chat == null)
+        {
+            Console.WriteLine($"[ChatHub] MessagePlayed: message {messageId} or chat {chatId} not found");
+            return;
+        }
+        
+        // Don't create receipt for sender's own message
+        if (message.SenderId == userId) return;
+        
+        // Create or update delivery receipt for this user
+        var receipt = await _unitOfWork.DeliveryReceipts.GetByMessageAndUserAsync(messageId, userId);
+        
+        if (receipt == null)
+        {
+            receipt = new DeliveryReceipt
+            {
+                MessageId = messageId,
+                UserId = userId,
+                DeliveredAt = DateTime.UtcNow,
+                ReadAt = DateTime.UtcNow,
+                PlayedAt = DateTime.UtcNow
+            };
+            await _unitOfWork.DeliveryReceipts.AddAsync(receipt);
+        }
+        else
+        {
+            if (receipt.DeliveredAt == null) receipt.DeliveredAt = DateTime.UtcNow;
+            if (receipt.ReadAt == null) receipt.ReadAt = DateTime.UtcNow;
+            if (receipt.PlayedAt == null)
+            {
+                receipt.PlayedAt = DateTime.UtcNow;
+                await _unitOfWork.DeliveryReceipts.UpdateAsync(receipt);
+            }
+        }
+        
+        // EVENT SOURCING: Create status event for Played status
+        await _unitOfWork.MessageStatusEvents.CreateEventAsync(
+            messageId, 
+            MessageStatus.Played, 
+            userId, 
+            "SignalR");
+        
+        // Calculate aggregate status based on all events
+        var aggregateStatus = await _unitOfWork.MessageStatusEvents.CalculateAggregateStatusAsync(messageId);
+            
+        // Update message status if it changed
+        if (message.Status != aggregateStatus)
+        {
+            message.Status = aggregateStatus;
+            if (aggregateStatus == MessageStatus.Read && message.ReadAt == null)
+            {
+                message.ReadAt = DateTime.UtcNow;
+            }
+            if (aggregateStatus == MessageStatus.Played && message.PlayedAt == null)
+            {
+                message.PlayedAt = DateTime.UtcNow;
+            }
+            await _unitOfWork.Messages.UpdateAsync(message);
+            
+            // Notify all participants about status change
+            await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, (int)aggregateStatus);
+            Console.WriteLine($"[ChatHub] MessagePlayed: status updated to {aggregateStatus} for message {messageId}");
+        }
+        
+        await _unitOfWork.SaveChangesAsync();
+    }
+    
     public async Task TypingIndicator(Guid chatId, bool isTyping)
     {
         var userId = GetCurrentUserId();

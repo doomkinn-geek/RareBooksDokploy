@@ -5,58 +5,52 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import '../../core/services/gallery_service.dart';
 
-class FullScreenImageViewer extends StatefulWidget {
-  final String? imageUrl;
+/// Full screen viewer for user avatars with zoom and save functionality
+class FullScreenAvatarViewer extends StatefulWidget {
+  final String? avatarUrl;
   final String? localPath;
-  final String senderName;
-  final DateTime createdAt;
+  final String displayName;
 
-  const FullScreenImageViewer({
+  const FullScreenAvatarViewer({
     super.key,
-    this.imageUrl,
+    this.avatarUrl,
     this.localPath,
-    required this.senderName,
-    required this.createdAt,
+    required this.displayName,
   });
 
   @override
-  State<FullScreenImageViewer> createState() => _FullScreenImageViewerState();
+  State<FullScreenAvatarViewer> createState() => _FullScreenAvatarViewerState();
 }
 
 /// Gesture state for distinguishing between swipe and pinch
 enum _GestureState {
-  idle,           // No gesture in progress
-  detecting,      // First touch, waiting to determine intent
-  swiping,        // Confirmed vertical swipe (single finger, vertical)
-  pinching,       // Confirmed pinch/zoom (two fingers or interaction started)
+  idle,
+  detecting,
+  swiping,
+  pinching,
 }
 
-class _FullScreenImageViewerState extends State<FullScreenImageViewer>
+class _FullScreenAvatarViewerState extends State<FullScreenAvatarViewer>
     with SingleTickerProviderStateMixin {
   double _dragOffset = 0.0;
   double _opacity = 1.0;
-  double _currentScale = 1.0; // Track current zoom scale
+  double _currentScale = 1.0;
   final TransformationController _transformationController = TransformationController();
   
-  // Animation controller for smooth double-tap zoom
   late AnimationController _animationController;
   Animation<Matrix4>? _animation;
   
-  // Target scale for double-tap zoom
   static const double _doubleTapZoomScale = 2.5;
   
-  // Gesture detection state machine
   _GestureState _gestureState = _GestureState.idle;
   Offset? _gestureStartPosition;
   DateTime? _gestureStartTime;
   int _pointerCount = 0;
   
-  // Thresholds for gesture detection
-  static const double _swipeDetectionThreshold = 20.0; // px before determining intent
-  static const double _swipeAngleThreshold = 0.7; // cos of max angle from vertical (about 45 degrees)
+  static const double _swipeDetectionThreshold = 20.0;
+  static const double _swipeAngleThreshold = 0.7;
   static const Duration _swipeDetectionTimeout = Duration(milliseconds: 150);
   
-  // Save state
   bool _isSaving = false;
 
   @override
@@ -83,7 +77,6 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
   }
 
   void _onTransformationChanged() {
-    // Extract scale from transformation matrix
     final scale = _transformationController.value.getMaxScaleOnAxis();
     if (scale != _currentScale) {
       setState(() {
@@ -92,39 +85,25 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
     }
   }
 
-  /// Handle double-tap to zoom in/out relative to center
   void _handleDoubleTap() {
     if (_currentScale > 1.05) {
-      // Already zoomed - zoom out to 1x (reset to center)
       _animateToScaleCenter(1.0);
     } else {
-      // Not zoomed - zoom in to target scale relative to center
       _animateToScaleCenter(_doubleTapZoomScale);
     }
   }
   
-  /// Animate zoom to target scale, centered on the image center
-  /// This provides a consistent zoom experience regardless of tap position
   void _animateToScaleCenter(double targetScale) {
-    // Get the current transformation
     final Matrix4 currentMatrix = _transformationController.value;
-    
-    // Calculate the target transformation
     Matrix4 targetMatrix;
     
     if (targetScale <= 1.0) {
-      // Reset to identity (no zoom, no pan)
       targetMatrix = Matrix4.identity();
     } else {
-      // Zoom centered on screen center (image center)
-      // When zooming to center, we need to translate so the center stays fixed
       final size = MediaQuery.of(context).size;
       final centerX = size.width / 2;
       final centerY = size.height / 2;
       
-      // Calculate the translation needed to keep center fixed after scaling
-      // For center-based zoom, we translate by -(center * (scale - 1))
-      // This is equivalent to zooming "into" the center
       final dx = -centerX * (targetScale - 1);
       final dy = -centerY * (targetScale - 1);
       
@@ -133,7 +112,6 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
         ..scale(targetScale);
     }
     
-    // Create the animation
     _animation = Matrix4Tween(
       begin: currentMatrix,
       end: targetMatrix,
@@ -142,24 +120,19 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
       curve: Curves.easeOutCubic,
     ));
     
-    // Reset and start animation
     _animationController.reset();
     _animationController.forward();
   }
 
-  /// Handle pointer down - start gesture detection
   void _onPointerDown(PointerDownEvent event) {
     _pointerCount++;
     
     if (_pointerCount == 1) {
-      // First finger - start detection phase
       _gestureState = _GestureState.detecting;
       _gestureStartPosition = event.localPosition;
       _gestureStartTime = DateTime.now();
     } else if (_pointerCount >= 2) {
-      // Second finger - it's a pinch, not a swipe
       _gestureState = _GestureState.pinching;
-      // Reset any swipe progress
       if (_dragOffset != 0) {
         setState(() {
           _dragOffset = 0;
@@ -169,16 +142,13 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
     }
   }
   
-  /// Handle pointer move - determine gesture intent
   void _onPointerMove(PointerMoveEvent event) {
     if (_currentScale > 1.05) {
-      // Zoomed in - don't allow swipe
       _gestureState = _GestureState.pinching;
       return;
     }
     
     if (_pointerCount >= 2) {
-      // Multiple fingers - it's a pinch
       _gestureState = _GestureState.pinching;
       return;
     }
@@ -187,29 +157,22 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
       final delta = event.localPosition - _gestureStartPosition!;
       final distance = delta.distance;
       
-      // Wait for movement to exceed threshold before determining intent
       if (distance > _swipeDetectionThreshold) {
-        // Calculate if movement is predominantly vertical
         final verticalRatio = delta.dy.abs() / distance;
         
         if (verticalRatio > _swipeAngleThreshold) {
-          // Predominantly vertical movement - it's a swipe
           _gestureState = _GestureState.swiping;
         } else {
-          // Horizontal or diagonal - let InteractiveViewer handle it
           _gestureState = _GestureState.pinching;
         }
       } else {
-        // Check timeout - if finger stayed still too long, it might be a pinch start
         final elapsed = DateTime.now().difference(_gestureStartTime!);
         if (elapsed > _swipeDetectionTimeout) {
-          // Timeout without clear vertical movement - default to pinching
           _gestureState = _GestureState.pinching;
         }
       }
     }
     
-    // Apply swipe movement
     if (_gestureState == _GestureState.swiping) {
       final delta = event.localPosition - _gestureStartPosition!;
       setState(() {
@@ -219,18 +182,14 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
     }
   }
   
-  /// Handle pointer up - finalize gesture
   void _onPointerUp(PointerUpEvent event) {
     _pointerCount = (_pointerCount - 1).clamp(0, 10);
     
     if (_pointerCount == 0) {
-      // All fingers lifted
       if (_gestureState == _GestureState.swiping) {
-        // Check if we should dismiss
         if (_dragOffset.abs() > 100) {
           Navigator.of(context).pop();
         } else {
-          // Reset position
           setState(() {
             _dragOffset = 0.0;
             _opacity = 1.0;
@@ -238,19 +197,16 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
         }
       }
       
-      // Reset state
       _gestureState = _GestureState.idle;
       _gestureStartPosition = null;
       _gestureStartTime = null;
     }
   }
   
-  /// Handle pointer cancel
   void _onPointerCancel(PointerCancelEvent event) {
     _pointerCount = (_pointerCount - 1).clamp(0, 10);
     
     if (_pointerCount == 0) {
-      // Reset everything
       setState(() {
         _dragOffset = 0.0;
         _opacity = 1.0;
@@ -266,35 +222,28 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
     return Scaffold(
       backgroundColor: Colors.black.withOpacity(_opacity),
       body: Listener(
-        // Use Listener for low-level pointer events to properly detect gesture intent
         onPointerDown: _onPointerDown,
         onPointerMove: _onPointerMove,
         onPointerUp: _onPointerUp,
         onPointerCancel: _onPointerCancel,
         child: GestureDetector(
-          // Double-tap detection only - swipe is handled by Listener
           onDoubleTap: _handleDoubleTap,
-          // Prevent GestureDetector from absorbing gestures
           behavior: HitTestBehavior.translucent,
           child: Transform.translate(
             offset: Offset(0, _dragOffset),
             child: Stack(
               children: [
-                // Image viewer with zoom (pinch-to-zoom)
-                // InteractiveViewer handles its own gestures
                 Center(
                   child: InteractiveViewer(
                     transformationController: _transformationController,
                     minScale: 0.5,
                     maxScale: 4.0,
                     onInteractionStart: (details) {
-                      // When InteractiveViewer starts interaction, mark as pinching
                       if (details.pointerCount >= 2) {
                         _gestureState = _GestureState.pinching;
                       }
                     },
                     onInteractionEnd: (details) {
-                      // Reset drag offset when zooming is done
                       if (_currentScale <= 1.0 && _dragOffset != 0) {
                         setState(() {
                           _dragOffset = 0.0;
@@ -302,104 +251,93 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
                         });
                       }
                     },
-                    child: _buildImage(),
+                    child: _buildAvatar(),
                   ),
                 ),
           
-          // Top app bar
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              bottom: false,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.7),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-                padding: const EdgeInsets.all(8.0),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                // Top app bar
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: SafeArea(
+                    bottom: false,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.7),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                      padding: const EdgeInsets.all(8.0),
+                      child: Row(
                         children: [
-                          Text(
-                            widget.senderName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
+                          IconButton(
+                            icon: const Icon(Icons.arrow_back, color: Colors.white),
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                          Expanded(
+                            child: Text(
+                              widget.displayName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          Text(
-                            _formatDate(widget.createdAt),
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                            ),
-                          ),
+                          // Save to gallery button
+                          _isSaving
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12.0),
+                                  child: SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                )
+                              : IconButton(
+                                  icon: const Icon(Icons.download, color: Colors.white),
+                                  onPressed: _saveAvatarToGallery,
+                                  tooltip: 'Сохранить в галерею',
+                                ),
                         ],
                       ),
                     ),
-                    // Save to gallery button
-                    _isSaving
-                        ? const Padding(
-                            padding: EdgeInsets.all(12.0),
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            ),
-                          )
-                        : IconButton(
-                            icon: const Icon(Icons.download, color: Colors.white),
-                            onPressed: _saveImageToGallery,
-                            tooltip: 'Сохранить в галерею',
-                          ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-              ),
-              
-              // Zoom indicator (shows current zoom level when zoomed)
-              if (_currentScale > 1.05)
-                Positioned(
-                  bottom: 80,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Text(
-                        '${_currentScale.toStringAsFixed(1)}x',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
+                
+                // Zoom indicator
+                if (_currentScale > 1.05)
+                  Positioned(
+                    bottom: 80,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          '${_currentScale.toStringAsFixed(1)}x',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
               ],
             ),
           ),
@@ -408,58 +346,65 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
     );
   }
 
-  Widget _buildImage() {
+  Widget _buildAvatar() {
     if (widget.localPath != null && File(widget.localPath!).existsSync()) {
-      return Image.file(
-        File(widget.localPath!),
-        fit: BoxFit.contain,
-      );
-    } else if (widget.imageUrl != null) {
-      return CachedNetworkImage(
-        imageUrl: widget.imageUrl!,
-        fit: BoxFit.contain,
-        placeholder: (context, url) => const Center(
-          child: CircularProgressIndicator(color: Colors.white),
+      return ClipOval(
+        child: Image.file(
+          File(widget.localPath!),
+          fit: BoxFit.cover,
+          width: 300,
+          height: 300,
         ),
-        errorWidget: (context, url, error) => const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.error_outline, color: Colors.white, size: 48),
-              SizedBox(height: 16),
-              Text(
-                'Не удалось загрузить изображение',
-                style: TextStyle(color: Colors.white),
-              ),
-            ],
+      );
+    } else if (widget.avatarUrl != null) {
+      return ClipOval(
+        child: CachedNetworkImage(
+          imageUrl: widget.avatarUrl!,
+          fit: BoxFit.cover,
+          width: 300,
+          height: 300,
+          placeholder: (context, url) => Container(
+            width: 300,
+            height: 300,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary,
+              shape: BoxShape.circle,
+            ),
+            child: const Center(
+              child: CircularProgressIndicator(color: Colors.white),
+            ),
           ),
+          errorWidget: (context, url, error) => _buildFallbackAvatar(context),
         ),
       );
     } else {
-      return const Center(
-        child: Text(
-          'Изображение недоступно',
-          style: TextStyle(color: Colors.white),
-        ),
-      );
-    }
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final diff = now.difference(date);
-    
-    if (diff.inDays == 0) {
-      return 'Сегодня в ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-    } else if (diff.inDays == 1) {
-      return 'Вчера в ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-    } else {
-      return '${date.day}.${date.month}.${date.year} в ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+      return _buildFallbackAvatar(context);
     }
   }
   
-  /// Save image to gallery
-  Future<void> _saveImageToGallery() async {
+  Widget _buildFallbackAvatar(BuildContext context) {
+    return Container(
+      width: 300,
+      height: 300,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primary,
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: Text(
+          widget.displayName.isNotEmpty ? widget.displayName[0].toUpperCase() : '?',
+          style: const TextStyle(
+            fontSize: 120,
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
+  
+  /// Save avatar to gallery
+  Future<void> _saveAvatarToGallery() async {
     if (_isSaving) return;
     
     setState(() {
@@ -472,13 +417,13 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
       // If we have a local path, use it directly
       if (widget.localPath != null && File(widget.localPath!).existsSync()) {
         filePath = widget.localPath;
-      } else if (widget.imageUrl != null) {
+      } else if (widget.avatarUrl != null) {
         // Download the image first
-        final response = await http.get(Uri.parse(widget.imageUrl!));
+        final response = await http.get(Uri.parse(widget.avatarUrl!));
         if (response.statusCode == 200) {
           // Save to temp file first
           final tempDir = await getTemporaryDirectory();
-          final fileName = 'image_${DateTime.now().millisecondsSinceEpoch}.jpg';
+          final fileName = 'avatar_${DateTime.now().millisecondsSinceEpoch}.jpg';
           final tempFile = File('${tempDir.path}/$fileName');
           await tempFile.writeAsBytes(response.bodyBytes);
           filePath = tempFile.path;
@@ -493,8 +438,8 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(success 
-                ? 'Изображение сохранено в галерею' 
-                : 'Ошибка сохранения изображения'),
+                ? 'Аватар сохранен в галерею' 
+                : 'Ошибка сохранения аватара'),
               duration: const Duration(seconds: 2),
               backgroundColor: success ? Colors.green : Colors.red,
             ),
@@ -504,7 +449,7 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
         throw Exception('Не удалось получить изображение');
       }
     } catch (e) {
-      print('[IMAGE_SAVE] Error saving image: $e');
+      print('[AVATAR_SAVE] Error saving avatar: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -523,3 +468,4 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
     }
   }
 }
+

@@ -42,6 +42,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _showScrollToBottomButton = false; // Show FAB when scrolled up
   DateTime? _currentVisibleDate; // For sticky date header
   bool _showStickyDateHeader = false; // Show/hide sticky date header
+  List<Message> _currentMessages = []; // Cache messages for scroll calculations
 
   @override
   void initState() {
@@ -102,11 +103,49 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final currentScroll = _scrollController.position.pixels;
     final shouldShow = currentScroll > 50; // Show when scrolled more than 50px from newest
     
-    if (shouldShow != _showStickyDateHeader) {
+    // Calculate the visible date based on scroll position
+    final newDate = _calculateVisibleDate(currentScroll);
+    
+    // Update state if header visibility or date changed
+    final dateChanged = newDate != null && 
+        (_currentVisibleDate == null || !MessageDateUtils.isSameDay(_currentVisibleDate!, newDate));
+    
+    if (shouldShow != _showStickyDateHeader || dateChanged) {
       setState(() {
         _showStickyDateHeader = shouldShow;
+        if (newDate != null) {
+          _currentVisibleDate = newDate;
+        }
       });
     }
+  }
+  
+  /// Calculate the date of the topmost visible message based on scroll position
+  DateTime? _calculateVisibleDate(double scrollPosition) {
+    if (_currentMessages.isEmpty) return null;
+    
+    // With reverse: true ListView:
+    // - scrollPosition = 0 means we're at the bottom (newest messages)
+    // - scrollPosition increases as we scroll UP (toward older messages)
+    // - Messages are sorted oldest first in _currentMessages
+    
+    // Approximate the item height (messages + some date separators)
+    // We use a conservative estimate since items have varying heights
+    const approximateItemHeight = 70.0;
+    
+    // Calculate how many items from the bottom (newest) we've scrolled
+    final itemsFromBottom = (scrollPosition / approximateItemHeight).floor();
+    
+    // The visible message index counting from the end (newest)
+    // _currentMessages is sorted oldest->newest, so we need to find the message
+    // that corresponds to this scroll position
+    final visibleIndexFromNewest = itemsFromBottom;
+    final visibleIndex = _currentMessages.length - 1 - visibleIndexFromNewest;
+    
+    // Clamp to valid range
+    final clampedIndex = visibleIndex.clamp(0, _currentMessages.length - 1);
+    
+    return _currentMessages[clampedIndex].createdAt;
   }
   
   /// Perform reliable synchronization when chat screen opens
@@ -388,6 +427,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget _buildMessagesList(MessagesState messagesState) {
     final messages = messagesState.messages;
     
+    // Cache messages for scroll calculations
+    _currentMessages = messages;
+    
+    // Initialize the visible date with the newest message date on first build
+    if (_currentVisibleDate == null && messages.isNotEmpty) {
+      _currentVisibleDate = messages.last.createdAt;
+    }
+    
     // Build items list with date separators (in normal order, oldest first)
     // We'll reverse the display order in ListView
     final List<dynamic> items = []; // Either Message or DateTime for separator
@@ -414,9 +461,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // With reverse: true, we need to reverse our items so newest is at index 0
     final reversedItems = items.reversed.toList();
     final itemCount = reversedItems.length + (messagesState.isLoadingOlder ? 1 : 0);
-    
-    // Update current visible date for sticky header
-    _updateVisibleDate(messages);
     
     return ListView.builder(
       controller: _scrollController,
@@ -465,32 +509,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
   
-  /// Update the currently visible date for sticky header
-  void _updateVisibleDate(List<Message> messages) {
-    if (messages.isEmpty) return;
-    
-    // Estimate which message is currently visible based on scroll position
-    if (!_scrollController.hasClients) {
-      _currentVisibleDate = messages.last.createdAt;
-      return;
-    }
-    
-    final currentScroll = _scrollController.position.pixels;
-    final approximateItemHeight = 80.0;
-    
-    // Calculate approximate visible message index (from newest)
-    final visibleIndexFromNewest = (currentScroll / approximateItemHeight).floor();
-    final visibleIndex = messages.length - 1 - visibleIndexFromNewest;
-    
-    if (visibleIndex >= 0 && visibleIndex < messages.length) {
-      final newDate = messages[visibleIndex.clamp(0, messages.length - 1)].createdAt;
-      if (_currentVisibleDate == null || 
-          !MessageDateUtils.isSameDay(_currentVisibleDate!, newDate)) {
-        _currentVisibleDate = newDate;
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final messagesState = ref.watch(messagesProvider(widget.chatId));
