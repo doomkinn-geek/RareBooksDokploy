@@ -23,11 +23,13 @@ import 'audio_player_manager.dart';
 class MessageBubble extends ConsumerStatefulWidget {
   final Message message;
   final bool isHighlighted;
+  final Function(String messageId)? onReplyTap;
 
   const MessageBubble({
     super.key,
     required this.message,
     this.isHighlighted = false,
+    this.onReplyTap,
   });
 
   @override
@@ -771,8 +773,10 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     
     return GestureDetector(
       onTap: () {
-        // Navigate to replied message (will be handled by parent)
-        // For now, just show the message was tapped
+        // Navigate to replied message
+        if (widget.onReplyTap != null) {
+          widget.onReplyTap!(reply.id);
+        }
       },
       child: Container(
         padding: const EdgeInsets.all(8),

@@ -66,19 +66,7 @@ public class MessagesController : ControllerBase
         
         await _unitOfWork.SaveChangesAsync();
         
-        return Ok(messages.Select(m => new MessageDto
-        {
-            Id = m.Id,
-            ChatId = m.ChatId,
-            SenderId = m.SenderId,
-            SenderName = m.Sender?.DisplayName ?? "Unknown",
-            Type = m.Type,
-            Content = m.Content,
-            FilePath = m.FilePath,
-            Status = m.Status,
-            CreatedAt = m.CreatedAt,
-            ClientMessageId = m.ClientMessageId
-        }));
+        return Ok(messages.Select(m => MapToMessageDto(m, m.Sender)));
     }
     
     /// <summary>
@@ -126,18 +114,7 @@ public class MessagesController : ControllerBase
             
             await _unitOfWork.SaveChangesAsync();
             
-            return Ok(messages.Select(m => new MessageDto
-            {
-                Id = m.Id,
-                ChatId = m.ChatId,
-                SenderId = m.SenderId,
-                SenderName = m.Sender?.DisplayName ?? "Unknown",
-                Type = m.Type,
-                Content = m.Content,
-                FilePath = m.FilePath,
-                Status = m.Status,
-                CreatedAt = m.CreatedAt
-            }));
+            return Ok(messages.Select(m => MapToMessageDto(m, m.Sender)));
         }
         catch (Exception ex)
         {
@@ -188,18 +165,7 @@ public class MessagesController : ControllerBase
             
             await _unitOfWork.SaveChangesAsync();
             
-            return Ok(messages.Select(m => new MessageDto
-            {
-                Id = m.Id,
-                ChatId = m.ChatId,
-                SenderId = m.SenderId,
-                SenderName = m.Sender?.DisplayName ?? "Unknown",
-                Type = m.Type,
-                Content = m.Content,
-                FilePath = m.FilePath,
-                Status = m.Status,
-                CreatedAt = m.CreatedAt
-            }));
+            return Ok(messages.Select(m => MapToMessageDto(m, m.Sender)));
         }
         catch (Exception ex)
         {
@@ -260,19 +226,7 @@ public class MessagesController : ControllerBase
             await _unitOfWork.SaveChangesAsync();
         }
         
-        var messageDtos = messages.Select(m => new MessageDto
-        {
-            Id = m.Id,
-            ChatId = m.ChatId,
-            SenderId = m.SenderId,
-            SenderName = m.Sender.DisplayName,
-            Type = m.Type,
-            Content = m.Content,
-            FilePath = m.FilePath,
-            Status = m.Status,
-            CreatedAt = m.CreatedAt,
-            ClientMessageId = m.ClientMessageId
-        });
+        var messageDtos = messages.Select(m => MapToMessageDto(m, m.Sender));
         
         return Ok(messageDtos);
     }
@@ -495,19 +449,7 @@ public class MessagesController : ControllerBase
             return StatusCode(500, "Internal server error: User not found");
         }
         
-        var messageDto = new MessageDto
-        {
-            Id = message.Id,
-            ChatId = message.ChatId,
-            SenderId = message.SenderId,
-            SenderName = sender.DisplayName,
-            Type = message.Type,
-            Content = message.Content,
-            FilePath = message.FilePath,
-            Status = message.Status,
-            CreatedAt = message.CreatedAt,
-            ClientMessageId = message.ClientMessageId
-        };
+        var messageDto = MapToMessageDto(message, sender);
         
         // Send SignalR notification ONLY to group (not to individual users to avoid duplicates)
         var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
@@ -588,19 +530,7 @@ public class MessagesController : ControllerBase
                 return StatusCode(500, "Internal server error: User not found");
             }
             
-            var messageDto = new MessageDto
-            {
-                Id = message.Id,
-                ChatId = message.ChatId,
-                SenderId = message.SenderId,
-                SenderName = sender.DisplayName,
-                Type = message.Type,
-                Content = message.Content,
-                FilePath = message.FilePath,
-                Status = message.Status,
-                CreatedAt = message.CreatedAt,
-                ClientMessageId = message.ClientMessageId  // Include clientMessageId for deduplication
-            };
+            var messageDto = MapToMessageDto(message, sender);
             
             // Send SignalR notification ONLY to group
             var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
@@ -695,21 +625,7 @@ public class MessagesController : ControllerBase
                 return StatusCode(500, "Internal server error: User not found");
             }
             
-            var messageDto = new MessageDto
-            {
-                Id = message.Id,
-                ChatId = message.ChatId,
-                SenderId = message.SenderId,
-                SenderName = sender.DisplayName,
-                Type = message.Type,
-                Content = message.Content,
-                FilePath = message.FilePath,
-                OriginalFileName = message.OriginalFileName,
-                FileSize = message.FileSize,
-                Status = message.Status,
-                CreatedAt = message.CreatedAt,
-                ClientMessageId = message.ClientMessageId
-            };
+            var messageDto = MapToMessageDto(message, sender);
             
             // Send SignalR notification
             var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
@@ -1411,19 +1327,7 @@ public class MessagesController : ControllerBase
         
         var sender = await _unitOfWork.Users.GetByIdAsync(userId);
         
-        var messageDto = new MessageDto
-        {
-            Id = message.Id,
-            ChatId = message.ChatId,
-            SenderId = message.SenderId,
-            SenderName = sender?.DisplayName ?? "Unknown",
-            Type = message.Type,
-            Content = message.Content,
-            Status = message.Status,
-            CreatedAt = message.CreatedAt,
-            IsEdited = message.IsEdited,
-            EditedAt = message.EditedAt
-        };
+        var messageDto = MapToMessageDto(message, sender);
         
         // Notify all participants via SignalR
         await _hubContext.Clients.Group(message.ChatId.ToString())
@@ -1669,19 +1573,7 @@ public class MessagesController : ControllerBase
             var unsyncedMessages = allMessages
                 .OrderBy(m => m.CreatedAt)
                 .Take(take)
-                .Select(m => new MessageDto
-                {
-                    Id = m.Id,
-                    ChatId = m.ChatId,
-                    SenderId = m.SenderId,
-                    SenderName = m.Sender?.DisplayName ?? "Unknown",
-                    Type = m.Type,
-                    Content = m.Content,
-                    FilePath = m.FilePath,
-                    Status = m.Status,
-                    CreatedAt = m.CreatedAt,
-                    ClientMessageId = m.ClientMessageId
-                })
+                .Select(m => MapToMessageDto(m, m.Sender))
                 .ToList();
             
             _logger.LogInformation($"GetUnsyncedMessages: Returning {unsyncedMessages.Count} unsynced messages");
@@ -1742,19 +1634,7 @@ public class MessagesController : ControllerBase
                 _logger.LogInformation($"GetMessageById: Auto-marked message {messageId} as delivered for user {userId}");
             }
             
-            var messageDto = new MessageDto
-            {
-                Id = message.Id,
-                ChatId = message.ChatId,
-                SenderId = message.SenderId,
-                SenderName = message.Sender?.DisplayName ?? "Unknown",
-                Type = message.Type,
-                Content = message.Content,
-                FilePath = message.FilePath,
-                Status = message.Status,
-                CreatedAt = message.CreatedAt,
-                ClientMessageId = message.ClientMessageId
-            };
+            var messageDto = MapToMessageDto(message, message.Sender);
             
             _logger.LogInformation($"GetMessageById: Successfully retrieved message {messageId}");
             

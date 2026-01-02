@@ -647,6 +647,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 key: ValueKey('${stableKey}_${item.status.name}'),
                 message: item,
                 isHighlighted: isHighlighted,
+                onReplyTap: _navigateToMessage,
               ),
             ),
           );

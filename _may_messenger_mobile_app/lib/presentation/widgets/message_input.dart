@@ -151,6 +151,30 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
     _preWarmRecording();
   }
   
+  @override
+  void didUpdateWidget(MessageInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // When editing message changes, load its content into text field
+    if (widget.editingMessage != oldWidget.editingMessage) {
+      if (widget.editingMessage != null) {
+        // Start editing - load old message content
+        _textController.text = widget.editingMessage!.content ?? '';
+        _hasText = _textController.text.isNotEmpty;
+        // Request focus to the text field
+        Future.delayed(const Duration(milliseconds: 50), () {
+          if (mounted) {
+            _textFocusNode.requestFocus();
+          }
+        });
+      } else {
+        // Cancel editing - clear the field
+        _textController.clear();
+        _hasText = false;
+      }
+    }
+  }
+  
   /// Pre-initialize recording dependencies for instant start
   /// This runs in background and doesn't block UI
   Future<void> _preWarmRecording() async {
