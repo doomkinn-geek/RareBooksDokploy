@@ -1398,11 +1398,13 @@ public class MessagesController : ControllerBase
         // Send push notifications to other participants (not the sender)
         var userTokensForPush = await GetFcmTokensForChatAsync(targetChat, userId);
         
-        // Log who will receive push notifications
-        _logger.LogInformation($"[FORWARD_PUSH] Sender: {userId}, recipients for push: {string.Join(", ", userTokensForPush.Keys)}");
+        _logger.LogInformation($"[FORWARD_PUSH] Message {forwardedMessage.Id} forwarded by {userId}. Target chat participants: {targetChat.Participants.Count}. FCM token users: {userTokensForPush.Count}");
+        foreach (var kvp in userTokensForPush)
+        {
+            _logger.LogInformation($"[FORWARD_PUSH] User {kvp.Key} has {kvp.Value.Count} FCM tokens");
+        }
         
-        // Only send push if there are recipients (exclude sender)
-        if (userTokensForPush.Any() && currentUser != null)
+        if (currentUser != null)
         {
             _ = Task.Run(async () =>
             {
@@ -1415,6 +1417,10 @@ public class MessagesController : ControllerBase
                     _logger.LogError(ex, $"FCM failed for forwarded message {forwardedMessage.Id}");
                 }
             });
+        }
+        else
+        {
+            _logger.LogWarning($"[FORWARD_PUSH] Cannot send push - currentUser is null for userId {userId}");
         }
         
         _logger.LogInformation($"Message {request.OriginalMessageId} forwarded to chat {request.TargetChatId} by user {userId}");

@@ -12,6 +12,9 @@ class NotificationService {
   Future<void> Function(String chatId, String? messageId)? onNotificationTap;
   Future<void> Function(String chatId, String text)? onNotificationReply;
   
+  /// Get the current open chat ID (null if no chat is open)
+  String? get currentChatId => _currentChatId;
+  
   // Track notifications per chat for grouping
   final Map<String, List<String>> _notificationsByChat = {};
   final Map<String, int> _unreadCountByChat = {};
