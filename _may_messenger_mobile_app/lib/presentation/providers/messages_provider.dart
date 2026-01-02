@@ -176,7 +176,6 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
       if (chat.id.isNotEmpty) {
         _otherParticipantPublicKey = chat.otherParticipantPublicKey;
-        print('[ENCRYPTION] Initialized encryption for chat $chatId, hasPublicKey: ${_otherParticipantPublicKey != null}');
       }
     } catch (e) {
       print('[ENCRYPTION] Failed to initialize encryption: $e');
@@ -212,7 +211,6 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       _initializeEncryption();
       
       if (_otherParticipantPublicKey == null || _otherParticipantPublicKey!.isEmpty) {
-        print('[ENCRYPTION] No public key available for decryption');
         return null;
       }
     }
@@ -224,7 +222,6 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         encryptedContent, 
         _otherParticipantPublicKey,
       );
-      print('[ENCRYPTION] Message decrypted successfully');
       return decrypted;
     } catch (e) {
       print('[ENCRYPTION] Decryption failed: $e');
@@ -251,25 +248,20 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     return message.copyWith(content: '[Не удалось расшифровать сообщение]');
   }
   
-  /// Handle encrypted message - decrypt and add to state
-  Future<void> _addEncryptedMessage(Message encryptedMessage) async {
-    print('[ENCRYPTION] Decrypting incoming message: ${encryptedMessage.id}');
-    
-    // Decrypt the message
-    final decryptedMessage = await _decryptMessageIfNeeded(encryptedMessage);
-    
-    // Add the decrypted message using the synchronous flow
-    // We call the internal logic directly since addMessage would detect encryption again
-    _addMessageInternal(decryptedMessage);
-  }
-  
-  /// Internal method to add a message without encryption check (to avoid recursion)
+  /// Internal method to add a message without encryption check (used for backup flow)
   void _addMessageInternal(Message message) {
+    // #region agent log - H4, H5
+    print('[DEBUG_H4H5] _addMessageInternal called: id=${message.id}, isEncrypted=${message.isEncrypted}, type=${message.type}, contentFirst30=${message.content?.substring(0, (message.content?.length ?? 0) > 30 ? 30 : message.content?.length ?? 0) ?? "NULL"}');
+    // #endregion
+    
     // Check if this is a replacement for a local message
     // (when our own message comes back from server via SignalR)
     final profileState = _ref.read(profileProvider);
     final currentUserId = profileState.profile?.id;
     final isFromMe = currentUserId != null && message.senderId == currentUserId;
+    // #region agent log - H4, H5
+    print('[DEBUG_H4H5] currentUserId=$currentUserId, senderId=${message.senderId}, isFromMe=$isFromMe');
+    // #endregion
     
     // If message is from me, check if we have a local version to replace
     if (isFromMe && message.clientMessageId != null && message.clientMessageId!.isNotEmpty) {
@@ -284,9 +276,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         
         final updatedMessages = [...state.messages];
         final localMessage = updatedMessages[localIndex];
+        // Preserve original plaintext content from local message if encrypted
         final serverMessage = message.copyWith(
           localId: localMessage.localId,
           isLocalOnly: false,
+          content: message.isEncrypted ? localMessage.content : message.content,
         );
         updatedMessages[localIndex] = serverMessage;
         state = state.copyWith(messages: updatedMessages);
@@ -828,8 +822,42 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       print('[MSG_LOAD] After adding local: ${allMessages.length} unique messages, skipped=$skipped duplicates');
       
       // Convert to list and sort by date
-      final List<Message> messages = List<Message>.from(allMessages.values);
+      List<Message> messages = List<Message>.from(allMessages.values);
       messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      
+      // STEP 4.5: Decrypt any encrypted messages from other users
+      final currentUserId = _ref.read(profileProvider).profile?.id;
+      
+      if (_otherParticipantPublicKey != null && _otherParticipantPublicKey!.isNotEmpty) {
+        final decryptedMessages = <Message>[];
+        for (final msg in messages) {
+          if (msg.isEncrypted && 
+              msg.type == MessageType.text && 
+              msg.content != null && 
+              msg.content!.isNotEmpty &&
+              msg.senderId != currentUserId) {
+            // Decrypt message from other user
+            try {
+              final decrypted = await _decryptContent(msg.content!);
+              if (decrypted != null) {
+                // Mark as decrypted (isEncrypted=false) to prevent re-decryption on next load
+                decryptedMessages.add(msg.copyWith(content: decrypted, isEncrypted: false));
+                print('[ENCRYPTION] Decrypted message ${msg.id} on load, marked isEncrypted=false');
+              } else {
+                // Mark as decrypted even on failure to prevent infinite retry
+                decryptedMessages.add(msg.copyWith(content: '[Не удалось расшифровать сообщение]', isEncrypted: false));
+              }
+            } catch (e) {
+              // Mark as decrypted even on error to prevent infinite retry
+              decryptedMessages.add(msg.copyWith(content: '[Ошибка расшифровки]', isEncrypted: false));
+              print('[ENCRYPTION] Failed to decrypt message ${msg.id}: $e');
+            }
+          } else {
+            decryptedMessages.add(msg);
+          }
+        }
+        messages = decryptedMessages;
+      }
       
       print('[MSG_LOAD] Final result: ${messages.length} messages total');
       // #region agent log - Hypothesis A: Track final state update
@@ -849,10 +877,12 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       print('[MSG_LOAD] HYP_A_STATE_UPDATED: State updated with ${messages.length} messages, isLoading: false');
       // #endregion
       
-      // STEP 6: Гарантируем сохранение в Hive кэш (на случай если репозиторий не сохранил)
+      // STEP 6: Гарантируем сохранение в Hive кэш РАСШИФРОВАННЫХ сообщений
+      // Important: save 'messages' (decrypted) not 'syncedMessages' (encrypted from server)
       try {
         final localDataSource = _ref.read(localDataSourceProvider);
-        await localDataSource.cacheMessages(chatId, syncedMessages);
+        await localDataSource.cacheMessages(chatId, messages);
+        print('[MSG_LOAD] Saved ${messages.length} decrypted messages to Hive cache');
       } catch (e) {
         print('[MSG_LOAD] Failed to cache messages in Hive: $e');
       }
@@ -992,10 +1022,16 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final apiCallStart = DateTime.now();
       // #endregion
       if (type == MessageType.text) {
-        // Try to encrypt the message if encryption is available
+        // TEMPORARILY DISABLED: E2EE encryption
+        // Key synchronization issues cause decryption failures after app data clear
+        // TODO: Re-enable when key exchange protocol is implemented
         String? contentToSend = content;
-        bool isEncrypted = false;
+        const bool isEncrypted = false;
         
+        // Encryption disabled - always send unencrypted
+        print('[MSG_SEND] E2EE temporarily disabled, sending unencrypted');
+        
+        /* DISABLED: Original encryption logic
         if (content != null && _otherParticipantPublicKey != null && _otherParticipantPublicKey!.isNotEmpty) {
           try {
             final encrypted = await _encryptContent(content);
@@ -1008,6 +1044,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
             print('[MSG_SEND] Encryption failed, sending unencrypted: $e');
           }
         }
+        */
         
         serverMessage = await _messageRepository.sendMessage(
           chatId: chatId,
@@ -1612,7 +1649,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     }
   }
 
-  void addMessage(Message message) {
+  Future<void> addMessage(Message message) async {
     // Проверяем, что сообщение для этого чата
     if (message.chatId != chatId) {
       return;
@@ -1623,14 +1660,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     print('[MSG_RECV] HYP_A_INCOMING: Message received - id: ${message.id}, clientMessageId: ${message.clientMessageId}, type: ${message.type}, isLocalOnly: ${message.isLocalOnly}, currentMessages: ${state.messages.length}');
     // #endregion
     
-    // Handle encrypted messages asynchronously
-    if (message.isEncrypted && message.type == MessageType.text) {
-      _addEncryptedMessage(message);
-      return;
-    }
-    
-    // Check if this is a replacement for a local message
+    // Check if this is a replacement for a local message FIRST
     // (when our own message comes back from server via SignalR)
+    // This MUST happen before decryption check to preserve original plaintext!
     final profileState = _ref.read(profileProvider);
     final currentUserId = profileState.profile?.id;
     final isFromMe = currentUserId != null && message.senderId == currentUserId;
@@ -1648,15 +1680,19 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         print('[MSG_RECV] Found local message by clientMessageId: ${message.clientMessageId}');
         
         // Replace local message with server message
+        // IMPORTANT: Preserve original plaintext content from local message!
+        // Server returns encrypted content, but we already have the plaintext locally
         final updatedMessages = [...state.messages];
         final localMessage = updatedMessages[localIndex];
         final serverMessage = message.copyWith(
           localId: localMessage.localId,
           isLocalOnly: false,
+          // Keep local plaintext content if message was encrypted
+          content: message.isEncrypted ? localMessage.content : message.content,
         );
         updatedMessages[localIndex] = serverMessage;
         state = state.copyWith(messages: updatedMessages);
-        print('[MSG_RECV] Replaced local message with server message: ${message.id}');
+        print('[MSG_RECV] Replaced local message with server message: ${message.id} (preserved local content: ${message.isEncrypted})');
         
         // Register ID mapping for future lookups
         if (localMessage.localId != null) {
@@ -1705,28 +1741,43 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     });
     
     if (!exists) {
+      // Handle encrypted messages from OTHER users (not our own returning)
+      // For messages from others, we need to decrypt before adding to UI
+      Message messageToAdd = message;
+      
+      if (message.isEncrypted && message.type == MessageType.text && !isFromMe) {
+        print('[ENCRYPTION] Decrypting incoming message from other user: ${message.id}');
+        final decrypted = await _decryptContent(message.content ?? '');
+        if (decrypted != null) {
+          // Mark as decrypted (isEncrypted=false) to prevent re-decryption on cache load
+          messageToAdd = message.copyWith(content: decrypted, isEncrypted: false);
+          print('[ENCRYPTION] Message decrypted successfully, marked isEncrypted=false');
+        } else {
+          // Mark as decrypted even on failure to prevent infinite retry loops
+          messageToAdd = message.copyWith(content: '[Не удалось расшифровать сообщение]', isEncrypted: false);
+          print('[ENCRYPTION] Failed to decrypt message, marked isEncrypted=false');
+        }
+      }
+      
       // Add new message and sort by date
-      final newMessages = [...state.messages, message];
+      final newMessages = [...state.messages, messageToAdd];
       newMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       
       state = state.copyWith(
         messages: newMessages,
       );
       
-      print('[MSG_RECV] Added new message to state: ${message.id} (localId: ${message.localId ?? 'none'}, clientMessageId: ${message.clientMessageId ?? 'none'})');
+      print('[MSG_RECV] Added new message to state: ${messageToAdd.id} (localId: ${messageToAdd.localId ?? 'none'}, clientMessageId: ${messageToAdd.clientMessageId ?? 'none'})');
       
       // Add to LRU cache
-      _cache.put(message);
+      _cache.put(messageToAdd);
       
       // Enqueue chat preview update via sync service
       try {
-        final profileState = _ref.read(profileProvider);
-        final isFromMe = message.senderId == profileState.profile?.id;
-        
         final syncService = _ref.read(chatPreviewSyncServiceProvider);
         syncService.enqueueUpdate(ChatPreviewUpdate(
           chatId: chatId,
-          lastMessage: message,
+          lastMessage: messageToAdd,
           unreadCountDelta: isFromMe ? null : 1, // Increment for messages from others
           timestamp: DateTime.now(),
         ));
@@ -1737,16 +1788,16 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       // Save message to Hive cache for persistence
       try {
         final localDataSource = _ref.read(localDataSourceProvider);
-        localDataSource.addMessageToCache(chatId, message);
+        localDataSource.addMessageToCache(chatId, messageToAdd);
       } catch (e) {
         print('[MSG_RECV] Failed to cache message in Hive: $e');
       }
       
       // Background download for audio messages
-      if (message.type == MessageType.audio && 
-          message.filePath != null && 
-          message.filePath!.isNotEmpty) {
-        _downloadAudioInBackground(message);
+      if (messageToAdd.type == MessageType.audio && 
+          messageToAdd.filePath != null && 
+          messageToAdd.filePath!.isNotEmpty) {
+        _downloadAudioInBackground(messageToAdd);
       }
     } else {
       print('[MSG_RECV] Message already exists, ignoring: ${message.id} (localId: ${message.localId ?? 'none'}, clientMessageId: ${message.clientMessageId ?? 'none'})');

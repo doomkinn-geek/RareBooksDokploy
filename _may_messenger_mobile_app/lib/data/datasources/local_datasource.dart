@@ -134,10 +134,22 @@ class LocalDataSource {
             .toList();
       }
       
-      // Check if message already exists
-      final exists = messages.any((m) => m.id == message.id);
-      if (!exists) {
+      // Check if message already exists - if so, UPDATE it (for decryption status changes)
+      final existingIndex = messages.indexWhere((m) => m.id == message.id);
+      bool needsSave = false;
+      
+      if (existingIndex != -1) {
+        // Update existing message (e.g., after decryption, isEncrypted changes from true to false)
+        messages[existingIndex] = message;
+        needsSave = true;
+        print('[HIVE_CACHE] Updated existing message ${message.id} in cache (isEncrypted=${message.isEncrypted})');
+      } else {
+        // Add new message
         messages.add(message);
+        needsSave = true;
+      }
+      
+      if (needsSave) {
         // Sort by date (ascending - oldest first, newest last)
         messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
         

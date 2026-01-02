@@ -422,7 +422,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
                 
                 // Force add this message to the messages provider
                 final messagesNotifier = ref.read(messagesProvider(chatId).notifier);
-                messagesNotifier.addMessage(message);
+                await messagesNotifier.addMessage(message);
                 
                 // Also trigger a sync to ensure consistency
                 await messagesNotifier.loadMessages(forceRefresh: true);

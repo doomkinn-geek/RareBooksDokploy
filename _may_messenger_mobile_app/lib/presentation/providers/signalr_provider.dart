@@ -259,7 +259,7 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
     print('[SignalR] Setting up event listeners');
     
     // Setup message listener
-        _signalRService.onReceiveMessage((message) {
+        _signalRService.onReceiveMessage((message) async {
           print('[MSG_RECV] Message received via SignalR: ${message.id} for chat ${message.chatId}');
           
           // Check if this message is from us (ignore delivery confirmation for our own messages)
@@ -272,7 +272,7 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
             // Try to add message to the provider
             // If the provider doesn't exist (chat not open), it will be loaded when user opens the chat
             // addMessage() will ignore duplicate if message was already added locally
-            _ref.read(messagesProvider(message.chatId).notifier).addMessage(message);
+            await _ref.read(messagesProvider(message.chatId).notifier).addMessage(message);
             print('[MSG_RECV] Message added to provider for chat ${message.chatId}');
           } catch (e) {
             // Provider might not be initialized yet - that's OK, message will be loaded from API when chat opens

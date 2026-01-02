@@ -131,7 +131,6 @@ class EncryptionService {
     // Cache the key
     _sessionKeyCache[chatId] = sessionKey;
     
-    print('[ENCRYPTION] Derived session key for chat $chatId');
     return sessionKey;
   }
   
@@ -227,13 +226,13 @@ class EncryptionService {
   /// Decrypt a message from a specific chat (convenience method)
   Future<String?> decryptFromChat(String chatId, String encryptedBase64, String? otherUserPublicKey) async {
     if (otherUserPublicKey == null || otherUserPublicKey.isEmpty) {
-      print('[ENCRYPTION] No public key available for chat $chatId');
       return null;
     }
     
     try {
       final sessionKey = await deriveSessionKey(chatId, otherUserPublicKey);
-      return await decrypt(encryptedBase64, sessionKey);
+      final result = await decrypt(encryptedBase64, sessionKey);
+      return result;
     } catch (e) {
       print('[ENCRYPTION] Failed to decrypt for chat $chatId: $e');
       return null;

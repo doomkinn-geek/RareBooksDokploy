@@ -61,6 +61,10 @@ class ProximityAudioService {
       // Initialize audio session
       _audioSession = await AudioSession.instance;
       
+      // IMPORTANT: Always start with speaker mode by default
+      _isNearEar = false;
+      await _setAudioRoute(speakerMode: true);
+      
       // Start listening to proximity sensor
       _proximitySubscription = ProximitySensor.events.listen((int event) {
         // event > 0 means object is near (phone near ear)
@@ -68,14 +72,14 @@ class ProximityAudioService {
         _isNearEar = event > 0;
         
         if (wasNearEar != _isNearEar) {
-          print('[ProximityAudio] Proximity changed: ${_isNearEar ? "NEAR" : "FAR"}');
+          print('[ProximityAudio] Proximity changed: ${_isNearEar ? "NEAR (earpiece)" : "FAR (speaker)"}');
           _updateAudioRoute();
           _notifyListeners();
         }
       });
       
       _isListening = true;
-      print('[ProximityAudio] Started listening to proximity sensor');
+      print('[ProximityAudio] Started listening to proximity sensor (default: SPEAKER)');
     } catch (e) {
       print('[ProximityAudio] Failed to start proximity sensor: $e');
     }

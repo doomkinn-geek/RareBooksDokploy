@@ -352,9 +352,7 @@ public class MessagesController : ControllerBase
                     {
                         try
                         {
-                            _logger.LogInformation($"[DEBUG_PUSH_A] Sending push for message {message.Id}");
                             await SendPushNotificationsAsync(sender, messageDto, userTokensForPush);
-                            _logger.LogInformation($"[DEBUG_PUSH_B] Push completed for {message.Id}");
                         }
                         catch (Exception ex)
                         {
@@ -753,21 +751,14 @@ public class MessagesController : ControllerBase
     /// </summary>
     private async Task SendPushNotificationsAsync(User sender, MessageDto message, Dictionary<Guid, List<Domain.Entities.FcmToken>> userTokens)
     {
-        // #region agent log - Hypothesis B: Check Firebase initialization
-        _logger.LogInformation($"[DEBUG_PUSH_D] SendPushNotificationsAsync started. Firebase initialized: {_firebaseService.IsInitialized}");
-        // #endregion
         if (!_firebaseService.IsInitialized)
         {
-            _logger.LogWarning("[DEBUG_PUSH_E] Firebase not initialized. Cannot send push notifications.");
+            _logger.LogWarning("Firebase not initialized. Cannot send push notifications.");
             return;
         }
 
         try
         {
-            // #region agent log - Hypothesis A: Check tokens received
-            _logger.LogInformation($"[DEBUG_PUSH_F] Received FCM tokens for {userTokens.Count} users");
-            // #endregion
-            
             var title = $"Новое сообщение от {sender.DisplayName}";
             var body = message.Type switch
             {
@@ -796,54 +787,38 @@ public class MessagesController : ControllerBase
 
                 try
                 {
-                    
                     if (tokens.Any())
                     {
-                        _logger.LogInformation($"Sending push notification to user {userId}, {tokens.Count} tokens");
-                        
                         int successCount = 0;
                         var tokensToDeactivate = new List<string>();
                         
                         foreach (var token in tokens)
                         {
-                            // #region agent log - Hypothesis B: Check FCM send result
-                            _logger.LogInformation($"[DEBUG_PUSH_H] Sending FCM notification to token {token.Token.Substring(0, Math.Min(20, token.Token.Length))}...");
-                            // #endregion
                             var (success, shouldDeactivate) = await _firebaseService.SendNotificationAsync(
                                 token.Token, 
                                 title, 
                                 body ?? "", 
                                 data);
                             
-                            // #region agent log - Hypothesis B
-                            _logger.LogInformation($"[DEBUG_PUSH_I] FCM send result: success={success}, shouldDeactivate={shouldDeactivate}");
-                            // #endregion
                             if (success)
                             {
                                 successCount++;
-                                // Update last used timestamp
                                 token.LastUsedAt = DateTime.UtcNow;
                             }
                             else if (shouldDeactivate)
                             {
-                                // Deactivate invalid token
-                                _logger.LogWarning($"[DEBUG_PUSH_J] Deactivating invalid FCM token for user {userId}");
                                 tokensToDeactivate.Add(token.Token);
                             }
                         }
                         
-                        // If at least one push was sent successfully, consider user as notified
                         if (successCount > 0)
                         {
                             successfulRecipients.Add(userId);
-                            _logger.LogInformation($"[DEBUG_PUSH_SUCCESS] Successfully sent push to user {userId}");
                         }
                         
-                        // TODO: Deactivate invalid tokens asynchronously in a separate background job
-                        // Cannot use _unitOfWork here as it may be disposed (running in Task.Run)
                         if (tokensToDeactivate.Any())
                         {
-                            _logger.LogWarning($"[DEBUG_PUSH_K] {tokensToDeactivate.Count} invalid FCM tokens found for user {userId}. Manual cleanup required.");
+                            _logger.LogWarning($"{tokensToDeactivate.Count} invalid FCM tokens found for user {userId}");
                         }
                     }
                 }
@@ -856,7 +831,6 @@ public class MessagesController : ControllerBase
             // Automatically mark message as delivered for users who received push notification
             if (successfulRecipients.Any())
             {
-                _logger.LogInformation($"[DEBUG_PUSH_AUTO_DELIVERED] Calling AutoMarkAsDeliveredAfterPushAsync for {successfulRecipients.Count} recipients");
                 await AutoMarkAsDeliveredAfterPushAsync(message.Id, message.ChatId, successfulRecipients);
             }
         }

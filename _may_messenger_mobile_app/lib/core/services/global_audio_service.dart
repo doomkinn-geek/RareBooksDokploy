@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_session/audio_session.dart';
+import '../../data/services/proximity_audio_service.dart';
 
 /// Состояние текущего воспроизведения
 class AudioPlaybackState {
@@ -60,6 +61,7 @@ class AudioPlaybackState {
 /// Работает независимо от виджетов, поддерживает фоновое воспроизведение
 class GlobalAudioService extends StateNotifier<AudioPlaybackState> {
   final AudioPlayer _player = AudioPlayer();
+  final ProximityAudioService _proximityService = ProximityAudioService();
   StreamSubscription? _positionSubscription;
   StreamSubscription? _durationSubscription;
   StreamSubscription? _playerStateSubscription;
@@ -71,24 +73,35 @@ class GlobalAudioService extends StateNotifier<AudioPlaybackState> {
   GlobalAudioService() : super(const AudioPlaybackState()) {
     _initAudioSession();
     _setupPlayerListeners();
+    _setupProximityListener();
+  }
+  
+  /// Setup proximity sensor listener for speaker/earpiece switching
+  void _setupProximityListener() {
+    _proximityService.addListener((isNearEar) {
+      onProximityChanged?.call(isNearEar);
+      print('[GlobalAudio] Proximity changed: ${isNearEar ? "EARPIECE" : "SPEAKER"}');
+    });
   }
   
   Future<void> _initAudioSession() async {
     try {
       final session = await AudioSession.instance;
+      // Configure for media playback through speaker by default
+      // ProximityAudioService will switch to earpiece when phone is near ear
       await session.configure(const AudioSessionConfiguration(
         avAudioSessionCategory: AVAudioSessionCategory.playback,
-        avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.duckOthers,
-        avAudioSessionMode: AVAudioSessionMode.spokenAudio,
+        avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.defaultToSpeaker,
+        avAudioSessionMode: AVAudioSessionMode.defaultMode,
         avAudioSessionRouteSharingPolicy: AVAudioSessionRouteSharingPolicy.defaultPolicy,
         avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
         androidAudioAttributes: AndroidAudioAttributes(
-          contentType: AndroidAudioContentType.speech,
+          contentType: AndroidAudioContentType.music,
           flags: AndroidAudioFlags.none,
-          usage: AndroidAudioUsage.voiceCommunication,
+          usage: AndroidAudioUsage.media, // Plays through speaker
         ),
-        androidAudioFocusGainType: AndroidAudioFocusGainType.gainTransientMayDuck,
-        androidWillPauseWhenDucked: true,
+        androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+        androidWillPauseWhenDucked: false,
       ));
       
       // Handle audio interruptions (phone calls, other apps)
@@ -132,6 +145,10 @@ class GlobalAudioService extends StateNotifier<AudioPlaybackState> {
         // Reset position but keep message info for mini-player
         _player.seek(Duration.zero);
         _player.pause();
+        
+        // Stop proximity sensor when playback completes
+        _proximityService.stopListening();
+        
         state = state.copyWith(isPlaying: false, position: Duration.zero);
         
         // Notify listeners
@@ -188,6 +205,9 @@ class GlobalAudioService extends StateNotifier<AudioPlaybackState> {
       
       await _player.play();
       
+      // Start proximity sensor for speaker/earpiece switching
+      _proximityService.startListening();
+      
       print('[GlobalAudio] Started playing message: $messageId');
     } catch (e) {
       print('[GlobalAudio] Error playing message: $e');
@@ -217,6 +237,8 @@ class GlobalAudioService extends StateNotifier<AudioPlaybackState> {
   Future<void> stop() async {
     try {
       await _player.stop();
+      // Stop proximity sensor when playback stops
+      _proximityService.stopListening();
       state = const AudioPlaybackState(); // Reset to initial state
       print('[GlobalAudio] Stopped playback');
     } catch (e) {
@@ -281,6 +303,8 @@ class GlobalAudioService extends StateNotifier<AudioPlaybackState> {
     _positionSubscription?.cancel();
     _durationSubscription?.cancel();
     _playerStateSubscription?.cancel();
+    _proximityService.stopListening();
+    _proximityService.dispose();
     _player.dispose();
     super.dispose();
   }
