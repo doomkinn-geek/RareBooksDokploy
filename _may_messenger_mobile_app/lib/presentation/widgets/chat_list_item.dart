@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../data/models/chat_model.dart';
+import '../../data/models/message_model.dart';
 import '../providers/contacts_names_provider.dart';
 import '../providers/chats_provider.dart';
 import 'cached_avatar.dart';
@@ -66,7 +67,16 @@ class ChatListItem extends ConsumerWidget {
       return 'Нет сообщений';
     }
     
-    final content = chat.lastMessage!.content ?? '[Голосовое сообщение]';
+    // Determine content based on message type
+    String content;
+    switch (chat.lastMessage!.type) {
+      case MessageType.audio:
+        content = '[Голосовое сообщение]';
+      case MessageType.image:
+        content = '[Изображение]';
+      case MessageType.text:
+        content = chat.lastMessage!.content ?? '';
+    }
     
     // For group chats, prepend sender name
     if (chat.type == ChatType.group) {

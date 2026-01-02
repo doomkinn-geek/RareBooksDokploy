@@ -213,12 +213,19 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           
           return ChatListItem(
             chat: chat,
-            onTap: () {
-              Navigator.of(context).push(
+            onTap: () async {
+              // Navigate to chat screen
+              await Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (context) => ChatScreen(chatId: chat.id),
                 ),
               );
+              
+              // CRITICAL: Refresh chats from server when returning from chat
+              // This ensures unread counts and last messages are accurate
+              if (mounted) {
+                await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+              }
             },
           );
         },

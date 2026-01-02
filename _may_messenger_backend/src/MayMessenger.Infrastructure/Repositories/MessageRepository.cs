@@ -34,10 +34,12 @@ public class MessageRepository : Repository<Message>, IMessageRepository
     
     public async Task<int> GetUnreadCountAsync(Guid chatId, Guid userId, CancellationToken cancellationToken = default)
     {
+        // Count messages that are not read or played (played implies read for audio messages)
         return await _dbSet
             .Where(m => m.ChatId == chatId && 
                        m.SenderId != userId && 
-                       m.Status != MessageStatus.Read)
+                       m.Status != MessageStatus.Read &&
+                       m.Status != MessageStatus.Played)
             .CountAsync(cancellationToken);
     }
     

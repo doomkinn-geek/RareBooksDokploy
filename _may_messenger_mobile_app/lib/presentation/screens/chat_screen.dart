@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../main.dart' show navigatorKey;
 import '../providers/messages_provider.dart';
 import '../providers/signalr_provider.dart';
 import '../providers/chats_provider.dart';
@@ -293,10 +292,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
-    // IMPORTANT: Clear unread count BEFORE widget is disposed
-    // Use WidgetsBinding to execute after current frame but before provider is disposed
-    final chatId = widget.chatId;
-    
     // Clear notification context
     try {
       ref.read(notificationServiceProvider).setCurrentChat(null);
@@ -305,19 +300,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       print('[CHAT_SCREEN] Failed to clear notification context: $e');
     }
     
-    // Clear unread count - schedule for after dispose to ensure state update
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      try {
-        // Force refresh the chat list to get accurate unread counts from server
-        final container = ProviderScope.containerOf(navigatorKey.currentContext!);
-        container.read(chatsProvider.notifier).clearUnreadCount(chatId);
-        
-        // Also trigger a background refresh to sync with server
-        container.read(chatsProvider.notifier).loadChats(forceRefresh: true);
-      } catch (e) {
-        print('[CHAT_SCREEN] Failed to clear unread count on dispose: $e');
-      }
-    });
+    // Clear local unread count immediately before dispose
+    // Note: The actual refresh from server happens in main_screen.dart after navigation returns
+    try {
+      ref.read(chatsProvider.notifier).clearUnreadCount(widget.chatId);
+    } catch (e) {
+      print('[CHAT_SCREEN] Failed to clear unread count: $e');
+    }
     
     _scrollController.dispose();
     super.dispose();

@@ -234,11 +234,9 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
   /// This is critical for seeing when your messages are read by recipients
   Future<void> _joinAllUserChats() async {
     try {
-      final chatsState = _ref.read(chatsProvider);
-      if (chatsState.chats.isEmpty) {
-        // Try to load chats first if not yet loaded
-        await _ref.read(chatsProvider.notifier).loadChats();
-      }
+      // CRITICAL: Force refresh to ensure we have the latest chats from server
+      // This prevents missing status updates for newly created chats
+      await _ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
       
       final chats = _ref.read(chatsProvider).chats;
       print('[SignalR] Auto-joining ${chats.length} chats');
