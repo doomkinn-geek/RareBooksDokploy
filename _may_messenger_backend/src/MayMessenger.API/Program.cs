@@ -16,6 +16,12 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure Kestrel for larger file uploads (20MB for file messages)
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 25 * 1024 * 1024; // 25MB to allow some overhead
+});
+
 // Configure WebRootPath for background services
 builder.Configuration["WebRootPath"] = builder.Environment.WebRootPath;
 

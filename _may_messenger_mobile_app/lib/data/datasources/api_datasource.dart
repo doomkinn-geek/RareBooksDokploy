@@ -217,6 +217,29 @@ class ApiDataSource {
     }
   }
 
+  Future<Message> sendFileMessage({
+    required String chatId,
+    required String filePath,
+    required String fileName,
+    String? clientMessageId,
+  }) async {
+    try {
+      final formData = FormData.fromMap({
+        'chatId': chatId,
+        'file': await MultipartFile.fromFile(filePath, filename: fileName),
+        if (clientMessageId != null) 'clientMessageId': clientMessageId,
+      });
+
+      final response = await _dio.post(
+        ApiConstants.fileMessages,
+        data: formData,
+      );
+      return Message.fromJson(response.data);
+    } catch (e) {
+      throw Exception('Failed to send file message: $e');
+    }
+  }
+
   Future<void> deleteMessage(String messageId) async {
     try {
       await _dio.delete('${ApiConstants.messages}/$messageId');
@@ -623,6 +646,73 @@ class ApiDataSource {
       return Chat.fromJson(response.data);
     } catch (e) {
       throw Exception('Failed to update group title: $e');
+    }
+  }
+  
+  // Message Management (Edit, Delete, Forward)
+  
+  /// Delete a message
+  Future<void> deleteMessage(String messageId) async {
+    try {
+      await _dio.delete('${ApiConstants.messages}/$messageId');
+    } catch (e) {
+      throw Exception('Failed to delete message: $e');
+    }
+  }
+  
+  /// Edit a text message
+  Future<Message> editMessage(String messageId, String newContent) async {
+    try {
+      final response = await _dio.put(
+        '${ApiConstants.messages}/$messageId',
+        data: {'content': newContent},
+      );
+      return Message.fromJson(response.data);
+    } catch (e) {
+      throw Exception('Failed to edit message: $e');
+    }
+  }
+  
+  /// Forward a message to another chat
+  Future<Message> forwardMessage({
+    required String originalMessageId,
+    required String targetChatId,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '${ApiConstants.messages}/forward',
+        data: {
+          'originalMessageId': originalMessageId,
+          'targetChatId': targetChatId,
+        },
+      );
+      return Message.fromJson(response.data);
+    } catch (e) {
+      throw Exception('Failed to forward message: $e');
+    }
+  }
+  
+  /// Send a message with reply
+  Future<Message> sendMessageWithReply({
+    required String chatId,
+    required String content,
+    required String replyToMessageId,
+    String? clientMessageId,
+  }) async {
+    try {
+      final response = await _dio.post(
+        ApiConstants.messages,
+        data: {
+          'chatId': chatId,
+          'type': MessageType.text.index,
+          'content': content,
+          'replyToMessageId': replyToMessageId,
+          'clientMessageId': clientMessageId,
+        },
+      );
+      return Message.fromJson(response.data);
+    } catch (e) {
+      throw Exception('Failed to send message with reply: $e');
     }
   }
 }

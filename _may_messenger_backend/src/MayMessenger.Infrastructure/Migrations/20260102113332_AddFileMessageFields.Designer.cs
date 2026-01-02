@@ -3,6 +3,7 @@ using System;
 using MayMessenger.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MayMessenger.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260102113332_AddFileMessageFields")]
+    partial class AddFileMessageFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -241,13 +244,7 @@ namespace MayMessenger.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<DateTime?>("DeliveredAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("EditedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("FilePath")
@@ -255,21 +252,6 @@ namespace MayMessenger.Infrastructure.Migrations
 
                     b.Property<long?>("FileSize")
                         .HasColumnType("bigint");
-
-                    b.Property<Guid?>("ForwardedFromMessageId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("ForwardedFromUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ForwardedFromUserName")
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsEdited")
-                        .HasColumnType("boolean");
 
                     b.Property<string>("OriginalFileName")
                         .HasColumnType("text");
@@ -279,9 +261,6 @@ namespace MayMessenger.Infrastructure.Migrations
 
                     b.Property<DateTime?>("ReadAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("ReplyToMessageId")
-                        .HasColumnType("uuid");
 
                     b.Property<Guid>("SenderId")
                         .HasColumnType("uuid");
@@ -300,8 +279,6 @@ namespace MayMessenger.Infrastructure.Migrations
                     b.HasIndex("ClientMessageId")
                         .IsUnique()
                         .HasFilter("\"ClientMessageId\" IS NOT NULL");
-
-                    b.HasIndex("ReplyToMessageId");
 
                     b.HasIndex("SenderId");
 
@@ -529,10 +506,6 @@ namespace MayMessenger.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("MayMessenger.Domain.Entities.Message", "ReplyToMessage")
-                        .WithMany()
-                        .HasForeignKey("ReplyToMessageId");
-
                     b.HasOne("MayMessenger.Domain.Entities.User", "Sender")
                         .WithMany("Messages")
                         .HasForeignKey("SenderId")
@@ -540,8 +513,6 @@ namespace MayMessenger.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Chat");
-
-                    b.Navigation("ReplyToMessage");
 
                     b.Navigation("Sender");
                 });

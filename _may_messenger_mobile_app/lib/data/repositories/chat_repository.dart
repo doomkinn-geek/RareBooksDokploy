@@ -10,7 +10,16 @@ class ChatRepository {
   ChatRepository(this._apiDataSource, this._localDataSource);
 
   Future<List<Chat>> getChats({bool forceRefresh = false}) async {
-    if (!forceRefresh) {
+    if (forceRefresh) {
+      // Clear cache BEFORE fetching from API to ensure fresh data
+      try {
+        await _localDataSource.clearChatsCache();
+        print('[ChatRepository] Cleared chats cache for force refresh');
+      } catch (e) {
+        print('[ChatRepository] Failed to clear cache: $e');
+      }
+    } else {
+      // Use cached data if available
       try {
         final cachedChats = await _localDataSource.getCachedChats();
         if (cachedChats != null && cachedChats.isNotEmpty) {

@@ -73,6 +73,20 @@ class MessageRepository {
     );
   }
 
+  Future<Message> sendFileMessage({
+    required String chatId,
+    required String filePath,
+    required String fileName,
+    String? clientMessageId,
+  }) async {
+    return await _apiDataSource.sendFileMessage(
+      chatId: chatId,
+      filePath: filePath,
+      fileName: fileName,
+      clientMessageId: clientMessageId,
+    );
+  }
+
   Future<void> deleteMessage(String messageId) async {
     await _apiDataSource.deleteMessage(messageId);
     // Note: Local cache will be updated via SignalR notification
@@ -188,6 +202,42 @@ class MessageRepository {
       print('[MessageRepository] Failed to get messages with cursor: $e');
       rethrow;
     }
+  }
+  
+  /// Delete a message
+  Future<void> deleteMessage(String messageId) async {
+    await _apiDataSource.deleteMessage(messageId);
+  }
+  
+  /// Edit a text message
+  Future<Message> editMessage(String messageId, String newContent) async {
+    return await _apiDataSource.editMessage(messageId, newContent);
+  }
+  
+  /// Forward a message to another chat
+  Future<Message> forwardMessage({
+    required String originalMessageId,
+    required String targetChatId,
+  }) async {
+    return await _apiDataSource.forwardMessage(
+      originalMessageId: originalMessageId,
+      targetChatId: targetChatId,
+    );
+  }
+  
+  /// Send a text message with reply
+  Future<Message> sendMessageWithReply({
+    required String chatId,
+    required String content,
+    required String replyToMessageId,
+    String? clientMessageId,
+  }) async {
+    return await _apiDataSource.sendMessageWithReply(
+      chatId: chatId,
+      content: content,
+      replyToMessageId: replyToMessageId,
+      clientMessageId: clientMessageId,
+    );
   }
 }
 

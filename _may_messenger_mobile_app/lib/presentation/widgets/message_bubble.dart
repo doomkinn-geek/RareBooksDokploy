@@ -49,9 +49,36 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     super.initState();
     if (widget.message.type == MessageType.audio) {
       _initAudio();
+      _preloadAudioDuration(); // Preload duration for immediate display
     }
     // Start timeout timer for messages in "sending" status
     _startSendingTimeoutCheck();
+  }
+  
+  /// Preload audio duration without starting playback
+  Future<void> _preloadAudioDuration() async {
+    try {
+      final audioStorageService = ref.read(audioStorageServiceProvider);
+      String? localPath = widget.message.localAudioPath ?? 
+                          await audioStorageService.getLocalAudioPath(widget.message.id);
+      
+      Duration? dur;
+      if (localPath != null && await File(localPath).exists()) {
+        dur = await _audioPlayer.setFilePath(localPath);
+      } else if (widget.message.filePath != null && widget.message.filePath!.isNotEmpty) {
+        final audioUrl = '${ApiConstants.baseUrl}${widget.message.filePath}';
+        dur = await _audioPlayer.setUrl(audioUrl);
+      }
+      
+      if (mounted && dur != null) {
+        setState(() {
+          _duration = dur;
+        });
+      }
+    } catch (e) {
+      // Ignore errors - duration will be loaded when played
+      print('[AUDIO] Failed to preload duration: $e');
+    }
   }
   
   /// Start a timer to show retry button if message stays in "sending" too long
@@ -508,14 +535,28 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                             ],
                           ],
                         ),
-                        Text(
-                          _duration != null
-                              ? '${_duration!.inMinutes}:${(_duration!.inSeconds % 60).toString().padLeft(2, '0')}'
-                              : '0:00',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: textColor,
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _duration != null
+                                  ? '${_duration!.inMinutes}:${(_duration!.inSeconds % 60).toString().padLeft(2, '0')}'
+                                  : '0:00',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: textColor,
+                              ),
+                            ),
+                            // Show "played" indicator for received audio messages
+                            if (isPlayed && !isMe) ...[
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.headphones,
+                                size: 14,
+                                color: Colors.green[700],
+                              ),
+                            ],
+                          ],
                         ),
                       ],
                     ),
@@ -531,6 +572,163 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           onTap: () => _showFullScreenImage(context),
           child: _buildImageWidget(),
         );
+      
+      case MessageType.file:
+        return _buildFileWidget(context);
+    }
+  }
+
+  Widget _buildFileWidget(BuildContext context) {
+    final profileState = ref.read(profileProvider);
+    final currentUserId = profileState.profile?.id;
+    final isFromMe = (currentUserId != null && widget.message.senderId == currentUserId) ||
+                     (widget.message.isLocalOnly == true);
+    final textColor = isFromMe ? Colors.white : Colors.black87;
+    final fileName = widget.message.originalFileName ?? 'Файл';
+    final fileSize = widget.message.fileSize ?? 0;
+    
+    // Format file size
+    String formattedSize;
+    if (fileSize < 1024) {
+      formattedSize = '$fileSize Б';
+    } else if (fileSize < 1024 * 1024) {
+      formattedSize = '${(fileSize / 1024).toStringAsFixed(1)} КБ';
+    } else {
+      formattedSize = '${(fileSize / (1024 * 1024)).toStringAsFixed(1)} МБ';
+    }
+    
+    return GestureDetector(
+      onTap: () => _openOrDownloadFile(context),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        constraints: const BoxConstraints(maxWidth: 250),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isFromMe 
+                    ? Colors.white.withOpacity(0.2)
+                    : Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.insert_drive_file,
+                color: isFromMe ? Colors.white : Theme.of(context).colorScheme.primary,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    fileName,
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    formattedSize,
+                    style: TextStyle(
+                      color: textColor.withOpacity(0.7),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              Icons.download,
+              color: textColor.withOpacity(0.7),
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openOrDownloadFile(BuildContext context) async {
+    // For now, show a message - file download/open functionality can be expanded later
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Файл: ${widget.message.originalFileName ?? "Файл"}'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+  
+  /// Build reply quote widget
+  Widget _buildReplyQuote(BuildContext context, bool isMe) {
+    final reply = widget.message.replyToMessage!;
+    
+    return GestureDetector(
+      onTap: () {
+        // Navigate to replied message (will be handled by parent)
+        // For now, just show the message was tapped
+      },
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        margin: const EdgeInsets.only(bottom: 4),
+        decoration: BoxDecoration(
+          color: isMe 
+              ? Colors.white.withOpacity(0.15)
+              : Colors.grey.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(8),
+          border: Border(
+            left: BorderSide(
+              color: isMe ? Colors.white54 : Theme.of(context).colorScheme.primary,
+              width: 2,
+            ),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              reply.senderName,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+                color: isMe ? Colors.white70 : Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              _getReplyPreviewText(reply),
+              style: TextStyle(
+                fontSize: 11,
+                color: isMe ? Colors.white60 : Colors.grey[600],
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  String _getReplyPreviewText(ReplyMessage reply) {
+    switch (reply.type) {
+      case MessageType.text:
+        return reply.content ?? '';
+      case MessageType.audio:
+        return '[Голосовое сообщение]';
+      case MessageType.image:
+        return '[Изображение]';
+      case MessageType.file:
+        return '[Файл: ${reply.originalFileName ?? "файл"}]';
     }
   }
 
@@ -791,6 +989,32 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                   fontSize: 12,
                 ),
               ),
+            // Forward indicator
+            if (widget.message.forwardedFromUserName != null) ...[
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.forward,
+                    size: 12,
+                    color: isMe ? Colors.white54 : Colors.grey[500],
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Переслано от ${widget.message.forwardedFromUserName}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontStyle: FontStyle.italic,
+                      color: isMe ? Colors.white54 : Colors.grey[500],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+            ],
+            // Reply quote
+            if (widget.message.replyToMessage != null)
+              _buildReplyQuote(context, isMe),
             const SizedBox(height: 4),
             _buildMessageContent(context, isMe),
             const SizedBox(height: 4),
@@ -804,6 +1028,18 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                     color: isMe ? Colors.white70 : Colors.grey[600],
                   ),
                 ),
+                // Edited indicator
+                if (widget.message.isEdited) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    'изм.',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontStyle: FontStyle.italic,
+                      color: isMe ? Colors.white54 : Colors.grey[500],
+                    ),
+                  ),
+                ],
                 if (isMe) ...[
                   const SizedBox(width: 4),
                   _buildMessageStatusIcon(),

@@ -209,6 +209,10 @@ class OutboxSyncService {
           // For images, we need localImagePath which isn't in PendingMessage currently
           // This would need to be added to PendingMessage if needed
           throw Exception('Image sync not implemented in outbox');
+          
+        case MessageType.file:
+          // File sync not implemented in outbox - files are sent directly
+          throw Exception('File sync not implemented in outbox');
       }
       
       // Mark as synced (this also removes from outbox)

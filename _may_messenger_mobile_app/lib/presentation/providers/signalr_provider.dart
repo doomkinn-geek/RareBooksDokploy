@@ -352,70 +352,58 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
         });
 
         // Setup message status update listener
-        _signalRService.onMessageStatusUpdated((messageId, status) {
-          // #region agent log
-          print('[SIGNALR_STATUS] HYP_SIGNALR: Received MessageStatusUpdated - MessageId: $messageId, Status: $status, Timestamp: ${DateTime.now().toIso8601String()}');
-          // #endregion
-          print('[SignalR] Message status updated: $messageId -> $status');
+        _signalRService.onMessageStatusUpdated((messageId, status, chatId) {
+          print('[STATUS_SYNC] Received MessageStatusUpdated - MessageId: $messageId, Status: $status, ChatId: $chatId');
           
           // ALWAYS cache the status update in global cache first
-          // This ensures it's not lost even if provider is not active
           try {
             _ref.read(pendingStatusUpdatesProvider.notifier).cacheStatusUpdate(messageId, status);
           } catch (e) {
-            print('[SignalR] Failed to cache status update: $e');
+            print('[STATUS_SYNC] Failed to cache status update: $e');
           }
           
-          // Update message status in all providers
+          // Update message status - use chatId if provided for targeted update
           try {
-            // Try to update in all active chat providers
-            // This will update the UI for the sender
-            final chatsState = _ref.read(chatsProvider);
-            int updatedCount = 0;
-            String? foundChatId;
-            // #region agent log
-            print('[SIGNALR_STATUS] HYP_SIGNALR: Total chats: ${chatsState.chats.length}');
-            // #endregion
+            bool updated = false;
             
-            for (final chat in chatsState.chats) {
+            if (chatId != null) {
+              // Targeted update - only update the specific chat
               try {
-                _ref.read(messagesProvider(chat.id).notifier).updateMessageStatus(messageId, status);
-                updatedCount++;
-                foundChatId = chat.id;
-                // #region agent log
-                print('[SIGNALR_STATUS] HYP_SIGNALR: Updated status in chat ${chat.id}');
-                // #endregion
+                _ref.read(messagesProvider(chatId).notifier).updateMessageStatus(messageId, status);
+                updated = true;
+                print('[STATUS_SYNC] Updated status in chat $chatId');
               } catch (e) {
-                // Provider not active - status is cached, will be applied when provider initializes
-                // #region agent log
-                print('[SIGNALR_STATUS] HYP_SIGNALR: Provider not active for chat ${chat.id}, status cached for later');
-                // #endregion
+                print('[STATUS_SYNC] Provider not active for chat $chatId, status cached');
+              }
+            } else {
+              // Fallback: try all chats (legacy support)
+              final chatsState = _ref.read(chatsProvider);
+              for (final chat in chatsState.chats) {
+                try {
+                  _ref.read(messagesProvider(chat.id).notifier).updateMessageStatus(messageId, status);
+                  updated = true;
+                  if (chatId == null) chatId = chat.id;
+                } catch (e) {
+                  // Provider not active
+                }
               }
             }
             
-            if (updatedCount > 0) {
-              print('[SignalR] Message status updated in $updatedCount chat(s)');
-              // Status was applied, we can consume it from cache
+            if (updated) {
               _ref.read(pendingStatusUpdatesProvider.notifier).consumeStatusUpdate(messageId);
-            } else {
-              print('[SignalR] No active providers found, status cached for later application');
             }
             
-            // Update unread count if message was marked as read
-            if (status == MessageStatus.read && foundChatId != null) {
+            // Clear unread count for this chat if message was marked as read/played
+            if ((status == MessageStatus.read || status == MessageStatus.played) && chatId != null) {
               try {
-                _ref.read(chatsProvider.notifier).updateUnreadCountOnStatusUpdate(
-                  foundChatId, 
-                  messageId, 
-                  status
-                );
-                print('[SignalR] Updated unread count for chat preview after read status');
+                _ref.read(chatsProvider.notifier).clearUnreadCount(chatId);
+                print('[STATUS_SYNC] Cleared unread count for chat $chatId');
               } catch (e) {
-                print('[SignalR] Failed to update unread count: $e');
+                print('[STATUS_SYNC] Failed to clear unread count: $e');
               }
             }
           } catch (e) {
-            print('[SignalR] Failed to update message status: $e');
+            print('[STATUS_SYNC] Failed to update message status: $e');
           }
         });
 
@@ -527,6 +515,32 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
             _ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
           } catch (e) {
             print('[SignalR] Failed to handle MessageDeleted: $e');
+          }
+        });
+        
+        // Setup message edited listener
+        _signalRService.onMessageEdited((data) {
+          try {
+            final messageId = data['id'] as String;
+            final chatId = data['chatId'] as String;
+            final newContent = data['content'] as String?;
+            final editedAtStr = data['editedAt'] as String?;
+            final editedAt = editedAtStr != null ? DateTime.parse(editedAtStr) : DateTime.now();
+            
+            // Update message in the chat provider
+            try {
+              if (newContent != null) {
+                _ref.read(messagesProvider(chatId).notifier).handleMessageEdited(
+                  messageId, 
+                  newContent, 
+                  editedAt,
+                );
+              }
+            } catch (e) {
+              // Provider not active - that's OK
+            }
+          } catch (e) {
+            print('[SignalR] Failed to handle MessageEdited: $e');
           }
         });
 

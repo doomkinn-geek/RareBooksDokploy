@@ -60,8 +60,10 @@ public class MediaCleanupService : IHostedService, IDisposable
             
             int audioDeleted = 0;
             int imagesDeleted = 0;
+            int filesDeleted = 0;
             int audioUpdated = 0;
             int imagesUpdated = 0;
+            int filesUpdated = 0;
             
             foreach (var message in oldMessages)
             {
@@ -82,6 +84,8 @@ public class MediaCleanupService : IHostedService, IDisposable
                                 audioDeleted++;
                             else if (message.Type == MessageType.Image)
                                 imagesDeleted++;
+                            else if (message.Type == MessageType.File)
+                                filesDeleted++;
                             
                             _logger.LogDebug("Deleted {Type} file: {Path}", message.Type, fullPath);
                         }
@@ -105,18 +109,24 @@ public class MediaCleanupService : IHostedService, IDisposable
                         message.Content = "[Изображение удалено с сервера]";
                         imagesUpdated++;
                     }
+                    else if (message.Type == MessageType.File)
+                    {
+                        message.Content = "[Файл удалён с сервера]";
+                        filesUpdated++;
+                    }
                 }
             }
             
-            if (audioUpdated > 0 || imagesUpdated > 0)
+            if (audioUpdated > 0 || imagesUpdated > 0 || filesUpdated > 0)
             {
                 await unitOfWork.SaveChangesAsync();
             }
             
             _logger.LogInformation(
                 "Media cleanup completed. Audio: {AudioDeleted} files deleted, {AudioUpdated} records updated. " +
-                "Images: {ImagesDeleted} files deleted, {ImagesUpdated} records updated.",
-                audioDeleted, audioUpdated, imagesDeleted, imagesUpdated);
+                "Images: {ImagesDeleted} files deleted, {ImagesUpdated} records updated. " +
+                "Files: {FilesDeleted} files deleted, {FilesUpdated} records updated.",
+                audioDeleted, audioUpdated, imagesDeleted, imagesUpdated, filesDeleted, filesUpdated);
         }
         catch (Exception ex)
         {

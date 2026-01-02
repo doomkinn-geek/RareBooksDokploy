@@ -356,6 +356,7 @@ public class MessagesController : ControllerBase
                         Type = dto.Type,
                         Content = dto.Content,
                         ClientMessageId = dto.ClientMessageId,
+                        ReplyToMessageId = dto.ReplyToMessageId,
                         Status = MessageStatus.Sent
                     };
                     
@@ -629,6 +630,113 @@ public class MessagesController : ControllerBase
     }
 
     /// <summary>
+    /// Send a file message (max 20MB)
+    /// </summary>
+    [HttpPost("file")]
+    [RequestSizeLimit(20 * 1024 * 1024)] // 20MB limit
+    [RequestFormLimits(MultipartBodyLengthLimit = 20 * 1024 * 1024)]
+    public async Task<ActionResult<MessageDto>> SendFileMessage([FromForm] Guid chatId, IFormFile file, [FromForm] string? clientMessageId = null)
+    {
+        var userId = GetCurrentUserId();
+        
+        if (file == null || file.Length == 0)
+            return BadRequest("No file provided");
+        
+        // Validate file size (20MB max)
+        if (file.Length > 20 * 1024 * 1024)
+            return BadRequest("File size must be less than 20MB");
+        
+        try
+        {
+            // Create files directory if it doesn't exist
+            var uploadsFolder = Path.Combine(_environment.WebRootPath, "files");
+            if (!Directory.Exists(uploadsFolder))
+            {
+                Directory.CreateDirectory(uploadsFolder);
+            }
+            
+            // Generate unique filename while preserving extension
+            var originalFileName = file.FileName;
+            var extension = Path.GetExtension(originalFileName).ToLowerInvariant();
+            var uniqueFileName = $"{Guid.NewGuid()}{extension}";
+            var filePath = Path.Combine(uploadsFolder, uniqueFileName);
+            
+            // Save file
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+            
+            var message = new Message
+            {
+                ChatId = chatId,
+                SenderId = userId,
+                Type = MessageType.File,
+                FilePath = $"/files/{uniqueFileName}",
+                OriginalFileName = originalFileName,
+                FileSize = file.Length,
+                Status = MessageStatus.Sent,
+                ClientMessageId = clientMessageId
+            };
+            
+            await _unitOfWork.Messages.AddAsync(message);
+            await _unitOfWork.SaveChangesAsync();
+            
+            var sender = await _unitOfWork.Users.GetByIdAsync(userId);
+            if (sender == null)
+            {
+                _logger.LogError($"User {userId} not found after sending file message");
+                return StatusCode(500, "Internal server error: User not found");
+            }
+            
+            var messageDto = new MessageDto
+            {
+                Id = message.Id,
+                ChatId = message.ChatId,
+                SenderId = message.SenderId,
+                SenderName = sender.DisplayName,
+                Type = message.Type,
+                Content = message.Content,
+                FilePath = message.FilePath,
+                OriginalFileName = message.OriginalFileName,
+                FileSize = message.FileSize,
+                Status = message.Status,
+                CreatedAt = message.CreatedAt,
+                ClientMessageId = message.ClientMessageId
+            };
+            
+            // Send SignalR notification
+            var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+            if (chat != null)
+            {
+                await CreatePendingAcksForMessage(chat, message, userId, AckType.Message);
+                await _hubContext.Clients.Group(chatId.ToString()).SendAsync("ReceiveMessage", messageDto);
+                
+                // Fetch FCM tokens for push notifications
+                var userTokensForPush = new Dictionary<Guid, List<Domain.Entities.FcmToken>>();
+                foreach (var participant in chat.Participants)
+                {
+                    if (participant.UserId != sender.Id)
+                    {
+                        var tokens = await _unitOfWork.FcmTokens.GetActiveTokensForUserAsync(participant.UserId);
+                        userTokensForPush[participant.UserId] = tokens.ToList();
+                    }
+                }
+                
+                await SendPushNotificationsAsync(sender, messageDto, userTokensForPush);
+            }
+            
+            _logger.LogInformation($"[FILE] File message sent: {originalFileName} ({file.Length} bytes) in chat {chatId}");
+            return Ok(messageDto);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing file message");
+            return StatusCode(500, "Error processing file");
+        }
+    }
+
+    /// <summary>
     /// Автоматически устанавливает статус Delivered после успешной отправки FCM push
     /// Создает новый scope для доступа к БД (безопасно для Task.Run)
     /// </summary>
@@ -743,6 +851,7 @@ public class MessagesController : ControllerBase
                 MessageType.Text => message.Content?.Length > 100 ? message.Content.Substring(0, 100) + "..." : message.Content,
                 MessageType.Audio => "🎤 Аудио сообщение",
                 MessageType.Image => "📷 Изображение",
+                MessageType.File => $"📎 Файл: {message.OriginalFileName ?? "Файл"}",
                 _ => "Новое сообщение"
             };
 
@@ -1255,6 +1364,147 @@ public class MessagesController : ControllerBase
     }
     
     /// <summary>
+    /// Edit a text message (only own messages, only text type)
+    /// </summary>
+    [HttpPut("{messageId}")]
+    public async Task<ActionResult<MessageDto>> EditMessage(Guid messageId, [FromBody] EditMessageRequest request)
+    {
+        var userId = GetCurrentUserId();
+        var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
+        
+        if (message == null)
+        {
+            return NotFound(new { message = "Сообщение не найдено" });
+        }
+        
+        // Only sender can edit their own message
+        if (message.SenderId != userId)
+        {
+            return Forbid();
+        }
+        
+        // Only text messages can be edited
+        if (message.Type != MessageType.Text)
+        {
+            return BadRequest(new { message = "Можно редактировать только текстовые сообщения" });
+        }
+        
+        // Check if message is too old (e.g., 24 hours limit)
+        if (DateTime.UtcNow - message.CreatedAt > TimeSpan.FromHours(24))
+        {
+            return BadRequest(new { message = "Сообщение можно редактировать только в течение 24 часов" });
+        }
+        
+        // Update message
+        message.Content = request.Content;
+        message.IsEdited = true;
+        message.EditedAt = DateTime.UtcNow;
+        
+        await _unitOfWork.Messages.UpdateAsync(message);
+        await _unitOfWork.SaveChangesAsync();
+        
+        var sender = await _unitOfWork.Users.GetByIdAsync(userId);
+        
+        var messageDto = new MessageDto
+        {
+            Id = message.Id,
+            ChatId = message.ChatId,
+            SenderId = message.SenderId,
+            SenderName = sender?.DisplayName ?? "Unknown",
+            Type = message.Type,
+            Content = message.Content,
+            Status = message.Status,
+            CreatedAt = message.CreatedAt,
+            IsEdited = message.IsEdited,
+            EditedAt = message.EditedAt
+        };
+        
+        // Notify all participants via SignalR
+        await _hubContext.Clients.Group(message.ChatId.ToString())
+            .SendAsync("MessageEdited", messageDto);
+        
+        _logger.LogInformation($"Message {messageId} edited by user {userId}");
+        return Ok(messageDto);
+    }
+    
+    /// <summary>
+    /// Forward a message to another chat
+    /// </summary>
+    [HttpPost("forward")]
+    public async Task<ActionResult<MessageDto>> ForwardMessage([FromBody] ForwardMessageRequest request)
+    {
+        var userId = GetCurrentUserId();
+        
+        // Get original message
+        var originalMessage = await _unitOfWork.Messages.GetByIdAsync(request.OriginalMessageId);
+        if (originalMessage == null)
+        {
+            return NotFound(new { message = "Исходное сообщение не найдено" });
+        }
+        
+        // Check if user is participant of target chat
+        var targetChat = await _unitOfWork.Chats.GetByIdAsync(request.TargetChatId);
+        if (targetChat == null)
+        {
+            return NotFound(new { message = "Целевой чат не найден" });
+        }
+        
+        var isParticipant = targetChat.Participants.Any(p => p.UserId == userId);
+        if (!isParticipant)
+        {
+            return Forbid();
+        }
+        
+        // Get original sender info
+        var originalSender = await _unitOfWork.Users.GetByIdAsync(originalMessage.SenderId);
+        var currentUser = await _unitOfWork.Users.GetByIdAsync(userId);
+        
+        // Create forwarded message
+        var forwardedMessage = new Message
+        {
+            ChatId = request.TargetChatId,
+            SenderId = userId,
+            Type = originalMessage.Type,
+            Content = originalMessage.Content,
+            FilePath = originalMessage.FilePath,
+            OriginalFileName = originalMessage.OriginalFileName,
+            FileSize = originalMessage.FileSize,
+            Status = MessageStatus.Sent,
+            ForwardedFromMessageId = originalMessage.Id,
+            ForwardedFromUserId = originalMessage.SenderId,
+            ForwardedFromUserName = originalSender?.DisplayName ?? "Unknown"
+        };
+        
+        await _unitOfWork.Messages.AddAsync(forwardedMessage);
+        await _unitOfWork.SaveChangesAsync();
+        
+        var messageDto = new MessageDto
+        {
+            Id = forwardedMessage.Id,
+            ChatId = forwardedMessage.ChatId,
+            SenderId = forwardedMessage.SenderId,
+            SenderName = currentUser?.DisplayName ?? "Unknown",
+            Type = forwardedMessage.Type,
+            Content = forwardedMessage.Content,
+            FilePath = forwardedMessage.FilePath,
+            OriginalFileName = forwardedMessage.OriginalFileName,
+            FileSize = forwardedMessage.FileSize,
+            Status = forwardedMessage.Status,
+            CreatedAt = forwardedMessage.CreatedAt,
+            ForwardedFromMessageId = forwardedMessage.ForwardedFromMessageId,
+            ForwardedFromUserId = forwardedMessage.ForwardedFromUserId,
+            ForwardedFromUserName = forwardedMessage.ForwardedFromUserName
+        };
+        
+        // Notify via SignalR
+        await _hubContext.Clients.Group(request.TargetChatId.ToString())
+            .SendAsync("ReceiveMessage", messageDto);
+        
+        _logger.LogInformation($"Message {request.OriginalMessageId} forwarded to chat {request.TargetChatId} by user {userId}");
+        return Ok(messageDto);
+    }
+    
+    /// <summary>
     /// Helper method to create pending acks for all chat participants (except sender)
     /// IMPORTANT: This method should be called within a transaction
     /// </summary>
@@ -1651,6 +1901,20 @@ public class MessagesController : ControllerBase
     /// </summary>
     private MessageDto MapToMessageDto(Message message, User? sender = null)
     {
+        ReplyMessageDto? replyDto = null;
+        if (message.ReplyToMessage != null)
+        {
+            replyDto = new ReplyMessageDto
+            {
+                Id = message.ReplyToMessage.Id,
+                SenderId = message.ReplyToMessage.SenderId,
+                SenderName = message.ReplyToMessage.Sender?.DisplayName ?? "Unknown",
+                Type = message.ReplyToMessage.Type,
+                Content = message.ReplyToMessage.Content,
+                OriginalFileName = message.ReplyToMessage.OriginalFileName
+            };
+        }
+        
         return new MessageDto
         {
             Id = message.Id,
@@ -1660,9 +1924,19 @@ public class MessagesController : ControllerBase
             Type = message.Type,
             Content = message.Content,
             FilePath = message.FilePath,
+            OriginalFileName = message.OriginalFileName,
+            FileSize = message.FileSize,
             Status = message.Status,
             CreatedAt = message.CreatedAt,
-            ClientMessageId = message.ClientMessageId
+            ClientMessageId = message.ClientMessageId,
+            ReplyToMessageId = message.ReplyToMessageId,
+            ReplyToMessage = replyDto,
+            ForwardedFromMessageId = message.ForwardedFromMessageId,
+            ForwardedFromUserId = message.ForwardedFromUserId,
+            ForwardedFromUserName = message.ForwardedFromUserName,
+            IsEdited = message.IsEdited,
+            EditedAt = message.EditedAt,
+            IsDeleted = message.IsDeleted
         };
     }
     

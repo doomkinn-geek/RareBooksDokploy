@@ -183,6 +183,7 @@ services:
       - maymessenger_audio:/app/wwwroot/audio
       - maymessenger_images:/app/wwwroot/images
       - maymessenger_avatars:/app/wwwroot/avatars
+      - maymessenger_files:/app/wwwroot/files
       - maymessenger_firebase:/app/firebase_config
     networks:
       - rarebooks_network
@@ -223,4 +224,5 @@ volumes:
   maymessenger_audio:
   maymessenger_images:  # Постоянное хранилище для изображений мессенджера
   maymessenger_avatars:  # Постоянное хранилище для аватарок пользователей и групп
+  maymessenger_files:    # Постоянное хранилище для файловых вложений
   maymessenger_firebase:

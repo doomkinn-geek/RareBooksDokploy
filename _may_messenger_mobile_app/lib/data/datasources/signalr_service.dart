@@ -487,33 +487,28 @@ class SignalRService {
     });
   }
 
-  void onMessageStatusUpdated(Function(String messageId, MessageStatus status) callback) {
+  void onMessageStatusUpdated(Function(String messageId, MessageStatus status, String? chatId) callback) {
     // Отписываемся от предыдущего обработчика, если был
     _hubConnection?.off('MessageStatusUpdated');
     
     _hubConnection?.on('MessageStatusUpdated', (arguments) async {
-      // #region agent log - Hypothesis D
-      print('[DEBUG_MOBILE_STATUS_A] MessageStatusUpdated received at ${DateTime.now()}, args: $arguments');
-      // #endregion
+      print('[STATUS_SYNC] MessageStatusUpdated received: $arguments');
       if (arguments != null && arguments.length >= 2) {
         final messageId = arguments[0] as String;
         final statusIndex = arguments[1] as int;
         final status = MessageStatus.values[statusIndex];
-        // #region agent log - Hypothesis D
-        print('[DEBUG_MOBILE_STATUS_B] Parsed: messageId=$messageId, status=$status');
-        // #endregion
-        callback(messageId, status);
+        // chatId is now sent as third argument for proper routing
+        final chatId = arguments.length >= 3 ? arguments[2]?.toString() : null;
+        
+        print('[STATUS_SYNC] Parsed: messageId=$messageId, status=$status, chatId=$chatId');
+        callback(messageId, status, chatId);
         
         // Automatically send ACK
         try {
           await ackStatusUpdate(messageId, statusIndex);
-          // #region agent log - Hypothesis D
-          print('[DEBUG_MOBILE_STATUS_C] ACK sent for status update');
-          // #endregion
+          print('[STATUS_SYNC] ACK sent for status update');
         } catch (e) {
-          // #region agent log - Hypothesis D
-          print('[DEBUG_MOBILE_STATUS_ERROR] Failed to auto-send status ACK: $e');
-          // #endregion
+          print('[STATUS_SYNC] Failed to auto-send status ACK: $e');
         }
       }
     });
@@ -538,7 +533,7 @@ class SignalRService {
         for (final messageId in messageIds) {
           try {
             await ackStatusUpdate(messageId, statusIndex);
-          } catch (e) {
+        } catch (e) {
             print('[SignalR] Failed to ACK batch status for $messageId: $e');
           }
         }
@@ -767,6 +762,23 @@ class SignalRService {
     _hubConnection?.off('MessageDeleted');
     
     _hubConnection?.on('MessageDeleted', (arguments) {
+      if (arguments != null && arguments.isNotEmpty) {
+        final data = arguments[0] as Map<Object?, Object?>;
+        final convertedData = <String, dynamic>{};
+        data.forEach((key, value) {
+          if (key != null) {
+            convertedData[key.toString()] = value;
+          }
+        });
+        callback(convertedData);
+      }
+    });
+  }
+  
+  void onMessageEdited(Function(Map<String, dynamic>) callback) {
+    _hubConnection?.off('MessageEdited');
+    
+    _hubConnection?.on('MessageEdited', (arguments) {
       if (arguments != null && arguments.isNotEmpty) {
         final data = arguments[0] as Map<Object?, Object?>;
         final convertedData = <String, dynamic>{};

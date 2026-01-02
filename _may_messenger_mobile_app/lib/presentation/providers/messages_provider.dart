@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../data/models/message_model.dart';
@@ -1228,6 +1229,174 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     }
   }
 
+  /// Send a file message (max 20MB)
+  Future<void> sendFileMessage(String filePath, String fileName) async {
+    print('[MSG_SEND] Starting local-first send for file message: $fileName');
+    
+    final now = DateTime.now();
+    if (_lastSendTime != null && now.difference(_lastSendTime!).inMilliseconds < 100) {
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    _lastSendTime = now;
+    
+    state = state.copyWith(isSending: true);
+    String? localId;
+    
+    try {
+      final profileState = _ref.read(profileProvider);
+      final currentUser = profileState.profile;
+      
+      if (currentUser == null) {
+        throw Exception('User not authenticated');
+      }
+      
+      // Get file size
+      final file = File(filePath);
+      final fileSize = await file.length();
+      
+      // Check file size limit (20MB)
+      if (fileSize > 20 * 1024 * 1024) {
+        throw Exception('Размер файла не должен превышать 20 МБ');
+      }
+      
+      localId = _uuid.v4();
+      final clientMessageId = localId;
+      
+      if (_pendingSends.contains(localId)) {
+        state = state.copyWith(isSending: false);
+        return;
+      }
+      
+      _pendingSends.add(localId);
+      
+      final localMessage = Message(
+        id: localId,
+        chatId: chatId,
+        senderId: currentUser.id,
+        senderName: currentUser.displayName,
+        type: MessageType.file,
+        localFilePath: filePath,
+        originalFileName: fileName,
+        fileSize: fileSize,
+        status: MessageStatus.sending,
+        createdAt: now,
+        localId: localId,
+        isLocalOnly: true,
+        clientMessageId: clientMessageId,
+      );
+      
+      // Add to UI immediately
+      final updatedMessages = [...state.messages, localMessage];
+      updatedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      state = state.copyWith(messages: updatedMessages, isSending: false);
+      print('[MSG_SEND] File message added to UI with local ID: $localId');
+      
+      _cache.put(localMessage);
+      
+      // Update chat preview
+      try {
+        _ref.read(chatsProvider.notifier).updateChatLastMessage(
+          chatId, 
+          localMessage, 
+          incrementUnread: false,
+        );
+      } catch (e) {
+        print('[MSG_SEND] Failed to update chat preview: $e');
+      }
+      
+      // Sync to backend
+      _syncFileToBackend(localId, filePath, fileName, clientMessageId: clientMessageId);
+      
+    } catch (e) {
+      print('[MSG_SEND] Failed to send file message: $e');
+      if (localId != null) {
+        _pendingSends.remove(localId);
+      }
+      state = state.copyWith(
+        isSending: false,
+        error: e.toString(),
+      );
+    }
+  }
+
+  Future<void> _syncFileToBackend(String localId, String filePath, String fileName, {String? clientMessageId, int attemptNumber = 0}) async {
+    const maxAttempts = 5;
+    final backoffDelays = [1, 2, 4, 8, 16];
+    
+    try {
+      print('[MSG_SEND] Syncing file to backend: $localId (attempt ${attemptNumber + 1}/$maxAttempts)');
+      
+      final serverMessage = await _messageRepository.sendFileMessage(
+        chatId: chatId,
+        filePath: filePath,
+        fileName: fileName,
+        clientMessageId: clientMessageId,
+      );
+      
+      print('[MSG_SEND] File synced successfully. Server ID: ${serverMessage.id}');
+      
+      final finalStatus = serverMessage.status == MessageStatus.sending 
+          ? MessageStatus.sent 
+          : serverMessage.status;
+      
+      _pendingSends.remove(localId);
+      _registerIdMapping(localId, serverMessage.id);
+      
+      // Update message in UI
+      final messageIndex = _findMessageIndex(localId);
+      if (messageIndex != -1) {
+        final updatedMessages = [...state.messages];
+        final finalServerMessage = serverMessage.copyWith(
+          localId: localId,
+          localFilePath: filePath, // Keep local path for viewing
+          isLocalOnly: false,
+          status: finalStatus,
+        );
+        updatedMessages[messageIndex] = finalServerMessage;
+        state = state.copyWith(messages: updatedMessages);
+        
+        updateMessageStatus(serverMessage.id, finalStatus, force: true);
+        _trackSentMessage(serverMessage.id);
+        
+        try {
+          _ref.read(chatsProvider.notifier).updateChatLastMessage(
+            chatId, 
+            finalServerMessage, 
+            incrementUnread: false,
+          );
+        } catch (e) {
+          print('[MSG_SEND] Failed to update chat preview: $e');
+        }
+      }
+      
+    } catch (e) {
+      print('[MSG_SEND] Failed to sync file to backend (attempt ${attemptNumber + 1}): $e');
+      
+      if (attemptNumber < maxAttempts - 1) {
+        final delaySeconds = attemptNumber < backoffDelays.length 
+            ? backoffDelays[attemptNumber] 
+            : backoffDelays.last;
+        
+        Future.delayed(Duration(seconds: delaySeconds), () {
+          if (mounted) {
+            _syncFileToBackend(localId, filePath, fileName, clientMessageId: clientMessageId, attemptNumber: attemptNumber + 1);
+          }
+        });
+      } else {
+        _pendingSends.remove(localId);
+        
+        final messageIndex = _findMessageIndex(localId);
+        if (messageIndex != -1) {
+          final updatedMessages = [...state.messages];
+          updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
+            status: MessageStatus.failed,
+          );
+          state = state.copyWith(messages: updatedMessages);
+        }
+      }
+    }
+  }
+
   void addMessage(Message message) {
     // Проверяем, что сообщение для этого чата
     if (message.chatId != chatId) {
@@ -1491,45 +1660,38 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
 
   Future<void> markMessagesAsRead() async {
     try {
-      print('[STATUS_UPDATE] markMessagesAsRead called');
+      print('[STATUS_UPDATE] markMessagesAsRead called for chat $chatId');
+      
       // Get current user ID
       final profileState = _ref.read(profileProvider);
-      final currentUserId = profileState.userId; // Uses cached userId for offline mode
+      final currentUserId = profileState.userId;
       
       if (currentUserId == null) {
         print('[STATUS_UPDATE] currentUserId is null, returning');
         return;
       }
       
-      print('[STATUS_UPDATE] currentUserId: $currentUserId, total messages: ${state.messages.length}');
-      
-      // IMPORTANT: Cancel push notifications for this chat when messages are read
+      // Cancel push notifications for this chat
       try {
         final notificationService = _ref.read(notificationServiceProvider);
         await notificationService.cancelNotificationsForChat(chatId);
-        print('[STATUS_UPDATE] Cancelled push notifications for chat: $chatId');
       } catch (e) {
         print('[STATUS_UPDATE] Failed to cancel notifications: $e');
       }
       
-      // Find all unread messages from other users
+      // Find unread messages from other users (exclude read AND played - played implies read)
       final unreadMessages = state.messages.where((message) {
         return message.senderId != currentUserId && 
-               message.status != MessageStatus.read;
+               message.status != MessageStatus.read &&
+               message.status != MessageStatus.played;
       }).toList();
       
       print('[STATUS_UPDATE] Found ${unreadMessages.length} unread messages');
       
       if (unreadMessages.isEmpty) {
-        print('[STATUS_UPDATE] No unread messages, returning');
+        // Even if no unread messages, clear the unread count to ensure sync
+        _ref.read(chatsProvider.notifier).clearUnreadCount(chatId);
         return;
-      }
-      
-      print('[STATUS_UPDATE] Marking ${unreadMessages.length} messages as read');
-      
-      // Add to status queue for reliable delivery
-      for (final message in unreadMessages) {
-        await _statusQueue.enqueueStatusUpdate(message.id, MessageStatus.read);
       }
       
       // Update local status immediately for responsive UI
@@ -1537,39 +1699,20 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         updateMessageStatus(message.id, MessageStatus.read);
       }
       
-      // Try sending via SignalR for real-time (but queue ensures it happens eventually)
-      for (final message in unreadMessages) {
-        try {
-          await _signalRService.markMessageAsRead(message.id, chatId);
-        } catch (e) {
-          print('[STATUS_UPDATE] Failed to mark message ${message.id} as read via SignalR: $e');
-          // Queue will retry
-        }
-      }
+      // Clear unread count immediately
+      _ref.read(chatsProvider.notifier).clearUnreadCount(chatId);
       
-      // Also send batch request via REST API
+      // Send batch request via REST API (single request instead of multiple SignalR calls)
+      // REST API will trigger SignalR notifications to sender
       try {
         final messageIds = unreadMessages.map((m) => m.id).toList();
         await _messageRepository.batchMarkAsRead(messageIds);
-        print('[STATUS_UPDATE] Batch read confirmation sent via REST API');
+        print('[STATUS_UPDATE] Batch read confirmation sent via REST API for ${messageIds.length} messages');
       } catch (e) {
         print('[STATUS_UPDATE] Failed to send batch read via REST API: $e');
-        // Queue will retry
-      }
-      
-      // Enqueue chat preview update to decrement unread count
-      final unreadCount = unreadMessages.length;
-      if (unreadCount > 0) {
-        try {
-          final syncService = _ref.read(chatPreviewSyncServiceProvider);
-          syncService.enqueueUpdate(ChatPreviewUpdate(
-            chatId: chatId,
-            lastMessage: null,
-            unreadCountDelta: -unreadCount, // Decrement by number of read messages
-            timestamp: DateTime.now(),
-          ));
-        } catch (e) {
-          print('[STATUS_UPDATE] Failed to enqueue unread count update: $e');
+        // Add to queue for retry
+        for (final message in unreadMessages) {
+          await _statusQueue.enqueueStatusUpdate(message.id, MessageStatus.read);
         }
       }
     } catch (e) {
@@ -1793,6 +1936,247 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
 
   /// Check if there are potentially more older messages to load
   bool get canLoadMore => state.hasMoreOlder;
+  
+  /// Delete a message
+  Future<void> deleteMessage(String messageId) async {
+    try {
+      print('[MSG_DELETE] Deleting message: $messageId');
+      
+      // Optimistic removal from UI
+      final updatedMessages = state.messages.where((m) => m.id != messageId).toList();
+      state = state.copyWith(messages: updatedMessages);
+      
+      // Delete on server
+      await _messageRepository.deleteMessage(messageId);
+      
+      // Remove from LRU cache
+      _cache.remove(messageId);
+      
+      print('[MSG_DELETE] Message deleted successfully');
+    } catch (e) {
+      print('[MSG_DELETE] Failed to delete message: $e');
+      // Reload messages to restore the deleted one if server delete failed
+      loadMessages();
+    }
+  }
+  
+  /// Edit a text message
+  Future<void> editMessage(String messageId, String newContent) async {
+    try {
+      print('[MSG_EDIT] Editing message: $messageId');
+      
+      // Find the message
+      final messageIndex = state.messages.indexWhere((m) => m.id == messageId);
+      if (messageIndex == -1) {
+        throw Exception('Message not found');
+      }
+      
+      final message = state.messages[messageIndex];
+      if (message.type != MessageType.text) {
+        throw Exception('Can only edit text messages');
+      }
+      
+      // Optimistic update
+      final updatedMessage = message.copyWith(
+        content: newContent,
+        isEdited: true,
+        editedAt: DateTime.now(),
+      );
+      
+      final updatedMessages = [...state.messages];
+      updatedMessages[messageIndex] = updatedMessage;
+      state = state.copyWith(messages: updatedMessages);
+      
+      // Update on server
+      await _messageRepository.editMessage(messageId, newContent);
+      
+      // Update LRU cache
+      _cache.update(updatedMessage);
+      
+      print('[MSG_EDIT] Message edited successfully');
+    } catch (e) {
+      print('[MSG_EDIT] Failed to edit message: $e');
+      // Reload to restore original
+      loadMessages();
+    }
+  }
+  
+  /// Forward a message to another chat
+  Future<void> forwardMessage({
+    required Message originalMessage,
+    required String targetChatId,
+  }) async {
+    try {
+      print('[MSG_FORWARD] Forwarding message ${originalMessage.id} to chat $targetChatId');
+      
+      await _messageRepository.forwardMessage(
+        originalMessageId: originalMessage.id,
+        targetChatId: targetChatId,
+      );
+      
+      print('[MSG_FORWARD] Message forwarded successfully');
+    } catch (e) {
+      print('[MSG_FORWARD] Failed to forward message: $e');
+      rethrow;
+    }
+  }
+  
+  /// Send a message with reply
+  Future<void> sendMessageWithReply(String content, Message replyToMessage) async {
+    print('[MSG_SEND] Starting local-first send for text message with reply');
+    
+    final now = DateTime.now();
+    if (_lastSendTime != null && now.difference(_lastSendTime!).inMilliseconds < 100) {
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    _lastSendTime = now;
+    
+    state = state.copyWith(isSending: true);
+    String? localId;
+    
+    try {
+      final profileState = _ref.read(profileProvider);
+      final currentUser = profileState.profile;
+      
+      if (currentUser == null) {
+        throw Exception('User not authenticated');
+      }
+      
+      localId = _uuid.v4();
+      
+      if (_pendingSends.contains(localId)) {
+        state = state.copyWith(isSending: false);
+        return;
+      }
+      
+      _pendingSends.add(localId);
+      
+      // Create ReplyMessage from the original message
+      final replyInfo = ReplyMessage(
+        id: replyToMessage.id,
+        senderId: replyToMessage.senderId,
+        senderName: replyToMessage.senderName,
+        type: replyToMessage.type,
+        content: replyToMessage.content,
+        originalFileName: replyToMessage.originalFileName,
+      );
+      
+      final localMessage = Message(
+        id: localId,
+        chatId: chatId,
+        senderId: currentUser.id,
+        senderName: currentUser.displayName,
+        type: MessageType.text,
+        content: content,
+        replyToMessageId: replyToMessage.id,
+        replyToMessage: replyInfo,
+        status: MessageStatus.sending,
+        createdAt: now,
+        localId: localId,
+        isLocalOnly: true,
+      );
+      
+      // Add to UI immediately
+      final updatedMessages = [...state.messages, localMessage];
+      updatedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      state = state.copyWith(messages: updatedMessages, isSending: false);
+      
+      _cache.put(localMessage);
+      
+      // Send to backend
+      _syncMessageWithReplyToBackend(localId, content, replyToMessage.id, clientMessageId: localId);
+      
+    } catch (e) {
+      print('[MSG_SEND] Failed to create local message with reply: $e');
+      if (localId != null) {
+        _pendingSends.remove(localId);
+      }
+      state = state.copyWith(isSending: false, error: e.toString());
+    }
+  }
+  
+  Future<void> _syncMessageWithReplyToBackend(
+    String localId,
+    String content,
+    String replyToMessageId, {
+    String? clientMessageId,
+    int attemptNumber = 0,
+  }) async {
+    const maxAttempts = 5;
+    
+    try {
+      final serverMessage = await _messageRepository.sendMessageWithReply(
+        chatId: chatId,
+        content: content,
+        replyToMessageId: replyToMessageId,
+        clientMessageId: clientMessageId,
+      );
+      
+      print('[MSG_SEND] Message with reply synced successfully. Server ID: ${serverMessage.id}');
+      
+      // Update local message with server response
+      final messageIndex = _findMessageIndex(localId);
+      if (messageIndex != -1) {
+        final updatedMessages = [...state.messages];
+        updatedMessages[messageIndex] = serverMessage.copyWith(
+          localId: localId,
+          isLocalOnly: false,
+        );
+        state = state.copyWith(messages: updatedMessages);
+        _cache.update(updatedMessages[messageIndex]);
+      }
+      
+      _pendingSends.remove(localId);
+      
+    } catch (e) {
+      print('[MSG_SEND] Failed to sync message with reply: $e (attempt ${attemptNumber + 1}/$maxAttempts)');
+      
+      if (attemptNumber < maxAttempts - 1) {
+        final delaySeconds = [1, 2, 4, 8, 16][attemptNumber];
+        Future.delayed(Duration(seconds: delaySeconds), () {
+          if (mounted) {
+            _syncMessageWithReplyToBackend(localId, content, replyToMessageId, 
+                clientMessageId: clientMessageId, attemptNumber: attemptNumber + 1);
+          }
+        });
+      } else {
+        _pendingSends.remove(localId);
+        final messageIndex = _findMessageIndex(localId);
+        if (messageIndex != -1) {
+          final updatedMessages = [...state.messages];
+          updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
+            status: MessageStatus.failed,
+          );
+          state = state.copyWith(messages: updatedMessages);
+        }
+      }
+    }
+  }
+  
+  /// Handle message edited event from SignalR
+  void handleMessageEdited(String messageId, String newContent, DateTime editedAt) {
+    final messageIndex = state.messages.indexWhere((m) => m.id == messageId);
+    if (messageIndex != -1) {
+      final updatedMessages = [...state.messages];
+      updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
+        content: newContent,
+        isEdited: true,
+        editedAt: editedAt,
+      );
+      state = state.copyWith(messages: updatedMessages);
+      print('[MSG_EDIT] Updated message from SignalR: $messageId');
+    }
+  }
+  
+  /// Handle message deleted event from SignalR
+  void handleMessageDeleted(String messageId) {
+    final updatedMessages = state.messages.where((m) => m.id != messageId).toList();
+    if (updatedMessages.length != state.messages.length) {
+      state = state.copyWith(messages: updatedMessages);
+      _cache.remove(messageId);
+      print('[MSG_DELETE] Removed message from SignalR: $messageId');
+    }
+  }
 }
 
 

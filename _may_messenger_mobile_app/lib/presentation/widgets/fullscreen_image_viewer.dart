@@ -370,7 +370,7 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
                             icon: const Icon(Icons.download, color: Colors.white),
                             onPressed: _saveImageToGallery,
                             tooltip: 'Сохранить в галерею',
-                          ),
+                    ),
                   ],
                 ),
               ),

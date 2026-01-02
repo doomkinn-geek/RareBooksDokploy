@@ -7,6 +7,7 @@ import '../providers/contacts_names_provider.dart';
 import '../providers/typing_provider.dart';
 import '../providers/online_status_provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/profile_provider.dart';
 import '../../data/models/chat_model.dart';
 import '../../data/models/message_model.dart';
 import '../../core/services/notification_service.dart';
@@ -16,8 +17,11 @@ import '../widgets/message_input.dart';
 import '../widgets/connection_status_indicator.dart';
 import '../widgets/typing_animation.dart';
 import '../widgets/date_separator.dart';
+import '../widgets/message_context_menu.dart';
+import '../widgets/swipeable_message.dart';
 import 'group_settings_screen.dart';
 import 'user_profile_screen.dart';
+import 'forward_message_screen.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final String chatId;
@@ -42,6 +46,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   DateTime? _currentVisibleDate; // For sticky date header
   bool _showStickyDateHeader = false; // Show/hide sticky date header
   List<Message> _currentMessages = []; // Cache messages for scroll calculations
+  
+  // Reply mode state
+  Message? _replyToMessage;
+  
+  // Edit mode state
+  Message? _editingMessage;
+  final TextEditingController _editController = TextEditingController();
 
   @override
   void initState() {
@@ -304,9 +315,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // Note: The actual refresh from server happens in main_screen.dart after navigation returns
     try {
       ref.read(chatsProvider.notifier).clearUnreadCount(widget.chatId);
-    } catch (e) {
+      } catch (e) {
       print('[CHAT_SCREEN] Failed to clear unread count: $e');
-    }
+      }
     
     _scrollController.dispose();
     super.dispose();
@@ -411,6 +422,133 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
   }
   
+  /// Set message to reply to
+  void _setReplyToMessage(Message message) {
+    setState(() {
+      _replyToMessage = message;
+      _editingMessage = null; // Cancel editing if active
+    });
+  }
+  
+  /// Cancel reply mode
+  void _cancelReply() {
+    setState(() {
+      _replyToMessage = null;
+    });
+  }
+  
+  /// Start editing a message
+  void _startEditing(Message message) {
+    setState(() {
+      _editingMessage = message;
+      _editController.text = message.content ?? '';
+      _replyToMessage = null; // Cancel reply if active
+    });
+  }
+  
+  /// Cancel editing mode
+  void _cancelEditing() {
+    setState(() {
+      _editingMessage = null;
+      _editController.clear();
+    });
+  }
+  
+  /// Show context menu for message
+  void _showMessageContextMenu(
+    BuildContext context,
+    Message message,
+    bool isMyMessage,
+    Offset position,
+  ) {
+    showMessageContextMenu(
+      context: context,
+      message: message,
+      isMyMessage: isMyMessage,
+      position: position,
+      onAction: (action) => _handleMessageAction(action, message),
+    );
+  }
+  
+  /// Handle context menu action
+  Future<void> _handleMessageAction(MessageAction action, Message message) async {
+    switch (action) {
+      case MessageAction.reply:
+        _setReplyToMessage(message);
+        break;
+        
+      case MessageAction.forward:
+        final targetChatId = await Navigator.of(context).push<String>(
+          MaterialPageRoute(
+            builder: (context) => ForwardMessageScreen(message: message),
+          ),
+        );
+        if (targetChatId != null) {
+          await ref.read(messagesProvider(targetChatId).notifier).forwardMessage(
+            originalMessage: message,
+            targetChatId: targetChatId,
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Сообщение переслано')),
+            );
+          }
+        }
+        break;
+        
+      case MessageAction.edit:
+        _startEditing(message);
+        break;
+        
+      case MessageAction.delete:
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Удалить сообщение?'),
+            content: const Text('Сообщение будет удалено безвозвратно.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Отмена'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: const Text('Удалить'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed == true) {
+          await ref.read(messagesProvider(widget.chatId).notifier).deleteMessage(message.id);
+        }
+        break;
+        
+      case MessageAction.copy:
+        // Handled in context menu widget
+        break;
+    }
+  }
+  
+  /// Navigate to a replied message
+  void _navigateToMessage(String messageId) {
+    setState(() {
+      _highlightedMessageId = messageId;
+    });
+    
+    final messages = ref.read(messagesProvider(widget.chatId)).messages;
+    _scrollToHighlightedMessage(messages);
+    
+    // Clear highlight after 3 seconds
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          _highlightedMessageId = null;
+        });
+      }
+    });
+  }
+  
   /// Build messages list with date separators using reverse: true for performance
   /// With reverse: true, newest messages are at the bottom (index 0) and render first
   Widget _buildMessagesList(MessagesState messagesState) {
@@ -486,10 +624,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           // Use localId if available (stable during sync), fallback to id
           // Include status in key to force rebuild when status changes
           final stableKey = item.localId ?? item.id;
-          return MessageBubble(
-            key: ValueKey('${stableKey}_${item.status.name}'),
+          
+          // Determine if this is my message
+          final profileState = ref.read(profileProvider);
+          final currentUserId = profileState.profile?.id;
+          final isMyMessage = (currentUserId != null && item.senderId == currentUserId) ||
+                             (item.isLocalOnly == true);
+          
+          return SwipeableMessage(
             message: item,
-            isHighlighted: isHighlighted,
+            onSwipeReply: () => _setReplyToMessage(item),
+            child: GestureDetector(
+              onLongPressStart: (details) {
+                _showMessageContextMenu(
+                  context,
+                  item,
+                  isMyMessage,
+                  details.globalPosition,
+                );
+              },
+              child: MessageBubble(
+                key: ValueKey('${stableKey}_${item.status.name}'),
+                message: item,
+                isHighlighted: isHighlighted,
+              ),
+            ),
           );
         }
         
@@ -497,7 +656,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       },
     );
   }
-  
+
   @override
   Widget build(BuildContext context) {
     final messagesState = ref.watch(messagesProvider(widget.chatId));
@@ -706,10 +865,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             MessageInput(
             chatId: widget.chatId,
             isSending: messagesState.isSending,
+            replyToMessage: _replyToMessage,
+            onCancelReply: _cancelReply,
+            editingMessage: _editingMessage,
+            onCancelEdit: _cancelEditing,
+            onSaveEdit: (messageId, newContent) {
+              ref.read(messagesProvider(widget.chatId).notifier)
+                  .editMessage(messageId, newContent);
+              _cancelEditing();
+            },
             onSendMessage: (content) {
-              ref
-                  .read(messagesProvider(widget.chatId).notifier)
-                  .sendMessage(content);
+              if (_replyToMessage != null) {
+                // Send with reply
+                ref
+                    .read(messagesProvider(widget.chatId).notifier)
+                    .sendMessageWithReply(content, _replyToMessage!);
+                _cancelReply();
+              } else if (_editingMessage != null) {
+                // Save edit
+                ref.read(messagesProvider(widget.chatId).notifier)
+                    .editMessage(_editingMessage!.id, content);
+                _cancelEditing();
+              } else {
+                // Normal send
+                ref
+                    .read(messagesProvider(widget.chatId).notifier)
+                    .sendMessage(content);
+              }
               // Scroll to bottom after sending message
               Future.delayed(const Duration(milliseconds: 100), () {
                 if (mounted) _scrollToBottom();
@@ -729,6 +911,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   .read(messagesProvider(widget.chatId).notifier)
                   .sendImageMessage(imagePath);
               // Scroll to bottom after sending image
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (mounted) _scrollToBottom();
+              });
+            },
+            onSendFile: (filePath, fileName) {
+              ref
+                  .read(messagesProvider(widget.chatId).notifier)
+                  .sendFileMessage(filePath, fileName);
+              // Scroll to bottom after sending file
               Future.delayed(const Duration(milliseconds: 100), () {
                 if (mounted) _scrollToBottom();
               });

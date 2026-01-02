@@ -74,6 +74,8 @@ class ChatListItem extends ConsumerWidget {
         content = '[Голосовое сообщение]';
       case MessageType.image:
         content = '[Изображение]';
+      case MessageType.file:
+        content = '[Файл]';
       case MessageType.text:
         content = chat.lastMessage!.content ?? '';
     }

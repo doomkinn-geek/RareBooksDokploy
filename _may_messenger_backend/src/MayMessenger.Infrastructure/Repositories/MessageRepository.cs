@@ -55,7 +55,7 @@ public class MessageRepository : Repository<Message>, IMessageRepository
     public async Task<IEnumerable<Message>> GetOldMediaMessagesAsync(DateTime cutoffDate, CancellationToken cancellationToken = default)
     {
         return await _dbSet
-            .Where(m => (m.Type == MessageType.Audio || m.Type == MessageType.Image) && 
+            .Where(m => (m.Type == MessageType.Audio || m.Type == MessageType.Image || m.Type == MessageType.File) && 
                        m.CreatedAt < cutoffDate && 
                        !string.IsNullOrEmpty(m.FilePath))
             .ToListAsync(cancellationToken);

@@ -8,8 +8,10 @@ import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'audio_recorder_widget.dart';
 import '../providers/signalr_provider.dart';
+import '../../data/models/message_model.dart';
 
 enum RecordingState { idle, recording, locked }
 enum HapticType { light, medium, heavy, selection }
@@ -20,6 +22,16 @@ class MessageInput extends ConsumerStatefulWidget {
   final Function(String) onSendMessage;
   final Function(String) onSendAudio;
   final Function(String) onSendImage;
+  final Function(String filePath, String fileName)? onSendFile;
+  
+  // Reply mode
+  final Message? replyToMessage;
+  final VoidCallback? onCancelReply;
+  
+  // Edit mode
+  final Message? editingMessage;
+  final VoidCallback? onCancelEdit;
+  final Function(String messageId, String newContent)? onSaveEdit;
 
   const MessageInput({
     super.key,
@@ -28,6 +40,12 @@ class MessageInput extends ConsumerStatefulWidget {
     required this.onSendMessage,
     required this.onSendAudio,
     required this.onSendImage,
+    this.onSendFile,
+    this.replyToMessage,
+    this.onCancelReply,
+    this.editingMessage,
+    this.onCancelEdit,
+    this.onSaveEdit,
   });
 
   @override
@@ -234,6 +252,41 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Ошибка: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickFile() async {
+    if (widget.onSendFile == null) return;
+    
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
+      );
+      
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        
+        // Check file size (20MB limit)
+        if (file.size > 20 * 1024 * 1024) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Размер файла не должен превышать 20 МБ')),
+            );
+          }
+          return;
+        }
+        
+        if (file.path != null) {
+          widget.onSendFile!(file.path!, file.name);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка выбора файла: $e')),
         );
       }
     }
@@ -511,6 +564,12 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Reply preview
+          if (widget.replyToMessage != null)
+            _buildReplyPreview(),
+          // Edit preview
+          if (widget.editingMessage != null)
+            _buildEditPreview(),
           Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
@@ -653,6 +712,8 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
                 _pickImage(fromCamera: true);
               } else if (value == 'gallery') {
                 _pickImage(fromCamera: false);
+              } else if (value == 'file') {
+                _pickFile();
               }
             },
             itemBuilder: (context) => [
@@ -673,6 +734,17 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
                     Icon(Icons.photo_library, color: Theme.of(context).colorScheme.primary),
                     const SizedBox(width: 12),
                     const Text('Галерея'),
+                  ],
+                ),
+              ),
+              if (widget.onSendFile != null)
+                PopupMenuItem(
+                  value: 'file',
+                  child: Row(
+                    children: [
+                      Icon(Icons.insert_drive_file, color: Theme.of(context).colorScheme.primary),
+                      const SizedBox(width: 12),
+                      const Text('Файл'),
                   ],
                 ),
               ),
@@ -1007,6 +1079,98 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
             ),
           ],
         ),
+      ),
+    );
+  }
+  
+  /// Build reply preview widget
+  Widget _buildReplyPreview() {
+    final message = widget.replyToMessage!;
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          left: BorderSide(
+            color: Theme.of(context).colorScheme.primary,
+            width: 3,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  message.senderName,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  message.getPreviewText(),
+                  style: TextStyle(
+                    color: Theme.of(context).textTheme.bodySmall?.color,
+                    fontSize: 12,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 18),
+            onPressed: widget.onCancelReply,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  /// Build edit preview widget
+  Widget _buildEditPreview() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          left: BorderSide(
+            color: Colors.orange,
+            width: 3,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.edit, size: 16, color: Colors.orange),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Редактирование сообщения',
+              style: TextStyle(
+                color: Colors.orange,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 18),
+            onPressed: widget.onCancelEdit,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
       ),
     );
   }

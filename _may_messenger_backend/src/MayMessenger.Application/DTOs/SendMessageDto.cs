@@ -8,6 +8,7 @@ public class SendMessageDto
     public MessageType Type { get; set; }
     public string? Content { get; set; }
     public string? ClientMessageId { get; set; }
+    public Guid? ReplyToMessageId { get; set; }
 }
 
 

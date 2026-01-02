@@ -259,6 +259,17 @@ class LocalDataSource {
     }
   }
 
+  /// Clear the chats cache to force fresh data from server
+  Future<void> clearChatsCache() async {
+    try {
+      final box = await _openBoxSafely(_chatsBox);
+      await box.delete('chats');
+      print('[LocalDataSource] Chats cache cleared');
+    } catch (e) {
+      print('[LocalDataSource] Failed to clear chats cache: $e');
+    }
+  }
+
   // Update local audio path for a message
   Future<void> updateMessageLocalAudioPath(String chatId, String messageId, String localPath) async {
     try {

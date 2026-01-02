@@ -176,24 +176,14 @@ public class ChatHub : Hub
             message.DeliveredAt = DateTime.UtcNow;
             }
             await _unitOfWork.Messages.UpdateAsync(message);
-            
-            // #region agent log - Hypothesis C: Check MessageStatusUpdated sending
-            Console.WriteLine($"[DEBUG_STATUS_A] Sending MessageStatusUpdated for message {messageId}, status {aggregateStatus} to group {chatId}");
-            // #endregion
-            // Notify all participants about status change
-            await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, (int)aggregateStatus);
-            // #region agent log - Hypothesis C
-            Console.WriteLine($"[DEBUG_STATUS_B] MessageStatusUpdated sent successfully");
-            // #endregion
-        }
-        else
-        {
-            // #region agent log - Hypothesis C
-            Console.WriteLine($"[DEBUG_STATUS_C] Status unchanged for message {messageId}, current: {message.Status}, aggregate: {aggregateStatus}");
-            // #endregion
         }
         
             await _unitOfWork.SaveChangesAsync();
+        
+        // ALWAYS notify all participants about status (for instant UI sync)
+        // Include chatId for proper routing on client side
+        Console.WriteLine($"[STATUS_SYNC] Sending MessageStatusUpdated for message {messageId}, status {aggregateStatus} to group {chatId}");
+        await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, (int)aggregateStatus, chatId);
     }
     
     public async Task MessageRead(Guid messageId, Guid chatId)
@@ -250,12 +240,14 @@ public class ChatHub : Hub
                 message.ReadAt = DateTime.UtcNow;
             }
             await _unitOfWork.Messages.UpdateAsync(message);
-            
-            // Notify all participants about status change
-            await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, (int)aggregateStatus);
         }
         
         await _unitOfWork.SaveChangesAsync();
+            
+        // ALWAYS notify all participants about status (for instant UI sync)
+        // Include chatId for proper routing on client side
+        Console.WriteLine($"[STATUS_SYNC] Sending MessageStatusUpdated (Read) for message {messageId}, status {aggregateStatus} to group {chatId}");
+        await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, (int)aggregateStatus, chatId);
     }
     
     /// <summary>
@@ -325,13 +317,14 @@ public class ChatHub : Hub
                 message.PlayedAt = DateTime.UtcNow;
             }
             await _unitOfWork.Messages.UpdateAsync(message);
-            
-            // Notify all participants about status change
-            await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, (int)aggregateStatus);
-            Console.WriteLine($"[ChatHub] MessagePlayed: status updated to {aggregateStatus} for message {messageId}");
         }
         
         await _unitOfWork.SaveChangesAsync();
+        
+        // ALWAYS notify all participants about status (for instant UI sync)
+        // Include chatId for proper routing on client side
+        Console.WriteLine($"[STATUS_SYNC] Sending MessageStatusUpdated (Played) for message {messageId}, status {aggregateStatus} to group {chatId}");
+        await Clients.Group(chatId.ToString()).SendAsync("MessageStatusUpdated", messageId, (int)aggregateStatus, chatId);
     }
     
     public async Task TypingIndicator(Guid chatId, bool isTyping)

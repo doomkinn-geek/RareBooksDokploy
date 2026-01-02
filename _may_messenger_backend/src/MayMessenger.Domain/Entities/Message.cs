@@ -14,8 +14,29 @@ public class Message : BaseEntity
     public DateTime? ReadAt { get; set; }
     public DateTime? PlayedAt { get; set; }  // For audio messages
     
+    // For file messages: original file name and size
+    public string? OriginalFileName { get; set; }
+    public long? FileSize { get; set; }
+    
     // Client-side generated ID for idempotency
     public string? ClientMessageId { get; set; }
+    
+    // Reply functionality
+    public Guid? ReplyToMessageId { get; set; }
+    public Message? ReplyToMessage { get; set; }
+    
+    // Forward functionality
+    public Guid? ForwardedFromMessageId { get; set; }
+    public Guid? ForwardedFromUserId { get; set; }
+    public string? ForwardedFromUserName { get; set; }
+    
+    // Edit functionality
+    public bool IsEdited { get; set; } = false;
+    public DateTime? EditedAt { get; set; }
+    
+    // Deletion
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
     
     // Navigation properties
     public Chat Chat { get; set; } = null!;
