@@ -16,6 +16,7 @@ class ApiConstants {
   static const String audioMessages = '/messages/audio';
   static const String imageMessages = '/messages/image';
   static const String fileMessages = '/messages/file';
+  static const String users = '/users';
 }
 
 

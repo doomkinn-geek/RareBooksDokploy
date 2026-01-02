@@ -18,6 +18,13 @@ public class ChatParticipant
     /// </summary>
     public bool IsAdmin { get; set; } = false;
     
+    /// <summary>
+    /// End-to-end encryption - Chat key encrypted with this participant's public key
+    /// For private chats: derived from ECDH shared secret
+    /// For group chats: group AES key encrypted with participant's public key
+    /// </summary>
+    public string? EncryptedChatKey { get; set; }
+    
     // Navigation properties
     public Chat Chat { get; set; } = null!;
     public User User { get; set; } = null!;

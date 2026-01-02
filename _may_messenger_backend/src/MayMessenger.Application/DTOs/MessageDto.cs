@@ -34,6 +34,9 @@ public class MessageDto
     
     // Deletion
     public bool IsDeleted { get; set; }
+    
+    // End-to-end encryption
+    public bool IsEncrypted { get; set; }
 }
 
 /// <summary>

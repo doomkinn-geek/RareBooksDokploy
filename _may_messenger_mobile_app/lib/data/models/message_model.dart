@@ -89,6 +89,9 @@ class Message {
   
   // Deletion
   final bool isDeleted;
+  
+  // End-to-end encryption
+  final bool isEncrypted;
 
   Message({
     required this.id,
@@ -116,6 +119,7 @@ class Message {
     this.isEdited = false,
     this.editedAt,
     this.isDeleted = false,
+    this.isEncrypted = false,
   });
 
   factory Message.fromJson(Map<String, dynamic> json) {
@@ -147,6 +151,7 @@ class Message {
       isEdited: json['isEdited'] ?? false,
       editedAt: json['editedAt'] != null ? DateTime.parse(json['editedAt']) : null,
       isDeleted: json['isDeleted'] ?? false,
+      isEncrypted: json['isEncrypted'] ?? false,
     );
   }
 
@@ -177,6 +182,7 @@ class Message {
       'isEdited': isEdited,
       'editedAt': editedAt?.toIso8601String(),
       'isDeleted': isDeleted,
+      'isEncrypted': isEncrypted,
     };
   }
 
@@ -206,6 +212,7 @@ class Message {
     bool? isEdited,
     DateTime? editedAt,
     bool? isDeleted,
+    bool? isEncrypted,
   }) {
     return Message(
       id: id ?? this.id,
@@ -233,6 +240,7 @@ class Message {
       isEdited: isEdited ?? this.isEdited,
       editedAt: editedAt ?? this.editedAt,
       isDeleted: isDeleted ?? this.isDeleted,
+      isEncrypted: isEncrypted ?? this.isEncrypted,
     );
   }
   

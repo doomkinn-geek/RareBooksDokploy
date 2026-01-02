@@ -48,6 +48,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   Timer? _markAsPlayedTimer; // Debounce timer for mark as played
   Timer? _sendingTimeoutTimer; // Fallback timer for stuck "sending" status
   bool _showRetryForStuck = false; // Show retry button for messages stuck in sending
+  double _playbackSpeed = 1.0; // Current playback speed
 
   @override
   void initState() {
@@ -79,9 +80,12 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       if (localPath != null && await File(localPath).exists()) {
         // Audio already cached locally
         final dur = await _audioPlayer.setFilePath(localPath);
+        // Reset position to start for proper animation
+        await _audioPlayer.seek(Duration.zero);
         if (mounted) {
           setState(() {
             _duration = dur;
+            _position = Duration.zero;
             _isDownloadingAudio = false;
           });
         }
@@ -98,6 +102,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           
           if (localPath != null) {
             final dur = await _audioPlayer.setFilePath(localPath);
+            // Reset position to start for proper animation
+            await _audioPlayer.seek(Duration.zero);
             
             // Update cache with local path
             final localDataSource = ref.read(localDataSourceProvider);
@@ -110,6 +116,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             if (mounted) {
               setState(() {
                 _duration = dur;
+                _position = Duration.zero;
                 _isDownloadingAudio = false;
               });
             }
@@ -223,16 +230,22 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
 
   void _initAudio() {
     _audioPlayer.durationStream.listen((d) {
-      setState(() => _duration = d);
+      if (mounted) {
+        setState(() => _duration = d);
+      }
     });
     _audioPlayer.positionStream.listen((p) {
-      setState(() => _position = p);
+      if (mounted) {
+        setState(() => _position = p);
+      }
     });
     _audioPlayer.playerStateStream.listen((state) {
       final wasPlaying = _isPlaying;
-      setState(() {
-        _isPlaying = state.playing;
-      });
+      if (mounted) {
+        setState(() {
+          _isPlaying = state.playing;
+        });
+      }
       
       // Start/stop proximity sensor based on playback state
       final proximityService = ref.read(proximityAudioServiceProvider);
@@ -320,6 +333,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           return;
         }
         
+        // Set playback speed (preserves pitch)
+        await _audioPlayer.setSpeed(_playbackSpeed);
         await _audioPlayer.play();
       }
     } catch (e) {
@@ -332,6 +347,36 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           ),
         );
       }
+    }
+  }
+  
+  /// Cycle through playback speeds: 1.0 -> 1.25 -> 1.5 -> 2.0 -> 1.0
+  void _cyclePlaybackSpeed() {
+    setState(() {
+      if (_playbackSpeed == 1.0) {
+        _playbackSpeed = 1.25;
+      } else if (_playbackSpeed == 1.25) {
+        _playbackSpeed = 1.5;
+      } else if (_playbackSpeed == 1.5) {
+        _playbackSpeed = 2.0;
+      } else {
+        _playbackSpeed = 1.0;
+      }
+    });
+    
+    // Update speed if currently playing
+    if (_isPlaying) {
+      _audioPlayer.setSpeed(_playbackSpeed);
+    }
+    
+    // Show snackbar with current speed
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Скорость: ${_playbackSpeed}x'),
+          duration: const Duration(milliseconds: 800),
+        ),
+      );
     }
   }
 
@@ -492,6 +537,32 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
               ),
               onPressed: _playPauseAudio,
             ),
+            // Speed control button (only visible when not downloading)
+            if (!_isDownloadingAudio)
+              GestureDetector(
+                onTap: _cyclePlaybackSpeed,
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: isPlayed 
+                        ? (isMe ? Colors.green[400]!.withOpacity(0.3) : Colors.green[600]!.withOpacity(0.3))
+                        : (isMe ? Colors.white.withOpacity(0.2) : Colors.grey[300]!.withOpacity(0.5)),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${_playbackSpeed}x',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: playerColor,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             Expanded(
               child: GestureDetector(
                 onTapDown: (details) => _seekAudio(details, isMe),
@@ -537,6 +608,30 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            // Playback speed button
+                            if (_playbackSpeed != 1.0) ...[
+                              GestureDetector(
+                                onTap: _cyclePlaybackSpeed,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isPlayed 
+                                        ? (isMe ? Colors.green[400]!.withOpacity(0.3) : Colors.green[600]!.withOpacity(0.3))
+                                        : (isMe ? Colors.white.withOpacity(0.2) : Colors.grey[300]!.withOpacity(0.5)),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    '${_playbackSpeed}x',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
                             Text(
                               _duration != null
                                   ? '${_duration!.inMinutes}:${(_duration!.inSeconds % 60).toString().padLeft(2, '0')}'

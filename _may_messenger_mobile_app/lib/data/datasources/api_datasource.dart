@@ -156,6 +156,7 @@ class ApiDataSource {
     required MessageType type,
     String? content,
     String? clientMessageId,
+    bool isEncrypted = false,
   }) async {
     try {
       final response = await _dio.post(
@@ -165,6 +166,7 @@ class ApiDataSource {
           'type': type.index,
           'content': content,
           'clientMessageId': clientMessageId,
+          'isEncrypted': isEncrypted,
         },
       );
       return Message.fromJson(response.data);
@@ -704,6 +706,73 @@ class ApiDataSource {
       return Message.fromJson(response.data);
     } catch (e) {
       throw Exception('Failed to send message with reply: $e');
+    }
+  }
+  
+  // ==================== Encryption API ====================
+  
+  /// Update the current user's public key on the server
+  Future<void> updatePublicKey(String publicKeyBase64) async {
+    try {
+      await _dio.put(
+        '${ApiConstants.users}/public-key',
+        data: {
+          'publicKey': publicKeyBase64,
+        },
+      );
+      print('[API] Public key updated successfully');
+    } catch (e) {
+      print('[API] Failed to update public key: $e');
+      throw Exception('Failed to update public key: $e');
+    }
+  }
+  
+  /// Get public key of a specific user
+  Future<String?> getUserPublicKey(String userId) async {
+    try {
+      final response = await _dio.get('${ApiConstants.users}/$userId/public-key');
+      return response.data['publicKey'] as String?;
+    } catch (e) {
+      print('[API] Failed to get user public key: $e');
+      return null;
+    }
+  }
+  
+  /// Get public keys for multiple users
+  Future<Map<String, String?>> getPublicKeys(List<String> userIds) async {
+    try {
+      final response = await _dio.post(
+        '${ApiConstants.users}/public-keys',
+        data: userIds,
+      );
+      
+      final result = <String, String?>{};
+      for (final item in response.data as List) {
+        final userId = item['userId'] as String;
+        final publicKey = item['publicKey'] as String?;
+        result[userId] = publicKey;
+      }
+      return result;
+    } catch (e) {
+      print('[API] Failed to get public keys: $e');
+      return {};
+    }
+  }
+  
+  /// Distribute encrypted group keys to chat participants
+  Future<void> distributeGroupKeys(String chatId, List<Map<String, String>> participantKeys) async {
+    try {
+      await _dio.post(
+        '${ApiConstants.chats}/$chatId/distribute-keys',
+        data: {
+          'chatId': chatId,
+          'participantKeys': participantKeys,
+        },
+      );
+      print('[API] Group keys distributed successfully');
+    } catch (e) {
+      print('[API] Failed to distribute group keys: $e');
+      throw Exception('Failed to distribute group keys: $e');
     }
   }
 }

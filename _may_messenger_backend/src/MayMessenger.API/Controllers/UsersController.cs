@@ -481,5 +481,99 @@ public class UsersController : ControllerBase
         
         return Ok(statusList);
     }
+    
+    #region End-to-End Encryption
+    
+    /// <summary>
+    /// Обновить публичный ключ текущего пользователя для E2E шифрования
+    /// </summary>
+    [HttpPut("public-key")]
+    public async Task<IActionResult> UpdatePublicKey([FromBody] UpdatePublicKeyDto dto)
+    {
+        var userId = GetCurrentUserId();
+        var user = await _unitOfWork.Users.GetByIdAsync(userId);
+        
+        if (user == null)
+        {
+            return NotFound("User not found");
+        }
+        
+        // Validate public key format (Base64 encoded, should be 32 bytes for X25519)
+        if (string.IsNullOrWhiteSpace(dto.PublicKey))
+        {
+            return BadRequest("Public key is required");
+        }
+        
+        try
+        {
+            var keyBytes = Convert.FromBase64String(dto.PublicKey);
+            if (keyBytes.Length != 32)
+            {
+                return BadRequest("Invalid public key length. Expected 32 bytes for X25519.");
+            }
+        }
+        catch (FormatException)
+        {
+            return BadRequest("Invalid Base64 format for public key");
+        }
+        
+        user.PublicKey = dto.PublicKey;
+        user.UpdatedAt = DateTime.UtcNow;
+        await _unitOfWork.Users.UpdateAsync(user);
+        await _unitOfWork.SaveChangesAsync();
+        
+        return Ok(new { message = "Public key updated successfully" });
+    }
+    
+    /// <summary>
+    /// Получить публичный ключ пользователя по ID
+    /// </summary>
+    [HttpGet("{userId}/public-key")]
+    public async Task<ActionResult<PublicKeyDto>> GetUserPublicKey(Guid userId)
+    {
+        var user = await _unitOfWork.Users.GetByIdAsync(userId);
+        
+        if (user == null)
+        {
+            return NotFound("User not found");
+        }
+        
+        return Ok(new PublicKeyDto
+        {
+            UserId = user.Id,
+            PublicKey = user.PublicKey
+        });
+    }
+    
+    /// <summary>
+    /// Получить публичные ключи нескольких пользователей
+    /// </summary>
+    [HttpPost("public-keys")]
+    public async Task<ActionResult<List<PublicKeyDto>>> GetPublicKeys([FromBody] List<Guid> userIds)
+    {
+        if (userIds == null || !userIds.Any())
+        {
+            return BadRequest("User IDs are required");
+        }
+        
+        var result = new List<PublicKeyDto>();
+        
+        foreach (var userId in userIds.Distinct().Take(100)) // Limit to 100 users
+        {
+            var user = await _unitOfWork.Users.GetByIdAsync(userId);
+            if (user != null)
+            {
+                result.Add(new PublicKeyDto
+                {
+                    UserId = user.Id,
+                    PublicKey = user.PublicKey
+                });
+            }
+        }
+        
+        return Ok(result);
+    }
+    
+    #endregion
 }
 

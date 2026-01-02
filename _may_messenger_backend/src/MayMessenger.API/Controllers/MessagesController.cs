@@ -311,7 +311,8 @@ public class MessagesController : ControllerBase
                         Content = dto.Content,
                         ClientMessageId = dto.ClientMessageId,
                         ReplyToMessageId = dto.ReplyToMessageId,
-                        Status = MessageStatus.Sent
+                        Status = MessageStatus.Sent,
+                        IsEncrypted = dto.IsEncrypted
                     };
                     
                     await _unitOfWork.Messages.AddAsync(message);
@@ -1821,7 +1822,8 @@ public class MessagesController : ControllerBase
             ForwardedFromUserName = message.ForwardedFromUserName,
             IsEdited = message.IsEdited,
             EditedAt = message.EditedAt,
-            IsDeleted = message.IsDeleted
+            IsDeleted = message.IsDeleted,
+            IsEncrypted = message.IsEncrypted
         };
     }
     

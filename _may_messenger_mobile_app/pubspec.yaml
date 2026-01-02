@@ -63,6 +63,10 @@ dependencies:
   shared_preferences: ^2.2.2
   uuid: ^4.2.1
   
+  # End-to-End Encryption
+  cryptography: ^2.7.0  # X25519 ECDH, AES-GCM, HKDF
+  flutter_secure_storage: ^9.2.2  # Secure key storage
+  
   # Network
   connectivity_plus: ^5.0.2
   

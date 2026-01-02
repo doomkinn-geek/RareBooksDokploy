@@ -22,6 +22,9 @@ public class User : BaseEntity
     public DateTime? LastSeenAt { get; set; }
     public DateTime? LastHeartbeatAt { get; set; } // For presence monitoring
     
+    // End-to-end encryption - X25519 public key (Base64 encoded, 32 bytes)
+    public string? PublicKey { get; set; }
+    
     // Navigation properties
     public User? InvitedByUser { get; set; }
     public ICollection<ChatParticipant> ChatParticipants { get; set; } = new List<ChatParticipant>();

@@ -13,6 +13,7 @@ import '../../data/services/image_storage_service.dart';
 import '../../data/services/status_sync_service.dart';
 import '../../data/services/outbox_sync_service.dart';
 import '../../core/services/fcm_service.dart';
+import '../../core/services/encryption_service.dart';
 
 // Утилита для форматирования ошибок
 String _formatError(dynamic error) {
@@ -186,6 +187,7 @@ final authStateProvider = StateNotifierProvider<AuthStateNotifier, AuthState>((r
   return AuthStateNotifier(
     ref.read(authRepositoryProvider),
     ref.read(fcmServiceProvider),
+    ref,
   );
 });
 
@@ -216,8 +218,9 @@ class AuthState {
 class AuthStateNotifier extends StateNotifier<AuthState> {
   final AuthRepository _authRepository;
   final FcmService _fcmService;
+  final Ref _ref;
 
-  AuthStateNotifier(this._authRepository, this._fcmService) : super(AuthState()) {
+  AuthStateNotifier(this._authRepository, this._fcmService, this._ref) : super(AuthState()) {
     checkAuth();
   }
 
@@ -359,6 +362,9 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
         
         // Register FCM token after successful login
         await _registerFcmToken();
+        
+        // Initialize encryption and register public key
+        await _initializeEncryption();
       } else {
         state = state.copyWith(
           isLoading: false,
@@ -388,6 +394,33 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
     } catch (e) {
       print('Failed to initialize/register FCM after auth: $e');
       // Don't fail the auth flow if FCM registration fails
+    }
+  }
+  
+  Future<void> _initializeEncryption() async {
+    try {
+      print('[ENCRYPTION] Initializing E2E encryption...');
+      
+      // Get encryption service
+      final encryptionService = _ref.read(encryptionServiceProvider);
+      
+      // Initialize (load or generate key pair)
+      await encryptionService.initialize();
+      
+      // Get public key and send to server
+      final publicKey = await encryptionService.getPublicKeyBase64();
+      
+      if (publicKey != null) {
+        // Update public key on server
+        final apiDataSource = _ref.read(apiDataSourceProvider);
+        await apiDataSource.updatePublicKey(publicKey);
+        print('[ENCRYPTION] Public key registered on server');
+      } else {
+        print('[ENCRYPTION] Failed to get public key');
+      }
+    } catch (e) {
+      print('[ENCRYPTION] Failed to initialize encryption: $e');
+      // Don't fail the auth flow if encryption initialization fails
     }
   }
 

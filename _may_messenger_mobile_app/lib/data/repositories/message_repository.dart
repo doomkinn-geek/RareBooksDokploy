@@ -40,12 +40,14 @@ class MessageRepository {
     required MessageType type,
     String? content,
     String? clientMessageId,
+    bool isEncrypted = false,
   }) async {
     return await _apiDataSource.sendMessage(
       chatId: chatId,
       type: type,
       content: content,
       clientMessageId: clientMessageId,
+      isEncrypted: isEncrypted,
     );
   }
 

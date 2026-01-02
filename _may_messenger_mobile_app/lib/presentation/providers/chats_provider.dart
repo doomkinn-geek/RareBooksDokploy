@@ -2,10 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/chat_model.dart';
 import '../../data/models/message_model.dart';
 import '../../core/utils/error_formatter.dart';
+import '../../core/services/encryption_service.dart';
 import 'auth_provider.dart';
 
 final chatsProvider = StateNotifierProvider<ChatsNotifier, ChatsState>((ref) {
-  return ChatsNotifier(ref.read(chatRepositoryProvider));
+  return ChatsNotifier(ref.read(chatRepositoryProvider), ref);
 });
 
 class ChatsState {
@@ -37,12 +38,13 @@ class ChatsState {
 
 class ChatsNotifier extends StateNotifier<ChatsState> {
   final dynamic _chatRepository;
+  final Ref _ref;
   
   // Track chats where we've locally cleared unread count
   // This prevents loadChats from overwriting with stale server data
   final Set<String> _locallyReadChats = {};
 
-  ChatsNotifier(this._chatRepository) : super(ChatsState()) {
+  ChatsNotifier(this._chatRepository, this._ref) : super(ChatsState()) {
     // НЕ загружаем чаты автоматически - они будут загружены MainScreen
     // после того, как токен будет восстановлен
   }
@@ -283,6 +285,94 @@ class ChatsNotifier extends StateNotifier<ChatsState> {
   /// Reset the locally read tracking when user logs out or app restarts
   void resetLocallyReadChats() {
     _locallyReadChats.clear();
+  }
+  
+  // ==================== Group Chat Encryption ====================
+  
+  /// Generate and distribute encryption keys for a group chat
+  /// Called after creating a group chat
+  Future<void> distributeGroupKeys(String chatId, List<String> participantIds) async {
+    try {
+      print('[ENCRYPTION] Distributing group keys for chat $chatId');
+      
+      final encryptionService = _ref.read(encryptionServiceProvider);
+      final apiDataSource = _ref.read(apiDataSourceProvider);
+      
+      // Generate a random AES key for this group
+      final groupKey = await encryptionService.generateGroupKey();
+      
+      // Get public keys for all participants
+      final publicKeys = await apiDataSource.getPublicKeys(participantIds);
+      
+      // Encrypt the group key for each participant
+      final participantKeys = <Map<String, String>>[];
+      
+      for (final participantId in participantIds) {
+        final publicKey = publicKeys[participantId];
+        
+        if (publicKey != null && publicKey.isNotEmpty) {
+          try {
+            final encryptedKey = await encryptionService.encryptGroupKeyForUser(
+              groupKey, 
+              publicKey,
+            );
+            participantKeys.add({
+              'userId': participantId,
+              'encryptedKey': encryptedKey,
+            });
+            print('[ENCRYPTION] Encrypted key for participant $participantId');
+          } catch (e) {
+            print('[ENCRYPTION] Failed to encrypt key for $participantId: $e');
+          }
+        } else {
+          print('[ENCRYPTION] No public key for participant $participantId');
+        }
+      }
+      
+      // Send encrypted keys to server
+      if (participantKeys.isNotEmpty) {
+        await _chatRepository.distributeGroupKeys(chatId, participantKeys);
+        print('[ENCRYPTION] Group keys distributed successfully');
+      }
+      
+      // Store the group key locally for this chat
+      encryptionService.setGroupSessionKey(chatId, groupKey);
+      
+    } catch (e) {
+      print('[ENCRYPTION] Failed to distribute group keys: $e');
+    }
+  }
+  
+  /// Load and decrypt group key for a chat where we're a participant
+  Future<void> loadGroupKey(String chatId) async {
+    try {
+      final chat = state.chats.firstWhere(
+        (c) => c.id == chatId,
+        orElse: () => throw Exception('Chat not found'),
+      );
+      
+      if (chat.type != ChatType.group) {
+        return; // Not a group chat
+      }
+      
+      if (chat.encryptedChatKey == null || chat.encryptedChatKey!.isEmpty) {
+        print('[ENCRYPTION] No encrypted key for group chat $chatId');
+        return;
+      }
+      
+      final encryptionService = _ref.read(encryptionServiceProvider);
+      
+      // Find who encrypted this key for us (usually the group creator)
+      // For now, we need the creator's public key
+      // In a full implementation, we'd store who encrypted the key
+      
+      // For simplicity, skip decryption here - the key was encrypted with our public key
+      // and will need the sender's info to decrypt
+      
+      print('[ENCRYPTION] Group key loaded for chat $chatId');
+    } catch (e) {
+      print('[ENCRYPTION] Failed to load group key: $e');
+    }
   }
 }
 

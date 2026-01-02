@@ -61,6 +61,11 @@ class ChatRepository {
   Future<Chat> createOrGetDirectChat(String targetUserId) async {
     return await _apiDataSource.createOrGetDirectChat(targetUserId);
   }
+  
+  /// Distribute encrypted group keys to participants
+  Future<void> distributeGroupKeys(String chatId, List<Map<String, String>> participantKeys) async {
+    await _apiDataSource.distributeGroupKeys(chatId, participantKeys);
+  }
 }
 
 

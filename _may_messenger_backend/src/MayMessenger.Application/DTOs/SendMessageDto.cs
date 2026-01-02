@@ -9,6 +9,9 @@ public class SendMessageDto
     public string? Content { get; set; }
     public string? ClientMessageId { get; set; }
     public Guid? ReplyToMessageId { get; set; }
+    
+    // End-to-end encryption - indicates if Content is encrypted
+    public bool IsEncrypted { get; set; } = false;
 }
 
 

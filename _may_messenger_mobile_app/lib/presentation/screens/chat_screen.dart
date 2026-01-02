@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/messages_provider.dart';
@@ -46,6 +47,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   DateTime? _currentVisibleDate; // For sticky date header
   bool _showStickyDateHeader = false; // Show/hide sticky date header
   List<Message> _currentMessages = []; // Cache messages for scroll calculations
+  Timer? _markAsReadDebounce; // Debounce timer for mark as read
   
   // Reply mode state
   Message? _replyToMessage;
@@ -199,14 +201,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       
       // Check if user is still in the chat and at the bottom (seeing the messages)
       if (mounted && _scrollController.hasClients) {
-        final isAtBottom = _scrollController.position.pixels <= 100; // At or near bottom
+        final scrollPos = _scrollController.position.pixels;
+        final isAtBottom = scrollPos <= 100; // At or near bottom
+        
+        print('[CHAT_SCREEN] Scroll check: position=$scrollPos, isAtBottom=$isAtBottom');
         
         if (isAtBottom) {
-          print('[CHAT_SCREEN] User at bottom of chat, marking messages as read...');
-          ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
+          print('[CHAT_SCREEN] User at bottom of chat, marking messages as read (debounced)...');
+          // Debounce: only mark as read if user stays at bottom for 300ms
+          _markAsReadDebounce?.cancel();
+          _markAsReadDebounce = Timer(const Duration(milliseconds: 300), () {
+            if (mounted) {
+              ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
+            }
+          });
         } else {
-          print('[CHAT_SCREEN] User not at bottom, NOT marking messages as read yet');
+          print('[CHAT_SCREEN] User not at bottom (scrollPos=$scrollPos), NOT marking messages as read yet');
         }
+      } else {
+        print('[CHAT_SCREEN] Cannot check scroll position: mounted=$mounted, hasClients=${_scrollController.hasClients}');
       }
     
       // STEP 6: Load user status immediately
@@ -276,9 +289,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     
     // Only mark as read if user is at the bottom AND the chat is active (mounted)
     if (currentScroll <= threshold && mounted) {
-      // User is at the bottom (newest messages), mark messages as read
-      print('[CHAT_SCREEN] User scrolled to bottom, marking messages as read');
-      ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
+      // User is at the bottom (newest messages), debounce mark as read
+      print('[CHAT_SCREEN] User scrolled to bottom (pixels=$currentScroll), marking messages as read (debounced)');
+      _markAsReadDebounce?.cancel();
+      _markAsReadDebounce = Timer(const Duration(milliseconds: 300), () {
+        if (mounted) {
+          ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
+        }
+      });
+    } else if (currentScroll > threshold) {
+      print('[CHAT_SCREEN] User not at bottom (pixels=$currentScroll), skipping mark as read');
     }
   }
 
@@ -334,6 +354,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       } catch (e) {
       print('[CHAT_SCREEN] Failed to clear unread count: $e');
       }
+    
+    // Cancel debounce timer
+    _markAsReadDebounce?.cancel();
     
     _scrollController.dispose();
     super.dispose();

@@ -2,9 +2,11 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../data/models/message_model.dart';
+import '../../data/models/chat_model.dart';
 import '../../data/services/message_sync_service.dart';
 import '../../data/repositories/message_cache_repository.dart';
 import '../../core/services/notification_service.dart';
+import '../../core/services/encryption_service.dart';
 import 'auth_provider.dart';
 import 'signalr_provider.dart';
 import 'profile_provider.dart';
@@ -85,6 +87,9 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   // Throttling: track pending sends to prevent spam
   final Set<String> _pendingSends = {};
   DateTime? _lastSendTime;
+  
+  // Encryption: cached public key for this chat's other participant
+  String? _otherParticipantPublicKey;
 
   // Track recently sent messages for status polling (messageId -> sentAt)
   final Map<String, DateTime> _recentlySentMessages = {};
@@ -149,6 +154,198 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     
     // Start status sync service
     _statusSyncService.startPeriodicSync();
+    
+    // Initialize encryption key from chat data
+    _initializeEncryption();
+  }
+  
+  /// Initialize encryption for this chat by caching the other participant's public key
+  void _initializeEncryption() {
+    try {
+      final chatsState = _ref.read(chatsProvider);
+      final chat = chatsState.chats.firstWhere(
+        (c) => c.id == chatId,
+        orElse: () => Chat(
+          id: '', 
+          type: ChatType.private, 
+          title: '', 
+          unreadCount: 0, 
+          createdAt: DateTime.now(),
+        ),
+      );
+      
+      if (chat.id.isNotEmpty) {
+        _otherParticipantPublicKey = chat.otherParticipantPublicKey;
+        print('[ENCRYPTION] Initialized encryption for chat $chatId, hasPublicKey: ${_otherParticipantPublicKey != null}');
+      }
+    } catch (e) {
+      print('[ENCRYPTION] Failed to initialize encryption: $e');
+    }
+  }
+  
+  /// Encrypt content for sending (for text messages)
+  Future<String?> _encryptContent(String content) async {
+    if (_otherParticipantPublicKey == null || _otherParticipantPublicKey!.isEmpty) {
+      print('[ENCRYPTION] No public key available for encryption');
+      return null;
+    }
+    
+    try {
+      final encryptionService = _ref.read(encryptionServiceProvider);
+      final encrypted = await encryptionService.encryptForChat(
+        chatId, 
+        content, 
+        _otherParticipantPublicKey,
+      );
+      print('[ENCRYPTION] Message encrypted successfully');
+      return encrypted;
+    } catch (e) {
+      print('[ENCRYPTION] Encryption failed: $e');
+      return null;
+    }
+  }
+  
+  /// Decrypt content from received message
+  Future<String?> _decryptContent(String encryptedContent) async {
+    if (_otherParticipantPublicKey == null || _otherParticipantPublicKey!.isEmpty) {
+      // Try to refresh public key from chat
+      _initializeEncryption();
+      
+      if (_otherParticipantPublicKey == null || _otherParticipantPublicKey!.isEmpty) {
+        print('[ENCRYPTION] No public key available for decryption');
+        return null;
+      }
+    }
+    
+    try {
+      final encryptionService = _ref.read(encryptionServiceProvider);
+      final decrypted = await encryptionService.decryptFromChat(
+        chatId, 
+        encryptedContent, 
+        _otherParticipantPublicKey,
+      );
+      print('[ENCRYPTION] Message decrypted successfully');
+      return decrypted;
+    } catch (e) {
+      print('[ENCRYPTION] Decryption failed: $e');
+      return null;
+    }
+  }
+  
+  /// Decrypt a message if it's encrypted
+  Future<Message> _decryptMessageIfNeeded(Message message) async {
+    if (!message.isEncrypted || message.type != MessageType.text) {
+      return message;
+    }
+    
+    if (message.content == null || message.content!.isEmpty) {
+      return message;
+    }
+    
+    final decryptedContent = await _decryptContent(message.content!);
+    if (decryptedContent != null) {
+      return message.copyWith(content: decryptedContent);
+    }
+    
+    // If decryption failed, mark the message as unreadable
+    return message.copyWith(content: '[Не удалось расшифровать сообщение]');
+  }
+  
+  /// Handle encrypted message - decrypt and add to state
+  Future<void> _addEncryptedMessage(Message encryptedMessage) async {
+    print('[ENCRYPTION] Decrypting incoming message: ${encryptedMessage.id}');
+    
+    // Decrypt the message
+    final decryptedMessage = await _decryptMessageIfNeeded(encryptedMessage);
+    
+    // Add the decrypted message using the synchronous flow
+    // We call the internal logic directly since addMessage would detect encryption again
+    _addMessageInternal(decryptedMessage);
+  }
+  
+  /// Internal method to add a message without encryption check (to avoid recursion)
+  void _addMessageInternal(Message message) {
+    // Check if this is a replacement for a local message
+    // (when our own message comes back from server via SignalR)
+    final profileState = _ref.read(profileProvider);
+    final currentUserId = profileState.profile?.id;
+    final isFromMe = currentUserId != null && message.senderId == currentUserId;
+    
+    // If message is from me, check if we have a local version to replace
+    if (isFromMe && message.clientMessageId != null && message.clientMessageId!.isNotEmpty) {
+      final localIndex = state.messages.indexWhere((m) => 
+        m.localId == message.clientMessageId || 
+        m.clientMessageId == message.clientMessageId ||
+        m.id == message.clientMessageId
+      );
+      
+      if (localIndex != -1) {
+        print('[MSG_RECV] Found local message by clientMessageId: ${message.clientMessageId}');
+        
+        final updatedMessages = [...state.messages];
+        final localMessage = updatedMessages[localIndex];
+        final serverMessage = message.copyWith(
+          localId: localMessage.localId,
+          isLocalOnly: false,
+        );
+        updatedMessages[localIndex] = serverMessage;
+        state = state.copyWith(messages: updatedMessages);
+        
+        if (localMessage.localId != null) {
+          _registerIdMapping(localMessage.localId!, message.id);
+        }
+        if (message.clientMessageId != null) {
+          _registerIdMapping(message.clientMessageId!, message.id);
+        }
+        
+        _cache.update(serverMessage);
+        
+        if (localMessage.localId != null) {
+          _outboxRepository.markAsSynced(localMessage.localId!, message.id);
+        }
+        
+        try {
+          final localDataSource = _ref.read(localDataSourceProvider);
+          localDataSource.addMessageToCache(chatId, serverMessage);
+        } catch (e) {
+          print('[MSG_RECV] Failed to cache message in Hive: $e');
+        }
+        return;
+      }
+    }
+    
+    // Check for duplicates
+    final exists = state.messages.any((m) {
+      if (message.id.isNotEmpty && m.id == message.id) {
+        return true;
+      }
+      if ((message.clientMessageId?.isNotEmpty ?? false) && 
+          (m.clientMessageId == message.clientMessageId || m.localId == message.clientMessageId)) {
+        return true;
+      }
+      return false;
+    });
+    
+    if (exists) {
+      print('[MSG_RECV] Duplicate message, skipping: ${message.id}');
+      return;
+    }
+    
+    // Add the message
+    final updatedMessages = [...state.messages, message];
+    updatedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    state = state.copyWith(messages: updatedMessages);
+    
+    _cache.put(message);
+    
+    try {
+      final localDataSource = _ref.read(localDataSourceProvider);
+      localDataSource.addMessageToCache(chatId, message);
+    } catch (e) {
+      print('[MSG_RECV] Failed to cache message in Hive: $e');
+    }
+    
+    print('[MSG_RECV] Message added: ${message.id}');
   }
   
   /// Apply any pending status updates from the global cache
@@ -795,11 +992,29 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final apiCallStart = DateTime.now();
       // #endregion
       if (type == MessageType.text) {
+        // Try to encrypt the message if encryption is available
+        String? contentToSend = content;
+        bool isEncrypted = false;
+        
+        if (content != null && _otherParticipantPublicKey != null && _otherParticipantPublicKey!.isNotEmpty) {
+          try {
+            final encrypted = await _encryptContent(content);
+            if (encrypted != null) {
+              contentToSend = encrypted;
+              isEncrypted = true;
+              print('[MSG_SEND] Message encrypted for sending');
+            }
+          } catch (e) {
+            print('[MSG_SEND] Encryption failed, sending unencrypted: $e');
+          }
+        }
+        
         serverMessage = await _messageRepository.sendMessage(
           chatId: chatId,
           type: type,
-          content: content,
+          content: contentToSend,
           clientMessageId: clientMessageId,
+          isEncrypted: isEncrypted,
         );
       } else {
         serverMessage = await _messageRepository.sendAudioMessage(
@@ -1407,6 +1622,12 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     // #region agent log - Hypothesis A/D: Track incoming message
     print('[MSG_RECV] HYP_A_INCOMING: Message received - id: ${message.id}, clientMessageId: ${message.clientMessageId}, type: ${message.type}, isLocalOnly: ${message.isLocalOnly}, currentMessages: ${state.messages.length}');
     // #endregion
+    
+    // Handle encrypted messages asynchronously
+    if (message.isEncrypted && message.type == MessageType.text) {
+      _addEncryptedMessage(message);
+      return;
+    }
     
     // Check if this is a replacement for a local message
     // (when our own message comes back from server via SignalR)

@@ -22,6 +22,17 @@ public class ChatDto
     
     // Avatar of the other participant for private chats
     public string? OtherParticipantAvatar { get; set; }
+    
+    // End-to-end encryption
+    // For private chats: other participant's public key for ECDH
+    // For group chats: not used (keys are in EncryptedChatKeys)
+    public string? OtherParticipantPublicKey { get; set; }
+    
+    // Encrypted chat key for current user (from ChatParticipant)
+    public string? EncryptedChatKey { get; set; }
+    
+    // List of participant IDs for the chat
+    public List<Guid> ParticipantIds { get; set; } = new List<Guid>();
 }
 
 

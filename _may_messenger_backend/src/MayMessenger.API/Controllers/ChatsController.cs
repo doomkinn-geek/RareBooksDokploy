@@ -61,6 +61,11 @@ public class ChatsController : ControllerBase
             string? otherParticipantAvatar = null;
             bool? otherParticipantIsOnline = null;
             DateTime? otherParticipantLastSeenAt = null;
+            string? otherParticipantPublicKey = null;
+            
+            // Get current user's encrypted chat key
+            var currentParticipant = chat.Participants.FirstOrDefault(p => p.UserId == userId);
+            var encryptedChatKey = currentParticipant?.EncryptedChatKey;
             
             if (chat.Type == ChatType.Private)
             {
@@ -74,6 +79,7 @@ public class ChatsController : ControllerBase
                     otherParticipantAvatar = otherParticipant.User.Avatar;
                     otherParticipantIsOnline = otherParticipant.User.IsOnline;
                     otherParticipantLastSeenAt = otherParticipant.User.LastSeenAt;
+                    otherParticipantPublicKey = otherParticipant.User.PublicKey;
                 }
             }
             
@@ -89,6 +95,9 @@ public class ChatsController : ControllerBase
                 OtherParticipantAvatar = otherParticipantAvatar,
                 OtherParticipantIsOnline = otherParticipantIsOnline,
                 OtherParticipantLastSeenAt = otherParticipantLastSeenAt,
+                OtherParticipantPublicKey = otherParticipantPublicKey,
+                EncryptedChatKey = encryptedChatKey,
+                ParticipantIds = chat.Participants.Select(p => p.UserId).ToList(),
                 LastMessage = lastMessage != null ? new MessageDto
                 {
                     Id = lastMessage.Id,
@@ -99,7 +108,8 @@ public class ChatsController : ControllerBase
                     Content = lastMessage.Content,
                     FilePath = lastMessage.FilePath,
                     Status = lastMessage.Status,
-                    CreatedAt = lastMessage.CreatedAt
+                    CreatedAt = lastMessage.CreatedAt,
+                    IsEncrypted = lastMessage.IsEncrypted
                 } : null
             });
         }
@@ -941,6 +951,82 @@ public class ChatsController : ControllerBase
             Avatar = chat.Avatar,
             CreatedAt = chat.CreatedAt,
             UnreadCount = 0
+        });
+    }
+    
+    #endregion
+    
+    #region End-to-End Encryption
+    
+    /// <summary>
+    /// Распределить зашифрованные ключи группового чата участникам
+    /// Вызывается создателем группы или при добавлении нового участника
+    /// </summary>
+    [HttpPost("{chatId}/distribute-keys")]
+    public async Task<IActionResult> DistributeGroupKeys(Guid chatId, [FromBody] DistributeGroupKeyDto dto)
+    {
+        var userId = GetCurrentUserId();
+        var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+        
+        if (chat == null)
+        {
+            return NotFound("Chat not found");
+        }
+        
+        // Check if user is owner or admin
+        var currentParticipant = chat.Participants.FirstOrDefault(p => p.UserId == userId);
+        if (currentParticipant == null || (!currentParticipant.IsOwner && !currentParticipant.IsAdmin))
+        {
+            return Forbid("Only owner or admin can distribute keys");
+        }
+        
+        // Update encrypted keys for each participant
+        foreach (var keyDto in dto.ParticipantKeys)
+        {
+            var participant = chat.Participants.FirstOrDefault(p => p.UserId == keyDto.UserId);
+            if (participant != null)
+            {
+                participant.EncryptedChatKey = keyDto.EncryptedKey;
+            }
+        }
+        
+        await _unitOfWork.SaveChangesAsync();
+        
+        // Notify participants that they have a new key
+        foreach (var keyDto in dto.ParticipantKeys)
+        {
+            await _hubContext.Clients.User(keyDto.UserId.ToString())
+                .SendAsync("ChatKeyUpdated", new { chatId, hasKey = true });
+        }
+        
+        return Ok(new { message = "Keys distributed successfully" });
+    }
+    
+    /// <summary>
+    /// Получить зашифрованный ключ чата для текущего пользователя
+    /// </summary>
+    [HttpGet("{chatId}/my-key")]
+    public async Task<ActionResult<ChatKeyDto>> GetMyChatKey(Guid chatId)
+    {
+        var userId = GetCurrentUserId();
+        var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+        
+        if (chat == null)
+        {
+            return NotFound("Chat not found");
+        }
+        
+        var participant = chat.Participants.FirstOrDefault(p => p.UserId == userId);
+        if (participant == null)
+        {
+            return Forbid("Not a participant of this chat");
+        }
+        
+        return Ok(new ChatKeyDto
+        {
+            ChatId = chatId,
+            EncryptedChatKey = participant.EncryptedChatKey,
+            ChatType = chat.Type
         });
     }
     

@@ -38,6 +38,9 @@ public class Message : BaseEntity
     public bool IsDeleted { get; set; } = false;
     public DateTime? DeletedAt { get; set; }
     
+    // End-to-end encryption
+    public bool IsEncrypted { get; set; } = false;
+    
     // Navigation properties
     public Chat Chat { get; set; } = null!;
     public User Sender { get; set; } = null!;

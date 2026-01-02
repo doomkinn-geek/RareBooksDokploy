@@ -21,6 +21,11 @@ class Chat {
   
   // Avatar of other participant (private chats only)
   final String? otherParticipantAvatar;
+  
+  // End-to-end encryption
+  final String? otherParticipantPublicKey; // For private chats - other user's X25519 public key
+  final String? encryptedChatKey; // Encrypted chat key for current user
+  final List<String> participantIds; // All participant IDs
 
   Chat({
     required this.id,
@@ -34,6 +39,9 @@ class Chat {
     this.otherParticipantIsOnline,
     this.otherParticipantLastSeenAt,
     this.otherParticipantAvatar,
+    this.otherParticipantPublicKey,
+    this.encryptedChatKey,
+    this.participantIds = const [],
   });
 
   factory Chat.fromJson(Map<String, dynamic> json) {
@@ -53,6 +61,11 @@ class Chat {
           ? DateTime.parse(json['otherParticipantLastSeenAt'])
           : null,
       otherParticipantAvatar: json['otherParticipantAvatar'],
+      otherParticipantPublicKey: json['otherParticipantPublicKey'],
+      encryptedChatKey: json['encryptedChatKey'],
+      participantIds: (json['participantIds'] as List<dynamic>?)
+          ?.map((e) => e.toString())
+          .toList() ?? [],
     );
   }
 
@@ -69,6 +82,9 @@ class Chat {
       'otherParticipantIsOnline': otherParticipantIsOnline,
       'otherParticipantLastSeenAt': otherParticipantLastSeenAt?.toIso8601String(),
       'otherParticipantAvatar': otherParticipantAvatar,
+      'otherParticipantPublicKey': otherParticipantPublicKey,
+      'encryptedChatKey': encryptedChatKey,
+      'participantIds': participantIds,
     };
   }
   
@@ -145,6 +161,9 @@ class Chat {
     bool? otherParticipantIsOnline,
     DateTime? otherParticipantLastSeenAt,
     String? otherParticipantAvatar,
+    String? otherParticipantPublicKey,
+    String? encryptedChatKey,
+    List<String>? participantIds,
   }) {
     return Chat(
       id: id ?? this.id,
@@ -158,7 +177,20 @@ class Chat {
       otherParticipantIsOnline: otherParticipantIsOnline ?? this.otherParticipantIsOnline,
       otherParticipantLastSeenAt: otherParticipantLastSeenAt ?? this.otherParticipantLastSeenAt,
       otherParticipantAvatar: otherParticipantAvatar ?? this.otherParticipantAvatar,
+      otherParticipantPublicKey: otherParticipantPublicKey ?? this.otherParticipantPublicKey,
+      encryptedChatKey: encryptedChatKey ?? this.encryptedChatKey,
+      participantIds: participantIds ?? this.participantIds,
     );
+  }
+  
+  /// Check if encryption is available for this chat
+  bool get canEncrypt {
+    if (type == ChatType.private) {
+      return otherParticipantPublicKey != null && otherParticipantPublicKey!.isNotEmpty;
+    } else {
+      // Group chat - need encrypted chat key
+      return encryptedChatKey != null && encryptedChatKey!.isNotEmpty;
+    }
   }
 }
 

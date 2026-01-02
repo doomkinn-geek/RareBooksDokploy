@@ -22,6 +22,9 @@ public class UserDto
     public Guid? InvitedByUserId { get; set; }
     public string? InvitedByUserName { get; set; }
     public DateTime CreatedAt { get; set; }
+    
+    // End-to-end encryption - X25519 public key (Base64)
+    public string? PublicKey { get; set; }
 }
 
 
