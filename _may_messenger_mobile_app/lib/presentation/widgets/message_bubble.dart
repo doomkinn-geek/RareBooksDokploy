@@ -43,6 +43,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   bool _isDownloadingAudio = false; // Track audio download state
   bool _hasMarkedAsPlayed = false; // Track if we've already marked as played
   bool _isNearEar = false; // Track proximity sensor state
+  bool _isAudioSourceSet = false; // Track if audio source is already set
   Duration? _duration;
   Duration? _position;
   Timer? _markAsPlayedTimer; // Debounce timer for mark as played
@@ -70,9 +71,19 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       Duration? dur;
       if (localPath != null && await File(localPath).exists()) {
         dur = await _audioPlayer.setFilePath(localPath);
+        if (mounted) {
+          setState(() {
+            _isAudioSourceSet = true;
+          });
+        }
       } else if (widget.message.filePath != null && widget.message.filePath!.isNotEmpty) {
         final audioUrl = '${ApiConstants.baseUrl}${widget.message.filePath}';
         dur = await _audioPlayer.setUrl(audioUrl);
+        if (mounted) {
+          setState(() {
+            _isAudioSourceSet = true;
+          });
+        }
       }
       
       if (mounted && dur != null) {
@@ -224,6 +235,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   }
 
   Future<void> _playPauseAudio() async {
+    // Prevent actions while downloading
+    if (_isDownloadingAudio) return;
+    
     final playerManager = ref.read(audioPlayerManagerProvider);
     
     try {
@@ -238,7 +252,13 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           }
         });
         
-        if (_audioPlayer.processingState == ProcessingState.idle) {
+        // If audio completed, seek to beginning first
+        if (_audioPlayer.processingState == ProcessingState.completed) {
+          await _audioPlayer.seek(Duration.zero);
+        }
+        
+        // If audio source not set yet, need to load it
+        if (!_isAudioSourceSet) {
           // 1. Check for local audio file first
           final audioStorageService = ref.read(audioStorageServiceProvider);
           String? localPath = widget.message.localAudioPath ?? 
@@ -246,7 +266,13 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           
           if (localPath != null && await File(localPath).exists()) {
             // Use local file
-            await _audioPlayer.setFilePath(localPath);
+            final dur = await _audioPlayer.setFilePath(localPath);
+            if (mounted) {
+              setState(() {
+                _isAudioSourceSet = true;
+                if (dur != null) _duration = dur;
+              });
+            }
           } else {
             // 2. Try to download from server
             if (widget.message.filePath == null || widget.message.filePath!.isEmpty) {
@@ -278,15 +304,17 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                 audioUrl
               );
               
-              // Clear downloading state
-              if (mounted) {
-                setState(() {
-                  _isDownloadingAudio = false;
-                });
-              }
-              
               if (localPath != null) {
-                await _audioPlayer.setFilePath(localPath);
+                final dur = await _audioPlayer.setFilePath(localPath);
+                
+                // Clear downloading state and mark source as set
+                if (mounted) {
+                  setState(() {
+                    _isDownloadingAudio = false;
+                    _isAudioSourceSet = true;
+                    if (dur != null) _duration = dur;
+                  });
+                }
                 
                 // Update cache with local path
                 final localDataSource = ref.read(localDataSourceProvider);
@@ -327,6 +355,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             }
           }
         }
+        
         await _audioPlayer.play();
       }
     } catch (e) {

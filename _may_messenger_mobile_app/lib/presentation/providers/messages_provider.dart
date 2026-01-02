@@ -1912,6 +1912,36 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         hasMoreOlder: hasMore,
       );
       
+      // Mark newly loaded older messages as read
+      // This ensures consistency - if user scrolled up to load older messages, they saw them
+      final profileState = _ref.read(profileProvider);
+      final currentUserId = profileState.userId;
+      
+      if (currentUserId != null) {
+        final unreadOlderMessages = newMessages.where((m) => 
+          m.senderId != currentUserId && 
+          m.status != MessageStatus.read &&
+          m.status != MessageStatus.played
+        ).toList();
+        
+        if (unreadOlderMessages.isNotEmpty) {
+          print('[MSG_LOAD] Marking ${unreadOlderMessages.length} loaded older messages as read');
+          
+          // Update local status immediately
+          for (final message in unreadOlderMessages) {
+            updateMessageStatus(message.id, MessageStatus.read);
+          }
+          
+          // Send batch request to server
+          try {
+            final messageIds = unreadOlderMessages.map((m) => m.id).toList();
+            await _messageRepository.batchMarkAsRead(messageIds);
+          } catch (e) {
+            print('[MSG_LOAD] Failed to batch mark older messages as read: $e');
+          }
+        }
+      }
+      
       print('[MSG_LOAD] Cursor pagination completed: added ${newMessages.length} messages, hasMoreOlder: $hasMore');
     } catch (e) {
       print('[MSG_LOAD] Failed to load older messages: $e');
