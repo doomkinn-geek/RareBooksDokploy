@@ -279,33 +279,22 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
             print('[MSG_RECV] Message provider not initialized for chat ${message.chatId}: $e');
           }
           
-          // Send delivery/read confirmation to backend (only for messages from others)
+          // Send delivery confirmation to backend (only for messages from others)
           if (!isFromMe) {
             try {
-              // Check if user is currently viewing this chat
-              final notificationService = _ref.read(notificationServiceProvider);
-              final isViewingChat = notificationService.currentChatId == message.chatId;
+              _signalRService.markMessageAsDelivered(message.id, message.chatId);
+              print('[MSG_RECV] Delivery confirmation sent for message: ${message.id}');
               
-              if (isViewingChat) {
-                // User is in this chat - mark as read immediately
-                print('[MSG_RECV] User is in chat, marking message as read: ${message.id}');
-                _ref.read(messagesProvider(message.chatId).notifier).markMessagesAsRead();
-              } else {
-                // User is not in this chat - mark as delivered
-                _signalRService.markMessageAsDelivered(message.id, message.chatId);
-                print('[MSG_RECV] Delivery confirmation sent for message: ${message.id}');
-                
-                // Update local message status to delivered immediately
-                try {
-                  _ref.read(messagesProvider(message.chatId).notifier)
-                      .updateMessageStatus(message.id, MessageStatus.delivered);
-                } catch (e) {
-                  print('[MSG_RECV] Failed to update local status to delivered: $e');
-                }
+              // Update local message status to delivered immediately
+              try {
+                _ref.read(messagesProvider(message.chatId).notifier)
+                    .updateMessageStatus(message.id, MessageStatus.delivered);
+              } catch (e) {
+                print('[MSG_RECV] Failed to update local status to delivered: $e');
               }
             } catch (e) {
-              print('[MSG_RECV] Failed to send delivery/read confirmation: $e');
-              // Retry delivery after a delay
+              print('[MSG_RECV] Failed to send delivery confirmation: $e');
+              // Retry after a delay
               Future.delayed(const Duration(seconds: 2), () {
                 try {
                   _signalRService.markMessageAsDelivered(message.id, message.chatId);
