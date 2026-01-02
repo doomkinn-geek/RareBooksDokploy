@@ -420,13 +420,14 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
                 
                 print('[FCM] Message fetched successfully: ${message.id}');
                 
-                // Update the messages provider to include this message
+                // Force add this message to the messages provider
                 final messagesNotifier = ref.read(messagesProvider(chatId).notifier);
-                // The message will be automatically added via SignalR or incremental sync
-                // Just trigger a sync to be safe
-                messagesNotifier.loadMessages(forceRefresh: true);
+                messagesNotifier.addMessage(message);
                 
-                print('[FCM] Message fetch completed');
+                // Also trigger a sync to ensure consistency
+                await messagesNotifier.loadMessages(forceRefresh: true);
+                
+                print('[FCM] Message fetch and sync completed');
               } catch (e) {
                 print('[FCM] Failed to fetch message on push notification: $e');
               }

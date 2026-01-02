@@ -62,27 +62,82 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   
   /// Preload audio duration without starting playback
   Future<void> _preloadAudioDuration() async {
+    // Don't preload if already downloading or playing
+    if (_isDownloadingAudio || _isPlaying) return;
+    
     try {
+      if (mounted) {
+        setState(() {
+          _isDownloadingAudio = true;
+        });
+      }
+      
       final audioStorageService = ref.read(audioStorageServiceProvider);
       String? localPath = widget.message.localAudioPath ?? 
                           await audioStorageService.getLocalAudioPath(widget.message.id);
       
-      Duration? dur;
       if (localPath != null && await File(localPath).exists()) {
-        dur = await _audioPlayer.setFilePath(localPath);
-      } else if (widget.message.filePath != null && widget.message.filePath!.isNotEmpty) {
-        final audioUrl = '${ApiConstants.baseUrl}${widget.message.filePath}';
-        dur = await _audioPlayer.setUrl(audioUrl);
-      }
-      
-      if (mounted && dur != null) {
-        setState(() {
-          _duration = dur;
-        });
+        // Audio already cached locally
+        final dur = await _audioPlayer.setFilePath(localPath);
+        if (mounted) {
+          setState(() {
+            _duration = dur;
+            _isDownloadingAudio = false;
+          });
+        }
+      } else {
+        // Download audio from server
+        if (widget.message.filePath != null && widget.message.filePath!.isNotEmpty) {
+          final audioUrl = '${ApiConstants.baseUrl}${widget.message.filePath}';
+          
+          // Download and save locally
+          localPath = await audioStorageService.saveAudioLocally(
+            widget.message.id, 
+            audioUrl
+          );
+          
+          if (localPath != null) {
+            final dur = await _audioPlayer.setFilePath(localPath);
+            
+            // Update cache with local path
+            final localDataSource = ref.read(localDataSourceProvider);
+            await localDataSource.updateMessageLocalAudioPath(
+              widget.message.chatId,
+              widget.message.id,
+              localPath
+            );
+            
+            if (mounted) {
+              setState(() {
+                _duration = dur;
+                _isDownloadingAudio = false;
+              });
+            }
+          } else {
+            // Failed to download
+            if (mounted) {
+              setState(() {
+                _isDownloadingAudio = false;
+              });
+            }
+          }
+        } else {
+          // No file path - audio was deleted
+          if (mounted) {
+            setState(() {
+              _isDownloadingAudio = false;
+            });
+          }
+        }
       }
     } catch (e) {
-      // Ignore errors - duration will be loaded when played
+      // Error during preload
       print('[AUDIO] Failed to preload duration: $e');
+      if (mounted) {
+        setState(() {
+          _isDownloadingAudio = false;
+        });
+      }
     }
   }
   
@@ -224,6 +279,19 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   }
 
   Future<void> _playPauseAudio() async {
+    // Block if audio is still downloading
+    if (_isDownloadingAudio) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Загрузка аудио...'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+      return;
+    }
+    
     final playerManager = ref.read(audioPlayerManagerProvider);
     
     try {
@@ -238,98 +306,24 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           }
         });
         
+        // Audio should already be loaded by _preloadAudioDuration
+        // If not, it means the file was deleted or failed to download
         if (_audioPlayer.processingState == ProcessingState.idle) {
-          // 1. Check for local audio file first
-          final audioStorageService = ref.read(audioStorageServiceProvider);
-          String? localPath = widget.message.localAudioPath ?? 
-                              await audioStorageService.getLocalAudioPath(widget.message.id);
-          
-          if (localPath != null && await File(localPath).exists()) {
-            // Use local file
-            await _audioPlayer.setFilePath(localPath);
-          } else {
-            // 2. Try to download from server
-            if (widget.message.filePath == null || widget.message.filePath!.isEmpty) {
-              // File was deleted on server
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Голосовое сообщение больше не доступно'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              }
-              return;
-            }
-            
-            final audioUrl = '${ApiConstants.baseUrl}${widget.message.filePath}';
-            
-            try {
-              // Set downloading state (shows indicator in widget)
-              if (mounted) {
-                setState(() {
-                  _isDownloadingAudio = true;
-                });
-              }
-              
-              // Download and save locally
-              localPath = await audioStorageService.saveAudioLocally(
-                widget.message.id, 
-                audioUrl
-              );
-              
-              // Clear downloading state
-              if (mounted) {
-                setState(() {
-                  _isDownloadingAudio = false;
-                });
-              }
-              
-              if (localPath != null) {
-                await _audioPlayer.setFilePath(localPath);
-                
-                // Update cache with local path
-                final localDataSource = ref.read(localDataSourceProvider);
-                await localDataSource.updateMessageLocalAudioPath(
-                  widget.message.chatId,
-                  widget.message.id,
-                  localPath
-                );
-              } else {
-                // Failed to download - file may be deleted
-                if (mounted) {
-                  setState(() {
-                    _isDownloadingAudio = false;
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Голосовое сообщение больше не доступно'),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
-                return;
-              }
-            } catch (e) {
-              // Network error or file deleted
-              if (mounted) {
-                setState(() {
-                  _isDownloadingAudio = false;
-                });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Не удалось загрузить аудио'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              }
-              return;
-            }
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Голосовое сообщение больше не доступно'),
+                duration: Duration(seconds: 2),
+              ),
+            );
           }
+          return;
         }
+        
         await _audioPlayer.play();
       }
     } catch (e) {
+      print('[AUDIO] Error in _playPauseAudio: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

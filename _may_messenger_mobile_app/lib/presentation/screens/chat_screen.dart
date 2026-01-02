@@ -184,16 +184,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       // STEP 4: Clear unread count
       ref.read(chatsProvider.notifier).clearUnreadCount(widget.chatId);
       
-      // STEP 5: Wait for messages to load, then mark as read
-      // Wait until messages are actually loaded (check isLoading state)
+      // STEP 5: Wait for messages to load before marking as read
+      // IMPORTANT: Only mark as read if user actively opened the chat
+      // Do NOT mark as read if this is just a push notification tap
+      // The chat is "active" when the widget is mounted and visible
       int waitAttempts = 0;
       while (ref.read(messagesProvider(widget.chatId)).isLoading && waitAttempts < 10) {
         await Future.delayed(const Duration(milliseconds: 100));
         waitAttempts++;
       }
       
-      print('[CHAT_SCREEN] Messages loaded, marking as read...');
-      ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
+      // Wait a bit more to ensure messages are rendered on screen
+      await Future.delayed(const Duration(milliseconds: 300));
+      
+      // Check if user is still in the chat and at the bottom (seeing the messages)
+      if (mounted && _scrollController.hasClients) {
+        final isAtBottom = _scrollController.position.pixels <= 100; // At or near bottom
+        
+        if (isAtBottom) {
+          print('[CHAT_SCREEN] User at bottom of chat, marking messages as read...');
+          ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
+        } else {
+          print('[CHAT_SCREEN] User not at bottom, NOT marking messages as read yet');
+        }
+      }
     
       // STEP 6: Load user status immediately
       await _loadUserStatus();
@@ -260,8 +274,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final currentScroll = _scrollController.position.pixels;
     final threshold = 100.0; // pixels from bottom (newest)
     
-    if (currentScroll <= threshold) {
+    // Only mark as read if user is at the bottom AND the chat is active (mounted)
+    if (currentScroll <= threshold && mounted) {
       // User is at the bottom (newest messages), mark messages as read
+      print('[CHAT_SCREEN] User scrolled to bottom, marking messages as read');
       ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
     }
   }
