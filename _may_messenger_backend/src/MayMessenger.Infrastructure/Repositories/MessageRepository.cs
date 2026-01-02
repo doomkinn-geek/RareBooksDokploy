@@ -13,10 +13,22 @@ public class MessageRepository : Repository<Message>, IMessageRepository
     {
     }
     
+    // Override to include ReplyToMessage and Sender navigation properties
+    public override async Task<Message?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await _dbSet
+            .Include(m => m.Sender)
+            .Include(m => m.ReplyToMessage)
+                .ThenInclude(r => r!.Sender)
+            .FirstOrDefaultAsync(m => m.Id == id, cancellationToken);
+    }
+    
     public async Task<IEnumerable<Message>> GetChatMessagesAsync(Guid chatId, int skip, int take, CancellationToken cancellationToken = default)
     {
         return await _dbSet
             .Include(m => m.Sender)
+            .Include(m => m.ReplyToMessage)
+                .ThenInclude(r => r!.Sender)
             .Where(m => m.ChatId == chatId)
             .OrderByDescending(m => m.CreatedAt)
             .Skip(skip)
@@ -65,6 +77,8 @@ public class MessageRepository : Repository<Message>, IMessageRepository
     {
         return await _dbSet
             .Include(m => m.Sender)
+            .Include(m => m.ReplyToMessage)
+                .ThenInclude(r => r!.Sender)
             .Where(m => m.ChatId == chatId && 
                        (m.CreatedAt > since || m.UpdatedAt > since))
             .OrderBy(m => m.CreatedAt) // Ascending для incremental sync (старые первыми)
@@ -76,6 +90,8 @@ public class MessageRepository : Repository<Message>, IMessageRepository
     {
         var query = _dbSet
             .Include(m => m.Sender)
+            .Include(m => m.ReplyToMessage)
+                .ThenInclude(r => r!.Sender)
             .Where(m => m.ChatId == chatId);
         
         // If cursor is provided, get messages older than the cursor message
@@ -108,6 +124,8 @@ public class MessageRepository : Repository<Message>, IMessageRepository
             
         return await _dbSet
             .Include(m => m.Sender)
+            .Include(m => m.ReplyToMessage)
+                .ThenInclude(r => r!.Sender)
             .FirstOrDefaultAsync(m => m.ClientMessageId == clientMessageId, cancellationToken);
     }
     
@@ -124,6 +142,8 @@ public class MessageRepository : Repository<Message>, IMessageRepository
         
         return await _dbSet
             .Include(m => m.Sender)
+            .Include(m => m.ReplyToMessage)
+                .ThenInclude(r => r!.Sender)
             .Where(m => chatIdsList.Contains(m.ChatId) && 
                        m.Type == MessageType.Text &&
                        m.Content != null &&

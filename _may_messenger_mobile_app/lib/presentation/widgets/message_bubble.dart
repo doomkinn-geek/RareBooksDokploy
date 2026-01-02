@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:dio/dio.dart';
 import '../../data/models/message_model.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/services/logger_service.dart';
@@ -658,13 +661,108 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   }
 
   Future<void> _openOrDownloadFile(BuildContext context) async {
-    // For now, show a message - file download/open functionality can be expanded later
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Файл: ${widget.message.originalFileName ?? "Файл"}'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    // Check if file is available locally
+    if (widget.message.localFilePath != null && 
+        File(widget.message.localFilePath!).existsSync()) {
+      // Open the local file with system dialog
+      final result = await OpenFilex.open(widget.message.localFilePath!);
+      if (result.type != ResultType.done && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Не удалось открыть файл: ${result.message}'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+    
+    // Need to download the file first
+    if (widget.message.filePath == null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Файл недоступен'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+    
+    final fileUrl = '${ApiConstants.baseUrl}${widget.message.filePath}';
+    final fileName = widget.message.originalFileName ?? 'downloaded_file';
+    
+    try {
+      // Show download progress
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 12),
+                Text('Загрузка файла...'),
+              ],
+            ),
+            duration: Duration(seconds: 30),
+          ),
+        );
+      }
+      
+      // Get directory for downloaded files
+      final directory = await getApplicationDocumentsDirectory();
+      final downloadDir = Directory('${directory.path}/downloads');
+      if (!await downloadDir.exists()) {
+        await downloadDir.create(recursive: true);
+      }
+      
+      final localPath = '${downloadDir.path}/$fileName';
+      
+      // Download the file (files are served as static files, no auth needed)
+      final dio = Dio();
+      await dio.download(
+        fileUrl,
+        localPath,
+        options: Options(
+          followRedirects: true,
+          validateStatus: (status) => status != null && status < 500,
+        ),
+      );
+      
+      // Hide download snackbar and open file
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        
+        final result = await OpenFilex.open(localPath);
+        if (result.type != ResultType.done) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Не удалось открыть файл: ${result.message}'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        
+        // Update message with local path for future use
+        ref.read(messagesProvider(widget.message.chatId).notifier)
+            .updateMessageLocalPath(widget.message.id, localFilePath: localPath);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка загрузки: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
   
   /// Build reply quote widget
@@ -896,52 +994,6 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     }
   }
 
-  Future<void> _showDeleteDialog(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Удалить сообщение'),
-        content: const Text('Сообщение будет удалено у всех участников чата'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Удалить'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && context.mounted) {
-      try {
-        await ref.read(messagesProvider(widget.message.chatId).notifier)
-            .deleteMessage(widget.message.id);
-        
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Сообщение удалено'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Не удалось удалить сообщение'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final profileState = ref.watch(profileProvider);
@@ -958,9 +1010,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: GestureDetector(
-        onLongPress: isMe ? () => _showDeleteDialog(context) : null,
-        child: AnimatedContainer(
+      child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1047,7 +1097,6 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
               ],
             ),
           ],
-        ),
         ),
       ),
     );

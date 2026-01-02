@@ -37,6 +37,10 @@ class ChatsState {
 
 class ChatsNotifier extends StateNotifier<ChatsState> {
   final dynamic _chatRepository;
+  
+  // Track chats where we've locally cleared unread count
+  // This prevents loadChats from overwriting with stale server data
+  final Set<String> _locallyReadChats = {};
 
   ChatsNotifier(this._chatRepository) : super(ChatsState()) {
     // НЕ загружаем чаты автоматически - они будут загружены MainScreen
@@ -46,7 +50,43 @@ class ChatsNotifier extends StateNotifier<ChatsState> {
   Future<void> loadChats({bool forceRefresh = false}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final chats = await _chatRepository.getChats(forceRefresh: forceRefresh);
+      final List<Chat> serverChats = await _chatRepository.getChats(forceRefresh: forceRefresh);
+      
+      // Preserve locally cleared unread counts
+      final List<Chat> chats = serverChats.map((chat) {
+        if (_locallyReadChats.contains(chat.id)) {
+          // Keep unread count at 0 if we've locally marked it as read
+          return Chat(
+            id: chat.id,
+            type: chat.type,
+            title: chat.title,
+            avatar: chat.avatar,
+            lastMessage: chat.lastMessage,
+            unreadCount: 0,
+            createdAt: chat.createdAt,
+            otherParticipantId: chat.otherParticipantId,
+            otherParticipantAvatar: chat.otherParticipantAvatar,
+            otherParticipantIsOnline: chat.otherParticipantIsOnline,
+            otherParticipantLastSeenAt: chat.otherParticipantLastSeenAt,
+          );
+        }
+        return chat;
+      }).toList();
+      
+      // Clear _locallyReadChats if server confirms unread is 0
+      final chatsToClear = <String>[];
+      for (final chatId in _locallyReadChats) {
+        final serverChat = serverChats.firstWhere(
+          (c) => c.id == chatId, 
+          orElse: () => Chat(id: '', type: ChatType.private, title: '', unreadCount: 0, createdAt: DateTime.now())
+        );
+        if (serverChat.id.isNotEmpty && serverChat.unreadCount == 0) {
+          chatsToClear.add(chatId);
+        }
+      }
+      for (final chatId in chatsToClear) {
+        _locallyReadChats.remove(chatId);
+      }
       
       state = state.copyWith(
         chats: chats,
@@ -167,6 +207,9 @@ class ChatsNotifier extends StateNotifier<ChatsState> {
   }
 
   void clearUnreadCount(String chatId) {
+    // Mark this chat as locally read to prevent loadChats from overwriting
+    _locallyReadChats.add(chatId);
+    
     final index = state.chats.indexWhere((c) => c.id == chatId);
     if (index != -1) {
       final chat = state.chats[index];
@@ -180,6 +223,9 @@ class ChatsNotifier extends StateNotifier<ChatsState> {
           unreadCount: 0,
           createdAt: chat.createdAt,
           otherParticipantId: chat.otherParticipantId,
+          otherParticipantAvatar: chat.otherParticipantAvatar,
+          otherParticipantIsOnline: chat.otherParticipantIsOnline,
+          otherParticipantLastSeenAt: chat.otherParticipantLastSeenAt,
         );
         
         final updatedChats = [...state.chats];
@@ -207,6 +253,11 @@ class ChatsNotifier extends StateNotifier<ChatsState> {
     if (chat.unreadCount > 0) {
       final newUnreadCount = (chat.unreadCount - 1).clamp(0, 999999);
       
+      // If unread count reaches 0, mark as locally read
+      if (newUnreadCount == 0) {
+        _locallyReadChats.add(chatId);
+      }
+      
       final updatedChat = Chat(
         id: chat.id,
         type: chat.type,
@@ -216,6 +267,9 @@ class ChatsNotifier extends StateNotifier<ChatsState> {
         unreadCount: newUnreadCount,
         createdAt: chat.createdAt,
         otherParticipantId: chat.otherParticipantId,
+        otherParticipantAvatar: chat.otherParticipantAvatar,
+        otherParticipantIsOnline: chat.otherParticipantIsOnline,
+        otherParticipantLastSeenAt: chat.otherParticipantLastSeenAt,
       );
       
       final updatedChats = [...state.chats];
@@ -224,6 +278,11 @@ class ChatsNotifier extends StateNotifier<ChatsState> {
       
       print('[ChatsProvider] Updated unread count for chat $chatId: ${chat.unreadCount} -> $newUnreadCount');
     }
+  }
+  
+  /// Reset the locally read tracking when user logs out or app restarts
+  void resetLocallyReadChats() {
+    _locallyReadChats.clear();
   }
 }
 

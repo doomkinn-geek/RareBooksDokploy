@@ -166,7 +166,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (error != null) {
+    // If there's an error but we have cached chats, show them with an error banner
+    if (error != null && chats.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -204,9 +205,41 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: () => ref.read(chatsProvider.notifier).loadChats(forceRefresh: true),
-      child: ListView.builder(
+    // Show chats even if there's an error (offline mode with cached data)
+    return Column(
+      children: [
+        // Error banner when offline but have cached chats
+        if (error != null)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: Colors.orange,
+            child: Row(
+              children: [
+                const Icon(Icons.wifi_off, color: Colors.white, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    error,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh, color: Colors.white, size: 20),
+                  onPressed: () => ref.read(chatsProvider.notifier).loadChats(forceRefresh: true),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+          ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () => ref.read(chatsProvider.notifier).loadChats(forceRefresh: true),
+            child: ListView.builder(
         itemCount: chats.length,
         itemBuilder: (context, index) {
           final chat = chats[index];
@@ -229,7 +262,10 @@ class _MainScreenState extends ConsumerState<MainScreen> {
             },
           );
         },
-      ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -204,11 +204,6 @@ class MessageRepository {
     }
   }
   
-  /// Delete a message
-  Future<void> deleteMessage(String messageId) async {
-    await _apiDataSource.deleteMessage(messageId);
-  }
-  
   /// Edit a text message
   Future<Message> editMessage(String messageId, String newContent) async {
     return await _apiDataSource.editMessage(messageId, newContent);

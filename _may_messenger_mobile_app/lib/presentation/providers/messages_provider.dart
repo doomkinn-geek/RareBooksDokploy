@@ -1796,16 +1796,6 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     }).toList();
   }
 
-  Future<void> deleteMessage(String messageId) async {
-    try {
-      await _messageRepository.deleteMessage(messageId);
-      // Message will be removed from state via SignalR notification
-    } catch (e) {
-      print('[MessagesProvider] Failed to delete message: $e');
-      rethrow;
-    }
-  }
-
   void removeMessage(String messageId) {
     final updatedMessages = state.messages.where((m) => m.id != messageId).toList();
     state = state.copyWith(messages: updatedMessages);
@@ -2176,6 +2166,23 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       _cache.remove(messageId);
       print('[MSG_DELETE] Removed message from SignalR: $messageId');
     }
+  }
+  
+  /// Update local file path for a message (used after downloading files)
+  void updateMessageLocalPath(String messageId, {String? localFilePath, String? localAudioPath, String? localImagePath}) {
+    final messageIndex = state.messages.indexWhere((m) => m.id == messageId);
+    if (messageIndex == -1) return;
+    
+    final updatedMessages = [...state.messages];
+    updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
+      localFilePath: localFilePath,
+      localAudioPath: localAudioPath,
+      localImagePath: localImagePath,
+    );
+    
+    state = state.copyWith(messages: updatedMessages);
+    _cache.update(updatedMessages[messageIndex]);
+    print('[MSG_UPDATE] Updated local path for message: $messageId');
   }
 }
 

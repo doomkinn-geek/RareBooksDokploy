@@ -368,6 +368,12 @@ public class MessagesController : ControllerBase
                     _logger.LogInformation($"Message {message.Id} created successfully (attempt {attempt})");
                     DiagnosticsController.IncrementMessageProcessed();
                     
+                    // Reload message with ReplyToMessage navigation property if it exists
+                    if (dto.ReplyToMessageId.HasValue)
+                    {
+                        message = await _unitOfWork.Messages.GetByIdAsync(message.Id) ?? message;
+                    }
+                    
                     var messageDto = MapToMessageDto(message, sender);
                     
                     // Send SignalR notification (non-blocking, outside transaction)
@@ -1077,7 +1083,7 @@ public class MessagesController : ControllerBase
                 
                 _logger.LogInformation($"[BATCH_READ] Sending SignalR MessageStatusUpdated for {messageId} -> READ to group {message.ChatId}");
                 await _hubContext.Clients.Group(message.ChatId.ToString())
-                    .SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Read);
+                    .SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Read, message.ChatId);
                 _logger.LogInformation($"[BATCH_READ] SignalR notification sent successfully");
             }
             // For private chats where message is already Read, still notify via SignalR
@@ -1087,7 +1093,7 @@ public class MessagesController : ControllerBase
                 _logger.LogInformation($"[BATCH_READ] HYP_C: Message already Read, but sending SignalR for sync. ChatId: {message.ChatId}, MessageId: {messageId}, SenderId: {message.SenderId}");
                 // #endregion
                 await _hubContext.Clients.Group(message.ChatId.ToString())
-                    .SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Read);
+                    .SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Read, message.ChatId);
                 // #region agent log
                 _logger.LogInformation($"[BATCH_READ] HYP_C: SignalR sent to group {message.ChatId} for message {messageId} with status Read");
                 // #endregion
@@ -1105,7 +1111,7 @@ public class MessagesController : ControllerBase
                     await _unitOfWork.Messages.UpdateAsync(message);
                     
                     await _hubContext.Clients.Group(message.ChatId.ToString())
-                        .SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Read);
+                        .SendAsync("MessageStatusUpdated", messageId, (int)MessageStatus.Read, message.ChatId);
                 }
             }
             else
@@ -1476,29 +1482,28 @@ public class MessagesController : ControllerBase
         };
         
         await _unitOfWork.Messages.AddAsync(forwardedMessage);
+        await CreatePendingAcksForMessageAsync(targetChat, forwardedMessage, userId, AckType.Message);
         await _unitOfWork.SaveChangesAsync();
         
-        var messageDto = new MessageDto
-        {
-            Id = forwardedMessage.Id,
-            ChatId = forwardedMessage.ChatId,
-            SenderId = forwardedMessage.SenderId,
-            SenderName = currentUser?.DisplayName ?? "Unknown",
-            Type = forwardedMessage.Type,
-            Content = forwardedMessage.Content,
-            FilePath = forwardedMessage.FilePath,
-            OriginalFileName = forwardedMessage.OriginalFileName,
-            FileSize = forwardedMessage.FileSize,
-            Status = forwardedMessage.Status,
-            CreatedAt = forwardedMessage.CreatedAt,
-            ForwardedFromMessageId = forwardedMessage.ForwardedFromMessageId,
-            ForwardedFromUserId = forwardedMessage.ForwardedFromUserId,
-            ForwardedFromUserName = forwardedMessage.ForwardedFromUserName
-        };
+        var messageDto = MapToMessageDto(forwardedMessage, currentUser);
         
         // Notify via SignalR
         await _hubContext.Clients.Group(request.TargetChatId.ToString())
             .SendAsync("ReceiveMessage", messageDto);
+        
+        // Send push notifications to other participants (not the sender)
+        var userTokensForPush = await GetFcmTokensForChatAsync(targetChat, userId);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await SendPushNotificationsAsync(currentUser, messageDto, userTokensForPush);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"FCM failed for forwarded message {forwardedMessage.Id}");
+            }
+        });
         
         _logger.LogInformation($"Message {request.OriginalMessageId} forwarded to chat {request.TargetChatId} by user {userId}");
         return Ok(messageDto);

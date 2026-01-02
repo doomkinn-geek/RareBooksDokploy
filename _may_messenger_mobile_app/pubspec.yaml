@@ -43,6 +43,9 @@ dependencies:
   # File Picker
   file_picker: ^8.0.0
   
+  # File Opening (system dialog)
+  open_filex: ^4.5.0
+  
   # QR Code
   mobile_scanner: ^5.2.3
   qr_flutter: ^4.1.0

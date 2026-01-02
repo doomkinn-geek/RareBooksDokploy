@@ -131,7 +131,7 @@ class Message {
       localImagePath: json['localImagePath'],
       localFilePath: json['localFilePath'],
       originalFileName: json['originalFileName'],
-      fileSize: json['fileSize'],
+      fileSize: json['fileSize'] != null ? (json['fileSize'] is int ? json['fileSize'] : (json['fileSize'] as num).toInt()) : null,
       status: MessageStatus.values[json['status']],
       createdAt: DateTime.parse(json['createdAt']),
       localId: json['localId'],

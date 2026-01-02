@@ -649,16 +649,7 @@ class ApiDataSource {
     }
   }
   
-  // Message Management (Edit, Delete, Forward)
-  
-  /// Delete a message
-  Future<void> deleteMessage(String messageId) async {
-    try {
-      await _dio.delete('${ApiConstants.messages}/$messageId');
-    } catch (e) {
-      throw Exception('Failed to delete message: $e');
-    }
-  }
+  // Message Management (Edit, Forward, Reply)
   
   /// Edit a text message
   Future<Message> editMessage(String messageId, String newContent) async {
