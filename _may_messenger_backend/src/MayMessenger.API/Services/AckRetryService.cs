@@ -27,8 +27,8 @@ public class AckRetryService : BackgroundService
     private const int CleanupAfterHours = 24;
     
     // FCM fallback configuration
-    private const int FcmFallbackAfterSeconds = 30; // Send FCM if SignalR fails for 30 seconds
-    private const int FcmRetryAfterSeconds = 300; // Retry FCM every 5 minutes if still pending
+    private const int FcmFallbackAfterSeconds = 60; // Send FCM if SignalR fails for 60 seconds (increased from 30)
+    private const int FcmRetryAfterSeconds = 600; // Retry FCM every 10 minutes if still pending (increased from 5 min)
 
     public AckRetryService(
         IServiceProvider serviceProvider,
@@ -103,6 +103,18 @@ public class AckRetryService : BackgroundService
 
     private async Task RetryAckAsync(Domain.Entities.PendingAck ack, IUnitOfWork unitOfWork)
     {
+        // DEDUPLICATION: Check if message was already delivered via DeliveryReceipt
+        // If so, no need to retry - just delete the PendingAck
+        var existingReceipt = await unitOfWork.DeliveryReceipts.GetByMessageAndUserAsync(
+            ack.MessageId, ack.RecipientUserId);
+        
+        if (existingReceipt?.DeliveredAt != null)
+        {
+            _logger.LogDebug($"Message {ack.MessageId} already delivered to {ack.RecipientUserId}, removing PendingAck");
+            await unitOfWork.PendingAcks.DeleteAsync(ack.Id);
+            return;
+        }
+        
         // Check if enough time has passed based on exponential backoff
         // Delays: 3s, 6s, 12s, 24s, 48s (approximately)
         var minDelaySeconds = RetryIntervalSeconds * Math.Pow(2, ack.RetryCount);
@@ -115,12 +127,12 @@ public class AckRetryService : BackgroundService
             return;
         }
         
-        // FCM FALLBACK: If SignalR has been failing for 30+ seconds, try FCM
+        // FCM FALLBACK: If SignalR has been failing for 60+ seconds, try FCM
         if (timeSinceCreation.TotalSeconds >= FcmFallbackAfterSeconds && _firebaseService.IsInitialized)
         {
             var timeSinceLastFcm = ack.LastRetryAt.HasValue ? DateTime.UtcNow - ack.LastRetryAt.Value : timeSinceCreation;
             
-            // Only send FCM once every 5 minutes to avoid spam
+            // Only send FCM once every 10 minutes to avoid spam
             if (timeSinceLastFcm.TotalSeconds >= FcmRetryAfterSeconds)
             {
                 await TryFcmFallbackAsync(ack, unitOfWork);
@@ -192,11 +204,30 @@ public class AckRetryService : BackgroundService
     
     /// <summary>
     /// Fallback to FCM push notification when SignalR delivery fails
+    /// Only for new messages - status updates should NOT trigger push notifications
     /// </summary>
     private async Task TryFcmFallbackAsync(Domain.Entities.PendingAck ack, IUnitOfWork unitOfWork)
     {
         try
         {
+            // IMPORTANT: Never send push for status updates - only for new messages
+            // Status updates should be delivered via SignalR only
+            if (ack.Type != Domain.Enums.AckType.Message)
+            {
+                _logger.LogDebug($"Skipping FCM fallback for non-message ack type: {ack.Type}");
+                return;
+            }
+            
+            // DEDUPLICATION: Check if already delivered via DeliveryReceipt
+            var existingReceipt = await unitOfWork.DeliveryReceipts.GetByMessageAndUserAsync(
+                ack.MessageId, ack.RecipientUserId);
+            
+            if (existingReceipt?.DeliveredAt != null)
+            {
+                _logger.LogDebug($"Message {ack.MessageId} already delivered, skipping FCM fallback");
+                return;
+            }
+            
             // Get FCM tokens for the recipient
             var tokens = await unitOfWork.FcmTokens.GetActiveTokensForUserAsync(ack.RecipientUserId);
             
@@ -215,33 +246,25 @@ public class AckRetryService : BackgroundService
                 return;
             }
             
-            // Prepare notification content
-            string title, body;
+            // Prepare notification content for new message
+            var title = $"Новое сообщение от {sender.DisplayName}";
+            var body = message.Type switch
+            {
+                Domain.Enums.MessageType.Text => message.Content?.Length > 100 
+                    ? message.Content.Substring(0, 100) + "..." 
+                    : message.Content ?? "Сообщение",
+                Domain.Enums.MessageType.Audio => "🎤 Голосовое сообщение",
+                Domain.Enums.MessageType.Image => "📷 Изображение",
+                Domain.Enums.MessageType.File => $"📎 Файл: {message.OriginalFileName ?? "Файл"}",
+                _ => "Новое сообщение"
+            };
+            
             var data = new Dictionary<string, string>
             {
                 { "chatId", message.ChatId.ToString() },
                 { "messageId", message.Id.ToString() },
-                { "type", ack.Type.ToString() }
+                { "type", "Message" }
             };
-            
-            if (ack.Type == Domain.Enums.AckType.Message)
-            {
-                title = $"Новое сообщение от {sender.DisplayName}";
-                body = message.Type switch
-                {
-                    Domain.Enums.MessageType.Text => message.Content?.Length > 100 
-                        ? message.Content.Substring(0, 100) + "..." 
-                        : message.Content ?? "Сообщение",
-                    Domain.Enums.MessageType.Audio => "🎤 Голосовое сообщение",
-                    Domain.Enums.MessageType.Image => "📷 Изображение",
-                    _ => "Новое сообщение"
-                };
-            }
-            else // StatusUpdate
-            {
-                title = "Обновление статуса сообщения";
-                body = $"Сообщение {message.Status}";
-            }
             
             // Send FCM to all tokens
             int successCount = 0;

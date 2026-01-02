@@ -49,5 +49,11 @@
 	<string>Для записи голосовых сообщений</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Для сканирования QR-кодов</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

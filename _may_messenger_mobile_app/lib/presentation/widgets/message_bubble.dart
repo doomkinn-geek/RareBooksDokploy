@@ -11,14 +11,13 @@ import 'package:dio/dio.dart';
 import '../../data/models/message_model.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/services/logger_service.dart';
-import '../../data/services/proximity_audio_service.dart';
+import '../../core/services/global_audio_service.dart';
 import '../providers/profile_provider.dart';
 import '../providers/contacts_names_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/messages_provider.dart';
 import 'fullscreen_image_viewer.dart';
 import 'audio_waveform.dart';
-import 'audio_player_manager.dart';
 
 class MessageBubble extends ConsumerStatefulWidget {
   final Message message;
@@ -37,18 +36,17 @@ class MessageBubble extends ConsumerStatefulWidget {
 }
 
 class _MessageBubbleState extends ConsumerState<MessageBubble> {
-  final AudioPlayer _audioPlayer = AudioPlayer();
+  // NOTE: Audio playback moved to GlobalAudioService
+  // Local AudioPlayer kept only for preloading duration
+  AudioPlayer? _preloadPlayer;
   final _logger = LoggerService();
-  bool _isPlaying = false;
   bool _isDownloadingAudio = false; // Track audio download state
   bool _hasMarkedAsPlayed = false; // Track if we've already marked as played
-  bool _isNearEar = false; // Track proximity sensor state
-  Duration? _duration;
-  Duration? _position;
+  Duration? _cachedDuration; // Cached duration from preload
   Timer? _markAsPlayedTimer; // Debounce timer for mark as played
   Timer? _sendingTimeoutTimer; // Fallback timer for stuck "sending" status
   bool _showRetryForStuck = false; // Show retry button for messages stuck in sending
-  double _playbackSpeed = 1.0; // Current playback speed
+  String? _localAudioPath; // Cached local path for audio
 
   @override
   void initState() {
@@ -61,10 +59,18 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     _startSendingTimeoutCheck();
   }
   
-  /// Preload audio duration without starting playback
+  /// Preload audio duration and download to local storage
   Future<void> _preloadAudioDuration() async {
-    // Don't preload if already downloading or playing
-    if (_isDownloadingAudio || _isPlaying) return;
+    // Check if already loaded via GlobalAudioService
+    final audioService = ref.read(globalAudioServiceProvider.notifier);
+    if (audioService.isCurrentMessage(widget.message.id)) {
+      final state = ref.read(globalAudioServiceProvider);
+      _cachedDuration = state.duration;
+      return;
+    }
+    
+    // Don't preload if already downloading
+    if (_isDownloadingAudio) return;
     
     try {
       if (mounted) {
@@ -78,14 +84,16 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                           await audioStorageService.getLocalAudioPath(widget.message.id);
       
       if (localPath != null && await File(localPath).exists()) {
-        // Audio already cached locally
-        final dur = await _audioPlayer.setFilePath(localPath);
-        // Reset position to start for proper animation
-        await _audioPlayer.seek(Duration.zero);
+        // Audio already cached locally - get duration using temp player
+        _localAudioPath = localPath;
+        _preloadPlayer = AudioPlayer();
+        final dur = await _preloadPlayer!.setFilePath(localPath);
+        _preloadPlayer!.dispose();
+        _preloadPlayer = null;
+        
         if (mounted) {
           setState(() {
-            _duration = dur;
-            _position = Duration.zero;
+            _cachedDuration = dur;
             _isDownloadingAudio = false;
           });
         }
@@ -101,9 +109,13 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           );
           
           if (localPath != null) {
-            final dur = await _audioPlayer.setFilePath(localPath);
-            // Reset position to start for proper animation
-            await _audioPlayer.seek(Duration.zero);
+            _localAudioPath = localPath;
+            
+            // Get duration using temp player
+            _preloadPlayer = AudioPlayer();
+            final dur = await _preloadPlayer!.setFilePath(localPath);
+            _preloadPlayer!.dispose();
+            _preloadPlayer = null;
             
             // Update cache with local path
             final localDataSource = ref.read(localDataSourceProvider);
@@ -115,8 +127,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             
             if (mounted) {
               setState(() {
-                _duration = dur;
-                _position = Duration.zero;
+                _cachedDuration = dur;
                 _isDownloadingAudio = false;
               });
             }
@@ -140,6 +151,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     } catch (e) {
       // Error during preload
       print('[AUDIO] Failed to preload duration: $e');
+      _preloadPlayer?.dispose();
+      _preloadPlayer = null;
       if (mounted) {
         setState(() {
           _isDownloadingAudio = false;
@@ -229,67 +242,15 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   }
 
   void _initAudio() {
-    _audioPlayer.durationStream.listen((d) {
-      if (mounted) {
-        setState(() => _duration = d);
+    // Setup callback for marking as played
+    final audioService = ref.read(globalAudioServiceProvider.notifier);
+    audioService.onPlaybackCompleted = (messageId) {
+      if (messageId == widget.message.id && !_hasMarkedAsPlayed) {
+        _markAudioAsPlayed();
       }
-    });
-    _audioPlayer.positionStream.listen((p) {
-      if (mounted) {
-        setState(() => _position = p);
-      }
-    });
-    _audioPlayer.playerStateStream.listen((state) {
-      final wasPlaying = _isPlaying;
-      if (mounted) {
-        setState(() {
-          _isPlaying = state.playing;
-        });
-      }
-      
-      // Start/stop proximity sensor based on playback state
-      final proximityService = ref.read(proximityAudioServiceProvider);
-      if (state.playing && !wasPlaying) {
-        // Started playing - enable proximity sensor for earpiece mode
-        proximityService.startListening();
-        proximityService.addListener(_onProximityChanged);
-      } else if (!state.playing && wasPlaying) {
-        // Stopped playing - disable proximity sensor
-        proximityService.removeListener(_onProximityChanged);
-        proximityService.stopListening();
-      }
-      
-      // Mark as played when first started playing (and user is not the sender)
-      // Use debounce to prevent multiple rapid calls
-      if (state.playing && 
-          !_hasMarkedAsPlayed && 
-          widget.message.type == MessageType.audio) {
-        // Cancel previous timer if exists
-        _markAsPlayedTimer?.cancel();
-        // Debounce: wait 200ms before marking to avoid race conditions
-        _markAsPlayedTimer = Timer(const Duration(milliseconds: 200), () {
-          if (mounted && !_hasMarkedAsPlayed) {
-            _markAudioAsPlayed();
-          }
-        });
-      }
-      
-      // Сброс при окончании воспроизведения
-      if (state.processingState == ProcessingState.completed) {
-        _audioPlayer.seek(Duration.zero);
-        _audioPlayer.pause();
-      }
-    });
+    };
   }
   
-  /// Handle proximity sensor changes
-  void _onProximityChanged(bool isNearEar) {
-    if (mounted) {
-      setState(() {
-        _isNearEar = isNearEar;
-      });
-    }
-  }
 
   Future<void> _playPauseAudio() async {
     // Block if audio is still downloading
@@ -305,38 +266,51 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       return;
     }
     
-    final playerManager = ref.read(audioPlayerManagerProvider);
+    final audioService = ref.read(globalAudioServiceProvider.notifier);
     
     try {
-      if (_isPlaying) {
-        await _audioPlayer.pause();
-        playerManager.unregisterPlayer(widget.message.id);
-      } else {
-        // Register this player and stop others
-        playerManager.registerPlayer(widget.message.id, () async {
-          if (_isPlaying) {
-            await _audioPlayer.pause();
+      // Check if we have a local path or need to use URL
+      String? localPath = _localAudioPath;
+      if (localPath == null) {
+        final audioStorageService = ref.read(audioStorageServiceProvider);
+        localPath = await audioStorageService.getLocalAudioPath(widget.message.id);
+      }
+      
+      if (localPath == null && widget.message.filePath == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Голосовое сообщение больше не доступно'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+      
+      final audioUrl = widget.message.filePath != null 
+          ? '${ApiConstants.baseUrl}${widget.message.filePath}'
+          : '';
+      
+      // Play using GlobalAudioService
+      await audioService.playMessage(
+        messageId: widget.message.id,
+        chatId: widget.message.chatId,
+        audioUrl: audioUrl,
+        senderName: widget.message.senderName,
+        localFilePath: localPath,
+      );
+      
+      // Mark as played when started (if not sender)
+      if (!_hasMarkedAsPlayed) {
+        _markAsPlayedTimer?.cancel();
+        _markAsPlayedTimer = Timer(const Duration(milliseconds: 200), () {
+          if (mounted && !_hasMarkedAsPlayed) {
+            _markAudioAsPlayed();
           }
         });
-        
-        // Audio should already be loaded by _preloadAudioDuration
-        // If not, it means the file was deleted or failed to download
-        if (_audioPlayer.processingState == ProcessingState.idle) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Голосовое сообщение больше не доступно'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-          }
-          return;
-        }
-        
-        // Set playback speed (preserves pitch)
-        await _audioPlayer.setSpeed(_playbackSpeed);
-        await _audioPlayer.play();
       }
+      
     } catch (e) {
       print('[AUDIO] Error in _playPauseAudio: $e');
       if (mounted) {
@@ -350,47 +324,17 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     }
   }
   
-  /// Cycle through playback speeds: 1.0 -> 1.25 -> 1.5 -> 2.0 -> 1.0
+  /// Cycle through playback speeds using GlobalAudioService
   void _cyclePlaybackSpeed() {
-    setState(() {
-      if (_playbackSpeed == 1.0) {
-        _playbackSpeed = 1.25;
-      } else if (_playbackSpeed == 1.25) {
-        _playbackSpeed = 1.5;
-      } else if (_playbackSpeed == 1.5) {
-        _playbackSpeed = 2.0;
-      } else {
-        _playbackSpeed = 1.0;
-      }
-    });
-    
-    // Update speed if currently playing
-    if (_isPlaying) {
-      _audioPlayer.setSpeed(_playbackSpeed);
-    }
-    
-    // Show snackbar with current speed
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Скорость: ${_playbackSpeed}x'),
-          duration: const Duration(milliseconds: 800),
-        ),
-      );
-    }
+    final audioService = ref.read(globalAudioServiceProvider.notifier);
+    audioService.cycleSpeed();
   }
 
   @override
   void dispose() {
     _markAsPlayedTimer?.cancel();
     _sendingTimeoutTimer?.cancel();
-    // Clean up proximity sensor if still listening
-    if (_isPlaying) {
-      final proximityService = ref.read(proximityAudioServiceProvider);
-      proximityService.removeListener(_onProximityChanged);
-      proximityService.stopListening();
-    }
-    _audioPlayer.dispose();
+    _preloadPlayer?.dispose();
     super.dispose();
   }
 
@@ -496,6 +440,16 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         );
       
       case MessageType.audio:
+        // Get playback state from GlobalAudioService
+        final globalState = ref.watch(globalAudioServiceProvider);
+        final isCurrentMsg = globalState.messageId == widget.message.id;
+        final isPlaying = isCurrentMsg && globalState.isPlaying;
+        final position = isCurrentMsg ? globalState.position : Duration.zero;
+        final duration = isCurrentMsg && globalState.duration != null 
+            ? globalState.duration! 
+            : _cachedDuration ?? Duration.zero;
+        final playbackSpeed = isCurrentMsg ? globalState.speed : 1.0;
+        
         // Определить, прослушано ли сообщение
         final isPlayed = widget.message.status == MessageStatus.played;
         
@@ -531,14 +485,14 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                   )
                 : IconButton(
               icon: Icon(
-                _isPlaying ? Icons.pause : Icons.play_arrow,
+                isPlaying ? Icons.pause : Icons.play_arrow,
                 color: playerColor,
                 size: 28,
               ),
               onPressed: _playPauseAudio,
             ),
-            // Speed control button (only visible when not downloading)
-            if (!_isDownloadingAudio)
+            // Speed control button (only visible when not downloading and playing)
+            if (!_isDownloadingAudio && isCurrentMsg)
               GestureDetector(
                 onTap: _cyclePlaybackSpeed,
                 child: Container(
@@ -553,7 +507,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                   ),
                   child: Center(
                     child: Text(
-                      '${_playbackSpeed}x',
+                      '${playbackSpeed}x',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
@@ -570,8 +524,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     AudioWaveform(
-                      progress: _duration != null && _position != null && _duration!.inMilliseconds > 0
-                          ? _position!.inMilliseconds / _duration!.inMilliseconds
+                      progress: duration.inMilliseconds > 0
+                          ? position.inMilliseconds / duration.inMilliseconds
                           : 0.0,
                       activeColor: waveformColor,
                       inactiveColor: isMe ? Colors.white30 : Colors.grey[300]!,
@@ -586,30 +540,19 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              _position != null
-                                  ? '${_position!.inMinutes}:${(_position!.inSeconds % 60).toString().padLeft(2, '0')}'
-                                  : '0:00',
+                              '${position.inMinutes}:${(position.inSeconds % 60).toString().padLeft(2, '0')}',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: textColor,
                               ),
                             ),
-                            // Show earpiece indicator when phone is near ear
-                            if (_isPlaying && _isNearEar) ...[
-                              const SizedBox(width: 4),
-                              Icon(
-                                Icons.hearing,
-                                size: 12,
-                                color: textColor,
-                              ),
-                            ],
                           ],
                         ),
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             // Playback speed button
-                            if (_playbackSpeed != 1.0) ...[
+                            if (playbackSpeed != 1.0) ...[
                               GestureDetector(
                                 onTap: _cyclePlaybackSpeed,
                                 child: Container(
@@ -621,7 +564,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
-                                    '${_playbackSpeed}x',
+                                    '${playbackSpeed}x',
                                     style: TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
@@ -633,9 +576,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                               const SizedBox(width: 4),
                             ],
                             Text(
-                              _duration != null
-                                  ? '${_duration!.inMinutes}:${(_duration!.inSeconds % 60).toString().padLeft(2, '0')}'
-                                  : '0:00',
+                              '${duration.inMinutes}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: textColor,
@@ -1006,7 +947,14 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   }
 
   void _seekAudio(TapDownDetails details, bool isMe) {
-    if (_duration == null || _duration!.inMilliseconds == 0) return;
+    final audioService = ref.read(globalAudioServiceProvider.notifier);
+    final state = ref.read(globalAudioServiceProvider);
+    
+    // Only allow seeking if this message is currently loaded
+    if (state.messageId != widget.message.id) return;
+    
+    final duration = state.duration ?? _cachedDuration;
+    if (duration == null || duration.inMilliseconds == 0) return;
     
     // Calculate the tap position relative to the waveform width
     final RenderBox box = context.findRenderObject() as RenderBox;
@@ -1022,10 +970,10 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     final progress = (tapX / waveformWidth).clamp(0.0, 1.0);
     
     final seekPosition = Duration(
-      milliseconds: (_duration!.inMilliseconds * progress).round(),
+      milliseconds: (duration.inMilliseconds * progress).round(),
     );
     
-    _audioPlayer.seek(seekPosition);
+    audioService.seek(seekPosition);
   }
 
   Future<void> _markAudioAsPlayed() async {

@@ -5,6 +5,8 @@ import '../providers/contacts_names_provider.dart';
 import '../providers/user_status_sync_service.dart';
 import '../widgets/chat_list_item.dart';
 import '../widgets/connection_status_indicator.dart';
+import '../widgets/global_audio_mini_player.dart';
+import '../../core/services/global_audio_service.dart';
 import '../../data/services/battery_optimization_service.dart';
 import 'chat_screen.dart';
 import 'settings_screen.dart';
@@ -115,13 +117,34 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           ),
         ],
       ),
-      body: _buildChatList(chatsState.chats, chatsState.isLoading, chatsState.error),
+      body: Column(
+        children: [
+          // Mini player for audio playback (shown when audio is playing)
+          GlobalAudioMiniPlayer(
+            onTap: () => _navigateToAudioChat(ref.read(globalAudioServiceProvider)),
+          ),
+          // Chat list
+          Expanded(
+            child: _buildChatList(chatsState.chats, chatsState.isLoading, chatsState.error),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showCreateChatOptions(context),
         tooltip: 'Создать чат',
         child: const Icon(Icons.add),
       ),
     );
+  }
+  
+  void _navigateToAudioChat(AudioPlaybackState playbackState) {
+    if (playbackState.chatId != null) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChatScreen(chatId: playbackState.chatId!),
+        ),
+      );
+    }
   }
   
   void _showCreateChatOptions(BuildContext context) {

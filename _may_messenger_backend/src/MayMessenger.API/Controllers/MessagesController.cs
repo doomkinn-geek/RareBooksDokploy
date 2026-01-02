@@ -1448,26 +1448,20 @@ public class MessagesController : ControllerBase
     }
     
     /// <summary>
-    /// Helper method to send status update and create pending acks
+    /// Helper method to send status update via SignalR only
+    /// NOTE: Status updates should NOT create PendingAcks - they don't trigger push notifications
+    /// Status updates are delivered only via SignalR; missed updates are synced via IncrementalSync
     /// </summary>
     private async Task SendStatusUpdateWithAcks(Guid chatId, Guid messageId, MessageStatus status, Guid senderId)
     {
         try
         {
-            var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
-            if (chat != null)
-            {
-                var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
-                if (message != null)
-                {
-                    // Create pending acks for status update
-                    await CreatePendingAcksForMessage(chat, message, senderId, AckType.StatusUpdate);
-                }
-                
-                // Send status update
-                await _hubContext.Clients.Group(chatId.ToString())
-                    .SendAsync("MessageStatusUpdated", messageId, (int)status);
-            }
+            // Send status update via SignalR only - no PendingAck creation
+            // Missed status updates will be synced when user reconnects via IncrementalSync
+            await _hubContext.Clients.Group(chatId.ToString())
+                .SendAsync("MessageStatusUpdated", messageId, (int)status);
+            
+            _logger.LogDebug($"Status update sent via SignalR: message {messageId}, status {status}");
         }
         catch (Exception ex)
         {
