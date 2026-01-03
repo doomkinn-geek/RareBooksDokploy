@@ -44,6 +44,23 @@ public class PendingAckRepository : IPendingAckRepository
             .Take(100) // Limit batch size
             .ToListAsync();
     }
+    
+    /// <summary>
+    /// Get all pending acks for a specific user (for delivery when user reconnects)
+    /// </summary>
+    public async Task<IEnumerable<PendingAck>> GetPendingForUserAsync(Guid userId, int maxRetries = 5)
+    {
+        return await _context.PendingAcks
+            .Include(pa => pa.Message)
+                .ThenInclude(m => m.Sender)
+            .Include(pa => pa.Message)
+                .ThenInclude(m => m.ReplyToMessage)
+                    .ThenInclude(r => r != null ? r.Sender : null)
+            .Where(pa => pa.RecipientUserId == userId && pa.RetryCount < maxRetries)
+            .OrderBy(pa => pa.CreatedAt)
+            .Take(100) // Limit batch size for performance
+            .ToListAsync();
+    }
 
     public async Task<PendingAck?> GetPendingAckAsync(Guid messageId, Guid recipientUserId, AckType type)
     {

@@ -182,18 +182,36 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
     print('[LIFECYCLE] App state changed to: $state');
     
+    final authState = ref.read(authStateProvider);
+    
     if (state == AppLifecycleState.paused) {
       _lastPausedAt = DateTime.now();
-      print('[LIFECYCLE] App paused at $_lastPausedAt - SignalR will try to maintain connection');
-    } else if (state == AppLifecycleState.resumed) {
-      final authState = ref.read(authStateProvider);
+      print('[LIFECYCLE] App paused at $_lastPausedAt - marking user as offline');
       
+      // CRITICAL: Mark user as offline when app is paused/minimized
+      if (authState.isAuthenticated) {
+        try {
+          final apiDataSource = ref.read(apiDataSourceProvider);
+          apiDataSource.goOffline();
+        } catch (e) {
+          print('[LIFECYCLE] Failed to mark user offline: $e');
+        }
+      }
+    } else if (state == AppLifecycleState.resumed) {
       if (authState.isAuthenticated) {
         final pauseDuration = _lastPausedAt != null 
             ? DateTime.now().difference(_lastPausedAt!)
             : Duration.zero;
         
         print('[LIFECYCLE] App resumed after ${pauseDuration.inSeconds}s pause');
+        
+        // CRITICAL: Mark user as online when app is resumed
+        try {
+          final apiDataSource = ref.read(apiDataSourceProvider);
+          apiDataSource.goOnline();
+        } catch (e) {
+          print('[LIFECYCLE] Failed to mark user online: $e');
+        }
         
         // Show reconnecting banner only for long pauses (> 10 seconds)
         if (pauseDuration.inSeconds > 10) {

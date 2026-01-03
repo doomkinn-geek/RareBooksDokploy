@@ -55,7 +55,97 @@ public class ChatHub : Hub
         
         Console.WriteLine($"[ChatHub] User {userId} connected to group user_{userId}. ConnectionId: {Context.ConnectionId}");
         
+        // Send pending messages that were not delivered while user was offline
+        await DeliverPendingMessagesAsync(userId);
+        
         await base.OnConnectedAsync();
+    }
+    
+    /// <summary>
+    /// Deliver pending messages to user that were not acknowledged while offline
+    /// </summary>
+    private async Task DeliverPendingMessagesAsync(Guid userId)
+    {
+        try
+        {
+            var pendingAcks = await _unitOfWork.PendingAcks.GetPendingForUserAsync(userId);
+            
+            if (!pendingAcks.Any())
+            {
+                Console.WriteLine($"[ChatHub] No pending messages for user {userId}");
+                return;
+            }
+            
+            Console.WriteLine($"[ChatHub] Delivering {pendingAcks.Count()} pending messages to user {userId}");
+            
+            foreach (var pendingAck in pendingAcks.OrderBy(a => a.CreatedAt))
+            {
+                try
+                {
+                    if (pendingAck.Type == AckType.Message)
+                    {
+                        var message = await _unitOfWork.Messages.GetByIdAsync(pendingAck.MessageId);
+                        if (message != null)
+                        {
+                            var sender = await _unitOfWork.Users.GetByIdAsync(message.SenderId);
+                            
+                            var messageDto = new
+                            {
+                                Id = message.Id,
+                                ChatId = message.ChatId,
+                                SenderId = message.SenderId,
+                                SenderName = sender?.DisplayName ?? "Unknown",
+                                SenderAvatar = sender?.Avatar,
+                                Type = message.Type,
+                                Content = message.Content,
+                                FilePath = message.FilePath,
+                                Status = message.Status,
+                                CreatedAt = message.CreatedAt,
+                                ClientMessageId = message.ClientMessageId,
+                                ReplyToMessageId = message.ReplyToMessageId,
+                                ReplyToMessage = message.ReplyToMessage != null ? new
+                                {
+                                    Id = message.ReplyToMessage.Id,
+                                    Content = message.ReplyToMessage.Content,
+                                    SenderName = message.ReplyToMessage.Sender?.DisplayName ?? "Unknown",
+                                    Type = message.ReplyToMessage.Type
+                                } : null
+                            };
+                            
+                            await Clients.Caller.SendAsync("ReceiveMessage", messageDto);
+                            Console.WriteLine($"[ChatHub] Delivered pending message {message.Id} to user {userId}");
+                        }
+                    }
+                    else if (pendingAck.Type == AckType.StatusUpdate)
+                    {
+                        var message = await _unitOfWork.Messages.GetByIdAsync(pendingAck.MessageId);
+                        if (message != null)
+                        {
+                            await Clients.Caller.SendAsync("MessageStatusUpdated", 
+                                message.Id.ToString(), 
+                                (int)message.Status,
+                                message.ChatId.ToString());
+                            Console.WriteLine($"[ChatHub] Delivered pending status update for message {message.Id} to user {userId}");
+                        }
+                    }
+                    
+                    // Update retry count
+                    pendingAck.RetryCount++;
+                    pendingAck.LastRetryAt = DateTime.UtcNow;
+                    await _unitOfWork.PendingAcks.UpdateAsync(pendingAck);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[ChatHub] Error delivering pending message {pendingAck.MessageId}: {ex.Message}");
+                }
+            }
+            
+            await _unitOfWork.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ChatHub] Error delivering pending messages: {ex.Message}");
+        }
     }
     
     public override async Task OnDisconnectedAsync(Exception? exception)

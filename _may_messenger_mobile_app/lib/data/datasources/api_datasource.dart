@@ -709,6 +709,30 @@ class ApiDataSource {
     }
   }
   
+  // ==================== Presence Management ====================
+  
+  /// Set current user as online (call when app is in foreground)
+  Future<void> goOnline() async {
+    try {
+      await _dio.post('/users/go-online');
+      print('[API] User marked as online');
+    } catch (e) {
+      print('[API] Failed to mark user as online: $e');
+      // Don't throw - this is not critical
+    }
+  }
+  
+  /// Set current user as offline (call when app goes to background)
+  Future<void> goOffline() async {
+    try {
+      await _dio.post('/users/go-offline');
+      print('[API] User marked as offline');
+    } catch (e) {
+      print('[API] Failed to mark user as offline: $e');
+      // Don't throw - this is not critical
+    }
+  }
+  
   // ==================== Encryption API ====================
   
   /// Update the current user's public key on the server

@@ -20,6 +20,8 @@ class OutboxSyncService {
   // Configuration
   static const Duration _periodicSyncInterval = Duration(seconds: 15);
   static const int _maxConcurrentSyncs = 3;
+  static const int _maxRetries = 5; // Max retry attempts before giving up
+  static const Duration _baseRetryDelay = Duration(seconds: 2); // Base delay for exponential backoff
   
   OutboxSyncService(this._outboxRepository, this._messageRepository);
   
@@ -76,10 +78,29 @@ class OutboxSyncService {
       final allPending = await _outboxRepository.getAllPendingMessages();
       
       // Filter to only localOnly and failed (for retry)
-      final toSync = allPending.where((msg) => 
-        msg.syncState == SyncState.localOnly || 
-        msg.syncState == SyncState.failed
-      ).toList();
+      // Also check retry count and apply exponential backoff
+      final now = DateTime.now();
+      final toSync = allPending.where((msg) {
+        if (msg.syncState == SyncState.localOnly) {
+          return true;
+        }
+        
+        if (msg.syncState == SyncState.failed) {
+          // Check if max retries exceeded
+          if (msg.retryCount >= _maxRetries) {
+            return false; // Skip - too many retries
+          }
+          
+          // Apply exponential backoff: 2^retryCount * baseDelay
+          // E.g., 2s, 4s, 8s, 16s, 32s
+          final backoffSeconds = _baseRetryDelay.inSeconds * (1 << msg.retryCount);
+          final retryAfter = msg.createdAt.add(Duration(seconds: backoffSeconds));
+          
+          return now.isAfter(retryAfter); // Only retry if backoff period elapsed
+        }
+        
+        return false;
+      }).toList();
       
       if (toSync.isEmpty) {
         print('[OUTBOX_SYNC] No pending messages to sync');
@@ -146,10 +167,27 @@ class OutboxSyncService {
       final pending = await _outboxRepository.getPendingMessagesForChat(chatId);
       
       // Filter to only localOnly and failed (for retry)
-      final toSync = pending.where((msg) => 
-        msg.syncState == SyncState.localOnly || 
-        msg.syncState == SyncState.failed
-      ).toList();
+      final now = DateTime.now();
+      final toSync = pending.where((msg) {
+        if (msg.syncState == SyncState.localOnly) {
+          return true;
+        }
+        
+        if (msg.syncState == SyncState.failed) {
+          // Check if max retries exceeded
+          if (msg.retryCount >= _maxRetries) {
+            return false;
+          }
+          
+          // Apply exponential backoff
+          final backoffSeconds = _baseRetryDelay.inSeconds * (1 << msg.retryCount);
+          final retryAfter = msg.createdAt.add(Duration(seconds: backoffSeconds));
+          
+          return now.isAfter(retryAfter);
+        }
+        
+        return false;
+      }).toList();
       
       if (toSync.isEmpty) {
         print('[OUTBOX_SYNC] No pending messages to sync for chat $chatId');

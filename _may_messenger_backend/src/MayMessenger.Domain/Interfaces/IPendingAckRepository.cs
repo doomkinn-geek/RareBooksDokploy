@@ -8,6 +8,7 @@ public interface IPendingAckRepository
     Task<PendingAck?> GetByIdAsync(Guid id);
     Task<IEnumerable<PendingAck>> GetAllAsync();
     Task<IEnumerable<PendingAck>> GetPendingAcksAsync(DateTime olderThan, int maxRetries = 3);
+    Task<IEnumerable<PendingAck>> GetPendingForUserAsync(Guid userId, int maxRetries = 5);
     Task<PendingAck?> GetPendingAckAsync(Guid messageId, Guid recipientUserId, AckType type);
     Task AddAsync(PendingAck pendingAck);
     Task UpdateAsync(PendingAck pendingAck);

@@ -5,11 +5,33 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import '../../core/services/gallery_service.dart';
 
+/// Data class for image information in the gallery
+class ImageData {
+  final String? imageUrl;
+  final String? localPath;
+  final String senderName;
+  final DateTime createdAt;
+  final String messageId;
+
+  const ImageData({
+    this.imageUrl,
+    this.localPath,
+    required this.senderName,
+    required this.createdAt,
+    required this.messageId,
+  });
+}
+
 class FullScreenImageViewer extends StatefulWidget {
   final String? imageUrl;
   final String? localPath;
   final String senderName;
   final DateTime createdAt;
+  
+  /// Optional list of all images in the chat for horizontal swiping
+  final List<ImageData>? allImages;
+  /// Initial index in the images list
+  final int initialIndex;
 
   const FullScreenImageViewer({
     super.key,
@@ -17,6 +39,8 @@ class FullScreenImageViewer extends StatefulWidget {
     this.localPath,
     required this.senderName,
     required this.createdAt,
+    this.allImages,
+    this.initialIndex = 0,
   });
 
   @override
@@ -36,7 +60,7 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
   double _dragOffset = 0.0;
   double _opacity = 1.0;
   double _currentScale = 1.0; // Track current zoom scale
-  final TransformationController _transformationController = TransformationController();
+  TransformationController _transformationController = TransformationController();
   
   // Animation controller for smooth double-tap zoom
   late AnimationController _animationController;
@@ -58,6 +82,16 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
   
   // Save state
   bool _isSaving = false;
+  
+  // Page view for horizontal swiping between images
+  late PageController _pageController;
+  late int _currentIndex;
+  
+  // Current image data (for display in header)
+  late String _currentSenderName;
+  late DateTime _currentCreatedAt;
+  late String? _currentImageUrl;
+  late String? _currentLocalPath;
 
   @override
   void initState() {
@@ -72,6 +106,23 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
           _transformationController.value = _animation!.value;
         }
       });
+    
+    // Initialize with single image or from list
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: _currentIndex);
+    
+    if (widget.allImages != null && widget.allImages!.isNotEmpty) {
+      final currentImage = widget.allImages![_currentIndex];
+      _currentSenderName = currentImage.senderName;
+      _currentCreatedAt = currentImage.createdAt;
+      _currentImageUrl = currentImage.imageUrl;
+      _currentLocalPath = currentImage.localPath;
+    } else {
+      _currentSenderName = widget.senderName;
+      _currentCreatedAt = widget.createdAt;
+      _currentImageUrl = widget.imageUrl;
+      _currentLocalPath = widget.localPath;
+    }
   }
 
   @override
@@ -79,6 +130,7 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
     _animationController.dispose();
     _transformationController.removeListener(_onTransformationChanged);
     _transformationController.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -88,6 +140,23 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
     if (scale != _currentScale) {
       setState(() {
         _currentScale = scale;
+      });
+    }
+  }
+  
+  void _onPageChanged(int index) {
+    // Reset zoom when changing pages
+    _transformationController.value = Matrix4.identity();
+    _currentScale = 1.0;
+    
+    if (widget.allImages != null && index < widget.allImages!.length) {
+      setState(() {
+        _currentIndex = index;
+        final currentImage = widget.allImages![index];
+        _currentSenderName = currentImage.senderName;
+        _currentCreatedAt = currentImage.createdAt;
+        _currentImageUrl = currentImage.imageUrl;
+        _currentLocalPath = currentImage.localPath;
       });
     }
   }
@@ -196,7 +265,7 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
           // Predominantly vertical movement - it's a swipe
           _gestureState = _GestureState.swiping;
         } else {
-          // Horizontal or diagonal - let InteractiveViewer handle it
+          // Horizontal or diagonal - let PageView/InteractiveViewer handle it
           _gestureState = _GestureState.pinching;
         }
       } else {
@@ -263,6 +332,8 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
 
   @override
   Widget build(BuildContext context) {
+    final bool hasMultipleImages = widget.allImages != null && widget.allImages!.length > 1;
+    
     return Scaffold(
       backgroundColor: Colors.black.withOpacity(_opacity),
       body: Listener(
@@ -280,132 +351,239 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
             offset: Offset(0, _dragOffset),
             child: Stack(
               children: [
-                // Image viewer with zoom (pinch-to-zoom)
-                // InteractiveViewer handles its own gestures
-                Center(
-                  child: InteractiveViewer(
-                    transformationController: _transformationController,
-                    minScale: 0.5,
-                    maxScale: 4.0,
-                    onInteractionStart: (details) {
-                      // When InteractiveViewer starts interaction, mark as pinching
-                      if (details.pointerCount >= 2) {
-                        _gestureState = _GestureState.pinching;
-                      }
-                    },
-                    onInteractionEnd: (details) {
-                      // Reset drag offset when zooming is done
-                      if (_currentScale <= 1.0 && _dragOffset != 0) {
-                        setState(() {
-                          _dragOffset = 0.0;
-                          _opacity = 1.0;
-                        });
-                      }
-                    },
-                    child: _buildImage(),
-                  ),
-                ),
+                // Image viewer - either PageView or single InteractiveViewer
+                if (hasMultipleImages)
+                  _buildPageView()
+                else
+                  _buildSingleImageView(),
           
-          // Top app bar
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              bottom: false,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.7),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-                padding: const EdgeInsets.all(8.0),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                // Top app bar
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: SafeArea(
+                    bottom: false,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.7),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                      padding: const EdgeInsets.all(8.0),
+                      child: Row(
                         children: [
-                          Text(
-                            widget.senderName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
+                          IconButton(
+                            icon: const Icon(Icons.arrow_back, color: Colors.white),
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _currentSenderName,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Text(
+                                  _formatDate(_currentCreatedAt),
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          Text(
-                            _formatDate(widget.createdAt),
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                            ),
+                          // Save to gallery button
+                          _isSaving
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12.0),
+                                  child: SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                )
+                              : IconButton(
+                                  icon: const Icon(Icons.download, color: Colors.white),
+                                  onPressed: _saveImageToGallery,
+                                  tooltip: 'Сохранить в галерею',
                           ),
                         ],
                       ),
                     ),
-                    // Save to gallery button
-                    _isSaving
-                        ? const Padding(
-                            padding: EdgeInsets.all(12.0),
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            ),
-                          )
-                        : IconButton(
-                            icon: const Icon(Icons.download, color: Colors.white),
-                            onPressed: _saveImageToGallery,
-                            tooltip: 'Сохранить в галерею',
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-              ),
-              
-              // Zoom indicator (shows current zoom level when zoomed)
-              if (_currentScale > 1.05)
-                Positioned(
-                  bottom: 80,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Text(
-                        '${_currentScale.toStringAsFixed(1)}x',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
+                
+                // Zoom indicator (shows current zoom level when zoomed)
+                if (_currentScale > 1.05)
+                  Positioned(
+                    bottom: 80,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          '${_currentScale.toStringAsFixed(1)}x',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
+                
+                // Page indicator for multiple images
+                if (hasMultipleImages)
+                  Positioned(
+                    bottom: 40,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '${_currentIndex + 1} / ${widget.allImages!.length}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
         ),
       ),
     );
+  }
+  
+  Widget _buildPageView() {
+    return PageView.builder(
+      controller: _pageController,
+      onPageChanged: _onPageChanged,
+      // Disable page scrolling when zoomed
+      physics: _currentScale > 1.05 
+          ? const NeverScrollableScrollPhysics() 
+          : const BouncingScrollPhysics(),
+      itemCount: widget.allImages!.length,
+      itemBuilder: (context, index) {
+        final imageData = widget.allImages![index];
+        return Center(
+          child: InteractiveViewer(
+            transformationController: index == _currentIndex 
+                ? _transformationController 
+                : TransformationController(),
+            minScale: 0.5,
+            maxScale: 4.0,
+            onInteractionStart: (details) {
+              // When InteractiveViewer starts interaction, mark as pinching
+              if (details.pointerCount >= 2) {
+                _gestureState = _GestureState.pinching;
+              }
+            },
+            onInteractionEnd: (details) {
+              // Reset drag offset when zooming is done
+              if (_currentScale <= 1.0 && _dragOffset != 0) {
+                setState(() {
+                  _dragOffset = 0.0;
+                  _opacity = 1.0;
+                });
+              }
+            },
+            child: _buildImageFromData(imageData),
+          ),
+        );
+      },
+    );
+  }
+  
+  Widget _buildSingleImageView() {
+    return Center(
+      child: InteractiveViewer(
+        transformationController: _transformationController,
+        minScale: 0.5,
+        maxScale: 4.0,
+        onInteractionStart: (details) {
+          // When InteractiveViewer starts interaction, mark as pinching
+          if (details.pointerCount >= 2) {
+            _gestureState = _GestureState.pinching;
+          }
+        },
+        onInteractionEnd: (details) {
+          // Reset drag offset when zooming is done
+          if (_currentScale <= 1.0 && _dragOffset != 0) {
+            setState(() {
+              _dragOffset = 0.0;
+              _opacity = 1.0;
+            });
+          }
+        },
+        child: _buildImage(),
+      ),
+    );
+  }
+  
+  Widget _buildImageFromData(ImageData imageData) {
+    if (imageData.localPath != null && File(imageData.localPath!).existsSync()) {
+      return Image.file(
+        File(imageData.localPath!),
+        fit: BoxFit.contain,
+      );
+    } else if (imageData.imageUrl != null) {
+      return CachedNetworkImage(
+        imageUrl: imageData.imageUrl!,
+        fit: BoxFit.contain,
+        placeholder: (context, url) => const Center(
+          child: CircularProgressIndicator(color: Colors.white),
+        ),
+        errorWidget: (context, url, error) => const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, color: Colors.white, size: 48),
+              SizedBox(height: 16),
+              Text(
+                'Не удалось загрузить изображение',
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      return const Center(
+        child: Text(
+          'Изображение недоступно',
+          style: TextStyle(color: Colors.white),
+        ),
+      );
+    }
   }
 
   Widget _buildImage() {
@@ -469,12 +647,16 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
     try {
       String? filePath;
       
+      // Use current image data
+      final localPath = _currentLocalPath;
+      final imageUrl = _currentImageUrl;
+      
       // If we have a local path, use it directly
-      if (widget.localPath != null && File(widget.localPath!).existsSync()) {
-        filePath = widget.localPath;
-      } else if (widget.imageUrl != null) {
+      if (localPath != null && File(localPath).existsSync()) {
+        filePath = localPath;
+      } else if (imageUrl != null) {
         // Download the image first
-        final response = await http.get(Uri.parse(widget.imageUrl!));
+        final response = await http.get(Uri.parse(imageUrl));
         if (response.statusCode == 200) {
           // Save to temp file first
           final tempDir = await getTemporaryDirectory();

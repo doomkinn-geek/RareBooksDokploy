@@ -25,12 +25,19 @@ class MessageBubble extends ConsumerStatefulWidget {
   final Message message;
   final bool isHighlighted;
   final Function(String messageId)? onReplyTap;
+  
+  /// List of all image messages in the chat for horizontal swiping in viewer
+  final List<Message>? allImageMessages;
+  /// Index of this message in the allImageMessages list
+  final int imageIndex;
 
   const MessageBubble({
     super.key,
     required this.message,
     this.isHighlighted = false,
     this.onReplyTap,
+    this.allImageMessages,
+    this.imageIndex = 0,
   });
 
   @override
@@ -1005,6 +1012,34 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       displayName = contactsNames[widget.message.senderId]!;
     }
     
+    // Build list of all images for horizontal swiping
+    List<ImageData>? allImages;
+    int initialIndex = 0;
+    
+    if (widget.allImageMessages != null && widget.allImageMessages!.isNotEmpty) {
+      allImages = widget.allImageMessages!.map((msg) {
+        // Get display name for each message sender
+        String senderDisplayName = msg.senderName;
+        if (contactsNames[msg.senderId] != null && 
+            contactsNames[msg.senderId]!.isNotEmpty) {
+          senderDisplayName = contactsNames[msg.senderId]!;
+        }
+        
+        return ImageData(
+          imageUrl: msg.filePath != null
+              ? '${ApiConstants.baseUrl}${msg.filePath}'
+              : null,
+          localPath: msg.localImagePath,
+          senderName: senderDisplayName,
+          createdAt: msg.createdAt,
+          messageId: msg.id,
+        );
+      }).toList();
+      
+      // Find current image index
+      initialIndex = widget.imageIndex;
+    }
+    
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => FullScreenImageViewer(
@@ -1012,8 +1047,10 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
               ? '${ApiConstants.baseUrl}${widget.message.filePath}'
               : null,
           localPath: widget.message.localImagePath,
-          senderName: displayName, // Use contact name if available
+          senderName: displayName,
           createdAt: widget.message.createdAt,
+          allImages: allImages,
+          initialIndex: initialIndex,
         ),
       ),
     );

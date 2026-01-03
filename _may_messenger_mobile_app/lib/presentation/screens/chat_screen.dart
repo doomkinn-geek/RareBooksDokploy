@@ -603,6 +603,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _currentVisibleDate = messages.last.createdAt;
     }
     
+    // Build list of all image messages for horizontal swiping in viewer
+    final allImageMessages = messages
+        .where((m) => m.type == MessageType.image)
+        .toList();
+    
+    // Create a map for quick lookup of image index by message id
+    final imageIndexMap = <String, int>{};
+    for (int i = 0; i < allImageMessages.length; i++) {
+      imageIndexMap[allImageMessages[i].id] = i;
+    }
+    
     // Build items list with date separators (in normal order, oldest first)
     // We'll reverse the display order in ListView
     final List<dynamic> items = []; // Either Message or DateTime for separator
@@ -689,6 +700,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 message: item,
                 isHighlighted: isHighlighted,
                 onReplyTap: _navigateToMessage,
+                allImageMessages: item.type == MessageType.image ? allImageMessages : null,
+                imageIndex: item.type == MessageType.image ? (imageIndexMap[item.id] ?? 0) : 0,
               ),
             ),
           );

@@ -174,6 +174,18 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
         _hasText = false;
       }
     }
+    
+    // When reply message changes, request focus to the text field
+    if (widget.replyToMessage != oldWidget.replyToMessage) {
+      if (widget.replyToMessage != null) {
+        // Start reply mode - request focus to text field
+        Future.delayed(const Duration(milliseconds: 50), () {
+          if (mounted) {
+            _textFocusNode.requestFocus();
+          }
+        });
+      }
+    }
   }
   
   /// Pre-initialize recording dependencies for instant start

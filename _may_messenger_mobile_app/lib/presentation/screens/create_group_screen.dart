@@ -141,47 +141,102 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
         throw Exception('Not authenticated');
       }
 
+      // Validate participant IDs are valid GUIDs
+      final participantIds = _selectedUserIds.toList();
+      print('[GROUP_CREATE] Creating group with title: ${_groupNameController.text.trim()}');
+      print('[GROUP_CREATE] Participants: $participantIds');
+      
+      for (final id in participantIds) {
+        // Validate GUID format
+        final guidRegex = RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+        if (!guidRegex.hasMatch(id)) {
+          throw Exception('Invalid participant ID format: $id');
+        }
+      }
+
       // Call backend to create group chat
       final dio = Dio();
       final response = await dio.post(
         '${ApiConstants.baseUrl}/api/chats',
         data: {
           'title': _groupNameController.text.trim(),
-          'participantIds': _selectedUserIds.toList(),
+          'participantIds': participantIds,
         },
         options: Options(
           headers: {'Authorization': 'Bearer $token'},
+          validateStatus: (status) => true, // Accept all status codes to see error body
         ),
       );
+      
+      print('[GROUP_CREATE] Response status: ${response.statusCode}');
+      print('[GROUP_CREATE] Response data: ${response.data}');
 
-      if (response.statusCode == 200 && mounted) {
-        final chatData = response.data;
-        final chatId = chatData['id'] as String;
-        
-        // Refresh chats list with force refresh and wait for completion
-        await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
-        
-        // Navigate back and open the chat
+      if (response.statusCode == 200) {
         if (mounted) {
-          Navigator.pop(context);
+          final chatData = response.data;
+          final chatId = chatData['id'] as String;
           
-          // Open the chat screen
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => ChatScreen(chatId: chatId),
-            ),
-          );
+          // Refresh chats list with force refresh and wait for completion
+          await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
           
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Группа "${_groupNameController.text.trim()}" создана'),
-              behavior: SnackBarBehavior.floating,
-              margin: const EdgeInsets.only(top: 80, left: 16, right: 16),
-            ),
-          );
+          // Navigate back and open the chat
+          if (mounted) {
+            Navigator.pop(context);
+            
+            // Open the chat screen
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => ChatScreen(chatId: chatId),
+              ),
+            );
+            
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Группа "${_groupNameController.text.trim()}" создана'),
+                behavior: SnackBarBehavior.floating,
+                margin: const EdgeInsets.only(top: 80, left: 16, right: 16),
+              ),
+            );
+          }
         }
+      } else {
+        // Handle error responses
+        String errorMessage = 'Ошибка ${response.statusCode}';
+        if (response.data != null) {
+          if (response.data is Map) {
+            errorMessage = response.data['message'] ?? response.data['title'] ?? response.data.toString();
+          } else {
+            errorMessage = response.data.toString();
+          }
+        }
+        throw Exception(errorMessage);
+      }
+    } on DioException catch (e) {
+      print('[GROUP_CREATE] DioException: ${e.type} - ${e.message}');
+      print('[GROUP_CREATE] Response data: ${e.response?.data}');
+      
+      String errorMessage = 'Ошибка сети';
+      if (e.response?.data != null) {
+        if (e.response!.data is Map) {
+          errorMessage = e.response!.data['message'] ?? e.response!.data['title'] ?? e.response!.data.toString();
+        } else {
+          errorMessage = e.response!.data.toString();
+        }
+      } else if (e.message != null) {
+        errorMessage = e.message!;
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка создания группы: $errorMessage'),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.only(top: 80, left: 16, right: 16),
+          ),
+        );
       }
     } catch (e) {
+      print('[GROUP_CREATE] Error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

@@ -482,6 +482,61 @@ public class UsersController : ControllerBase
         return Ok(statusList);
     }
     
+    #region Presence Management
+    
+    /// <summary>
+    /// Set current user as online (call when app is in foreground)
+    /// This should be called when app resumes from background
+    /// </summary>
+    [HttpPost("go-online")]
+    public async Task<IActionResult> GoOnline()
+    {
+        var userId = GetCurrentUserId();
+        var user = await _unitOfWork.Users.GetByIdAsync(userId);
+        
+        if (user == null)
+        {
+            return NotFound("User not found");
+        }
+        
+        user.IsOnline = true;
+        user.LastSeenAt = DateTime.UtcNow;
+        user.LastHeartbeatAt = DateTime.UtcNow;
+        await _unitOfWork.Users.UpdateAsync(user);
+        await _unitOfWork.SaveChangesAsync();
+        
+        Console.WriteLine($"[Presence] User {userId} marked as ONLINE via REST API");
+        
+        return Ok(new { isOnline = true, lastSeenAt = user.LastSeenAt });
+    }
+    
+    /// <summary>
+    /// Set current user as offline (call when app goes to background)
+    /// This should be called when app is paused/minimized
+    /// </summary>
+    [HttpPost("go-offline")]
+    public async Task<IActionResult> GoOffline()
+    {
+        var userId = GetCurrentUserId();
+        var user = await _unitOfWork.Users.GetByIdAsync(userId);
+        
+        if (user == null)
+        {
+            return NotFound("User not found");
+        }
+        
+        user.IsOnline = false;
+        user.LastSeenAt = DateTime.UtcNow;
+        await _unitOfWork.Users.UpdateAsync(user);
+        await _unitOfWork.SaveChangesAsync();
+        
+        Console.WriteLine($"[Presence] User {userId} marked as OFFLINE via REST API");
+        
+        return Ok(new { isOnline = false, lastSeenAt = user.LastSeenAt });
+    }
+    
+    #endregion
+    
     #region End-to-End Encryption
     
     /// <summary>

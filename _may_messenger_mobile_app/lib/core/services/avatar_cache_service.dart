@@ -66,24 +66,27 @@ class AvatarCacheService {
   }
   
   /// Synchronously get cached path (for widget build)
-  /// Returns null if not cached, but triggers async download
+  /// Returns null if not cached or if user has no avatar set
+  /// IMPORTANT: If avatarUrl is null, user has no avatar - don't return cached file
   String? getCachedPath(String? userId, String? avatarUrl) {
     if (userId == null || _cacheDir == null) return null;
+    
+    // CRITICAL FIX: If avatarUrl is null, user has no avatar set
+    // Don't return any cached file - this prevents showing wrong avatar
+    if (avatarUrl == null) {
+      return null;
+    }
     
     final localPath = getLocalPath(userId);
     
     if (localPath != null) {
       // Cached - trigger async update check
-      if (avatarUrl != null) {
-        _checkForUpdateAsync(userId, avatarUrl);
-      }
+      _checkForUpdateAsync(userId, avatarUrl);
       return localPath;
     }
     
     // Not cached - trigger async download
-    if (avatarUrl != null) {
-      _downloadAvatarAsync(userId, avatarUrl);
-    }
+    _downloadAvatarAsync(userId, avatarUrl);
     
     return null;
   }

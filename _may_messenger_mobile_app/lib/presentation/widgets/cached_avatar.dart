@@ -42,6 +42,12 @@ class _CachedAvatarState extends State<CachedAvatar> {
     if (oldWidget.userId != widget.userId || 
         oldWidget.avatarPath != widget.avatarPath) {
       _hasCheckedCache = false;
+      
+      // If avatar was removed (path changed to null), clear local path immediately
+      if (widget.avatarPath == null && _localPath != null) {
+        _localPath = null;
+      }
+      
       _checkCache();
     }
   }
@@ -49,6 +55,17 @@ class _CachedAvatarState extends State<CachedAvatar> {
   void _checkCache() {
     if (_hasCheckedCache) return;
     _hasCheckedCache = true;
+    
+    // CRITICAL FIX: If avatarPath is null, user has no avatar set
+    // Don't check cache - just show fallback (initials)
+    if (widget.avatarPath == null) {
+      if (_localPath != null) {
+        setState(() {
+          _localPath = null; // Clear any stale cached path
+        });
+      }
+      return;
+    }
     
     // Check for cached avatar
     final cachedPath = avatarCacheService.getCachedPath(
@@ -60,7 +77,7 @@ class _CachedAvatarState extends State<CachedAvatar> {
       setState(() {
         _localPath = cachedPath;
       });
-    } else if (_localPath == null && widget.avatarPath != null) {
+    } else if (_localPath == null) {
       // Not cached yet, will use network image
       // The service will download in background and we'll get it next rebuild
       // For now, use CachedNetworkImage as fallback

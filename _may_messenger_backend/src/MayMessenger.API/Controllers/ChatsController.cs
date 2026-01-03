@@ -178,7 +178,46 @@ public class ChatsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<ChatDto>> CreateChat([FromBody] CreateChatDto dto)
     {
+        Console.WriteLine($"[CHAT_CREATE] Creating chat: Title={dto.Title}, ParticipantIds={string.Join(", ", dto.ParticipantIds)}");
+        
         var userId = GetCurrentUserId();
+        
+        // Validate participant IDs
+        if (dto.ParticipantIds == null || dto.ParticipantIds.Count == 0)
+        {
+            Console.WriteLine("[CHAT_CREATE] Error: No participants provided");
+            return BadRequest(new { message = "Необходимо указать хотя бы одного участника" });
+        }
+        
+        // Validate that all participant IDs exist
+        foreach (var participantId in dto.ParticipantIds)
+        {
+            var participant = await _unitOfWork.Users.GetByIdAsync(participantId);
+            if (participant == null)
+            {
+                Console.WriteLine($"[CHAT_CREATE] Error: Participant {participantId} not found");
+                return BadRequest(new { message = $"Пользователь {participantId} не найден" });
+            }
+        }
+        
+        // Check for duplicate participants
+        var uniqueParticipants = dto.ParticipantIds.Distinct().ToList();
+        if (uniqueParticipants.Count != dto.ParticipantIds.Count)
+        {
+            Console.WriteLine("[CHAT_CREATE] Warning: Duplicate participants detected, using unique list");
+            dto.ParticipantIds = uniqueParticipants;
+        }
+        
+        // Don't allow adding self as participant (handled separately as creator)
+        if (dto.ParticipantIds.Contains(userId))
+        {
+            Console.WriteLine("[CHAT_CREATE] Warning: Creator included in participants, removing from list");
+            dto.ParticipantIds = dto.ParticipantIds.Where(p => p != userId).ToList();
+            if (dto.ParticipantIds.Count == 0)
+            {
+                return BadRequest(new { message = "Нельзя создать чат только с собой" });
+            }
+        }
         
         // For private chat
         if (dto.ParticipantIds.Count == 1)
@@ -186,6 +225,7 @@ public class ChatsController : ControllerBase
             var existingChat = await _unitOfWork.Chats.GetPrivateChatAsync(userId, dto.ParticipantIds[0]);
             if (existingChat != null)
             {
+                Console.WriteLine($"[CHAT_CREATE] Returning existing private chat: {existingChat.Id}");
                 return Ok(new ChatDto
                 {
                     Id = existingChat.Id,
@@ -199,14 +239,25 @@ public class ChatsController : ControllerBase
             }
         }
         
+        // Validate group title for group chats
+        if (dto.ParticipantIds.Count > 1 && string.IsNullOrWhiteSpace(dto.Title))
+        {
+            Console.WriteLine("[CHAT_CREATE] Error: Group title is required");
+            return BadRequest(new { message = "Необходимо указать название группы" });
+        }
+        
         var chat = new Chat
         {
             Type = dto.ParticipantIds.Count == 1 ? ChatType.Private : ChatType.Group,
             Title = dto.Title
         };
         
+        Console.WriteLine($"[CHAT_CREATE] Creating {chat.Type} chat");
+        
         await _unitOfWork.Chats.AddAsync(chat);
         await _unitOfWork.SaveChangesAsync(); // Save chat first to get ID
+        
+        Console.WriteLine($"[CHAT_CREATE] Chat created with ID: {chat.Id}");
         
         // For group chats, creator is owner; for private chats, no owner/admin
         var isGroupChat = dto.ParticipantIds.Count > 1;
