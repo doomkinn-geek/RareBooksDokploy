@@ -7,10 +7,14 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:audio_service/audio_service.dart';
+import 'package:just_audio/just_audio.dart';
 import 'core/themes/app_theme.dart';
+import 'core/themes/theme_provider.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/fcm_service.dart';
 import 'core/services/avatar_cache_service.dart';
+import 'core/services/background_audio_service.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/providers/signalr_provider.dart';
 import 'presentation/providers/chats_provider.dart';
@@ -85,6 +89,27 @@ void main() async {
   // Initialize date formatting for Russian locale
   await initializeDateFormatting('ru', null);
   
+  // Initialize Background Audio Service
+  MayMessengerAudioHandler? audioHandler;
+  try {
+    final audioPlayer = AudioPlayer();
+    audioHandler = await AudioService.init(
+      builder: () => MayMessengerAudioHandler(audioPlayer),
+      config: const AudioServiceConfig(
+        androidNotificationChannelId: 'ru.rare-books.messenger.audio',
+        androidNotificationChannelName: 'Воспроизведение аудиосообщений',
+        androidNotificationIcon: 'mipmap/ic_launcher',
+        androidShowNotificationBadge: true,
+        androidStopForegroundOnPause: false,
+        fastForwardInterval: Duration(seconds: 10),
+        rewindInterval: Duration(seconds: 10),
+      ),
+    );
+    print('[AudioService] Background audio service initialized');
+  } catch (e) {
+    print('[AudioService] Failed to initialize: $e (audio playback may not work in background)');
+  }
+  
   // Initialize Firebase только на поддерживаемых платформах (Android, iOS, Web)
   // На Desktop (Windows, Linux, macOS) Firebase пропускаем
   final shouldInitFirebase = kIsWeb || Platform.isAndroid || Platform.isIOS;
@@ -119,8 +144,13 @@ void main() async {
   }
   
   runApp(
-    const ProviderScope(
-      child: MyApp(),
+    ProviderScope(
+      overrides: [
+        // Override audioHandlerProvider with initialized handler
+        if (audioHandler != null)
+          audioHandlerProvider.overrideWithValue(audioHandler),
+      ],
+      child: const MyApp(),
     ),
   );
 }
@@ -451,11 +481,16 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       });
     }
 
+    // Watch theme state
+    final themeState = ref.watch(themeProvider);
+    
     // Показываем экран загрузки пока проверяется auth
     if (authState.isLoading) {
       return MaterialApp(
         title: 'Депеша',
         theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: themeState.flutterThemeMode,
         home: const Scaffold(
           body: Center(
             child: CircularProgressIndicator(),
@@ -469,7 +504,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       title: 'Депеша',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system,
+      themeMode: themeState.flutterThemeMode,
       debugShowCheckedModeBanner: false,
       home: authState.isAuthenticated
           ? const MainScreen()

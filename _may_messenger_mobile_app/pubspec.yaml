@@ -32,6 +32,8 @@ dependencies:
   # Audio Playback
   just_audio: ^0.9.36
   audio_session: ^0.1.21
+  audio_service: ^0.18.12
+  proximity_sensor: ^1.0.2
   
   # Images
   image_picker: ^1.0.7

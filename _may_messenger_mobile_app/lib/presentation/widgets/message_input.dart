@@ -12,6 +12,7 @@ import 'package:file_picker/file_picker.dart';
 import 'audio_recorder_widget.dart';
 import '../providers/signalr_provider.dart';
 import '../../data/models/message_model.dart';
+import '../../core/themes/app_theme.dart';
 
 enum RecordingState { idle, recording, locked }
 enum HapticType { light, medium, heavy, selection }
@@ -775,17 +776,37 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
             ],
           ),
           // Show send button if text exists, otherwise show mic button
+          // Telegram-style circular green button
+          const SizedBox(width: 4),
           if (_hasText)
-            IconButton(
-              onPressed: widget.isSending ? null : _sendMessage,
-              icon: widget.isSending
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.send),
-              color: Theme.of(context).colorScheme.primary,
+            GestureDetector(
+              onTap: widget.isSending ? null : _sendMessage,
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: widget.isSending 
+                      ? AppColors.primaryGreen.withOpacity(0.5) 
+                      : AppColors.primaryGreen,
+                  shape: BoxShape.circle,
+                ),
+                child: widget.isSending
+                    ? const Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                      )
+                    : const Icon(
+                        Icons.send,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+              ),
             )
           else
             // Use Listener for instant response on pointer down (no delay)
@@ -808,17 +829,18 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
                     ),
                   ),
                   child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: _recordingState == RecordingState.recording
-                        ? BoxDecoration(
-                            color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                            shape: BoxShape.circle,
-                          )
-                        : null,
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: _recordingState == RecordingState.recording
+                          ? AppColors.primaryGreen
+                          : AppColors.primaryGreen,
+                      shape: BoxShape.circle,
+                    ),
                     child: Icon(
                       Icons.mic,
-                      size: 28,
-                      color: Theme.of(context).colorScheme.primary,
+                      size: 24,
+                      color: Colors.white,
                     ),
                   ),
                 ),

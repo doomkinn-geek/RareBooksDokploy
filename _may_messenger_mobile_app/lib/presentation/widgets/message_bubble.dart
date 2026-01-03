@@ -12,6 +12,8 @@ import '../../data/models/message_model.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/services/logger_service.dart';
 import '../../core/services/global_audio_service.dart';
+import '../../core/services/proximity_audio_service.dart';
+import '../../core/themes/app_theme.dart';
 import '../providers/profile_provider.dart';
 import '../providers/contacts_names_provider.dart';
 import '../providers/auth_provider.dart';
@@ -266,62 +268,65 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       return;
     }
     
-    final audioService = ref.read(globalAudioServiceProvider.notifier);
-    
-    try {
-      // Check if we have a local path or need to use URL
-      String? localPath = _localAudioPath;
-      if (localPath == null) {
-        final audioStorageService = ref.read(audioStorageServiceProvider);
-        localPath = await audioStorageService.getLocalAudioPath(widget.message.id);
-      }
+    // Defer provider state changes to avoid modifying provider during build
+    await Future.microtask(() async {
+      final audioService = ref.read(globalAudioServiceProvider.notifier);
       
-      if (localPath == null && widget.message.filePath == null) {
+      try {
+        // Check if we have a local path or need to use URL
+        String? localPath = _localAudioPath;
+        if (localPath == null) {
+          final audioStorageService = ref.read(audioStorageServiceProvider);
+          localPath = await audioStorageService.getLocalAudioPath(widget.message.id);
+        }
+        
+        if (localPath == null && widget.message.filePath == null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Голосовое сообщение больше не доступно'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+          return;
+        }
+        
+        final audioUrl = widget.message.filePath != null 
+            ? '${ApiConstants.baseUrl}${widget.message.filePath}'
+            : '';
+        
+        // Play using GlobalAudioService
+        await audioService.playMessage(
+          messageId: widget.message.id,
+          chatId: widget.message.chatId,
+          audioUrl: audioUrl,
+          senderName: widget.message.senderName,
+          localFilePath: localPath,
+        );
+        
+        // Mark as played when started (if not sender)
+        if (!_hasMarkedAsPlayed) {
+          _markAsPlayedTimer?.cancel();
+          _markAsPlayedTimer = Timer(const Duration(milliseconds: 200), () {
+            if (mounted && !_hasMarkedAsPlayed) {
+              _markAudioAsPlayed();
+            }
+          });
+        }
+        
+      } catch (e) {
+        print('[AUDIO] Error in _playPauseAudio: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Голосовое сообщение больше не доступно'),
+              content: Text('Ошибка воспроизведения'),
               duration: Duration(seconds: 2),
             ),
           );
         }
-        return;
       }
-      
-      final audioUrl = widget.message.filePath != null 
-          ? '${ApiConstants.baseUrl}${widget.message.filePath}'
-          : '';
-      
-      // Play using GlobalAudioService
-      await audioService.playMessage(
-        messageId: widget.message.id,
-        chatId: widget.message.chatId,
-        audioUrl: audioUrl,
-        senderName: widget.message.senderName,
-        localFilePath: localPath,
-      );
-      
-      // Mark as played when started (if not sender)
-      if (!_hasMarkedAsPlayed) {
-        _markAsPlayedTimer?.cancel();
-        _markAsPlayedTimer = Timer(const Duration(milliseconds: 200), () {
-          if (mounted && !_hasMarkedAsPlayed) {
-            _markAudioAsPlayed();
-          }
-        });
-      }
-      
-    } catch (e) {
-      print('[AUDIO] Error in _playPauseAudio: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ошибка воспроизведения'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    }
+    });
   }
   
   /// Cycle through playback speeds using GlobalAudioService
@@ -430,12 +435,17 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   }
 
   Widget _buildMessageContent(BuildContext context, bool isMe) {
+    final theme = Theme.of(context);
+    final textColor = isMe ? theme.outgoingTextColor : theme.incomingTextColor;
+    
     switch (widget.message.type) {
       case MessageType.text:
         return Text(
           widget.message.content ?? '',
           style: TextStyle(
-            color: isMe ? Colors.white : null,
+            color: textColor,
+            fontSize: 15,
+            height: 1.3,
           ),
         );
       
@@ -444,31 +454,39 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         final globalState = ref.watch(globalAudioServiceProvider);
         final isCurrentMsg = globalState.messageId == widget.message.id;
         final isPlaying = isCurrentMsg && globalState.isPlaying;
+        final isLoading = isCurrentMsg && globalState.isLoading;
         final position = isCurrentMsg ? globalState.position : Duration.zero;
         final duration = isCurrentMsg && globalState.duration != null 
             ? globalState.duration! 
             : _cachedDuration ?? Duration.zero;
         final playbackSpeed = isCurrentMsg ? globalState.speed : 1.0;
+        final outputRoute = globalState.outputRoute;
+        final isDark = theme.brightness == Brightness.dark;
         
         // Определить, прослушано ли сообщение
         final isPlayed = widget.message.status == MessageStatus.played;
         
-        // Все элементы зеленые для прослушанных
+        // Telegram-style colors for audio player
         final Color playerColor = isPlayed 
-            ? (isMe ? Colors.green[300]! : Colors.green[700]!) 
-            : (isMe ? Colors.white : Colors.black);
-        final Color waveformColor = isPlayed 
-            ? (isMe ? Colors.green[200]! : Colors.green[400]!) 
-            : (isMe ? Colors.white70 : Colors.grey);
-        final Color textColor = isPlayed
-            ? (isMe ? Colors.green[100]! : Colors.green[800]!)
-            : (isMe ? Colors.white70 : Colors.grey[600]!);
+            ? AppColors.primaryGreen
+            : textColor;
+        final Color waveformActiveColor = isPlayed 
+            ? AppColors.primaryGreen
+            : (isMe 
+                ? (isDark ? Colors.white70 : Colors.black54)
+                : (isDark ? Colors.white54 : Colors.grey[600]!));
+        final Color waveformInactiveColor = isMe
+            ? (isDark ? Colors.white24 : Colors.black26)
+            : (isDark ? Colors.white24 : Colors.grey[300]!);
+        final Color audioTextColor = isMe 
+            ? theme.outgoingTextColor.withOpacity(0.7)
+            : theme.incomingTextColor.withOpacity(0.7);
         
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Show loading indicator while downloading, otherwise show play/pause button
-            _isDownloadingAudio
+            // Show loading indicator while downloading or loading audio
+            (_isDownloadingAudio || isLoading)
                 ? SizedBox(
                     width: 48,
                     height: 48,
@@ -483,16 +501,73 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                       ),
                     ),
                   )
-                : IconButton(
-              icon: Icon(
-                isPlaying ? Icons.pause : Icons.play_arrow,
-                color: playerColor,
-                size: 28,
+                : AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    transitionBuilder: (child, animation) {
+                      return ScaleTransition(
+                        scale: animation,
+                        child: child,
+                      );
+                    },
+                    child: Stack(
+                      key: ValueKey<bool>(isPlaying),
+                      alignment: Alignment.center,
+                      children: [
+                        // Пульсирующий индикатор при воспроизведении
+                        if (isPlaying && isCurrentMsg)
+                          TweenAnimationBuilder<double>(
+                            tween: Tween(begin: 0.8, end: 1.2),
+                            duration: const Duration(milliseconds: 800),
+                            curve: Curves.easeInOut,
+                            builder: (context, value, child) {
+                              return Transform.scale(
+                                scale: value,
+                                child: Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: playerColor.withOpacity(0.15),
+                                  ),
+                                ),
+                              );
+                            },
+                            onEnd: () {
+                              // Restart animation
+                              if (mounted && isPlaying) {
+                                setState(() {});
+                              }
+                            },
+                          ),
+                        IconButton(
+                          icon: Icon(
+                            isPlaying ? Icons.pause : Icons.play_arrow,
+                            color: playerColor,
+                            size: 28,
+                          ),
+                          onPressed: _playPauseAudio,
+                        ),
+                      ],
+                    ),
+                  ),
+            
+            // Audio route indicator (earpiece/speaker/bluetooth)
+            if (isCurrentMsg && !_isDownloadingAudio && !isLoading)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Icon(
+                  outputRoute == AudioOutputRoute.earpiece
+                      ? Icons.phone_in_talk
+                      : outputRoute == AudioOutputRoute.bluetooth
+                          ? Icons.bluetooth_audio
+                          : Icons.volume_up,
+                  color: playerColor.withOpacity(0.6),
+                  size: 16,
+                ),
               ),
-              onPressed: _playPauseAudio,
-            ),
-            // Speed control button (only visible when not downloading and playing)
-            if (!_isDownloadingAudio && isCurrentMsg)
+            
+            // Speed control button (only visible when current message)
+            if (!_isDownloadingAudio && !isLoading && isCurrentMsg)
               GestureDetector(
                 onTap: _cyclePlaybackSpeed,
                 child: Container(
@@ -527,8 +602,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                       progress: duration.inMilliseconds > 0
                           ? position.inMilliseconds / duration.inMilliseconds
                           : 0.0,
-                      activeColor: waveformColor,
-                      inactiveColor: isMe ? Colors.white30 : Colors.grey[300]!,
+                      activeColor: waveformActiveColor,
+                      inactiveColor: waveformInactiveColor,
                       height: 30,
                       barsCount: 25,
                     ),
@@ -543,7 +618,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                               '${position.inMinutes}:${(position.inSeconds % 60).toString().padLeft(2, '0')}',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: textColor,
+                                color: audioTextColor,
                               ),
                             ),
                           ],
@@ -558,9 +633,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: isPlayed 
-                                        ? (isMe ? Colors.green[400]!.withOpacity(0.3) : Colors.green[600]!.withOpacity(0.3))
-                                        : (isMe ? Colors.white.withOpacity(0.2) : Colors.grey[300]!.withOpacity(0.5)),
+                                    color: playerColor.withOpacity(0.2),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
@@ -568,7 +641,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                                     style: TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
-                                      color: textColor,
+                                      color: audioTextColor,
                                     ),
                                   ),
                                 ),
@@ -579,16 +652,16 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                               '${duration.inMinutes}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: textColor,
+                                color: audioTextColor,
                               ),
                             ),
                             // Show "played" indicator for received audio messages
                             if (isPlayed && !isMe) ...[
                               const SizedBox(width: 4),
-                              Icon(
+                              const Icon(
                                 Icons.headphones,
                                 size: 14,
-                                color: Colors.green[700],
+                                color: AppColors.primaryGreen,
                               ),
                             ],
                           ],
@@ -1039,6 +1112,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   Widget build(BuildContext context) {
     final profileState = ref.watch(profileProvider);
     final currentUserId = profileState.profile?.id;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     
     // Fallback: if profile not loaded, check by isLocalOnly flag
     final isMe = (currentUserId != null && widget.message.senderId == currentUserId) ||
@@ -1049,98 +1124,204 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     final displayName = contactsNames[widget.message.senderId] 
                         ?? widget.message.senderName;
     
+    // Telegram-style colors
+    final bubbleColor = widget.isHighlighted
+        ? Colors.yellow.withOpacity(0.5)
+        : isMe
+            ? theme.outgoingBubbleColor
+            : theme.incomingBubbleColor;
+    
+    final timeColor = theme.messageTimeColor;
+    
+    final secondaryTextColor = isMe
+        ? (isDark ? Colors.white60 : Colors.black54)
+        : (isDark ? Colors.white54 : Colors.grey[600]!);
+    
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.7,
+      child: Container(
+        margin: EdgeInsets.only(
+          bottom: 4,
+          left: isMe ? 48 : 8,
+          right: isMe ? 8 : 48,
         ),
-        decoration: BoxDecoration(
-          color: widget.isHighlighted
-              ? Colors.yellow.withOpacity(0.5)
-              : isMe
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (!isMe)
-              Text(
-                displayName,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: isMe
-                      ? Colors.white70
-                      : Theme.of(context).colorScheme.primary,
-                  fontSize: 12,
-                ),
-              ),
-            // Forward indicator
-            if (widget.message.forwardedFromUserName != null) ...[
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.forward,
-                    size: 12,
-                    color: isMe ? Colors.white54 : Colors.grey[500],
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Переслано от ${widget.message.forwardedFromUserName}',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontStyle: FontStyle.italic,
-                      color: isMe ? Colors.white54 : Colors.grey[500],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-            ],
-            // Reply quote
-            if (widget.message.replyToMessage != null)
-              _buildReplyQuote(context, isMe),
-            const SizedBox(height: 4),
-            _buildMessageContent(context, isMe),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisSize: MainAxisSize.min,
+        child: CustomPaint(
+          painter: BubblePainter(
+            color: bubbleColor,
+            isMe: isMe,
+            isDark: isDark,
+          ),
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.75,
+            ),
+            padding: EdgeInsets.only(
+              left: isMe ? 12 : 16,
+              right: isMe ? 16 : 12,
+              top: 8,
+              bottom: 6,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  DateFormat('HH:mm').format(widget.message.createdAt.toLocal()),
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: isMe ? Colors.white70 : Colors.grey[600],
-                  ),
-                ),
-                // Edited indicator
-                if (widget.message.isEdited) ...[
-                  const SizedBox(width: 4),
-                  Text(
-                    'изм.',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontStyle: FontStyle.italic,
-                      color: isMe ? Colors.white54 : Colors.grey[500],
+                // Sender name (for incoming messages in groups)
+                if (!isMe)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      displayName,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primaryGreen,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
+                // Forward indicator
+                if (widget.message.forwardedFromUserName != null) ...[
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.reply,
+                        size: 14,
+                        color: secondaryTextColor,
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          'Переслано от ${widget.message.forwardedFromUserName}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                            color: secondaryTextColor,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
                 ],
-                if (isMe) ...[
-                  const SizedBox(width: 4),
-                  _buildMessageStatusIcon(),
-                ],
+                // Reply quote
+                if (widget.message.replyToMessage != null)
+                  _buildReplyQuote(context, isMe),
+                // Message content
+                _buildMessageContent(context, isMe),
+                const SizedBox(height: 4),
+                // Time and status row
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text(
+                      DateFormat('HH:mm').format(widget.message.createdAt.toLocal()),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: timeColor,
+                      ),
+                    ),
+                    // Edited indicator
+                    if (widget.message.isEdited) ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        'изм.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
+                          color: timeColor,
+                        ),
+                      ),
+                    ],
+                    if (isMe) ...[
+                      const SizedBox(width: 4),
+                      _buildMessageStatusIcon(),
+                    ],
+                  ],
+                ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
+  }
+}
+
+/// Painter для пузыря сообщения в стиле Telegram с хвостиком
+class BubblePainter extends CustomPainter {
+  final Color color;
+  final bool isMe;
+  final bool isDark;
+  
+  BubblePainter({
+    required this.color,
+    required this.isMe,
+    required this.isDark,
+  });
+  
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    
+    // Тень
+    final shadowPaint = Paint()
+      ..color = Colors.black.withOpacity(isDark ? 0.3 : 0.08)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+    
+    final radius = 16.0;
+    final tailWidth = 8.0;
+    final tailHeight = 10.0;
+    
+    final path = Path();
+    
+    if (isMe) {
+      // Исходящее сообщение - хвостик справа
+      path.moveTo(radius, 0);
+      path.lineTo(size.width - radius - tailWidth, 0);
+      path.quadraticBezierTo(size.width - tailWidth, 0, size.width - tailWidth, radius);
+      path.lineTo(size.width - tailWidth, size.height - tailHeight);
+      // Хвостик
+      path.lineTo(size.width, size.height);
+      path.lineTo(size.width - tailWidth, size.height - tailHeight - 4);
+      path.lineTo(size.width - tailWidth, size.height - radius);
+      path.quadraticBezierTo(size.width - tailWidth, size.height, size.width - tailWidth - radius, size.height);
+      path.lineTo(radius, size.height);
+      path.quadraticBezierTo(0, size.height, 0, size.height - radius);
+      path.lineTo(0, radius);
+      path.quadraticBezierTo(0, 0, radius, 0);
+    } else {
+      // Входящее сообщение - хвостик слева
+      path.moveTo(radius + tailWidth, 0);
+      path.lineTo(size.width - radius, 0);
+      path.quadraticBezierTo(size.width, 0, size.width, radius);
+      path.lineTo(size.width, size.height - radius);
+      path.quadraticBezierTo(size.width, size.height, size.width - radius, size.height);
+      path.lineTo(radius + tailWidth, size.height);
+      path.quadraticBezierTo(tailWidth, size.height, tailWidth, size.height - radius);
+      path.lineTo(tailWidth, size.height - tailHeight - 4);
+      // Хвостик
+      path.lineTo(0, size.height);
+      path.lineTo(tailWidth, size.height - tailHeight);
+      path.lineTo(tailWidth, radius);
+      path.quadraticBezierTo(tailWidth, 0, radius + tailWidth, 0);
+    }
+    
+    path.close();
+    
+    // Рисуем тень
+    canvas.drawPath(path.shift(const Offset(0, 1)), shadowPaint);
+    // Рисуем пузырь
+    canvas.drawPath(path, paint);
+  }
+  
+  @override
+  bool shouldRepaint(covariant BubblePainter oldDelegate) {
+    return oldDelegate.color != color || 
+           oldDelegate.isMe != isMe ||
+           oldDelegate.isDark != isDark;
   }
 }
 

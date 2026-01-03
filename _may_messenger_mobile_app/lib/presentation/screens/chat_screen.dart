@@ -13,6 +13,7 @@ import '../../data/models/chat_model.dart';
 import '../../data/models/message_model.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/fcm_service.dart';
+import '../../core/themes/app_theme.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/message_input.dart';
 import '../widgets/connection_status_indicator.dart';
@@ -20,6 +21,7 @@ import '../widgets/typing_animation.dart';
 import '../widgets/date_separator.dart';
 import '../widgets/message_context_menu.dart';
 import '../widgets/swipeable_message.dart';
+import '../widgets/chat_background.dart';
 import 'group_settings_screen.dart';
 import 'user_profile_screen.dart';
 import 'forward_message_screen.dart';
@@ -826,8 +828,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   style: TextStyle(
                     fontSize: 12,
                     color: onlineStatusText == 'онлайн' 
-                        ? Colors.green 
-                        : Colors.grey[400],
+                        ? AppColors.onlineIndicator 
+                        : Colors.white70,
                     fontWeight: FontWeight.normal,
                   ),
                 ),
@@ -865,14 +867,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
       body: Stack(
         children: [
-          Container(
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage('assets/chat_background.png'),
-            fit: BoxFit.contain, // Вписываем изображение полностью с сохранением пропорций
-            opacity: 0.3, // Subtle background, not too distracting
-          ),
-        ),
+          ChatBackground(
         child: Column(
           children: [
             Expanded(

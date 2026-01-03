@@ -7,6 +7,7 @@ import '../widgets/chat_list_item.dart';
 import '../widgets/connection_status_indicator.dart';
 import '../widgets/global_audio_mini_player.dart';
 import '../../core/services/global_audio_service.dart';
+import '../../core/themes/app_theme.dart';
 import '../../data/services/battery_optimization_service.dart';
 import 'chat_screen.dart';
 import 'settings_screen.dart';
@@ -132,7 +133,10 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showCreateChatOptions(context),
         tooltip: 'Создать чат',
-        child: const Icon(Icons.add),
+        backgroundColor: AppColors.lightGreen,
+        foregroundColor: Colors.white,
+        elevation: 4,
+        child: const Icon(Icons.edit),
       ),
     );
   }

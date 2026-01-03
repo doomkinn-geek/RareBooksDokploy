@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../data/models/chat_model.dart';
 import '../../data/models/message_model.dart';
+import '../../core/themes/app_theme.dart';
 import '../providers/contacts_names_provider.dart';
 import '../providers/chats_provider.dart';
 import 'cached_avatar.dart';
@@ -71,11 +72,11 @@ class ChatListItem extends ConsumerWidget {
     String content;
     switch (chat.lastMessage!.type) {
       case MessageType.audio:
-        content = '[Голосовое сообщение]';
+        content = '🎤 Голосовое сообщение';
       case MessageType.image:
-        content = '[Изображение]';
+        content = '📷 Фото';
       case MessageType.file:
-        content = '[Файл]';
+        content = '📎 Файл';
       case MessageType.text:
         content = chat.lastMessage!.content ?? '';
     }
@@ -90,8 +91,31 @@ class ChatListItem extends ConsumerWidget {
     return content;
   }
 
+  String _formatTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final messageDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
+    
+    if (messageDate == today) {
+      // Today - show time
+      return DateFormat('HH:mm').format(dateTime.toLocal());
+    } else if (today.difference(messageDate).inDays == 1) {
+      // Yesterday
+      return 'Вчера';
+    } else if (today.difference(messageDate).inDays < 7) {
+      // This week - show day name
+      return DateFormat('E', 'ru').format(dateTime.toLocal());
+    } else {
+      // Older - show date
+      return DateFormat('dd.MM.yy').format(dateTime.toLocal());
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
     // Get contacts mapping
     final contactsNames = ref.watch(contactsNamesProvider);
     
@@ -114,82 +138,183 @@ class ChatListItem extends ConsumerWidget {
     final avatarPath = chat.displayAvatar;
     final avatarUserId = chat.type == ChatType.private 
         ? chat.otherParticipantId 
-        : chat.id; // Use chat ID for group avatars
+        : chat.id;
+    
+    final hasUnread = chat.unreadCount > 0;
+    final lastMessagePreview = _formatLastMessage(contactsNames);
     
     return InkWell(
       onTap: onTap,
       onLongPress: () => _showDeleteDialog(context, ref),
-      child: ListTile(
-        leading: Stack(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
           children: [
-            CachedAvatar(
-              userId: avatarUserId,
-              avatarPath: avatarPath,
-              fallbackText: displayTitle,
-              radius: 24,
-              backgroundColor: Theme.of(context).colorScheme.primary,
-            ),
-            // Online status indicator for private chats
-            if (chat.type == ChatType.private && 
-                chat.otherParticipantId != null && 
-                chat.otherParticipantIsOnline == true)
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  width: 14,
-                  height: 14,
-                  decoration: BoxDecoration(
-                    color: Colors.green,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Theme.of(context).scaffoldBackgroundColor,
-                      width: 2,
+            // Avatar with online indicator
+            Stack(
+              children: [
+                CachedAvatar(
+                  userId: avatarUserId,
+                  avatarPath: avatarPath,
+                  fallbackText: displayTitle,
+                  radius: 28, // Larger avatar (56px diameter)
+                  backgroundColor: AppColors.primaryGreen,
+                ),
+                // Online status indicator
+                if (chat.type == ChatType.private && 
+                    chat.otherParticipantId != null && 
+                    chat.otherParticipantIsOnline == true)
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 16,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: AppColors.onlineIndicator,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: theme.scaffoldBackgroundColor,
+                          width: 2,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-          ],
-        ),
-        title: Text(
-          displayTitle,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Text(
-          _formatLastMessage(contactsNames),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            if (chat.lastMessage != null)
-              Text(
-                DateFormat('HH:mm').format(chat.lastMessage!.createdAt.toLocal()),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            if (chat.unreadCount > 0)
-              Container(
-                margin: const EdgeInsets.only(top: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  chat.unreadCount.toString(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
+              ],
+            ),
+            const SizedBox(width: 12),
+            
+            // Chat info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Title and time row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          displayTitle,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: hasUnread ? FontWeight.w600 : FontWeight.w500,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (chat.lastMessage != null)
+                        Text(
+                          _formatTime(chat.lastMessage!.createdAt),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: hasUnread 
+                                ? AppColors.primaryGreen 
+                                : (isDark ? Colors.white54 : Colors.grey[600]),
+                          ),
+                        ),
+                    ],
                   ),
-                ),
+                  const SizedBox(height: 4),
+                  
+                  // Message preview and unread badge row
+                  Row(
+                    children: [
+                      // Check marks for sent messages
+                      if (chat.lastMessage != null && _isOwnMessage(ref)) ...[
+                        _buildStatusIcon(chat.lastMessage!.status),
+                        const SizedBox(width: 4),
+                      ],
+                      
+                      // Message preview
+                      Expanded(
+                        child: Text(
+                          lastMessagePreview,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: hasUnread
+                                ? (isDark ? Colors.white70 : Colors.black87)
+                                : (isDark ? Colors.white54 : Colors.grey[600]),
+                            fontWeight: hasUnread ? FontWeight.w500 : FontWeight.normal,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      
+                      // Unread badge
+                      if (hasUnread)
+                        Container(
+                          margin: const EdgeInsets.only(left: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.unreadBadge,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            chat.unreadCount > 99 ? '99+' : chat.unreadCount.toString(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
               ),
+            ),
           ],
         ),
       ),
     );
   }
+  
+  bool _isOwnMessage(WidgetRef ref) {
+    if (chat.lastMessage == null) return false;
+    // Check if the last message sender ID matches current user
+    // For now, simplified check - return false
+    return false;
+  }
+  
+  Widget _buildStatusIcon(MessageStatus status) {
+    switch (status) {
+      case MessageStatus.sending:
+        return SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.5,
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.grey[400]!),
+          ),
+        );
+      case MessageStatus.sent:
+        return Icon(
+          Icons.check,
+          size: 16,
+          color: Colors.grey[400],
+        );
+      case MessageStatus.delivered:
+        return Icon(
+          Icons.done_all,
+          size: 16,
+          color: Colors.grey[400],
+        );
+      case MessageStatus.read:
+      case MessageStatus.played:
+        return const Icon(
+          Icons.done_all,
+          size: 16,
+          color: AppColors.readCheckmarks,
+        );
+      case MessageStatus.failed:
+        return const Icon(
+          Icons.error_outline,
+          size: 16,
+          color: AppColors.error,
+        );
+    }
+  }
 }
-
-

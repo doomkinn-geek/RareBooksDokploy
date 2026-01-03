@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../providers/auth_provider.dart';
+import '../../core/themes/app_theme.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -92,16 +93,43 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 40),
-              Icon(
-                Icons.message,
-                size: 80,
-                color: Theme.of(context).colorScheme.primary,
+              // Telegram-style logo
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryGreen,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryGreen.withOpacity(0.3),
+                      blurRadius: 20,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.send,
+                  size: 50,
+                  color: Colors.white,
+                ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
               Text(
                 'Депеша',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineMedium,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primaryGreen,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Безопасный мессенджер',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.grey[600],
+                ),
               ),
               const SizedBox(height: 40),
               

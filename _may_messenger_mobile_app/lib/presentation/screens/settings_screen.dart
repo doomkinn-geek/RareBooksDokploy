@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/user_model.dart';
 import '../../core/constants/api_constants.dart';
+import '../../core/themes/app_theme.dart';
+import '../../core/themes/theme_provider.dart';
 import '../providers/profile_provider.dart';
 import '../providers/invite_provider.dart';
 import '../providers/auth_provider.dart';
@@ -159,6 +161,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     );
                   },
                 ),
+
+                const Divider(),
+
+                // Тема приложения
+                _buildThemeSection(),
 
                 const Divider(),
 
@@ -336,6 +343,70 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               'Выйти',
               style: TextStyle(color: Colors.red),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildThemeSection() {
+    final themeState = ref.watch(themeProvider);
+    
+    return ListTile(
+      leading: Icon(
+        themeState.themeMode == ThemeModeOption.dark 
+            ? Icons.dark_mode 
+            : themeState.themeMode == ThemeModeOption.light
+                ? Icons.light_mode
+                : Icons.brightness_auto,
+        color: AppColors.primaryGreen,
+      ),
+      title: const Text('Тема оформления'),
+      subtitle: Text(_getThemeModeText(themeState.themeMode)),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => _showThemeDialog(),
+    );
+  }
+
+  String _getThemeModeText(ThemeModeOption mode) {
+    switch (mode) {
+      case ThemeModeOption.system:
+        return 'Системная';
+      case ThemeModeOption.light:
+        return 'Светлая';
+      case ThemeModeOption.dark:
+        return 'Темная';
+    }
+  }
+
+  void _showThemeDialog() {
+    final themeState = ref.read(themeProvider);
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Тема оформления'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: ThemeModeOption.values.map((mode) {
+            return RadioListTile<ThemeModeOption>(
+              title: Text(_getThemeModeText(mode)),
+              value: mode,
+              groupValue: themeState.themeMode,
+              activeColor: AppColors.primaryGreen,
+              onChanged: (value) {
+                if (value != null) {
+                  ref.read(themeProvider.notifier).setThemeMode(value);
+                  Navigator.of(context).pop();
+                }
+              },
+            );
+          }).toList(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Отмена'),
           ),
         ],
       ),
