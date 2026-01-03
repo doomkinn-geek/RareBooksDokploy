@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:audio_session/audio_session.dart';
-import '../../data/services/proximity_audio_service.dart';
 
 /// Состояние текущего воспроизведения
 class AudioPlaybackState {
@@ -58,66 +56,16 @@ class AudioPlaybackState {
 }
 
 /// Глобальный сервис для воспроизведения аудио сообщений
-/// Работает независимо от виджетов, поддерживает фоновое воспроизведение
 class GlobalAudioService extends StateNotifier<AudioPlaybackState> {
   final AudioPlayer _player = AudioPlayer();
-  final ProximityAudioService _proximityService = ProximityAudioService();
   StreamSubscription? _positionSubscription;
   StreamSubscription? _durationSubscription;
   StreamSubscription? _playerStateSubscription;
   
-  // Callbacks for external listeners
-  Function(bool isNearEar)? onProximityChanged;
   Function(String messageId)? onPlaybackCompleted;
   
   GlobalAudioService() : super(const AudioPlaybackState()) {
-    _initAudioSession();
     _setupPlayerListeners();
-    _setupProximityListener();
-  }
-  
-  /// Setup proximity sensor listener for speaker/earpiece switching
-  void _setupProximityListener() {
-    _proximityService.addListener((isNearEar) {
-      onProximityChanged?.call(isNearEar);
-      print('[GlobalAudio] Proximity changed: ${isNearEar ? "EARPIECE" : "SPEAKER"}');
-    });
-  }
-  
-  Future<void> _initAudioSession() async {
-    try {
-      final session = await AudioSession.instance;
-      // Configure for media playback through speaker by default
-      // ProximityAudioService will switch to earpiece when phone is near ear
-      await session.configure(const AudioSessionConfiguration(
-        avAudioSessionCategory: AVAudioSessionCategory.playback,
-        avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.defaultToSpeaker,
-        avAudioSessionMode: AVAudioSessionMode.defaultMode,
-        avAudioSessionRouteSharingPolicy: AVAudioSessionRouteSharingPolicy.defaultPolicy,
-        avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
-        androidAudioAttributes: AndroidAudioAttributes(
-          contentType: AndroidAudioContentType.music,
-          flags: AndroidAudioFlags.none,
-          usage: AndroidAudioUsage.media, // Plays through speaker
-        ),
-        androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
-        androidWillPauseWhenDucked: false,
-      ));
-      
-      // Handle audio interruptions (phone calls, other apps)
-      session.interruptionEventStream.listen((event) {
-        if (event.begin) {
-          // Interruption started - pause
-          if (state.isPlaying) {
-            pause();
-          }
-        }
-      });
-      
-      print('[GlobalAudio] Audio session configured');
-    } catch (e) {
-      print('[GlobalAudio] Failed to configure audio session: $e');
-    }
   }
   
   void _setupPlayerListeners() {
@@ -138,20 +86,18 @@ class GlobalAudioService extends StateNotifier<AudioPlaybackState> {
       
       state = state.copyWith(isPlaying: playerState.playing);
       
-      // Handle playback completion
       if (playerState.processingState == ProcessingState.completed) {
         final completedMessageId = state.messageId;
         
-        // Reset position but keep message info for mini-player
         _player.seek(Duration.zero);
         _player.pause();
         
-        // Stop proximity sensor when playback completes
-        _proximityService.stopListening();
+        state = state.copyWith(
+          isPlaying: false, 
+          position: Duration.zero,
+          clearMessage: true,
+        );
         
-        state = state.copyWith(isPlaying: false, position: Duration.zero);
-        
-        // Notify listeners
         if (completedMessageId != null && onPlaybackCompleted != null) {
           onPlaybackCompleted!(completedMessageId);
         }
@@ -168,7 +114,6 @@ class GlobalAudioService extends StateNotifier<AudioPlaybackState> {
     String? localFilePath,
   }) async {
     try {
-      // If same message is already playing, just toggle
       if (state.messageId == messageId) {
         if (state.isPlaying) {
           await pause();
@@ -178,9 +123,9 @@ class GlobalAudioService extends StateNotifier<AudioPlaybackState> {
         return;
       }
       
-      // Stop current playback if different message
       if (state.hasActivePlayback) {
-        await stop();
+        await _player.stop();
+        state = const AudioPlaybackState();
       }
       
       state = state.copyWith(
@@ -193,7 +138,6 @@ class GlobalAudioService extends StateNotifier<AudioPlaybackState> {
         duration: null,
       );
       
-      // Use local file if available, otherwise stream from URL
       final source = localFilePath != null 
           ? AudioSource.file(localFilePath)
           : AudioSource.uri(Uri.parse(audioUrl));
@@ -205,17 +149,13 @@ class GlobalAudioService extends StateNotifier<AudioPlaybackState> {
       
       await _player.play();
       
-      // Start proximity sensor for speaker/earpiece switching
-      _proximityService.startListening();
-      
-      print('[GlobalAudio] Started playing message: $messageId');
+      print('[GlobalAudio] Started playing: $messageId');
     } catch (e) {
-      print('[GlobalAudio] Error playing message: $e');
+      print('[GlobalAudio] Error playing: $e');
       state = state.copyWith(isLoading: false, clearMessage: true);
     }
   }
   
-  /// Приостановить воспроизведение
   Future<void> pause() async {
     try {
       await _player.pause();
@@ -224,7 +164,6 @@ class GlobalAudioService extends StateNotifier<AudioPlaybackState> {
     }
   }
   
-  /// Продолжить воспроизведение
   Future<void> resume() async {
     try {
       await _player.play();
@@ -233,20 +172,16 @@ class GlobalAudioService extends StateNotifier<AudioPlaybackState> {
     }
   }
   
-  /// Остановить воспроизведение и очистить состояние
   Future<void> stop() async {
     try {
       await _player.stop();
-      // Stop proximity sensor when playback stops
-      _proximityService.stopListening();
-      state = const AudioPlaybackState(); // Reset to initial state
-      print('[GlobalAudio] Stopped playback');
+      state = const AudioPlaybackState();
+      print('[GlobalAudio] Stopped');
     } catch (e) {
       print('[GlobalAudio] Error stopping: $e');
     }
   }
   
-  /// Перемотать на указанную позицию
   Future<void> seek(Duration position) async {
     try {
       await _player.seek(position);
@@ -255,7 +190,6 @@ class GlobalAudioService extends StateNotifier<AudioPlaybackState> {
     }
   }
   
-  /// Изменить скорость воспроизведения
   Future<void> setSpeed(double speed) async {
     try {
       await _player.setSpeed(speed);
@@ -265,7 +199,6 @@ class GlobalAudioService extends StateNotifier<AudioPlaybackState> {
     }
   }
   
-  /// Циклическое изменение скорости: 1.0 -> 1.25 -> 1.5 -> 2.0 -> 1.0
   Future<void> cycleSpeed() async {
     final newSpeed = switch (state.speed) {
       1.0 => 1.25,
@@ -276,23 +209,19 @@ class GlobalAudioService extends StateNotifier<AudioPlaybackState> {
     await setSpeed(newSpeed);
   }
   
-  /// Проверить, воспроизводится ли конкретное сообщение
   bool isMessagePlaying(String messageId) {
     return state.messageId == messageId && state.isPlaying;
   }
   
-  /// Проверить, является ли сообщение текущим (даже если на паузе)
   bool isCurrentMessage(String messageId) {
     return state.messageId == messageId;
   }
   
-  /// Получить прогресс для конкретного сообщения
   double? getProgressForMessage(String messageId) {
     if (state.messageId != messageId) return null;
     return state.progress;
   }
   
-  /// Получить позицию для конкретного сообщения
   Duration? getPositionForMessage(String messageId) {
     if (state.messageId != messageId) return null;
     return state.position;
@@ -303,32 +232,25 @@ class GlobalAudioService extends StateNotifier<AudioPlaybackState> {
     _positionSubscription?.cancel();
     _durationSubscription?.cancel();
     _playerStateSubscription?.cancel();
-    _proximityService.stopListening();
-    _proximityService.dispose();
     _player.dispose();
     super.dispose();
   }
 }
 
-/// Provider для глобального аудио сервиса
 final globalAudioServiceProvider = StateNotifierProvider<GlobalAudioService, AudioPlaybackState>((ref) {
   return GlobalAudioService();
 });
 
-/// Provider для получения только состояния воспроизведения (для UI)
 final audioPlaybackStateProvider = Provider<AudioPlaybackState>((ref) {
   return ref.watch(globalAudioServiceProvider);
 });
 
-/// Provider для проверки, воспроизводится ли конкретное сообщение
 final isMessagePlayingProvider = Provider.family<bool, String>((ref, messageId) {
   final state = ref.watch(globalAudioServiceProvider);
   return state.messageId == messageId && state.isPlaying;
 });
 
-/// Provider для проверки, является ли сообщение текущим (даже на паузе)
 final isCurrentMessageProvider = Provider.family<bool, String>((ref, messageId) {
   final state = ref.watch(globalAudioServiceProvider);
   return state.messageId == messageId;
 });
-

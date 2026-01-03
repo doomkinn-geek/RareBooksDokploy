@@ -33,9 +33,6 @@ dependencies:
   just_audio: ^0.9.36
   audio_session: ^0.1.21
   
-  # Proximity Sensor (for earpiece mode)
-  proximity_sensor: ^1.0.5
-  
   # Images
   image_picker: ^1.0.7
   flutter_image_compress: ^2.1.0
