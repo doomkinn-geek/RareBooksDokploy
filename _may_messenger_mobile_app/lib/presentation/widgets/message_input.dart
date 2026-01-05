@@ -13,7 +13,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'audio_recorder_widget.dart';
 import '../providers/signalr_provider.dart';
 import '../../data/models/message_model.dart';
-import '../../core/themes/app_theme.dart';
 import '../../core/constants/api_constants.dart';
 
 enum RecordingState { idle, recording, locked }
@@ -800,8 +799,8 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
                 height: 44,
                 decoration: BoxDecoration(
                   color: widget.isSending 
-                      ? AppColors.primaryGreen.withOpacity(0.5) 
-                      : AppColors.primaryGreen,
+                      ? Theme.of(context).colorScheme.primary.withOpacity(0.5) 
+                      : Theme.of(context).colorScheme.primary,
                   shape: BoxShape.circle,
                 ),
                 child: widget.isSending
@@ -846,9 +845,7 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: _recordingState == RecordingState.recording
-                          ? AppColors.primaryGreen
-                          : AppColors.primaryGreen,
+                      color: Theme.of(context).colorScheme.primary,
                       shape: BoxShape.circle,
                     ),
                     child: Icon(

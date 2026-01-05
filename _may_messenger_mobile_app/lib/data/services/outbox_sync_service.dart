@@ -240,17 +240,34 @@ class OutboxSyncService {
             chatId: msg.chatId,
             audioPath: msg.localAudioPath!,
             clientMessageId: msg.localId,
+            replyToMessageId: msg.replyToMessageId,
           );
           break;
           
         case MessageType.image:
-          // For images, we need localImagePath which isn't in PendingMessage currently
-          // This would need to be added to PendingMessage if needed
-          throw Exception('Image sync not implemented in outbox');
+          if (msg.localImagePath == null) {
+            throw Exception('Image path is null for image message');
+          }
+          serverMessage = await _messageRepository.sendImageMessage(
+            chatId: msg.chatId,
+            imagePath: msg.localImagePath!,
+            clientMessageId: msg.localId,
+            replyToMessageId: msg.replyToMessageId,
+          );
+          break;
           
         case MessageType.file:
-          // File sync not implemented in outbox - files are sent directly
-          throw Exception('File sync not implemented in outbox');
+          if (msg.localFilePath == null || msg.originalFileName == null) {
+            throw Exception('File path or filename is null for file message');
+          }
+          serverMessage = await _messageRepository.sendFileMessage(
+            chatId: msg.chatId,
+            filePath: msg.localFilePath!,
+            fileName: msg.originalFileName!,
+            clientMessageId: msg.localId,
+            replyToMessageId: msg.replyToMessageId,
+          );
+          break;
       }
       
       // Mark as synced (this also removes from outbox)

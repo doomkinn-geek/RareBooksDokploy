@@ -17,7 +17,7 @@ class ThemeState {
   
   const ThemeState({
     this.themeMode = ThemeModeOption.system,
-    this.designStyle = DesignStyle.green,
+    this.designStyle = DesignStyle.slate, // Серая тема по умолчанию
   });
   
   ThemeMode get flutterThemeMode {
@@ -76,7 +76,7 @@ class ThemeNotifier extends StateNotifier<ThemeState> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final themeIndex = prefs.getInt(_themeModeKey) ?? 0;
-      final designIndex = prefs.getInt(_designStyleKey) ?? 0;
+      final designIndex = prefs.getInt(_designStyleKey) ?? 1; // 1 = slate (серая тема)
       
       state = state.copyWith(
         themeMode: ThemeModeOption.values[themeIndex.clamp(0, ThemeModeOption.values.length - 1)],

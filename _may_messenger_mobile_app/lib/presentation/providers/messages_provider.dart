@@ -1270,6 +1270,16 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         print('[MSG_SEND] Max retry attempts reached for image: $localId');
         _pendingSends.remove(localId);
         
+        // Update outbox to failed state so it can be retried later
+        if (outboxId != null) {
+          try {
+            await _outboxRepository.markAsFailed(outboxId, 'Max retry attempts reached: $e');
+            print('[MSG_SEND] Image marked as failed in outbox: $outboxId');
+          } catch (outboxError) {
+            print('[MSG_SEND] Failed to update outbox status: $outboxError');
+          }
+        }
+        
         // Update message status to failed in UI using improved lookup
         final messageIndex = _findMessageIndex(localId);
         if (messageIndex != -1) {
@@ -1669,6 +1679,16 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         });
       } else {
         _pendingSends.remove(localId);
+        
+        // Mark as failed in outbox
+        if (outboxId != null) {
+          try {
+            await _outboxRepository.markAsFailed(outboxId, 'Max retry attempts reached: $e');
+            print('[MSG_SEND] File marked as failed in outbox: $outboxId');
+          } catch (outboxError) {
+            print('[MSG_SEND] Failed to update outbox status: $outboxError');
+          }
+        }
         
         final messageIndex = _findMessageIndex(localId);
         if (messageIndex != -1) {
@@ -2129,17 +2149,78 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         state = state.copyWith(messages: updatedMessages);
       }
       
-      // Trigger sync
-      _syncMessageToBackend(
-        localId, 
-        pendingMessage.type,
-        content: pendingMessage.content,
-        audioPath: pendingMessage.localAudioPath,
-        clientMessageId: localId, // Use localId as clientMessageId
-        attemptNumber: 0, // Reset attempt counter
-      );
+      // Trigger sync based on message type
+      switch (pendingMessage.type) {
+        case MessageType.text:
+          _syncMessageToBackend(
+            localId, 
+            MessageType.text,
+            content: pendingMessage.content,
+            clientMessageId: localId,
+            outboxId: localId,
+            attemptNumber: 0,
+          );
+          break;
+          
+        case MessageType.audio:
+          if (pendingMessage.localAudioPath != null) {
+            _syncMessageToBackend(
+              localId, 
+              MessageType.audio,
+              audioPath: pendingMessage.localAudioPath,
+              clientMessageId: localId,
+              outboxId: localId,
+              attemptNumber: 0,
+            );
+          } else {
+            throw Exception('Audio path is missing for audio message');
+          }
+          break;
+          
+        case MessageType.image:
+          if (pendingMessage.localImagePath != null) {
+            _syncImageToBackend(
+              localId,
+              pendingMessage.localImagePath!,
+              clientMessageId: localId,
+              outboxId: localId,
+              attemptNumber: 0,
+            );
+          } else {
+            throw Exception('Image path is missing for image message');
+          }
+          break;
+          
+        case MessageType.file:
+          if (pendingMessage.localFilePath != null && pendingMessage.originalFileName != null) {
+            _syncFileToBackend(
+              localId,
+              pendingMessage.localFilePath!,
+              pendingMessage.originalFileName!,
+              clientMessageId: localId,
+              outboxId: localId,
+              attemptNumber: 0,
+            );
+          } else {
+            throw Exception('File path or filename is missing for file message');
+          }
+          break;
+      }
+      
+      print('[MSG_RETRY] Retry initiated for ${pendingMessage.type} message: $localId');
     } catch (e) {
       print('[MSG_RETRY] Failed to retry message: $e');
+      
+      // Mark as failed in UI if retry fails
+      final messageIndex = state.messages.indexWhere((m) => 
+          m.id == localId || m.localId == localId);
+      if (messageIndex != -1) {
+        final updatedMessages = [...state.messages];
+        updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
+          status: MessageStatus.failed,
+        );
+        state = state.copyWith(messages: updatedMessages);
+      }
     }
   }
 
