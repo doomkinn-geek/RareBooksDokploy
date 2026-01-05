@@ -96,26 +96,60 @@ class OfflineSyncService {
   }
 
   /// Sync a single pending message
+  /// Supports all message types: text, audio, image, file
   Future<void> _syncMessage(PendingMessage pending) async {
     try {
-      print('[SYNC] Syncing message: ${pending.localId} (attempt ${pending.retryCount + 1})');
+      print('[SYNC] Syncing ${pending.type.name} message: ${pending.localId} (attempt ${pending.retryCount + 1})');
       
       // Mark as syncing
       await _outboxRepository.markAsSyncing(pending.localId);
       
-      // Send to backend
-      final Message serverMessage;
-      if (pending.type == MessageType.text) {
-        serverMessage = await _messageRepository.sendMessage(
-          chatId: pending.chatId,
-          type: pending.type,
-          content: pending.content,
-        );
-      } else {
-        serverMessage = await _messageRepository.sendAudioMessage(
-          chatId: pending.chatId,
-          audioPath: pending.localAudioPath!,
-        );
+      // Send to backend based on message type
+      Message serverMessage;
+      
+      switch (pending.type) {
+        case MessageType.text:
+          serverMessage = await _messageRepository.sendMessage(
+            chatId: pending.chatId,
+            type: pending.type,
+            content: pending.content,
+            replyToMessageId: pending.replyToMessageId,
+          );
+          break;
+          
+        case MessageType.audio:
+          if (pending.localAudioPath == null) {
+            throw Exception('Audio path is null for audio message');
+          }
+          serverMessage = await _messageRepository.sendAudioMessage(
+            chatId: pending.chatId,
+            audioPath: pending.localAudioPath!,
+            replyToMessageId: pending.replyToMessageId,
+          );
+          break;
+          
+        case MessageType.image:
+          if (pending.localImagePath == null) {
+            throw Exception('Image path is null for image message');
+          }
+          serverMessage = await _messageRepository.sendImageMessage(
+            chatId: pending.chatId,
+            imagePath: pending.localImagePath!,
+            replyToMessageId: pending.replyToMessageId,
+          );
+          break;
+          
+        case MessageType.file:
+          if (pending.localFilePath == null) {
+            throw Exception('File path is null for file message');
+          }
+          serverMessage = await _messageRepository.sendFileMessage(
+            chatId: pending.chatId,
+            filePath: pending.localFilePath!,
+            fileName: pending.originalFileName ?? 'file',
+            replyToMessageId: pending.replyToMessageId,
+          );
+          break;
       }
       
       print('[SYNC] Message synced successfully: ${pending.localId} -> ${serverMessage.id}');

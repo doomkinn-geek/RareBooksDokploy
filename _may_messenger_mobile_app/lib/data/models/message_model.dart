@@ -22,6 +22,7 @@ class ReplyMessage {
   final MessageType type;
   final String? content;
   final String? originalFileName;
+  final String? filePath; // Path for image/file preview in quote
 
   ReplyMessage({
     required this.id,
@@ -30,6 +31,7 @@ class ReplyMessage {
     required this.type,
     this.content,
     this.originalFileName,
+    this.filePath,
   });
 
   factory ReplyMessage.fromJson(Map<String, dynamic> json) {
@@ -40,6 +42,7 @@ class ReplyMessage {
       type: MessageType.values[json['type']],
       content: json['content'],
       originalFileName: json['originalFileName'],
+      filePath: json['filePath'],
     );
   }
 
@@ -51,6 +54,7 @@ class ReplyMessage {
       'type': type.index,
       'content': content,
       'originalFileName': originalFileName,
+      'filePath': filePath,
     };
   }
 }

@@ -1175,13 +1175,13 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     }
   }
 
-  Future<void> _syncImageToBackend(String localId, String imagePath, {String? clientMessageId, int attemptNumber = 0}) async {
+  Future<void> _syncImageToBackend(String localId, String imagePath, {String? clientMessageId, String? outboxId, int attemptNumber = 0}) async {
     const maxAttempts = 5;
     final backoffDelays = [1, 2, 4, 8, 16, 30]; // seconds
     
     try {
       // #region agent log - Hypothesis B: Check clientMessageId for image
-      print('[MSG_SYNC] HYP_B_IMAGE: Syncing image to backend - localId: $localId, clientMessageId: $clientMessageId, attempt: ${attemptNumber + 1}/$maxAttempts');
+      print('[MSG_SYNC] HYP_B_IMAGE: Syncing image to backend - localId: $localId, clientMessageId: $clientMessageId, outboxId: $outboxId, attempt: ${attemptNumber + 1}/$maxAttempts');
       // #endregion
       print('[MSG_SEND] Syncing image to backend: $localId (attempt ${attemptNumber + 1}/$maxAttempts)');
       
@@ -1203,9 +1203,14 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       // Remove from pending sends
       _pendingSends.remove(localId);
       
-      // IMMEDIATELY remove from outbox after successful sync
-      await _outboxRepository.removePendingMessage(localId);
-      print('[MSG_SEND] Removed image message from outbox: $localId');
+      // IMMEDIATELY remove from outbox after successful sync using outboxId
+      if (outboxId != null) {
+        await _outboxRepository.removePendingMessage(outboxId);
+        print('[MSG_SEND] ✅ Removed image from outbox using outboxId: $outboxId');
+      } else {
+        await _outboxRepository.removePendingMessage(localId);
+        print('[MSG_SEND] ⚠️ Removed image from outbox using localId: $localId');
+      }
       
       // Register ID mapping for future lookups
       _registerIdMapping(localId, serverMessage.id);
@@ -1257,7 +1262,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         // Schedule retry with exponential backoff
         Future.delayed(Duration(seconds: delaySeconds), () {
           if (mounted) {
-            _syncImageToBackend(localId, imagePath, clientMessageId: clientMessageId, attemptNumber: attemptNumber + 1);
+            _syncImageToBackend(localId, imagePath, clientMessageId: clientMessageId, outboxId: outboxId, attemptNumber: attemptNumber + 1);
           }
         });
       } else {
@@ -1466,8 +1471,17 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         print('[MSG_SEND] Failed to cache sent image (non-critical): $e');
       }
       
-      // STEP 4: Send to backend asynchronously with clientMessageId
-      _syncImageToBackend(localId, imagePath, clientMessageId: clientMessageId);
+      // STEP 4: Add to outbox queue for persistence (critical for offline reliability)
+      final outboxEntry = await _outboxRepository.addToOutbox(
+        chatId: chatId,
+        type: MessageType.image,
+        localImagePath: imagePath,
+      );
+      final outboxId = outboxEntry.localId;
+      print('[MSG_SEND] Image added to outbox: $outboxId');
+      
+      // STEP 5: Send to backend asynchronously with clientMessageId
+      _syncImageToBackend(localId, imagePath, clientMessageId: clientMessageId, outboxId: outboxId);
       
     } catch (e) {
       print('[MSG_SEND] Failed to create local image message: $e');
@@ -1556,8 +1570,18 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         print('[MSG_SEND] Failed to update chat preview: $e');
       }
       
+      // Add to outbox queue for persistence (critical for offline reliability)
+      final outboxEntry = await _outboxRepository.addToOutbox(
+        chatId: chatId,
+        type: MessageType.file,
+        localFilePath: filePath,
+        originalFileName: fileName,
+      );
+      final outboxId = outboxEntry.localId;
+      print('[MSG_SEND] File added to outbox: $outboxId');
+      
       // Sync to backend
-      _syncFileToBackend(localId, filePath, fileName, clientMessageId: clientMessageId);
+      _syncFileToBackend(localId, filePath, fileName, clientMessageId: clientMessageId, outboxId: outboxId);
       
     } catch (e) {
       print('[MSG_SEND] Failed to send file message: $e');
@@ -1571,12 +1595,12 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     }
   }
 
-  Future<void> _syncFileToBackend(String localId, String filePath, String fileName, {String? clientMessageId, int attemptNumber = 0}) async {
+  Future<void> _syncFileToBackend(String localId, String filePath, String fileName, {String? clientMessageId, String? outboxId, int attemptNumber = 0}) async {
     const maxAttempts = 5;
     final backoffDelays = [1, 2, 4, 8, 16];
     
     try {
-      print('[MSG_SEND] Syncing file to backend: $localId (attempt ${attemptNumber + 1}/$maxAttempts)');
+      print('[MSG_SEND] Syncing file to backend: $localId, outboxId: $outboxId (attempt ${attemptNumber + 1}/$maxAttempts)');
       
       final serverMessage = await _messageRepository.sendFileMessage(
         chatId: chatId,
@@ -1593,6 +1617,15 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
       _pendingSends.remove(localId);
       _registerIdMapping(localId, serverMessage.id);
+      
+      // Remove from outbox after successful sync
+      if (outboxId != null) {
+        await _outboxRepository.removePendingMessage(outboxId);
+        print('[MSG_SEND] ✅ Removed file from outbox using outboxId: $outboxId');
+      } else {
+        await _outboxRepository.removePendingMessage(localId);
+        print('[MSG_SEND] ⚠️ Removed file from outbox using localId: $localId');
+      }
       
       // Update message in UI
       final messageIndex = _findMessageIndex(localId);
@@ -1631,7 +1664,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         
         Future.delayed(Duration(seconds: delaySeconds), () {
           if (mounted) {
-            _syncFileToBackend(localId, filePath, fileName, clientMessageId: clientMessageId, attemptNumber: attemptNumber + 1);
+            _syncFileToBackend(localId, filePath, fileName, clientMessageId: clientMessageId, outboxId: outboxId, attemptNumber: attemptNumber + 1);
           }
         });
       } else {

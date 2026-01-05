@@ -15,6 +15,10 @@ class PendingMessage {
   final MessageType type;
   final String? content;
   final String? localAudioPath;
+  final String? localImagePath;
+  final String? localFilePath;
+  final String? originalFileName;
+  final String? replyToMessageId;
   final SyncState syncState;
   final DateTime createdAt;
   final int retryCount;
@@ -27,6 +31,10 @@ class PendingMessage {
     required this.type,
     this.content,
     this.localAudioPath,
+    this.localImagePath,
+    this.localFilePath,
+    this.originalFileName,
+    this.replyToMessageId,
     required this.syncState,
     required this.createdAt,
     this.retryCount = 0,
@@ -40,6 +48,10 @@ class PendingMessage {
     MessageType? type,
     String? content,
     String? localAudioPath,
+    String? localImagePath,
+    String? localFilePath,
+    String? originalFileName,
+    String? replyToMessageId,
     SyncState? syncState,
     DateTime? createdAt,
     int? retryCount,
@@ -52,6 +64,10 @@ class PendingMessage {
       type: type ?? this.type,
       content: content ?? this.content,
       localAudioPath: localAudioPath ?? this.localAudioPath,
+      localImagePath: localImagePath ?? this.localImagePath,
+      localFilePath: localFilePath ?? this.localFilePath,
+      originalFileName: originalFileName ?? this.originalFileName,
+      replyToMessageId: replyToMessageId ?? this.replyToMessageId,
       syncState: syncState ?? this.syncState,
       createdAt: createdAt ?? this.createdAt,
       retryCount: retryCount ?? this.retryCount,
@@ -67,6 +83,10 @@ class PendingMessage {
       'type': type.index,
       'content': content,
       'localAudioPath': localAudioPath,
+      'localImagePath': localImagePath,
+      'localFilePath': localFilePath,
+      'originalFileName': originalFileName,
+      'replyToMessageId': replyToMessageId,
       'syncState': syncState.index,
       'createdAt': createdAt.toIso8601String(),
       'retryCount': retryCount,
@@ -82,6 +102,10 @@ class PendingMessage {
       type: MessageType.values[json['type']],
       content: json['content'],
       localAudioPath: json['localAudioPath'],
+      localImagePath: json['localImagePath'],
+      localFilePath: json['localFilePath'],
+      originalFileName: json['originalFileName'],
+      replyToMessageId: json['replyToMessageId'],
       syncState: SyncState.values[json['syncState']],
       createdAt: DateTime.parse(json['createdAt']),
       retryCount: json['retryCount'] ?? 0,
@@ -100,9 +124,13 @@ class PendingMessage {
       type: type,
       content: content,
       localAudioPath: localAudioPath,
+      localImagePath: localImagePath,
       filePath: null,
+      originalFileName: originalFileName,
       status: _mapSyncStateToMessageStatus(),
       createdAt: createdAt,
+      isLocalOnly: syncState != SyncState.synced,
+      localId: localId,
     );
   }
 
@@ -174,11 +202,16 @@ class OutboxRepository {
 
   /// Add a new message to the outbox queue
   /// Uses atomic operation to prevent corruption
+  /// Supports all message types: text, audio, image, file
   Future<PendingMessage> addToOutbox({
     required String chatId,
     required MessageType type,
     String? content,
     String? localAudioPath,
+    String? localImagePath,
+    String? localFilePath,
+    String? originalFileName,
+    String? replyToMessageId,
   }) async {
     await initialize(); // Ensure initialized before operations
     
@@ -188,6 +221,10 @@ class OutboxRepository {
       type: type,
       content: content,
       localAudioPath: localAudioPath,
+      localImagePath: localImagePath,
+      localFilePath: localFilePath,
+      originalFileName: originalFileName,
+      replyToMessageId: replyToMessageId,
       syncState: SyncState.localOnly,
       createdAt: DateTime.now(),
     );
@@ -195,7 +232,7 @@ class OutboxRepository {
     try {
       // Atomic operation: add to outbox
       await _localDataSource.addPendingMessage(pendingMessage);
-      print('[OUTBOX] Added message to outbox: ${pendingMessage.localId}');
+      print('[OUTBOX] Added ${type.name} message to outbox: ${pendingMessage.localId}');
       
       return pendingMessage;
     } catch (e, stackTrace) {

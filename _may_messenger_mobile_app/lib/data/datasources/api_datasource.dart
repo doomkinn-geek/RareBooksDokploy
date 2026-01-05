@@ -156,6 +156,7 @@ class ApiDataSource {
     required MessageType type,
     String? content,
     String? clientMessageId,
+    String? replyToMessageId,
     bool isEncrypted = false,
   }) async {
     try {
@@ -166,6 +167,7 @@ class ApiDataSource {
           'type': type.index,
           'content': content,
           'clientMessageId': clientMessageId,
+          if (replyToMessageId != null) 'replyToMessageId': replyToMessageId,
           'isEncrypted': isEncrypted,
         },
       );
@@ -179,12 +181,14 @@ class ApiDataSource {
     required String chatId,
     required String audioPath,
     String? clientMessageId,
+    String? replyToMessageId,
   }) async {
     try {
       final formData = FormData.fromMap({
         'chatId': chatId,
         'audioFile': await MultipartFile.fromFile(audioPath),
         if (clientMessageId != null) 'clientMessageId': clientMessageId,
+        if (replyToMessageId != null) 'replyToMessageId': replyToMessageId,
       });
 
       final response = await _dio.post(
@@ -201,12 +205,14 @@ class ApiDataSource {
     required String chatId,
     required String imagePath,
     String? clientMessageId,
+    String? replyToMessageId,
   }) async {
     try {
       final formData = FormData.fromMap({
         'chatId': chatId,
         'imageFile': await MultipartFile.fromFile(imagePath),
         if (clientMessageId != null) 'clientMessageId': clientMessageId,
+        if (replyToMessageId != null) 'replyToMessageId': replyToMessageId,
       });
 
       final response = await _dio.post(
@@ -224,12 +230,14 @@ class ApiDataSource {
     required String filePath,
     required String fileName,
     String? clientMessageId,
+    String? replyToMessageId,
   }) async {
     try {
       final formData = FormData.fromMap({
         'chatId': chatId,
         'file': await MultipartFile.fromFile(filePath, filename: fileName),
         if (clientMessageId != null) 'clientMessageId': clientMessageId,
+        if (replyToMessageId != null) 'replyToMessageId': replyToMessageId,
       });
 
       final response = await _dio.post(

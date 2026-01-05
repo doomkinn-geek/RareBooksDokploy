@@ -40,6 +40,7 @@ class MessageRepository {
     required MessageType type,
     String? content,
     String? clientMessageId,
+    String? replyToMessageId,
     bool isEncrypted = false,
   }) async {
     return await _apiDataSource.sendMessage(
@@ -47,6 +48,7 @@ class MessageRepository {
       type: type,
       content: content,
       clientMessageId: clientMessageId,
+      replyToMessageId: replyToMessageId,
       isEncrypted: isEncrypted,
     );
   }
@@ -55,11 +57,13 @@ class MessageRepository {
     required String chatId,
     required String audioPath,
     String? clientMessageId,
+    String? replyToMessageId,
   }) async {
     return await _apiDataSource.sendAudioMessage(
       chatId: chatId,
       audioPath: audioPath,
       clientMessageId: clientMessageId,
+      replyToMessageId: replyToMessageId,
     );
   }
 
@@ -67,11 +71,13 @@ class MessageRepository {
     required String chatId,
     required String imagePath,
     String? clientMessageId,
+    String? replyToMessageId,
   }) async {
     return await _apiDataSource.sendImageMessage(
       chatId: chatId,
       imagePath: imagePath,
       clientMessageId: clientMessageId,
+      replyToMessageId: replyToMessageId,
     );
   }
 
@@ -80,12 +86,14 @@ class MessageRepository {
     required String filePath,
     required String fileName,
     String? clientMessageId,
+    String? replyToMessageId,
   }) async {
     return await _apiDataSource.sendFileMessage(
       chatId: chatId,
       filePath: filePath,
       fileName: fileName,
       clientMessageId: clientMessageId,
+      replyToMessageId: replyToMessageId,
     );
   }
 

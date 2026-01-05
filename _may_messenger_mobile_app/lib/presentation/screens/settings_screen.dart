@@ -352,19 +352,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget _buildThemeSection() {
     final themeState = ref.watch(themeProvider);
     
-    return ListTile(
-      leading: Icon(
-        themeState.themeMode == ThemeModeOption.dark 
-            ? Icons.dark_mode 
-            : themeState.themeMode == ThemeModeOption.light
-                ? Icons.light_mode
-                : Icons.brightness_auto,
-        color: AppColors.primaryGreen,
-      ),
-      title: const Text('Тема оформления'),
-      subtitle: Text(_getThemeModeText(themeState.themeMode)),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => _showThemeDialog(),
+    return Column(
+      children: [
+        // Режим темы (светлая/темная/системная)
+        ListTile(
+          leading: Icon(
+            themeState.themeMode == ThemeModeOption.dark 
+                ? Icons.dark_mode 
+                : themeState.themeMode == ThemeModeOption.light
+                    ? Icons.light_mode
+                    : Icons.brightness_auto,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          title: const Text('Режим темы'),
+          subtitle: Text(_getThemeModeText(themeState.themeMode)),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _showThemeDialog(),
+        ),
+        // Дизайн-стиль
+        ListTile(
+          leading: Icon(
+            themeState.designStyle == DesignStyle.green
+                ? Icons.eco
+                : Icons.palette,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          title: const Text('Дизайн'),
+          subtitle: Text(_getDesignStyleText(themeState.designStyle)),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _showDesignStyleDialog(),
+        ),
+      ],
     );
   }
 
@@ -379,13 +397,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  String _getDesignStyleText(DesignStyle style) {
+    switch (style) {
+      case DesignStyle.green:
+        return 'Зеленый (по умолчанию)';
+      case DesignStyle.slate:
+        return 'Серый';
+    }
+  }
+
   void _showThemeDialog() {
     final themeState = ref.read(themeProvider);
     
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Тема оформления'),
+        title: const Text('Режим темы'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: ThemeModeOption.values.map((mode) {
@@ -393,7 +420,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: Text(_getThemeModeText(mode)),
               value: mode,
               groupValue: themeState.themeMode,
-              activeColor: AppColors.primaryGreen,
+              activeColor: Theme.of(context).colorScheme.primary,
               onChanged: (value) {
                 if (value != null) {
                   ref.read(themeProvider.notifier).setThemeMode(value);
@@ -402,6 +429,54 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               },
             );
           }).toList(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Отмена'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDesignStyleDialog() {
+    final themeState = ref.read(themeProvider);
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Дизайн'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioListTile<DesignStyle>(
+              title: const Text('Зеленый'),
+              subtitle: const Text('Классический стиль мессенджера'),
+              value: DesignStyle.green,
+              groupValue: themeState.designStyle,
+              activeColor: AppColors.primaryGreen,
+              onChanged: (value) {
+                if (value != null) {
+                  ref.read(themeProvider.notifier).setDesignStyle(value);
+                  Navigator.of(context).pop();
+                }
+              },
+            ),
+            RadioListTile<DesignStyle>(
+              title: const Text('Серый'),
+              subtitle: const Text('Минималистичный стиль'),
+              value: DesignStyle.slate,
+              groupValue: themeState.designStyle,
+              activeColor: AppColors.primarySlate,
+              onChanged: (value) {
+                if (value != null) {
+                  ref.read(themeProvider.notifier).setDesignStyle(value);
+                  Navigator.of(context).pop();
+                }
+              },
+            ),
+          ],
         ),
         actions: [
           TextButton(

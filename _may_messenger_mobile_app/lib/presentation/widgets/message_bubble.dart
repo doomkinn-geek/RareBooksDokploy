@@ -351,6 +351,15 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   }
 
   Widget _buildMessageStatusIcon() {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    // Цвета статусов - контрастные на светло-зеленом фоне
+    final pendingColor = isDark ? Colors.grey[400]! : Colors.grey[600]!;
+    final sentColor = isDark ? Colors.grey[400]! : Colors.grey[600]!;
+    final deliveredColor = isDark ? Colors.grey[400]! : Colors.grey[500]!;
+    final readColor = AppColors.readCheckmarks; // Голубые галочки как в Telegram
+    
     switch (widget.message.status) {
       case MessageStatus.sending:
         // If stuck in sending for too long, show retry button instead of spinner
@@ -363,14 +372,14 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                 Icon(
                   Icons.refresh,
                   size: 14,
-                  color: Colors.orange[300],
+                  color: Colors.orange[700],
                 ),
                 const SizedBox(width: 2),
                 Text(
                   'Retry',
                   style: TextStyle(
                     fontSize: 10,
-                    color: Colors.orange[300],
+                    color: Colors.orange[700],
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -378,41 +387,41 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             ),
           );
         }
-        return const SizedBox(
+        return SizedBox(
           width: 14,
           height: 14,
           child: CircularProgressIndicator(
             strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+            valueColor: AlwaysStoppedAnimation<Color>(pendingColor),
           ),
         );
       case MessageStatus.sent:
         // Одна серая галочка - отправлено, но не доставлено
-        return const Icon(
+        return Icon(
           Icons.check,
           size: 14,
-          color: Colors.white70,
+          color: sentColor,
         );
       case MessageStatus.delivered:
         // Две серых галочки - доставлено, но не прочитано
         return Icon(
           Icons.done_all,
           size: 14,
-          color: Colors.grey[400],
+          color: deliveredColor,
         );
       case MessageStatus.read:
-        // Две зеленых галочки - прочитано
-        return const Icon(
+        // Две голубых галочки - прочитано (как в Telegram)
+        return Icon(
           Icons.done_all,
           size: 14,
-          color: Colors.green,
+          color: readColor,
         );
       case MessageStatus.played:
-        // Зеленые галочки - воспроизведено (для аудио)
-        return const Icon(
+        // Голубые галочки - воспроизведено (для аудио)
+        return Icon(
           Icons.done_all,
           size: 14,
-          color: Colors.green,
+          color: readColor,
         );
       case MessageStatus.failed:
         // Red error icon with retry functionality
@@ -424,14 +433,14 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
               Icon(
                 Icons.error_outline,
                 size: 16,
-                color: Colors.red[300],
+                color: Colors.red[700],
               ),
               const SizedBox(width: 2),
               Text(
                 'Retry',
                 style: TextStyle(
                   fontSize: 10,
-                  color: Colors.red[300],
+                  color: Colors.red[700],
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -877,9 +886,30 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     }
   }
   
-  /// Build reply quote widget
+  /// Build reply quote widget with optional image thumbnail
   Widget _buildReplyQuote(BuildContext context, bool isMe) {
     final reply = widget.message.replyToMessage!;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    // Контрастные цвета для цитаты
+    final quoteBackgroundColor = isMe 
+        ? (isDark ? Colors.black.withOpacity(0.2) : Colors.black.withOpacity(0.08))
+        : (isDark ? Colors.white.withOpacity(0.1) : Colors.grey.withOpacity(0.12));
+    
+    final quoteBorderColor = isMe 
+        ? (isDark ? AppColors.lightGreen : AppColors.primaryGreen)
+        : theme.colorScheme.primary;
+    
+    final quoteNameColor = isMe 
+        ? (isDark ? AppColors.lightGreen : AppColors.primaryGreen)
+        : theme.colorScheme.primary;
+    
+    final quoteTextColor = isMe 
+        ? (isDark ? Colors.white70 : Colors.black87)
+        : (isDark ? Colors.white70 : Colors.grey[700]!);
+    
+    final hasImage = reply.type == MessageType.image && reply.filePath != null;
     
     return GestureDetector(
       onTap: () {
@@ -892,38 +922,70 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         padding: const EdgeInsets.all(8),
         margin: const EdgeInsets.only(bottom: 4),
         decoration: BoxDecoration(
-          color: isMe 
-              ? Colors.white.withOpacity(0.15)
-              : Colors.grey.withOpacity(0.15),
+          color: quoteBackgroundColor,
           borderRadius: BorderRadius.circular(8),
           border: Border(
             left: BorderSide(
-              color: isMe ? Colors.white54 : Theme.of(context).colorScheme.primary,
-              width: 2,
+              color: quoteBorderColor,
+              width: 3,
             ),
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              reply.senderName,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 11,
-                color: isMe ? Colors.white70 : Theme.of(context).colorScheme.primary,
+            // Image thumbnail if replying to image
+            if (hasImage)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: CachedNetworkImage(
+                    imageUrl: '${ApiConstants.baseUrl}${reply.filePath}',
+                    width: 40,
+                    height: 40,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      width: 40,
+                      height: 40,
+                      color: Colors.grey[300],
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      width: 40,
+                      height: 40,
+                      color: Colors.grey[300],
+                      child: const Icon(Icons.image, size: 20),
+                    ),
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              _getReplyPreviewText(reply),
-              style: TextStyle(
-                fontSize: 11,
-                color: isMe ? Colors.white60 : Colors.grey[600],
+            // Text content
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    reply.senderName,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: quoteNameColor,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _getReplyPreviewText(reply),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: quoteTextColor,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -936,11 +998,11 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       case MessageType.text:
         return reply.content ?? '';
       case MessageType.audio:
-        return '[Голосовое сообщение]';
+        return '🎤 Голосовое сообщение';
       case MessageType.image:
-        return '[Изображение]';
+        return '📷 Фото';
       case MessageType.file:
-        return '[Файл: ${reply.originalFileName ?? "файл"}]';
+        return '📎 ${reply.originalFileName ?? "Файл"}';
     }
   }
 

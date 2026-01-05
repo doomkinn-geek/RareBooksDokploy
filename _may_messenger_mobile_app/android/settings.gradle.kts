@@ -12,6 +12,10 @@ pluginManagement {
 
     repositories {
         google()
+        // Добавляем зеркала Maven для более надежного скачивания плагинов
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
         mavenCentral()
         gradlePluginPortal()
     }

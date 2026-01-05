@@ -9,10 +9,12 @@ import 'package:path_provider/path_provider.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'audio_recorder_widget.dart';
 import '../providers/signalr_provider.dart';
 import '../../data/models/message_model.dart';
 import '../../core/themes/app_theme.dart';
+import '../../core/constants/api_constants.dart';
 
 enum RecordingState { idle, recording, locked }
 enum HapticType { light, medium, heavy, selection }
@@ -1144,6 +1146,8 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
   /// Build reply preview widget
   Widget _buildReplyPreview() {
     final message = widget.replyToMessage!;
+    final hasImage = message.type == MessageType.image && 
+                     (message.filePath != null || message.localImagePath != null);
     
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1158,6 +1162,15 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
       ),
       child: Row(
         children: [
+          // Image thumbnail if replying to image message
+          if (hasImage)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: _buildReplyImageThumbnail(message),
+              ),
+            ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1173,7 +1186,7 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  message.getPreviewText(),
+                  _getReplyPreviewText(message),
                   style: TextStyle(
                     color: Theme.of(context).textTheme.bodySmall?.color,
                     fontSize: 12,
@@ -1193,6 +1206,59 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
         ],
       ),
     );
+  }
+  
+  Widget _buildReplyImageThumbnail(Message message) {
+    // Try local image first
+    if (message.localImagePath != null && File(message.localImagePath!).existsSync()) {
+      return Image.file(
+        File(message.localImagePath!),
+        width: 40,
+        height: 40,
+        fit: BoxFit.cover,
+      );
+    }
+    
+    // Then try network image
+    if (message.filePath != null) {
+      return CachedNetworkImage(
+        imageUrl: '${ApiConstants.baseUrl}${message.filePath}',
+        width: 40,
+        height: 40,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(
+          width: 40,
+          height: 40,
+          color: Colors.grey[300],
+        ),
+        errorWidget: (context, url, error) => Container(
+          width: 40,
+          height: 40,
+          color: Colors.grey[300],
+          child: const Icon(Icons.image, size: 20),
+        ),
+      );
+    }
+    
+    return Container(
+      width: 40,
+      height: 40,
+      color: Colors.grey[300],
+      child: const Icon(Icons.image, size: 20),
+    );
+  }
+  
+  String _getReplyPreviewText(Message message) {
+    switch (message.type) {
+      case MessageType.text:
+        return message.content ?? '';
+      case MessageType.audio:
+        return '🎤 Голосовое сообщение';
+      case MessageType.image:
+        return '📷 Фото';
+      case MessageType.file:
+        return '📎 ${message.originalFileName ?? "Файл"}';
+    }
   }
   
   /// Build edit preview widget

@@ -506,8 +506,8 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     if (authState.isLoading) {
       return MaterialApp(
         title: 'Депеша',
-        theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.darkTheme,
+        theme: themeState.lightTheme,
+        darkTheme: themeState.darkTheme,
         themeMode: themeState.flutterThemeMode,
         home: const Scaffold(
           body: Center(
@@ -520,8 +520,8 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     return MaterialApp(
       navigatorKey: navigatorKey,
       title: 'Депеша',
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
+      theme: themeState.lightTheme,
+      darkTheme: themeState.darkTheme,
       themeMode: themeState.flutterThemeMode,
       debugShowCheckedModeBanner: false,
       home: authState.isAuthenticated
