@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import '../models/auth_response.dart';
 import '../models/chat_model.dart';
 import '../models/message_model.dart';
+import '../models/message_receipts_model.dart';
 import '../models/user_profile_model.dart';
 import '../models/invite_link_model.dart';
 import '../models/participant_model.dart';
@@ -314,6 +315,20 @@ class ApiDataSource {
       );
     } catch (e) {
       throw Exception('Failed to mark audio as played: $e');
+    }
+  }
+  
+  /// Get delivery receipts for a message (who delivered, who read, when)
+  /// Used for group chats to show message status per participant (like WhatsApp)
+  Future<MessageReceiptsResponse> getMessageReceipts(String messageId) async {
+    try {
+      final response = await _dio.get(
+        '${ApiConstants.messages}/$messageId/receipts',
+      );
+      return MessageReceiptsResponse.fromJson(response.data);
+    } catch (e) {
+      print('[API] Failed to get message receipts: $e');
+      throw Exception('Failed to get message receipts: $e');
     }
   }
 

@@ -1193,6 +1193,90 @@ public class MessagesController : ControllerBase
         return Ok(new { message = "Audio message marked as played" });
     }
     
+    /// <summary>
+    /// Get delivery receipts for a message (who delivered, who read, when)
+    /// Used for group chats to show message status per participant (like WhatsApp)
+    /// </summary>
+    [HttpGet("{messageId}/receipts")]
+    public async Task<ActionResult<MessageReceiptsDto>> GetMessageReceipts(Guid messageId)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            var message = await _unitOfWork.Messages.GetByIdAsync(messageId);
+            
+            if (message == null)
+            {
+                return NotFound(new { message = "Message not found" });
+            }
+            
+            // Only sender can view receipts of their own messages
+            if (message.SenderId != userId)
+            {
+                return Forbid();
+            }
+            
+            // Get the chat to know participants
+            var chat = await _unitOfWork.Chats.GetByIdAsync(message.ChatId);
+            if (chat == null)
+            {
+                return NotFound(new { message = "Chat not found" });
+            }
+            
+            // Get all delivery receipts for this message
+            var receipts = await _unitOfWork.DeliveryReceipts.GetReceiptsForMessageAsync(messageId);
+            
+            // Build response with participant info
+            var participantReceipts = new List<ParticipantReceiptDto>();
+            
+            foreach (var participant in chat.Participants)
+            {
+                // Skip sender
+                if (participant.UserId == message.SenderId) continue;
+                
+                var user = await _unitOfWork.Users.GetByIdAsync(participant.UserId);
+                var receipt = receipts.FirstOrDefault(r => r.UserId == participant.UserId);
+                
+                participantReceipts.Add(new ParticipantReceiptDto
+                {
+                    UserId = participant.UserId,
+                    UserName = user?.DisplayName ?? "Unknown",
+                    UserAvatar = user?.Avatar,
+                    DeliveredAt = receipt?.DeliveredAt,
+                    ReadAt = receipt?.ReadAt,
+                    PlayedAt = receipt?.PlayedAt,
+                });
+            }
+            
+            // Sort: unread first, then by read time descending
+            participantReceipts = participantReceipts
+                .OrderBy(r => r.ReadAt.HasValue ? 1 : 0)
+                .ThenByDescending(r => r.ReadAt ?? r.DeliveredAt ?? DateTime.MinValue)
+                .ToList();
+            
+            var result = new MessageReceiptsDto
+            {
+                MessageId = messageId,
+                ChatId = message.ChatId,
+                IsGroupChat = chat.Type == ChatType.Group,
+                TotalParticipants = chat.Participants.Count - 1, // Exclude sender
+                DeliveredCount = participantReceipts.Count(r => r.DeliveredAt.HasValue),
+                ReadCount = participantReceipts.Count(r => r.ReadAt.HasValue),
+                PlayedCount = participantReceipts.Count(r => r.PlayedAt.HasValue),
+                Receipts = participantReceipts,
+            };
+            
+            _logger.LogInformation($"GetMessageReceipts: message {messageId}, {result.DeliveredCount} delivered, {result.ReadCount} read");
+            
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Error getting receipts for message {messageId}");
+            return StatusCode(500, "Error getting message receipts");
+        }
+    }
+    
     [HttpDelete("{messageId}")]
     public async Task<IActionResult> DeleteMessage(Guid messageId)
     {

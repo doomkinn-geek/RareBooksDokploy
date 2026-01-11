@@ -25,6 +25,7 @@ import '../widgets/chat_background.dart';
 import 'group_settings_screen.dart';
 import 'user_profile_screen.dart';
 import 'forward_message_screen.dart';
+import 'message_info_screen.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final String chatId;
@@ -502,11 +503,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     bool isMyMessage,
     Offset position,
   ) {
+    final currentChat = ref.read(chatsProvider).chats.where((c) => c.id == widget.chatId).firstOrNull;
+    final isGroupChat = currentChat?.type == ChatType.group;
+    
     showMessageContextMenu(
       context: context,
       message: message,
       isMyMessage: isMyMessage,
       position: position,
+      isGroupChat: isGroupChat,
       onAction: (action) => _handleMessageAction(action, message),
     );
   }
@@ -567,6 +572,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         
       case MessageAction.copy:
         // Handled in context menu widget
+        break;
+        
+      case MessageAction.info:
+        // Show message info screen (delivery receipts)
+        final currentChat = ref.read(chatsProvider).chats.where((c) => c.id == widget.chatId).firstOrNull;
+        if (currentChat != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => MessageInfoScreen(
+                message: message,
+                chatTitle: currentChat.title,
+              ),
+            ),
+          );
+        }
         break;
     }
   }

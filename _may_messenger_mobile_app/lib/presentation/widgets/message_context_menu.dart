@@ -9,12 +9,14 @@ enum MessageAction {
   edit,
   delete,
   copy,
+  info, // Show message delivery/read info (for group chats)
 }
 
 /// Context menu for message actions
 class MessageContextMenu extends StatelessWidget {
   final Message message;
   final bool isMyMessage;
+  final bool isGroupChat;
   final Function(MessageAction) onAction;
   final VoidCallback onDismiss;
 
@@ -22,6 +24,7 @@ class MessageContextMenu extends StatelessWidget {
     super.key,
     required this.message,
     required this.isMyMessage,
+    this.isGroupChat = false,
     required this.onAction,
     required this.onDismiss,
   });
@@ -70,6 +73,14 @@ class MessageContextMenu extends StatelessWidget {
                 Icons.copy,
                 'Копировать',
                 MessageAction.copy,
+              ),
+            // Show info option for sender's own messages in group chats
+            if (isMyMessage && isGroupChat && !message.isLocalOnly)
+              _buildMenuItem(
+                context,
+                Icons.info_outline,
+                'Информация',
+                MessageAction.info,
               ),
             if (isMyMessage && !message.isDeleted)
               _buildMenuItem(
@@ -137,6 +148,7 @@ void showMessageContextMenu({
   required bool isMyMessage,
   required Offset position,
   required Function(MessageAction) onAction,
+  bool isGroupChat = false,
 }) {
   final overlay = Overlay.of(context);
   late OverlayEntry overlayEntry;
@@ -159,6 +171,7 @@ void showMessageContextMenu({
             child: MessageContextMenu(
               message: message,
               isMyMessage: isMyMessage,
+              isGroupChat: isGroupChat,
               onAction: onAction,
               onDismiss: () => overlayEntry.remove(),
             ),

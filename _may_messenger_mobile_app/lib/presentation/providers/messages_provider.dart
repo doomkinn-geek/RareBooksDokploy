@@ -484,9 +484,10 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     
     // OPTIMIZED TIMEOUT thresholds for better UX
     // User should get feedback quickly, but not falsely mark as failed
-    const warningTimeout = Duration(seconds: 10);  // Log warning early
-    const retryTimeout = Duration(seconds: 20);    // Trigger retry if still stuck
-    const failureTimeout = Duration(seconds: 30);  // Mark as failed after 30s
+    const warningTimeout = Duration(seconds: 15);  // Log warning early
+    const retryTimeout = Duration(seconds: 30);    // Trigger retry if still stuck  
+    const failureTimeout = Duration(seconds: 60);  // Mark as failed after 60s (increased from 30s)
+    const serverCheckTimeout = Duration(seconds: 45); // Check server before marking failed
     
     if (messageAge < warningTimeout) {
       // Still within normal sync window
@@ -508,15 +509,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
           // Already marked as failed, update UI
           updateMessageStatus(message.id, MessageStatus.failed, force: true);
           print('[OUTGOING_STATUS] Message ${message.id} marked as failed (outbox state: failed)');
-        } else if (messageAge >= failureTimeout) {
-          // Timeout exceeded - mark as failed
-          await _outboxRepository.markAsFailed(
-            message.id, 
-            'Message stuck in sending state for ${messageAge.inSeconds}s'
-          );
-          updateMessageStatus(message.id, MessageStatus.failed, force: true);
-          print('[OUTGOING_STATUS] Message ${message.id} marked as failed (timeout after ${messageAge.inSeconds}s)');
-        } else if (messageAge >= retryTimeout) {
+        } else if (messageAge >= retryTimeout && messageAge < failureTimeout) {
           // Trigger retry if not already pending
           if (!_pendingSends.contains(message.id) && 
               !_pendingSends.contains(message.localId ?? '')) {
@@ -529,20 +522,72 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
               print('[OUTGOING_STATUS] Automatic retry failed: $e');
             }
           }
+        } else if (messageAge >= failureTimeout) {
+          // Timeout exceeded - mark as failed
+          await _outboxRepository.markAsFailed(
+            message.id, 
+            'Message stuck in sending state for ${messageAge.inSeconds}s'
+          );
+          updateMessageStatus(message.id, MessageStatus.failed, force: true);
+          print('[OUTGOING_STATUS] Message ${message.id} marked as failed (timeout after ${messageAge.inSeconds}s)');
         }
       } else {
         // Not in outbox - message might have been synced but UI not updated
-        // Try to find it on server by clientMessageId
-        if (message.clientMessageId != null) {
+        // This is a CRITICAL case: the message was sent to server but local state wasn't updated
+        
+        // First, check if we have a server ID mapping for this local message
+        final serverId = _localToServerIdMap[message.id] ?? _localToServerIdMap[message.localId ?? ''];
+        if (serverId != null) {
+          // We have a server ID - message was successfully sent!
+          // Update the local message with proper status
+          print('[OUTGOING_STATUS] Found server ID mapping for stuck message: ${message.id} -> $serverId');
+          
           try {
-            // This will update the UI if found
+            // Get status from server
+            final statuses = await _messageRepository.getMessageStatuses([serverId]);
+            final serverStatus = statuses[serverId];
+            
+            if (serverStatus != null) {
+              // Update local message with server status
+              final messageIndex = _findMessageIndex(message.id);
+              if (messageIndex != -1) {
+                final updatedMessages = [...state.messages];
+                updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
+                  id: serverId,
+                  status: serverStatus,
+                  isLocalOnly: false,
+                );
+                state = state.copyWith(messages: updatedMessages);
+                print('[OUTGOING_STATUS] ✅ Fixed stuck message: ${message.id} -> $serverId, status: $serverStatus');
+              }
+              return; // Don't mark as failed - it was successful!
+            }
+          } catch (e) {
+            print('[OUTGOING_STATUS] Failed to get status for mapped server ID: $e');
+          }
+        }
+        
+        // Try to find it on server by clientMessageId (incremental sync)
+        if (message.clientMessageId != null && messageAge >= serverCheckTimeout) {
+          try {
+            print('[OUTGOING_STATUS] Performing incremental sync to find stuck message with clientMessageId: ${message.clientMessageId}');
             await _performIncrementalSync();
+            
+            // Check if message is now found and updated
+            final updatedMessage = state.messages.where((m) => 
+              m.id == message.id || m.localId == message.id || m.clientMessageId == message.clientMessageId
+            ).firstOrNull;
+            
+            if (updatedMessage != null && updatedMessage.status != MessageStatus.sending) {
+              print('[OUTGOING_STATUS] ✅ Stuck message found via incremental sync: ${message.id}, status: ${updatedMessage.status}');
+              return; // Message was found and updated
+            }
           } catch (e) {
             print('[OUTGOING_STATUS] Incremental sync failed for stuck message: $e');
           }
         }
         
-        // If still in sending state after sync attempt and timeout exceeded, mark as failed
+        // If still in sending state after all checks and timeout exceeded, mark as failed
         if (messageAge >= failureTimeout) {
           final currentMessage = state.messages.where((m) => m.id == message.id).firstOrNull;
           if (currentMessage != null && currentMessage.status == MessageStatus.sending) {

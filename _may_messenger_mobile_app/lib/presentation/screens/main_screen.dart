@@ -188,11 +188,16 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   }
 
   Widget _buildChatList(List chats, bool isLoading, String? error) {
+    final chatsState = ref.watch(chatsProvider);
+    final isOfflineMode = chatsState.isOfflineMode;
+    final isSyncing = chatsState.isSyncing;
+    final syncError = chatsState.syncError;
+    
     if (isLoading && chats.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    // If there's an error but we have cached chats, show them with an error banner
+    // If there's a blocking error and no chats at all
     if (error != null && chats.isEmpty) {
       return Center(
         child: Padding(
@@ -231,11 +236,33 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       );
     }
 
-    // Show chats even if there's an error (offline mode with cached data)
+    // Show chats with offline/sync status banner
     return Column(
       children: [
-        // Error banner when offline but have cached chats
-        if (error != null)
+        // Syncing indicator (non-blocking)
+        if (isSyncing)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            color: Colors.blue.shade100,
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'Синхронизация...',
+                  style: TextStyle(fontSize: 12, color: Colors.blue),
+                ),
+              ],
+            ),
+          ),
+        // Offline mode banner (with sync error if any)
+        if (isOfflineMode || syncError != null)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -246,11 +273,13 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    error,
+                    syncError ?? 'Работа в офлайн режиме',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 12,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 IconButton(
@@ -266,28 +295,28 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           child: RefreshIndicator(
             onRefresh: () => ref.read(chatsProvider.notifier).loadChats(forceRefresh: true),
             child: ListView.builder(
-        itemCount: chats.length,
-        itemBuilder: (context, index) {
-          final chat = chats[index];
-          
-          return ChatListItem(
-            chat: chat,
-            onTap: () async {
-              // Navigate to chat screen
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => ChatScreen(chatId: chat.id),
-                ),
-              );
-              
-              // CRITICAL: Refresh chats from server when returning from chat
-              // This ensures unread counts and last messages are accurate
-              if (mounted) {
-                await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
-              }
-            },
-          );
-        },
+              itemCount: chats.length,
+              itemBuilder: (context, index) {
+                final chat = chats[index];
+                
+                return ChatListItem(
+                  chat: chat,
+                  onTap: () async {
+                    // Navigate to chat screen
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => ChatScreen(chatId: chat.id),
+                      ),
+                    );
+                    
+                    // CRITICAL: Refresh chats from server when returning from chat
+                    // This ensures unread counts and last messages are accurate
+                    if (mounted) {
+                      await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+                    }
+                  },
+                );
+              },
             ),
           ),
         ),

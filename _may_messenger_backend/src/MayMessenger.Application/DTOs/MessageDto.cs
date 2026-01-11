@@ -52,4 +52,32 @@ public class ReplyMessageDto
     public string? OriginalFileName { get; set; }
 }
 
+/// <summary>
+/// DTO for message receipts (delivery/read status per participant)
+/// </summary>
+public class MessageReceiptsDto
+{
+    public Guid MessageId { get; set; }
+    public Guid ChatId { get; set; }
+    public bool IsGroupChat { get; set; }
+    public int TotalParticipants { get; set; }
+    public int DeliveredCount { get; set; }
+    public int ReadCount { get; set; }
+    public int PlayedCount { get; set; }
+    public List<ParticipantReceiptDto> Receipts { get; set; } = new();
+}
+
+/// <summary>
+/// DTO for individual participant's receipt status
+/// </summary>
+public class ParticipantReceiptDto
+{
+    public Guid UserId { get; set; }
+    public string UserName { get; set; } = string.Empty;
+    public string? UserAvatar { get; set; }
+    public DateTime? DeliveredAt { get; set; }
+    public DateTime? ReadAt { get; set; }
+    public DateTime? PlayedAt { get; set; }
+}
+
 

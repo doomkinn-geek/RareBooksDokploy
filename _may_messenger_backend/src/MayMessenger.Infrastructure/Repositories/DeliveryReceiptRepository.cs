@@ -38,4 +38,13 @@ public class DeliveryReceiptRepository : Repository<DeliveryReceipt>, IDeliveryR
             .Include(r => r.User)
             .ToListAsync(cancellationToken);
     }
+    
+    public async Task<List<DeliveryReceipt>> GetReceiptsForMessageAsync(Guid messageId, CancellationToken cancellationToken = default)
+    {
+        return await _context.DeliveryReceipts
+            .Where(r => r.MessageId == messageId)
+            .Include(r => r.User)
+            .OrderByDescending(r => r.ReadAt ?? r.DeliveredAt ?? DateTime.MinValue)
+            .ToListAsync(cancellationToken);
+    }
 }

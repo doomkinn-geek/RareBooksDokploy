@@ -12,23 +12,35 @@ final chatsProvider = StateNotifierProvider<ChatsNotifier, ChatsState>((ref) {
 class ChatsState {
   final List<Chat> chats;
   final bool isLoading;
+  final bool isSyncing; // Background sync in progress
+  final bool isOfflineMode; // Data is from cache, not server
   final String? error;
+  final String? syncError; // Non-fatal sync error (shown as banner, not blocking)
 
   ChatsState({
     this.chats = const [],
     this.isLoading = false,
+    this.isSyncing = false,
+    this.isOfflineMode = false,
     this.error,
+    this.syncError,
   });
 
   ChatsState copyWith({
     List<Chat>? chats,
     bool? isLoading,
+    bool? isSyncing,
+    bool? isOfflineMode,
     String? error,
+    String? syncError,
   }) {
     return ChatsState(
       chats: chats ?? this.chats,
       isLoading: isLoading ?? this.isLoading,
+      isSyncing: isSyncing ?? this.isSyncing,
+      isOfflineMode: isOfflineMode ?? this.isOfflineMode,
       error: error,
+      syncError: syncError,
     );
   }
 
@@ -50,57 +62,97 @@ class ChatsNotifier extends StateNotifier<ChatsState> {
   }
 
   Future<void> loadChats({bool forceRefresh = false}) async {
-    state = state.copyWith(isLoading: true, error: null);
+    // Don't set loading if we already have chats (smoother UX)
+    final hasExistingChats = state.chats.isNotEmpty;
+    
+    if (!hasExistingChats) {
+      state = state.copyWith(isLoading: true, error: null, syncError: null);
+    } else {
+      // Show syncing indicator instead of full loading
+      state = state.copyWith(isSyncing: true, syncError: null);
+    }
+    
     try {
-      final List<Chat> serverChats = await _chatRepository.getChats(forceRefresh: forceRefresh);
+      final List<Chat> fetchedChats = await _chatRepository.getChats(forceRefresh: forceRefresh);
       
       // Preserve locally cleared unread counts
-      final List<Chat> chats = serverChats.map((chat) {
-        if (_locallyReadChats.contains(chat.id)) {
-          // Keep unread count at 0 if we've locally marked it as read
-          return Chat(
-            id: chat.id,
-            type: chat.type,
-            title: chat.title,
-            avatar: chat.avatar,
-            lastMessage: chat.lastMessage,
-            unreadCount: 0,
-            createdAt: chat.createdAt,
-            otherParticipantId: chat.otherParticipantId,
-            otherParticipantAvatar: chat.otherParticipantAvatar,
-            otherParticipantIsOnline: chat.otherParticipantIsOnline,
-            otherParticipantLastSeenAt: chat.otherParticipantLastSeenAt,
-          );
-        }
-        return chat;
-      }).toList();
+      final List<Chat> chats = _applyLocallyReadChats(fetchedChats);
       
       // Clear _locallyReadChats if server confirms unread is 0
-      final chatsToClear = <String>[];
-      for (final chatId in _locallyReadChats) {
-        final serverChat = serverChats.firstWhere(
-          (c) => c.id == chatId, 
-          orElse: () => Chat(id: '', type: ChatType.private, title: '', unreadCount: 0, createdAt: DateTime.now())
-        );
-        if (serverChat.id.isNotEmpty && serverChat.unreadCount == 0) {
-          chatsToClear.add(chatId);
-        }
-      }
-      for (final chatId in chatsToClear) {
-        _locallyReadChats.remove(chatId);
-      }
+      _syncLocallyReadChats(fetchedChats);
       
       state = state.copyWith(
         chats: chats,
         isLoading: false,
+        isSyncing: false,
+        isOfflineMode: false,
+        error: null,
+        syncError: null,
       );
     } catch (e) {
+      print('[ChatsProvider] loadChats error: $e');
       final userFriendlyError = formatUserFriendlyError(e);
-      state = state.copyWith(
-        isLoading: false,
-        error: userFriendlyError,
-      );
+      
+      // If we have existing chats, show them with sync error (not blocking error)
+      if (hasExistingChats) {
+        state = state.copyWith(
+          isLoading: false,
+          isSyncing: false,
+          isOfflineMode: true,
+          syncError: userFriendlyError,
+        );
+      } else {
+        // No chats at all - this is a blocking error
+        state = state.copyWith(
+          isLoading: false,
+          isSyncing: false,
+          error: userFriendlyError,
+        );
+      }
     }
+  }
+  
+  /// Apply locally read chat tracking to preserve unread=0
+  List<Chat> _applyLocallyReadChats(List<Chat> serverChats) {
+    return serverChats.map((chat) {
+      if (_locallyReadChats.contains(chat.id)) {
+        // Keep unread count at 0 if we've locally marked it as read
+        return chat.copyWith(unreadCount: 0);
+      }
+      return chat;
+    }).toList();
+  }
+  
+  /// Sync locally read tracking with server state
+  void _syncLocallyReadChats(List<Chat> serverChats) {
+    final chatsToClear = <String>[];
+    for (final chatId in _locallyReadChats) {
+      final serverChat = serverChats.firstWhere(
+        (c) => c.id == chatId, 
+        orElse: () => Chat(id: '', type: ChatType.private, title: '', unreadCount: 0, createdAt: DateTime.now())
+      );
+      if (serverChat.id.isNotEmpty && serverChat.unreadCount == 0) {
+        chatsToClear.add(chatId);
+      }
+    }
+    for (final chatId in chatsToClear) {
+      _locallyReadChats.remove(chatId);
+    }
+  }
+  
+  /// Handle background sync completion from repository
+  void onBackgroundSyncComplete(List<Chat> serverChats) {
+    print('[ChatsProvider] Background sync completed with ${serverChats.length} chats');
+    
+    final chats = _applyLocallyReadChats(serverChats);
+    _syncLocallyReadChats(serverChats);
+    
+    state = state.copyWith(
+      chats: chats,
+      isSyncing: false,
+      isOfflineMode: false,
+      syncError: null,
+    );
   }
 
   Future<Chat?> createChat({
