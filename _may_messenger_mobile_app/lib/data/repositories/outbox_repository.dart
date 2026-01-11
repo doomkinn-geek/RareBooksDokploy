@@ -203,20 +203,24 @@ class OutboxRepository {
   /// Add a new message to the outbox queue
   /// Uses atomic operation to prevent corruption
   /// Supports all message types: text, audio, image, file
+  /// [localId] - if provided, uses this ID instead of generating a new one (important for deduplication)
+  /// [initialSyncState] - initial sync state (default: syncing to prevent double-sync by OutboxSyncService)
   Future<PendingMessage> addToOutbox({
     required String chatId,
     required MessageType type,
+    String? localId,
     String? content,
     String? localAudioPath,
     String? localImagePath,
     String? localFilePath,
     String? originalFileName,
     String? replyToMessageId,
+    SyncState initialSyncState = SyncState.syncing, // Default to syncing to prevent OutboxSync from picking it up
   }) async {
     await initialize(); // Ensure initialized before operations
     
     final pendingMessage = PendingMessage(
-      localId: _uuid.v4(),
+      localId: localId ?? _uuid.v4(),
       chatId: chatId,
       type: type,
       content: content,
@@ -225,7 +229,7 @@ class OutboxRepository {
       localFilePath: localFilePath,
       originalFileName: originalFileName,
       replyToMessageId: replyToMessageId,
-      syncState: SyncState.localOnly,
+      syncState: initialSyncState,
       createdAt: DateTime.now(),
     );
 

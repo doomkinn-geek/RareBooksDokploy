@@ -7,6 +7,7 @@ using MayMessenger.Domain.Entities;
 using MayMessenger.Domain.Enums;
 using MayMessenger.Domain.Interfaces;
 using MayMessenger.API.Hubs;
+using MayMessenger.API.Services;
 
 namespace MayMessenger.API.Controllers;
 
@@ -22,6 +23,7 @@ public class MessagesController : ControllerBase
     private readonly MayMessenger.Application.Services.IImageCompressionService _imageCompressionService;
     private readonly ILogger<MessagesController> _logger;
     private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly UserConnectionService _userConnectionService;
     
     public MessagesController(
         IUnitOfWork unitOfWork, 
@@ -30,7 +32,8 @@ public class MessagesController : ControllerBase
         MayMessenger.Application.Services.IFirebaseService firebaseService,
         MayMessenger.Application.Services.IImageCompressionService imageCompressionService,
         ILogger<MessagesController> logger,
-        IServiceScopeFactory serviceScopeFactory)
+        IServiceScopeFactory serviceScopeFactory,
+        UserConnectionService userConnectionService)
     {
         _unitOfWork = unitOfWork;
         _environment = environment;
@@ -38,6 +41,7 @@ public class MessagesController : ControllerBase
         _firebaseService = firebaseService;
         _imageCompressionService = imageCompressionService;
         _logger = logger;
+        _userConnectionService = userConnectionService;
         _serviceScopeFactory = serviceScopeFactory;
     }
     
@@ -332,13 +336,15 @@ public class MessagesController : ControllerBase
                     var messageDto = MapToMessageDto(message, sender);
                     
                     // Send SignalR notification (non-blocking, outside transaction)
+                    // IMPORTANT: Exclude sender to prevent duplicate messages
+                    var senderIdForSignalR = userId;
+                    var chatIdForSignalR = dto.ChatId;
                     _ = Task.Run(async () =>
                     {
                         try
                         {
-                            await _hubContext.Clients.Group(dto.ChatId.ToString())
-                                .SendAsync("ReceiveMessage", messageDto);
-                            _logger.LogInformation($"SignalR sent for {message.Id}");
+                            await SendToGroupExceptSenderAsync(chatIdForSignalR, senderIdForSignalR, "ReceiveMessage", messageDto);
+                            _logger.LogInformation($"SignalR sent for {message.Id} (excluding sender)");
                         }
                         catch (Exception ex)
                         {
@@ -451,13 +457,14 @@ public class MessagesController : ControllerBase
         var messageDto = MapToMessageDto(message, sender);
         
         // Send SignalR notification ONLY to group (not to individual users to avoid duplicates)
+        // IMPORTANT: Exclude sender to prevent duplicate messages
         var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
         if (chat != null)
         {
             // Create pending acks for reliable delivery
             await CreatePendingAcksForMessage(chat, message, userId, AckType.Message);
             
-            await _hubContext.Clients.Group(chatId.ToString()).SendAsync("ReceiveMessage", messageDto);
+            await SendToGroupExceptSenderAsync(chatId, userId, "ReceiveMessage", messageDto);
             
             // Fetch FCM tokens before sending push notifications
             var userTokensForPush = new Dictionary<Guid, List<Domain.Entities.FcmToken>>();
@@ -532,13 +539,14 @@ public class MessagesController : ControllerBase
             var messageDto = MapToMessageDto(message, sender);
             
             // Send SignalR notification ONLY to group
+            // IMPORTANT: Exclude sender to prevent duplicate messages
             var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
             if (chat != null)
             {
                 // Create pending acks for reliable delivery
                 await CreatePendingAcksForMessage(chat, message, userId, AckType.Message);
                 
-                await _hubContext.Clients.Group(chatId.ToString()).SendAsync("ReceiveMessage", messageDto);
+                await SendToGroupExceptSenderAsync(chatId, userId, "ReceiveMessage", messageDto);
                 
                 // Fetch FCM tokens before sending push notifications
                 var userTokensForPush = new Dictionary<Guid, List<Domain.Entities.FcmToken>>();
@@ -627,11 +635,12 @@ public class MessagesController : ControllerBase
             var messageDto = MapToMessageDto(message, sender);
             
             // Send SignalR notification
+            // IMPORTANT: Exclude sender to prevent duplicate messages
             var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
             if (chat != null)
             {
                 await CreatePendingAcksForMessage(chat, message, userId, AckType.Message);
-                await _hubContext.Clients.Group(chatId.ToString()).SendAsync("ReceiveMessage", messageDto);
+                await SendToGroupExceptSenderAsync(chatId, userId, "ReceiveMessage", messageDto);
                 
                 // Fetch FCM tokens for push notifications
                 var userTokensForPush = new Dictionary<Guid, List<Domain.Entities.FcmToken>>();
@@ -1451,8 +1460,8 @@ public class MessagesController : ControllerBase
         var messageDto = MapToMessageDto(forwardedMessage, currentUser);
         
         // Notify via SignalR
-        await _hubContext.Clients.Group(request.TargetChatId.ToString())
-            .SendAsync("ReceiveMessage", messageDto);
+        // IMPORTANT: Exclude sender to prevent duplicate messages
+        await SendToGroupExceptSenderAsync(request.TargetChatId, userId, "ReceiveMessage", messageDto);
         
         // Send push notifications to other participants (not the sender)
         var userTokensForPush = await GetFcmTokensForChatAsync(targetChat, userId);
@@ -1832,6 +1841,30 @@ public class MessagesController : ControllerBase
             }
         }
         return userTokensForPush;
+    }
+    
+    /// <summary>
+    /// Send SignalR message to chat group, excluding the sender's connections
+    /// This prevents the sender from receiving their own message via SignalR
+    /// </summary>
+    private async Task SendToGroupExceptSenderAsync(Guid chatId, Guid senderId, string method, object arg)
+    {
+        var senderConnections = _userConnectionService.GetConnections(senderId);
+        
+        if (senderConnections.Count > 0)
+        {
+            // Exclude sender's connections
+            await _hubContext.Clients.GroupExcept(chatId.ToString(), senderConnections)
+                .SendAsync(method, arg);
+            _logger.LogDebug($"[SignalR] Sent {method} to group {chatId}, excluding {senderConnections.Count} sender connections");
+        }
+        else
+        {
+            // No sender connections to exclude, send to whole group
+            await _hubContext.Clients.Group(chatId.ToString())
+                .SendAsync(method, arg);
+            _logger.LogDebug($"[SignalR] Sent {method} to group {chatId} (sender has no connections)");
+        }
     }
 
     /// <summary>

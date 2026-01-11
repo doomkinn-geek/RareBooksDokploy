@@ -19,13 +19,15 @@ import '../widgets/message_input.dart';
 import '../widgets/connection_status_indicator.dart';
 import '../widgets/typing_animation.dart';
 import '../widgets/date_separator.dart';
-import '../widgets/message_context_menu.dart';
 import '../widgets/swipeable_message.dart';
 import '../widgets/chat_background.dart';
+import '../widgets/message_selection_app_bar.dart';
+import '../../core/services/share_send_service.dart';
 import 'group_settings_screen.dart';
 import 'user_profile_screen.dart';
 import 'forward_message_screen.dart';
 import 'message_info_screen.dart';
+import 'package:flutter/services.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final String chatId;
@@ -58,6 +60,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   // Edit mode state
   Message? _editingMessage;
   final TextEditingController _editController = TextEditingController();
+  
+  // Selection mode state (Telegram-style multi-select)
+  final Set<String> _selectedMessageIds = {};
+  bool get _isSelectionMode => _selectedMessageIds.isNotEmpty;
+  
+  /// Get selected messages
+  List<Message> get _selectedMessages {
+    final messages = ref.read(messagesProvider(widget.chatId)).messages;
+    return messages.where((m) => _selectedMessageIds.contains(m.id)).toList();
+  }
 
   @override
   void initState() {
@@ -496,100 +508,181 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
   }
   
-  /// Show context menu for message
-  void _showMessageContextMenu(
-    BuildContext context,
-    Message message,
-    bool isMyMessage,
-    Offset position,
-  ) {
-    final currentChat = ref.read(chatsProvider).chats.where((c) => c.id == widget.chatId).firstOrNull;
-    final isGroupChat = currentChat?.type == ChatType.group;
-    
-    showMessageContextMenu(
-      context: context,
-      message: message,
-      isMyMessage: isMyMessage,
-      position: position,
-      isGroupChat: isGroupChat,
-      onAction: (action) => _handleMessageAction(action, message),
-    );
+  // ==================== SELECTION MODE ====================
+  
+  /// Toggle message selection
+  void _toggleMessageSelection(String messageId) {
+    setState(() {
+      if (_selectedMessageIds.contains(messageId)) {
+        _selectedMessageIds.remove(messageId);
+      } else {
+        _selectedMessageIds.add(messageId);
+      }
+    });
   }
   
-  /// Handle context menu action
-  Future<void> _handleMessageAction(MessageAction action, Message message) async {
-    switch (action) {
-      case MessageAction.reply:
-        _setReplyToMessage(message);
-        break;
-        
-      case MessageAction.forward:
-        final targetChatId = await Navigator.of(context).push<String>(
-          MaterialPageRoute(
-            builder: (context) => ForwardMessageScreen(message: message),
-          ),
-        );
-        if (targetChatId != null) {
-          await ref.read(messagesProvider(targetChatId).notifier).forwardMessage(
-            originalMessage: message,
-            targetChatId: targetChatId,
-          );
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Сообщение переслано')),
-            );
-          }
-        }
-        break;
-        
-      case MessageAction.edit:
-        _startEditing(message);
-        break;
-        
-      case MessageAction.delete:
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Удалить сообщение?'),
-            content: const Text('Сообщение будет удалено безвозвратно.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Отмена'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: const Text('Удалить'),
-              ),
-            ],
-          ),
-        );
-        if (confirmed == true) {
-          await ref.read(messagesProvider(widget.chatId).notifier).deleteMessage(message.id);
-        }
-        break;
-        
-      case MessageAction.copy:
-        // Handled in context menu widget
-        break;
-        
-      case MessageAction.info:
-        // Show message info screen (delivery receipts)
-        final currentChat = ref.read(chatsProvider).chats.where((c) => c.id == widget.chatId).firstOrNull;
-        if (currentChat != null) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => MessageInfoScreen(
-                message: message,
-                chatTitle: currentChat.title,
-              ),
-            ),
-          );
-        }
-        break;
-    }
+  /// Start selection mode with a message
+  void _startSelectionMode(String messageId) {
+    setState(() {
+      _selectedMessageIds.clear();
+      _selectedMessageIds.add(messageId);
+    });
   }
+  
+  /// Clear selection and exit selection mode
+  void _clearSelection() {
+    setState(() {
+      _selectedMessageIds.clear();
+    });
+  }
+  
+  /// Handle copy action for selected messages
+  void _handleSelectionCopy() {
+    final selected = _selectedMessages;
+    if (selected.isEmpty) return;
+    
+    // Collect text content from all selected messages
+    final textContent = selected
+        .where((m) => m.type == MessageType.text && m.content != null)
+        .map((m) => m.content!)
+        .join('\n\n');
+    
+    if (textContent.isNotEmpty) {
+      Clipboard.setData(ClipboardData(text: textContent));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Скопировано'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
+    
+    _clearSelection();
+  }
+  
+  /// Handle forward action for selected messages
+  Future<void> _handleSelectionForward() async {
+    final selected = _selectedMessages;
+    if (selected.isEmpty) return;
+    
+    // For now, forward only the first message (multi-forward can be added later)
+    final targetChatId = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (context) => ForwardMessageScreen(message: selected.first),
+      ),
+    );
+    
+    if (targetChatId != null) {
+      for (final message in selected) {
+        await ref.read(messagesProvider(targetChatId).notifier).forwardMessage(
+          originalMessage: message,
+          targetChatId: targetChatId,
+        );
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Переслано ${selected.length} сообщение(й)')),
+        );
+      }
+    }
+    
+    _clearSelection();
+  }
+  
+  /// Handle delete action for selected messages
+  Future<void> _handleSelectionDelete() async {
+    final selected = _selectedMessages;
+    if (selected.isEmpty) return;
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Удалить ${selected.length} сообщение(й)?'),
+        content: const Text('Сообщения будут удалены безвозвратно.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true) {
+      for (final message in selected) {
+        await ref.read(messagesProvider(widget.chatId).notifier).deleteMessage(message.id);
+      }
+    }
+    
+    _clearSelection();
+  }
+  
+  /// Handle share action for selected messages
+  Future<void> _handleSelectionShare() async {
+    final selected = _selectedMessages;
+    if (selected.isEmpty) return;
+    
+    try {
+      final shareSendService = ref.read(shareSendServiceProvider);
+      await shareSendService.shareMessages(selected);
+    } catch (e) {
+      print('[ChatScreen] Error sharing messages: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка при отправке: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+    
+    _clearSelection();
+  }
+  
+  /// Handle reply action for single selected message
+  void _handleSelectionReply() {
+    final selected = _selectedMessages;
+    if (selected.length != 1) return;
+    
+    _setReplyToMessage(selected.first);
+    _clearSelection();
+  }
+  
+  /// Handle edit action for single selected message
+  void _handleSelectionEdit() {
+    final selected = _selectedMessages;
+    if (selected.length != 1) return;
+    
+    _startEditing(selected.first);
+    _clearSelection();
+  }
+  
+  /// Handle info action for single selected message
+  void _handleSelectionInfo() {
+    final selected = _selectedMessages;
+    if (selected.length != 1) return;
+    
+    final currentChat = ref.read(chatsProvider).chats.where((c) => c.id == widget.chatId).firstOrNull;
+    if (currentChat != null) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => MessageInfoScreen(
+            message: selected.first,
+            chatTitle: currentChat.title,
+          ),
+        ),
+      );
+    }
+    _clearSelection();
+  }
+  
+  // ==================== END SELECTION MODE ====================
   
   /// Navigate to a replied message
   void _navigateToMessage(String messageId) {
@@ -697,31 +790,54 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           // Include status in key to force rebuild when status changes
           final stableKey = item.localId ?? item.id;
           
-          // Determine if this is my message
-          final profileState = ref.read(profileProvider);
-          final currentUserId = profileState.profile?.id;
-          final isMyMessage = (currentUserId != null && item.senderId == currentUserId) ||
-                             (item.isLocalOnly == true);
+          final isSelected = _selectedMessageIds.contains(item.id);
           
           return SwipeableMessage(
             message: item,
-            onSwipeReply: () => _setReplyToMessage(item),
+            onSwipeReply: _isSelectionMode ? null : () => _setReplyToMessage(item),
             child: GestureDetector(
+              onTap: _isSelectionMode 
+                  ? () => _toggleMessageSelection(item.id)
+                  : null,
               onLongPressStart: (details) {
-                _showMessageContextMenu(
-                  context,
-                  item,
-                  isMyMessage,
-                  details.globalPosition,
-                );
+                if (_isSelectionMode) {
+                  // In selection mode, toggle selection
+                  _toggleMessageSelection(item.id);
+                } else {
+                  // Start selection mode instead of showing context menu
+                  _startSelectionMode(item.id);
+                }
               },
-              child: MessageBubble(
-                key: ValueKey('${stableKey}_${item.status.name}'),
-                message: item,
-                isHighlighted: isHighlighted,
-                onReplyTap: _navigateToMessage,
-                allImageMessages: item.type == MessageType.image ? allImageMessages : null,
-                imageIndex: item.type == MessageType.image ? (imageIndexMap[item.id] ?? 0) : 0,
+              child: Container(
+                color: isSelected 
+                    ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3)
+                    : Colors.transparent,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Selection checkbox
+                    if (_isSelectionMode)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Checkbox(
+                          value: isSelected,
+                          onChanged: (_) => _toggleMessageSelection(item.id),
+                          shape: const CircleBorder(),
+                        ),
+                      ),
+                    // Message bubble
+                    Expanded(
+                      child: MessageBubble(
+                        key: ValueKey('${stableKey}_${item.status.name}_$isSelected'),
+                        message: item,
+                        isHighlighted: isHighlighted,
+                        onReplyTap: _isSelectionMode ? null : _navigateToMessage,
+                        allImageMessages: item.type == MessageType.image ? allImageMessages : null,
+                        imageIndex: item.type == MessageType.image ? (imageIndexMap[item.id] ?? 0) : 0,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           );
@@ -826,8 +942,57 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
     }
 
-    return Scaffold(
-      appBar: AppBar(
+    // Check selection mode capabilities
+    final selectedMessages = _selectedMessages;
+    final profileState = ref.read(profileProvider);
+    final currentUserId = profileState.profile?.id;
+    
+    // Can edit: single message, own, text, not deleted
+    final canEdit = selectedMessages.length == 1 &&
+        selectedMessages.first.type == MessageType.text &&
+        !selectedMessages.first.isDeleted &&
+        (currentUserId != null && selectedMessages.first.senderId == currentUserId);
+    
+    // Can copy: all selected are text messages
+    final canCopy = selectedMessages.isNotEmpty &&
+        selectedMessages.every((m) => m.type == MessageType.text && m.content != null);
+    
+    // Can show info: single message, own, in group chat
+    final canShowInfo = selectedMessages.length == 1 &&
+        currentChat.type == ChatType.group &&
+        (currentUserId != null && selectedMessages.first.senderId == currentUserId) &&
+        !selectedMessages.first.isLocalOnly;
+    
+    // Can delete: all selected are own messages
+    final canDelete = selectedMessages.isNotEmpty &&
+        selectedMessages.every((m) => 
+          (currentUserId != null && m.senderId == currentUserId) || m.isLocalOnly);
+    
+    return PopScope(
+      canPop: !_isSelectionMode,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _isSelectionMode) {
+          _clearSelection();
+        }
+      },
+      child: Scaffold(
+      appBar: _isSelectionMode
+          ? MessageSelectionAppBar(
+              selectedCount: _selectedMessageIds.length,
+              canEdit: canEdit,
+              canCopy: canCopy,
+              canShowInfo: canShowInfo,
+              canDelete: canDelete,
+              onClose: _clearSelection,
+              onCopy: _handleSelectionCopy,
+              onForward: _handleSelectionForward,
+              onShare: _handleSelectionShare,
+              onDelete: _handleSelectionDelete,
+              onEdit: canEdit ? _handleSelectionEdit : null,
+              onInfo: canShowInfo ? _handleSelectionInfo : null,
+              onReply: selectedMessages.length == 1 ? _handleSelectionReply : null,
+            )
+          : AppBar(
         title: GestureDetector(
           onTap: () {
             // Navigate to profile on tap for private chats
@@ -1019,6 +1184,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 }

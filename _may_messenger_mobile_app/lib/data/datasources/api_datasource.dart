@@ -348,8 +348,9 @@ class ApiDataSource {
       
       for (final item in data) {
         if (item is Map<String, dynamic>) {
-          final messageId = item['messageId'] as String?;
-          final statusIndex = item['status'] as int?;
+          // Handle both camelCase (messageId) and PascalCase (MessageId) from server
+          final messageId = (item['messageId'] ?? item['MessageId']) as String?;
+          final statusIndex = (item['status'] ?? item['Status']) as int?;
           if (messageId != null && statusIndex != null && statusIndex < MessageStatus.values.length) {
             result[messageId] = MessageStatus.values[statusIndex];
           }

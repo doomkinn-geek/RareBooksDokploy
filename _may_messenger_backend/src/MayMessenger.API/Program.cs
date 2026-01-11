@@ -80,6 +80,9 @@ builder.Services.AddSingleton<MayMessenger.Application.Services.IFirebaseService
 // Migration Service
 builder.Services.AddScoped<MayMessenger.API.Services.MigrationService>();
 
+// User Connection Tracking (for SignalR sender exclusion)
+builder.Services.AddSingleton<MayMessenger.API.Services.UserConnectionService>();
+
 // Background Services
 builder.Services.AddHostedService<MayMessenger.Application.Services.MediaCleanupService>(); // Audio + Images cleanup
 builder.Services.AddHostedService<MayMessenger.Application.Services.CleanupInvalidTokensService>();

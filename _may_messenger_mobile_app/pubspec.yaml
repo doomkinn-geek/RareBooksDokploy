@@ -85,6 +85,10 @@ dependencies:
   
   # Battery Optimization (for reliable background message delivery)
   disable_battery_optimization: ^1.1.1
+  
+  # Share to/from other apps
+  share_plus: ^10.0.0
+  receive_sharing_intent: ^1.8.0
 
 dev_dependencies:
   flutter_test:

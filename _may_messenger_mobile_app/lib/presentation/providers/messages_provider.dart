@@ -973,7 +973,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final profileState = _ref.read(profileProvider);
       final currentUser = profileState.profile;
       
-      if (currentUser == null) {
+      // Use cached userId if profile is not fully loaded yet
+      final userId = currentUser?.id ?? profileState.cachedUserId;
+      final displayName = currentUser?.displayName ?? 'Вы';
+      
+      if (userId == null) {
         throw Exception('User not authenticated');
       }
       
@@ -992,8 +996,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final localMessage = Message(
         id: localId, // Temporary local ID
         chatId: chatId,
-        senderId: currentUser.id,
-        senderName: currentUser.displayName,
+        senderId: userId,
+        senderName: displayName,
         type: MessageType.text,
         content: content,
         status: MessageStatus.sending,
@@ -1028,9 +1032,10 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final outboxEntry = await _outboxRepository.addToOutbox(
         chatId: chatId,
         type: MessageType.text,
+        localId: localId, // Use same localId for deduplication
         content: content,
       );
-      final outboxId = outboxEntry.localId; // Save outbox ID for later cleanup
+      final outboxId = outboxEntry.localId; // Will be same as localId
       
       // STEP 4: Send to backend asynchronously with clientMessageId
       _syncMessageToBackend(localId, MessageType.text, outboxId: outboxId, content: content, clientMessageId: localId);
@@ -1359,7 +1364,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final profileState = _ref.read(profileProvider);
       final currentUser = profileState.profile;
       
-      if (currentUser == null) {
+      // Use cached userId if profile is not fully loaded yet
+      final userId = currentUser?.id ?? profileState.cachedUserId;
+      final displayName = currentUser?.displayName ?? 'Вы';
+      
+      if (userId == null) {
         throw Exception('User not authenticated');
       }
       
@@ -1379,8 +1388,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final localMessage = Message(
         id: localId, // Temporary local ID
         chatId: chatId,
-        senderId: currentUser.id,
-        senderName: currentUser.displayName,
+        senderId: userId,
+        senderName: displayName,
         type: MessageType.audio,
         localAudioPath: audioPath,
         status: MessageStatus.sending,
@@ -1425,9 +1434,10 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final outboxEntry = await _outboxRepository.addToOutbox(
         chatId: chatId,
         type: MessageType.audio,
+        localId: localId, // Use same localId for deduplication
         localAudioPath: audioPath,
       );
-      final outboxId = outboxEntry.localId; // Save outbox ID for later cleanup
+      final outboxId = outboxEntry.localId; // Will be same as localId
       
       // STEP 5: Send to backend asynchronously with clientMessageId
       _syncMessageToBackend(localId, MessageType.audio, outboxId: outboxId, audioPath: audioPath, clientMessageId: clientMessageId);
@@ -1464,7 +1474,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final profileState = _ref.read(profileProvider);
       final currentUser = profileState.profile;
       
-      if (currentUser == null) {
+      // Use cached userId if profile is not fully loaded yet
+      final userId = currentUser?.id ?? profileState.cachedUserId;
+      final displayName = currentUser?.displayName ?? 'Вы';
+      
+      if (userId == null) {
         throw Exception('User not authenticated');
       }
       
@@ -1484,8 +1498,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final localMessage = Message(
         id: localId, // Temporary local ID
         chatId: chatId,
-        senderId: currentUser.id,
-        senderName: currentUser.displayName,
+        senderId: userId,
+        senderName: displayName,
         type: MessageType.image,
         localImagePath: imagePath,
         status: MessageStatus.sending,
@@ -1530,9 +1544,10 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final outboxEntry = await _outboxRepository.addToOutbox(
         chatId: chatId,
         type: MessageType.image,
+        localId: localId, // Use same localId for deduplication
         localImagePath: imagePath,
       );
-      final outboxId = outboxEntry.localId;
+      final outboxId = outboxEntry.localId; // Will be same as localId
       print('[MSG_SEND] Image added to outbox: $outboxId');
       
       // STEP 5: Send to backend asynchronously with clientMessageId
@@ -1567,7 +1582,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final profileState = _ref.read(profileProvider);
       final currentUser = profileState.profile;
       
-      if (currentUser == null) {
+      // Use cached userId if profile is not fully loaded yet
+      final userId = currentUser?.id ?? profileState.cachedUserId;
+      final displayName = currentUser?.displayName ?? 'Вы';
+      
+      if (userId == null) {
         throw Exception('User not authenticated');
       }
       
@@ -1593,8 +1612,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final localMessage = Message(
         id: localId,
         chatId: chatId,
-        senderId: currentUser.id,
-        senderName: currentUser.displayName,
+        senderId: userId,
+        senderName: displayName,
         type: MessageType.file,
         localFilePath: filePath,
         originalFileName: fileName,
@@ -1629,10 +1648,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final outboxEntry = await _outboxRepository.addToOutbox(
         chatId: chatId,
         type: MessageType.file,
+        localId: localId, // Use same localId for deduplication
         localFilePath: filePath,
         originalFileName: fileName,
       );
-      final outboxId = outboxEntry.localId;
+      final outboxId = outboxEntry.localId; // Will be same as localId
       print('[MSG_SEND] File added to outbox: $outboxId');
       
       // Sync to backend
@@ -2459,7 +2479,11 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final profileState = _ref.read(profileProvider);
       final currentUser = profileState.profile;
       
-      if (currentUser == null) {
+      // Use cached userId if profile is not fully loaded yet
+      final userId = currentUser?.id ?? profileState.cachedUserId;
+      final displayName = currentUser?.displayName ?? 'Вы';
+      
+      if (userId == null) {
         throw Exception('User not authenticated');
       }
       
@@ -2485,8 +2509,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       final localMessage = Message(
         id: localId,
         chatId: chatId,
-        senderId: currentUser.id,
-        senderName: currentUser.displayName,
+        senderId: userId,
+        senderName: displayName,
         type: MessageType.text,
         content: content,
         replyToMessageId: replyToMessage.id,

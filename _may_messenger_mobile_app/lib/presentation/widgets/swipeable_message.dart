@@ -5,13 +5,13 @@ import '../../data/models/message_model.dart';
 class SwipeableMessage extends StatefulWidget {
   final Widget child;
   final Message message;
-  final VoidCallback onSwipeReply;
+  final VoidCallback? onSwipeReply;
 
   const SwipeableMessage({
     super.key,
     required this.child,
     required this.message,
-    required this.onSwipeReply,
+    this.onSwipeReply,
   });
 
   @override
@@ -46,6 +46,9 @@ class _SwipeableMessageState extends State<SwipeableMessage>
   }
 
   void _handleDragUpdate(DragUpdateDetails details) {
+    // Disable swipe if no callback
+    if (widget.onSwipeReply == null) return;
+    
     // Only allow right swipe (positive dx)
     if (details.delta.dx > 0 || _dragExtent > 0) {
       setState(() {
@@ -55,9 +58,9 @@ class _SwipeableMessageState extends State<SwipeableMessage>
   }
 
   void _handleDragEnd(DragEndDetails details) {
-    if (_dragExtent >= _swipeThreshold) {
+    if (_dragExtent >= _swipeThreshold && widget.onSwipeReply != null) {
       // Trigger reply
-      widget.onSwipeReply();
+      widget.onSwipeReply!();
       // Haptic feedback
       HapticFeedback.lightImpact();
     }

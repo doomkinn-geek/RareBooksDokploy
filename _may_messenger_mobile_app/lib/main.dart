@@ -9,12 +9,12 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
-import 'core/themes/app_theme.dart';
 import 'core/themes/theme_provider.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/fcm_service.dart';
 import 'core/services/avatar_cache_service.dart';
 import 'core/services/background_audio_service.dart';
+import 'core/services/share_receive_service.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/providers/signalr_provider.dart';
 import 'presentation/providers/chats_provider.dart';
@@ -23,6 +23,7 @@ import 'presentation/providers/user_status_sync_service.dart';
 import 'presentation/screens/auth_screen.dart';
 import 'presentation/screens/main_screen.dart';
 import 'presentation/screens/chat_screen.dart';
+import 'presentation/screens/share_target_screen.dart';
 
 // Global navigator key for navigation from FCM
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -164,16 +165,77 @@ class MyApp extends ConsumerStatefulWidget {
 
 class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   DateTime? _lastPausedAt;
+  ShareReceiveService? _shareReceiveService;
+  SharedContent? _pendingShare;
   
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    
+    // Initialize share receive service
+    _initShareReceiveService();
+  }
+  
+  /// Initialize the share receive service to handle incoming shares
+  void _initShareReceiveService() {
+    _shareReceiveService = ref.read(shareReceiveServiceProvider);
+    
+    // Initialize and listen for shares
+    _shareReceiveService?.init(
+      onReceive: (SharedContent content) {
+        print('[SHARE] Received share while app is running: ${content.type}');
+        _handleIncomingShare(content);
+      },
+    );
+    
+    // Check for initial share (app launched via share)
+    _checkInitialShare();
+  }
+  
+  /// Check if app was launched with shared content
+  Future<void> _checkInitialShare() async {
+    try {
+      final content = await _shareReceiveService?.getInitialSharedContent();
+      if (content != null && !content.isEmpty) {
+        print('[SHARE] App launched with shared content: ${content.type}');
+        _pendingShare = content;
+        // Handle will be triggered after auth check
+      }
+    } catch (e) {
+      print('[SHARE] Error checking initial share: $e');
+    }
+  }
+  
+  /// Handle incoming shared content
+  void _handleIncomingShare(SharedContent content) {
+    final authState = ref.read(authStateProvider);
+    
+    if (!authState.isAuthenticated) {
+      print('[SHARE] User not authenticated, storing pending share');
+      _pendingShare = content;
+      return;
+    }
+    
+    // Navigate to share target screen
+    _navigateToShareTarget(content);
+  }
+  
+  /// Navigate to the share target selection screen
+  void _navigateToShareTarget(SharedContent content) {
+    Future.microtask(() {
+      navigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (context) => ShareTargetScreen(sharedContent: content),
+        ),
+      );
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _shareReceiveService?.dispose();
     super.dispose();
   }
 
@@ -278,6 +340,17 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
+    
+    // Handle pending share after authentication
+    if (authState.isAuthenticated && _pendingShare != null) {
+      final share = _pendingShare;
+      _pendingShare = null; // Clear to avoid re-triggering
+      Future.microtask(() {
+        if (share != null) {
+          _navigateToShareTarget(share);
+        }
+      });
+    }
     
     // Initialize SignalR and services when authenticated
     if (authState.isAuthenticated) {

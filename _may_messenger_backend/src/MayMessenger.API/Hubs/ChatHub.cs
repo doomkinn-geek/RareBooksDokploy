@@ -5,6 +5,7 @@ using MayMessenger.Application.DTOs;
 using MayMessenger.Domain.Entities;
 using MayMessenger.Domain.Enums;
 using MayMessenger.Domain.Interfaces;
+using MayMessenger.API.Services;
 
 namespace MayMessenger.API.Hubs;
 
@@ -12,10 +13,12 @@ namespace MayMessenger.API.Hubs;
 public class ChatHub : Hub
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly UserConnectionService _userConnectionService;
     
-    public ChatHub(IUnitOfWork unitOfWork)
+    public ChatHub(IUnitOfWork unitOfWork, UserConnectionService userConnectionService)
     {
         _unitOfWork = unitOfWork;
+        _userConnectionService = userConnectionService;
     }
     
     private Guid GetCurrentUserId()
@@ -41,6 +44,9 @@ public class ChatHub : Hub
             // Notify all participants in user's chats about status change
             await NotifyUserStatusChanged(userId, true, DateTime.UtcNow);
         }
+        
+        // Register connection for sender exclusion
+        _userConnectionService.AddConnection(userId, Context.ConnectionId);
         
         // Join user-specific group for direct notifications
         await Groups.AddToGroupAsync(Context.ConnectionId, $"user_{userId}");
@@ -153,18 +159,32 @@ public class ChatHub : Hub
         try
         {
             var userId = GetCurrentUserId();
-            var user = await _unitOfWork.Users.GetByIdAsync(userId);
             
-            if (user != null)
+            // Remove connection from tracking
+            _userConnectionService.RemoveConnection(userId, Context.ConnectionId);
+            
+            // Only set offline if user has no more active connections
+            if (!_userConnectionService.IsConnected(userId))
             {
-                // Update user offline status
-                user.IsOnline = false;
-                user.LastSeenAt = DateTime.UtcNow;
-                await _unitOfWork.Users.UpdateAsync(user);
-                await _unitOfWork.SaveChangesAsync();
+                var user = await _unitOfWork.Users.GetByIdAsync(userId);
                 
-                // Notify all participants in user's chats about status change
-                await NotifyUserStatusChanged(userId, false, DateTime.UtcNow);
+                if (user != null)
+                {
+                    // Update user offline status
+                    user.IsOnline = false;
+                    user.LastSeenAt = DateTime.UtcNow;
+                    await _unitOfWork.Users.UpdateAsync(user);
+                    await _unitOfWork.SaveChangesAsync();
+                    
+                    // Notify all participants in user's chats about status change
+                    await NotifyUserStatusChanged(userId, false, DateTime.UtcNow);
+                    
+                    Console.WriteLine($"[ChatHub] User {userId} disconnected and marked offline (no more connections)");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"[ChatHub] User {userId} disconnected but has other active connections");
             }
         }
         catch (Exception ex)
