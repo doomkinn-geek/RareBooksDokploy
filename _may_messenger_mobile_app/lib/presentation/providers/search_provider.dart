@@ -1,55 +1,37 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dio/dio.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/models/user_model.dart';
 import '../../data/models/chat_model.dart';
 import '../../data/models/search_result_model.dart';
-import '../../data/services/search_service.dart';
+import '../../data/services/local_search_service.dart';
 import '../../data/datasources/local_datasource.dart';
-import 'chats_provider.dart';
 
-final searchServiceProvider = Provider<SearchService>((ref) {
-  // Create a new Dio instance with proper configuration
-  final dio = Dio(BaseOptions(
-    baseUrl: 'https://messenger.rare-books.ru',
-    headers: {'Content-Type': 'application/json'},
-  ));
-  
-  // Add interceptor to copy auth token from shared preferences
-  dio.interceptors.add(InterceptorsWrapper(
-    onRequest: (options, handler) async {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token');
-      if (token != null) {
-        options.headers['Authorization'] = 'Bearer $token';
-      }
-      handler.next(options);
-    },
-  ));
-  
-  return SearchService(dio);
-});
-
+/// Provider for LocalDataSource (shared instance)
 final localDataSourceForSearchProvider = Provider<LocalDataSource>((ref) {
   return LocalDataSource();
 });
 
+/// Provider for LocalSearchService - the main search engine
+final localSearchServiceProvider = Provider<LocalSearchService>((ref) {
+  final localDataSource = ref.read(localDataSourceForSearchProvider);
+  return LocalSearchService(localDataSource);
+});
+
+/// Main search provider - completely local, no network requests
 final searchProvider = StateNotifierProvider<SearchNotifier, SearchState>((ref) {
   return SearchNotifier(
-    ref.read(searchServiceProvider),
-    ref.read(localDataSourceForSearchProvider),
-    ref,
+    ref.read(localSearchServiceProvider),
   );
 });
 
 class SearchState {
   final List<User> userResults;
   final List<MessageSearchResult> messageResults;
-  final List<Chat> chatResults; // Chats and groups matching the query
+  final List<Chat> chatResults;
   final bool isLoading;
   final String? error;
   final String query;
+  final int? searchTimeMs; // Time taken for search in milliseconds
 
   SearchState({
     this.userResults = const [],
@@ -58,6 +40,7 @@ class SearchState {
     this.isLoading = false,
     this.error,
     this.query = '',
+    this.searchTimeMs,
   });
 
   SearchState copyWith({
@@ -67,6 +50,7 @@ class SearchState {
     bool? isLoading,
     String? error,
     String? query,
+    int? searchTimeMs,
   }) {
     return SearchState(
       userResults: userResults ?? this.userResults,
@@ -75,18 +59,32 @@ class SearchState {
       isLoading: isLoading ?? this.isLoading,
       error: error,
       query: query ?? this.query,
+      searchTimeMs: searchTimeMs ?? this.searchTimeMs,
     );
   }
 }
 
 class SearchNotifier extends StateNotifier<SearchState> {
-  final SearchService _searchService;
-  final LocalDataSource _localDataSource;
-  final Ref _ref;
+  final LocalSearchService _searchService;
   Timer? _debounceTimer;
+  bool _isPreloaded = false;
 
-  SearchNotifier(this._searchService, this._localDataSource, this._ref) : super(SearchState());
+  SearchNotifier(this._searchService) : super(SearchState());
 
+  /// Preload search data for instant results
+  /// Call this when search screen is opened
+  Future<void> preload() async {
+    if (_isPreloaded) return;
+    
+    try {
+      await _searchService.preloadData();
+      _isPreloaded = true;
+    } catch (e) {
+      print('[SearchNotifier] Preload failed: $e');
+    }
+  }
+
+  /// Main search method - completely local, instant results
   void search(String query) {
     // Cancel previous timer
     _debounceTimer?.cancel();
@@ -101,114 +99,66 @@ class SearchNotifier extends StateNotifier<SearchState> {
         isLoading: false,
         error: 'Введите минимум 2 символа',
         query: query.trim(),
+        chatResults: [],
+        userResults: [],
+        messageResults: [],
       );
       return;
     }
     
-    // Set loading state immediately
-    state = state.copyWith(
-      isLoading: true,
-      error: null,
-      query: query.trim(),
-    );
-    
-    // Search local cache immediately for instant results
-    _searchLocalContacts(query.trim());
-    
-    // Search chats/groups locally (instant)
-    _searchLocalChats(query.trim());
-    
-    // Debounce backend search
-    _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
+    // For local search, use very short debounce (50ms) for snappy UX
+    _debounceTimer = Timer(const Duration(milliseconds: 50), () async {
+      state = state.copyWith(
+        isLoading: true,
+        error: null,
+        query: query.trim(),
+      );
+      
       try {
-        // Get current local contacts results first
-        final localContacts = state.userResults;
+        final results = await _searchService.searchAll(query.trim());
         
-        // Search backend for messages only
-        // Contacts search is done locally from phone book cache
-        final messages = await _searchService.searchMessages(query.trim());
-        
-        // Keep local contacts, only update messages
-        state = state.copyWith(
-          userResults: localContacts, // Keep local contacts from phone book
-          messageResults: messages,
-          isLoading: false,
-          error: null,
-        );
-      } catch (e) {
-        String errorMessage = 'Ошибка поиска';
-        if (e is DioException) {
-          if (e.type == DioExceptionType.connectionTimeout || 
-              e.type == DioExceptionType.receiveTimeout) {
-            errorMessage = 'Сервер не отвечает';
-          } else if (e.type == DioExceptionType.unknown) {
-            errorMessage = 'Нет подключения к интернету';
-          } else {
-            errorMessage = 'Ошибка соединения';
-          }
-        } else {
-          errorMessage = e.toString();
-        }
-        
-        // Keep local results even on error
-        state = state.copyWith(
-          isLoading: false,
-          error: errorMessage,
-        );
-      }
-    });
-  }
-
-  Future<void> _searchLocalContacts(String query) async {
-    try {
-      final cachedContacts = await _localDataSource.searchContactsCache(query);
-      if (cachedContacts.isNotEmpty) {
-        // Convert ContactCache to User for display
-        // Use phone number from cache for display in search results
-        final users = cachedContacts.map((c) => User(
+        // Convert ContactCache to User for UI compatibility
+        final users = results.contacts.map((c) => User(
           id: c.userId,
           displayName: c.displayName,
-          phoneNumber: c.phoneNumber ?? '', // Use cached phone number
+          phoneNumber: c.phoneNumber ?? '',
           role: UserRole.user,
           isOnline: false,
           lastSeenAt: null,
         )).toList();
         
-        // Update state with local results (kept for contacts, not replaced by backend)
         state = state.copyWith(
+          chatResults: results.chats,
           userResults: users.cast<User>(),
-          isLoading: true, // Still loading backend results
+          messageResults: results.messages,
+          isLoading: false,
+          error: null,
+          searchTimeMs: results.searchTimeMs,
+        );
+        
+        print('[SearchNotifier] Found ${results.totalCount} results in ${results.searchTimeMs}ms');
+      } catch (e) {
+        print('[SearchNotifier] Search error: $e');
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Ошибка поиска: $e',
         );
       }
-    } catch (e) {
-      print('[Search] Failed to search local contacts: $e');
-    }
+    });
   }
 
-  /// Search chats and groups locally by title
-  void _searchLocalChats(String query) {
+  /// Refresh all search caches (call when new data is available)
+  Future<void> refreshCache() async {
     try {
-      final chatsState = _ref.read(chatsProvider);
-      final queryLower = query.toLowerCase();
+      await _searchService.preloadData();
+      print('[SearchNotifier] Cache refreshed');
       
-      // Filter chats by title matching the query
-      final matchingChats = chatsState.chats.where((chat) {
-        return chat.title.toLowerCase().contains(queryLower);
-      }).toList();
-      
-      // Sort groups first, then private chats
-      matchingChats.sort((a, b) {
-        if (a.type == ChatType.group && b.type != ChatType.group) return -1;
-        if (a.type != ChatType.group && b.type == ChatType.group) return 1;
-        return a.title.compareTo(b.title);
-      });
-      
-      state = state.copyWith(
-        chatResults: matchingChats,
-        isLoading: true, // Still loading backend results
-      );
+      // Re-run search if there's an active query
+      if (state.query.isNotEmpty) {
+        search(state.query);
+      }
     } catch (e) {
-      print('[Search] Failed to search local chats: $e');
+      print('[SearchNotifier] Failed to refresh cache: $e');
     }
   }
 
@@ -220,7 +170,7 @@ class SearchNotifier extends StateNotifier<SearchState> {
   @override
   void dispose() {
     _debounceTimer?.cancel();
+    _searchService.clearCache();
     super.dispose();
   }
 }
-
