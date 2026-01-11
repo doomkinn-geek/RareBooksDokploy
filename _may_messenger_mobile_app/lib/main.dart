@@ -246,11 +246,13 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     
     final authState = ref.read(authStateProvider);
     
-    if (state == AppLifecycleState.paused) {
+    if (state == AppLifecycleState.paused || 
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
       _lastPausedAt = DateTime.now();
-      print('[LIFECYCLE] App paused at $_lastPausedAt - marking user as offline');
+      print('[LIFECYCLE] App $state at $_lastPausedAt - marking user as offline');
       
-      // CRITICAL: Mark user as offline when app is paused/minimized
+      // CRITICAL: Mark user as offline when app is paused/minimized/closed
       if (authState.isAuthenticated) {
         try {
           final apiDataSource = ref.read(apiDataSourceProvider);
