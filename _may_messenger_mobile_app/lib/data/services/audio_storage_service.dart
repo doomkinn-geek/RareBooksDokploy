@@ -39,35 +39,36 @@ class AudioStorageService {
   }
 
   /// Download and save audio file locally
-  Future<String?> saveAudioLocally(String messageId, String audioUrl) async {
+  Future<String?> saveAudioLocally(String messageId, String audioUrl, {
+    void Function(double progress)? onProgress,
+  }) async {
     try {
       final audioDir = await _getAudioDirectory();
       final filePath = '${audioDir.path}/$messageId.m4a';
       
-      // Download file
-      final response = await _dio.get(
+      // Download file with progress callback
+      await _dio.download(
         audioUrl,
+        filePath,
         options: Options(
-          responseType: ResponseType.bytes,
           followRedirects: true,
           validateStatus: (status) => status != null && status < 500,
         ),
+        onReceiveProgress: onProgress != null 
+            ? (received, total) {
+                if (total > 0) {
+                  onProgress(received / total);
+                }
+              }
+            : null,
       );
       
-      if (response.statusCode == 404) {
-        // File not found on server
-        return null;
-      }
-      
-      if (response.statusCode != 200) {
-        return null;
-      }
-      
-      // Save to file
+      // Verify file was downloaded
       final file = File(filePath);
-      await file.writeAsBytes(response.data);
-      
-      return filePath;
+      if (await file.exists()) {
+        return filePath;
+      }
+      return null;
     } catch (e) {
       // Network error or other issue
       return null;

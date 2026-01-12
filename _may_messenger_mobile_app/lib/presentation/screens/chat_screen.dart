@@ -27,6 +27,7 @@ import 'group_settings_screen.dart';
 import 'user_profile_screen.dart';
 import 'forward_message_screen.dart';
 import 'message_info_screen.dart';
+import 'create_poll_screen.dart';
 import 'package:flutter/services.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -489,6 +490,37 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     setState(() {
       _replyToMessage = null;
     });
+  }
+  
+  /// Open create poll screen
+  void _openCreatePoll(BuildContext context) async {
+    final result = await Navigator.of(context).push<dynamic>(
+      MaterialPageRoute(
+        builder: (context) => CreatePollScreen(chatId: widget.chatId),
+      ),
+    );
+    
+    if (result != null && mounted) {
+      try {
+        await ref.read(messagesProvider(widget.chatId).notifier).createPoll(
+          question: result.question,
+          options: result.options,
+          allowMultipleAnswers: result.allowMultipleAnswers,
+          isAnonymous: result.isAnonymous,
+        );
+        
+        // Scroll to bottom after creating poll
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) _scrollToBottom();
+        });
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Ошибка создания голосования: $e')),
+          );
+        }
+      }
+    }
   }
   
   /// Start editing a message
@@ -1036,6 +1068,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ),
         actions: [
           const ConnectionStatusIndicator(),
+          // Poll button (only for group chats)
+          if (currentChat.type == ChatType.group)
+            IconButton(
+              icon: const Icon(Icons.poll_outlined),
+              tooltip: 'Создать голосование',
+              onPressed: () => _openCreatePoll(context),
+            ),
           IconButton(
             icon: const Icon(Icons.info_outline),
             onPressed: () {

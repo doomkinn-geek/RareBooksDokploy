@@ -9,6 +9,8 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:dio/dio.dart';
 import '../../data/models/message_model.dart';
+import '../../data/models/poll_model.dart';
+import 'poll_widget.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/services/logger_service.dart';
 import '../../core/services/global_audio_service.dart';
@@ -110,12 +112,19 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         // Download audio from server
         if (widget.message.filePath != null && widget.message.filePath!.isNotEmpty) {
           final audioUrl = '${ApiConstants.baseUrl}${widget.message.filePath}';
+          final messagesNotifier = ref.read(messagesProvider(widget.message.chatId).notifier);
           
-          // Download and save locally
+          // Download and save locally with progress
           localPath = await audioStorageService.saveAudioLocally(
             widget.message.id, 
-            audioUrl
+            audioUrl,
+            onProgress: (progress) {
+              messagesNotifier.updateDownloadProgress(widget.message.id, progress);
+            },
           );
+          
+          // Clear download progress
+          messagesNotifier.clearDownloadProgress(widget.message.id);
           
           if (localPath != null) {
             _localAudioPath = localPath;
@@ -303,6 +312,11 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             ? '${ApiConstants.baseUrl}${widget.message.filePath}'
             : '';
         
+        // Setup sequential playback callback
+        audioService.getNextAudioMessage = (currentMessageId, chatId) async {
+          return _findNextAudioMessage(currentMessageId, chatId);
+        };
+        
         // Play using GlobalAudioService
         await audioService.playMessage(
           messageId: widget.message.id,
@@ -340,6 +354,50 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   void _cyclePlaybackSpeed() {
     final audioService = ref.read(globalAudioServiceProvider.notifier);
     audioService.cycleSpeed();
+  }
+  
+  /// Find the next audio message in sequence after the current one
+  /// Returns null if no more audio messages (sequence ends when non-audio message is found)
+  Future<({String messageId, String audioUrl, String? senderName, String? localFilePath})?> 
+  _findNextAudioMessage(String currentMessageId, String chatId) async {
+    try {
+      final messagesState = ref.read(messagesProvider(chatId));
+      final messages = messagesState.messages;
+      
+      // Find current message index
+      final currentIndex = messages.indexWhere((m) => m.id == currentMessageId);
+      if (currentIndex == -1 || currentIndex >= messages.length - 1) {
+        return null; // Current message not found or is the last one
+      }
+      
+      // Check next message
+      final nextMessage = messages[currentIndex + 1];
+      
+      // Stop sequence if next message is not audio
+      if (nextMessage.type != MessageType.audio) {
+        print('[AUDIO] Next message is ${nextMessage.type}, stopping sequence');
+        return null;
+      }
+      
+      // Get audio path
+      final audioStorageService = ref.read(audioStorageServiceProvider);
+      String? localPath = nextMessage.localAudioPath ?? 
+                          await audioStorageService.getLocalAudioPath(nextMessage.id);
+      
+      final audioUrl = nextMessage.filePath != null 
+          ? '${ApiConstants.baseUrl}${nextMessage.filePath}'
+          : '';
+      
+      return (
+        messageId: nextMessage.id,
+        audioUrl: audioUrl,
+        senderName: nextMessage.senderName,
+        localFilePath: localPath,
+      );
+    } catch (e) {
+      print('[AUDIO] Error finding next audio message: $e');
+      return null;
+    }
   }
 
   @override
@@ -479,6 +537,12 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         final outputRoute = globalState.outputRoute;
         final isDark = theme.brightness == Brightness.dark;
         
+        // Check if audio is uploading
+        final isUploading = widget.message.status == MessageStatus.sending && 
+                            widget.message.uploadProgress != null &&
+                            widget.message.uploadProgress! < 1.0;
+        final uploadProgress = widget.message.uploadProgress ?? 0.0;
+        
         // Определить, прослушано ли сообщение
         final isPlayed = widget.message.status == MessageStatus.played;
         
@@ -501,23 +565,87 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Show loading indicator while downloading or loading audio
-            (_isDownloadingAudio || isLoading)
-                ? SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Center(
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
+            // Show upload progress indicator when uploading
+            if (isUploading)
+              SizedBox(
+                width: 48,
+                height: 48,
+                child: Center(
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: 32,
+                        height: 32,
                         child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
+                          value: uploadProgress,
+                          strokeWidth: 3,
+                          backgroundColor: playerColor.withOpacity(0.2),
                           valueColor: AlwaysStoppedAnimation<Color>(playerColor),
                         ),
                       ),
+                      Text(
+                        '${(uploadProgress * 100).toInt()}%',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: playerColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            // Show loading indicator while downloading or loading audio
+            else if (_isDownloadingAudio || isLoading) ...[
+              // Check if we have download progress
+              if (widget.message.downloadProgress != null && widget.message.downloadProgress! < 1.0)
+                SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: Center(
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 32,
+                          height: 32,
+                          child: CircularProgressIndicator(
+                            value: widget.message.downloadProgress,
+                            strokeWidth: 3,
+                            backgroundColor: playerColor.withOpacity(0.2),
+                            valueColor: AlwaysStoppedAnimation<Color>(playerColor),
+                          ),
+                        ),
+                        Text(
+                          '${((widget.message.downloadProgress ?? 0) * 100).toInt()}%',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: playerColor,
+                          ),
+                        ),
+                      ],
                     ),
-                  )
-                : AnimatedSwitcher(
+                  ),
+                )
+              else
+                SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        valueColor: AlwaysStoppedAnimation<Color>(playerColor),
+                      ),
+                    ),
+                  ),
+                ),
+            ]
+            else AnimatedSwitcher(
                     duration: const Duration(milliseconds: 200),
                     transitionBuilder: (child, animation) {
                       return ScaleTransition(
@@ -699,17 +827,29 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       
       case MessageType.file:
         return _buildFileWidget(context);
+      
+      case MessageType.poll:
+        return _buildPollWidget(context, isMe);
     }
   }
 
   Widget _buildFileWidget(BuildContext context) {
     final profileState = ref.read(profileProvider);
-    final currentUserId = profileState.profile?.id;
+    final currentUserId = profileState.userId;
     final isFromMe = (currentUserId != null && widget.message.senderId == currentUserId) ||
                      (widget.message.isLocalOnly == true);
     final textColor = isFromMe ? Colors.white : Colors.black87;
     final fileName = widget.message.originalFileName ?? 'Файл';
     final fileSize = widget.message.fileSize ?? 0;
+    final isUploading = widget.message.status == MessageStatus.sending && 
+                        widget.message.uploadProgress != null &&
+                        widget.message.uploadProgress! < 1.0;
+    final isDownloading = widget.message.downloadProgress != null &&
+                          widget.message.downloadProgress! < 1.0;
+    final progress = isUploading 
+        ? (widget.message.uploadProgress ?? 0.0)
+        : (widget.message.downloadProgress ?? 0.0);
+    final isTransferring = isUploading || isDownloading;
     
     // Format file size
     String formattedSize;
@@ -722,59 +862,102 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     }
     
     return GestureDetector(
-      onTap: () => _openOrDownloadFile(context),
+      onTap: isTransferring ? null : () => _openOrDownloadFile(context),
       child: Container(
         padding: const EdgeInsets.all(12),
         constraints: const BoxConstraints(maxWidth: 250),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isFromMe 
-                    ? Colors.white.withOpacity(0.2)
-                    : Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                Icons.insert_drive_file,
-                color: isFromMe ? Colors.white : Theme.of(context).colorScheme.primary,
-                size: 28,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Flexible(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    fileName,
-                    style: TextStyle(
-                      color: textColor,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: isFromMe 
+                            ? Colors.white.withOpacity(0.2)
+                            : Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        isUploading ? Icons.cloud_upload 
+                            : isDownloading ? Icons.cloud_download 
+                            : Icons.insert_drive_file,
+                        color: isFromMe ? Colors.white : Theme.of(context).colorScheme.primary,
+                        size: 28,
+                      ),
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    if (isTransferring)
+                      SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: CircularProgressIndicator(
+                          value: progress,
+                          strokeWidth: 3,
+                          backgroundColor: Colors.white.withOpacity(0.3),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            isFromMe ? Colors.white : Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        fileName,
+                        style: TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        isTransferring 
+                            ? '${(progress * 100).toInt()}% • $formattedSize'
+                            : formattedSize,
+                        style: TextStyle(
+                          color: textColor.withOpacity(0.7),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    formattedSize,
-                    style: TextStyle(
-                      color: textColor.withOpacity(0.7),
-                      fontSize: 12,
-                    ),
+                ),
+                if (!isTransferring) ...[
+                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.download,
+                    color: textColor.withOpacity(0.7),
+                    size: 20,
                   ),
                 ],
+              ],
+            ),
+            // Progress bar for upload/download
+            if (isTransferring) ...[
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  backgroundColor: Colors.white.withOpacity(0.2),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    isFromMe ? Colors.white : Theme.of(context).colorScheme.primary,
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Icon(
-              Icons.download,
-              color: textColor.withOpacity(0.7),
-              size: 20,
-            ),
+            ],
           ],
         ),
       ),
@@ -815,26 +998,6 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     final fileName = widget.message.originalFileName ?? 'downloaded_file';
     
     try {
-      // Show download progress
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                SizedBox(width: 12),
-                Text('Загрузка файла...'),
-              ],
-            ),
-            duration: Duration(seconds: 30),
-          ),
-        );
-      }
-      
       // Get directory for downloaded files
       final directory = await getApplicationDocumentsDirectory();
       final downloadDir = Directory('${directory.path}/downloads');
@@ -843,8 +1006,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       }
       
       final localPath = '${downloadDir.path}/$fileName';
+      final messagesNotifier = ref.read(messagesProvider(widget.message.chatId).notifier);
       
-      // Download the file (files are served as static files, no auth needed)
+      // Download the file with progress callback
       final dio = Dio();
       await dio.download(
         fileUrl,
@@ -853,12 +1017,20 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           followRedirects: true,
           validateStatus: (status) => status != null && status < 500,
         ),
+        onReceiveProgress: (received, total) {
+          if (total > 0) {
+            final progress = received / total;
+            messagesNotifier.updateDownloadProgress(widget.message.id, progress);
+          }
+        },
       );
       
-      // Hide download snackbar and open file
+      // Clear download progress and update local path
+      messagesNotifier.clearDownloadProgress(widget.message.id);
+      messagesNotifier.updateMessageLocalPath(widget.message.id, localFilePath: localPath);
+      
+      // Open file
       if (context.mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        
         final result = await OpenFilex.open(localPath);
         if (result.type != ResultType.done) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -868,14 +1040,13 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             ),
           );
         }
-        
-        // Update message with local path for future use
-        ref.read(messagesProvider(widget.message.chatId).notifier)
-            .updateMessageLocalPath(widget.message.id, localFilePath: localPath);
       }
     } catch (e) {
+      // Clear download progress on error
+      ref.read(messagesProvider(widget.message.chatId).notifier)
+          .clearDownloadProgress(widget.message.id);
+      
       if (context.mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Ошибка загрузки: $e'),
@@ -1003,33 +1174,67 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         return '📷 Фото';
       case MessageType.file:
         return '📎 ${reply.originalFileName ?? "Файл"}';
+      case MessageType.poll:
+        return '📊 Голосование';
     }
   }
 
+  Widget _buildPollWidget(BuildContext context, bool isMe) {
+    final pollData = widget.message.pollData;
+    if (pollData == null) {
+      return const Text('Ошибка: данные голосования недоступны');
+    }
+    
+    final poll = Poll.fromJson(pollData);
+    final profileState = ref.watch(profileProvider);
+    final currentUserId = profileState.userId;
+    final isCreator = widget.message.senderId == currentUserId;
+    
+    return PollWidget(
+      poll: poll,
+      isFromMe: isMe,
+      canClose: isCreator && !poll.isClosed,
+      onVote: (optionIds) async {
+        // Voting will be handled by MessagesProvider
+        await ref.read(messagesProvider(widget.message.chatId).notifier)
+            .votePoll(poll.id, optionIds);
+      },
+      onRetract: (optionIds) async {
+        await ref.read(messagesProvider(widget.message.chatId).notifier)
+            .retractPollVote(poll.id, optionIds);
+      },
+      onClose: isCreator ? () async {
+        await ref.read(messagesProvider(widget.message.chatId).notifier)
+            .closePoll(poll.id);
+      } : null,
+    );
+  }
+
   Widget _buildImageWidget() {
+    final isUploading = widget.message.status == MessageStatus.sending && 
+                        widget.message.uploadProgress != null &&
+                        widget.message.uploadProgress! < 1.0;
+    final progress = widget.message.uploadProgress ?? 0.0;
+    
+    Widget imageWidget;
+    
     // Check if we have local image first
     if (widget.message.localImagePath != null && 
         File(widget.message.localImagePath!).existsSync()) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.file(
-          File(widget.message.localImagePath!),
-          width: 200,
-          height: 200,
-          fit: BoxFit.cover,
-        ),
+      imageWidget = Image.file(
+        File(widget.message.localImagePath!),
+        width: 200,
+        height: 200,
+        fit: BoxFit.cover,
       );
-    }
-    
-    // Otherwise use network image
-    final imageUrl = widget.message.filePath != null
-        ? '${ApiConstants.baseUrl}${widget.message.filePath}'
-        : null;
-    
-    if (imageUrl != null) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: CachedNetworkImage(
+    } else {
+      // Otherwise use network image
+      final imageUrl = widget.message.filePath != null
+          ? '${ApiConstants.baseUrl}${widget.message.filePath}'
+          : null;
+      
+      if (imageUrl != null) {
+        imageWidget = CachedNetworkImage(
           imageUrl: imageUrl,
           width: 200,
           height: 200,
@@ -1050,16 +1255,57 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
               child: Icon(Icons.error_outline, size: 48),
             ),
           ),
-        ),
-      );
+        );
+      } else {
+        imageWidget = Container(
+          width: 200,
+          height: 200,
+          color: Colors.grey[300],
+          child: const Center(
+            child: Text('Изображение недоступно'),
+          ),
+        );
+      }
     }
     
-    return Container(
-      width: 200,
-      height: 200,
-      color: Colors.grey[300],
-      child: const Center(
-        child: Text('Изображение недоступно'),
+    // Wrap with upload progress overlay if uploading
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Stack(
+        children: [
+          imageWidget,
+          // Upload progress overlay
+          if (isUploading)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withOpacity(0.4),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 50,
+                      height: 50,
+                      child: CircularProgressIndicator(
+                        value: progress,
+                        strokeWidth: 4,
+                        backgroundColor: Colors.white.withOpacity(0.3),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${(progress * 100).toInt()}%',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -1154,7 +1400,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     _hasMarkedAsPlayed = true;
     
     final profileState = ref.read(profileProvider);
-    final currentUserId = profileState.profile?.id;
+    final currentUserId = profileState.userId; // Use getter that falls back to cachedUserId
     
     // Don't mark own messages as played
     if (currentUserId == null || widget.message.senderId == currentUserId) {
@@ -1210,7 +1456,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   @override
   Widget build(BuildContext context) {
     final profileState = ref.watch(profileProvider);
-    final currentUserId = profileState.profile?.id;
+    // Use userId getter which returns profile?.id ?? cachedUserId for immediate positioning
+    final currentUserId = profileState.userId;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     

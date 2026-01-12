@@ -3,6 +3,7 @@ enum MessageType {
   audio,
   image,
   file,
+  poll,
 }
 
 enum MessageStatus {
@@ -96,6 +97,15 @@ class Message {
   
   // End-to-end encryption
   final bool isEncrypted;
+  
+  // Upload progress (0.0 - 1.0) for sending media messages
+  final double? uploadProgress;
+  
+  // Download progress (0.0 - 1.0) for receiving media messages
+  final double? downloadProgress;
+  
+  // Poll data (for MessageType.poll)
+  final Map<String, dynamic>? pollData;
 
   Message({
     required this.id,
@@ -124,6 +134,9 @@ class Message {
     this.editedAt,
     this.isDeleted = false,
     this.isEncrypted = false,
+    this.uploadProgress,
+    this.downloadProgress,
+    this.pollData,
   });
 
   factory Message.fromJson(Map<String, dynamic> json) {
@@ -156,6 +169,15 @@ class Message {
       editedAt: json['editedAt'] != null ? DateTime.parse(json['editedAt']) : null,
       isDeleted: json['isDeleted'] ?? false,
       isEncrypted: json['isEncrypted'] ?? false,
+      uploadProgress: json['uploadProgress'] != null 
+          ? (json['uploadProgress'] as num).toDouble() 
+          : null,
+      downloadProgress: json['downloadProgress'] != null 
+          ? (json['downloadProgress'] as num).toDouble() 
+          : null,
+      pollData: json['poll'] != null 
+          ? Map<String, dynamic>.from(json['poll'])
+          : null,
     );
   }
 
@@ -187,6 +209,9 @@ class Message {
       'editedAt': editedAt?.toIso8601String(),
       'isDeleted': isDeleted,
       'isEncrypted': isEncrypted,
+      'uploadProgress': uploadProgress,
+      'downloadProgress': downloadProgress,
+      'poll': pollData,
     };
   }
 
@@ -217,6 +242,9 @@ class Message {
     DateTime? editedAt,
     bool? isDeleted,
     bool? isEncrypted,
+    double? uploadProgress,
+    double? downloadProgress,
+    Map<String, dynamic>? pollData,
   }) {
     return Message(
       id: id ?? this.id,
@@ -245,6 +273,9 @@ class Message {
       editedAt: editedAt ?? this.editedAt,
       isDeleted: isDeleted ?? this.isDeleted,
       isEncrypted: isEncrypted ?? this.isEncrypted,
+      uploadProgress: uploadProgress ?? this.uploadProgress,
+      downloadProgress: downloadProgress ?? this.downloadProgress,
+      pollData: pollData ?? this.pollData,
     );
   }
   
@@ -261,6 +292,9 @@ class Message {
         return '[Изображение]';
       case MessageType.file:
         return '[Файл: ${originalFileName ?? "файл"}]';
+      case MessageType.poll:
+        final question = pollData?['question'] ?? 'Голосование';
+        return '📊 $question';
     }
   }
 }

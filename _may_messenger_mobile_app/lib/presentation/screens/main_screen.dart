@@ -116,6 +116,17 @@ class _MainScreenState extends ConsumerState<MainScreen> {
             },
           ),
         ],
+        // Thin sync indicator under AppBar - non-intrusive
+        bottom: chatsState.isSyncing ? PreferredSize(
+          preferredSize: const Size.fromHeight(2),
+          child: LinearProgressIndicator(
+            minHeight: 2,
+            backgroundColor: Colors.transparent,
+            valueColor: AlwaysStoppedAnimation<Color>(
+              Theme.of(context).colorScheme.primary.withOpacity(0.7),
+            ),
+          ),
+        ) : null,
       ),
       body: Column(
         children: [
@@ -190,7 +201,6 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   Widget _buildChatList(List chats, bool isLoading, String? error) {
     final chatsState = ref.watch(chatsProvider);
     final isOfflineMode = chatsState.isOfflineMode;
-    final isSyncing = chatsState.isSyncing;
     final syncError = chatsState.syncError;
     
     if (isLoading && chats.isEmpty) {
@@ -236,31 +246,9 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       );
     }
 
-    // Show chats with offline/sync status banner
+    // Show chats with offline status banner (syncing indicator moved to AppBar)
     return Column(
       children: [
-        // Syncing indicator (non-blocking)
-        if (isSyncing)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            color: Colors.blue.shade100,
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                SizedBox(width: 8),
-                Text(
-                  'Синхронизация...',
-                  style: TextStyle(fontSize: 12, color: Colors.blue),
-                ),
-              ],
-            ),
-          ),
         // Offline mode banner (with sync error if any)
         if (isOfflineMode || syncError != null)
           Container(

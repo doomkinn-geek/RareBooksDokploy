@@ -58,12 +58,14 @@ class MessageRepository {
     required String audioPath,
     String? clientMessageId,
     String? replyToMessageId,
+    void Function(double progress)? onSendProgress,
   }) async {
     return await _apiDataSource.sendAudioMessage(
       chatId: chatId,
       audioPath: audioPath,
       clientMessageId: clientMessageId,
       replyToMessageId: replyToMessageId,
+      onSendProgress: onSendProgress,
     );
   }
 
@@ -72,12 +74,14 @@ class MessageRepository {
     required String imagePath,
     String? clientMessageId,
     String? replyToMessageId,
+    void Function(double progress)? onSendProgress,
   }) async {
     return await _apiDataSource.sendImageMessage(
       chatId: chatId,
       imagePath: imagePath,
       clientMessageId: clientMessageId,
       replyToMessageId: replyToMessageId,
+      onSendProgress: onSendProgress,
     );
   }
 
@@ -87,6 +91,7 @@ class MessageRepository {
     required String fileName,
     String? clientMessageId,
     String? replyToMessageId,
+    void Function(double progress)? onSendProgress,
   }) async {
     return await _apiDataSource.sendFileMessage(
       chatId: chatId,
@@ -94,6 +99,7 @@ class MessageRepository {
       fileName: fileName,
       clientMessageId: clientMessageId,
       replyToMessageId: replyToMessageId,
+      onSendProgress: onSendProgress,
     );
   }
 

@@ -6,6 +6,7 @@ import '../models/message_receipts_model.dart';
 import '../models/user_profile_model.dart';
 import '../models/invite_link_model.dart';
 import '../models/participant_model.dart';
+import '../models/poll_model.dart';
 import '../../core/constants/api_constants.dart';
 
 class ApiDataSource {
@@ -183,6 +184,7 @@ class ApiDataSource {
     required String audioPath,
     String? clientMessageId,
     String? replyToMessageId,
+    void Function(double progress)? onSendProgress,
   }) async {
     try {
       final formData = FormData.fromMap({
@@ -195,6 +197,9 @@ class ApiDataSource {
       final response = await _dio.post(
         ApiConstants.audioMessages,
         data: formData,
+        onSendProgress: onSendProgress != null 
+            ? (count, total) => onSendProgress(total > 0 ? count / total : 0)
+            : null,
       );
       return Message.fromJson(response.data);
     } catch (e) {
@@ -207,6 +212,7 @@ class ApiDataSource {
     required String imagePath,
     String? clientMessageId,
     String? replyToMessageId,
+    void Function(double progress)? onSendProgress,
   }) async {
     try {
       final formData = FormData.fromMap({
@@ -219,6 +225,9 @@ class ApiDataSource {
       final response = await _dio.post(
         ApiConstants.imageMessages,
         data: formData,
+        onSendProgress: onSendProgress != null 
+            ? (count, total) => onSendProgress(total > 0 ? count / total : 0)
+            : null,
       );
       return Message.fromJson(response.data);
     } catch (e) {
@@ -232,6 +241,7 @@ class ApiDataSource {
     required String fileName,
     String? clientMessageId,
     String? replyToMessageId,
+    void Function(double progress)? onSendProgress,
   }) async {
     try {
       final formData = FormData.fromMap({
@@ -244,6 +254,9 @@ class ApiDataSource {
       final response = await _dio.post(
         ApiConstants.fileMessages,
         data: formData,
+        onSendProgress: onSendProgress != null 
+            ? (count, total) => onSendProgress(total > 0 ? count / total : 0)
+            : null,
       );
       return Message.fromJson(response.data);
     } catch (e) {
@@ -821,6 +834,84 @@ class ApiDataSource {
     } catch (e) {
       print('[API] Failed to distribute group keys: $e');
       throw Exception('Failed to distribute group keys: $e');
+    }
+  }
+  
+  // ====================== POLLS ======================
+  
+  /// Create a new poll in a group chat
+  Future<Message> createPoll(CreatePollRequest request) async {
+    try {
+      final response = await _dio.post(
+        '${ApiConstants.apiUrl}/polls',
+        data: request.toJson(),
+      );
+      return Message.fromJson(response.data);
+    } catch (e) {
+      print('[API] Failed to create poll: $e');
+      throw Exception('Failed to create poll: $e');
+    }
+  }
+  
+  /// Vote on a poll
+  Future<Poll> votePoll(String pollId, List<String> optionIds) async {
+    try {
+      final response = await _dio.post(
+        '${ApiConstants.apiUrl}/polls/vote',
+        data: {
+          'pollId': pollId,
+          'optionIds': optionIds,
+        },
+      );
+      return Poll.fromJson(response.data);
+    } catch (e) {
+      print('[API] Failed to vote on poll: $e');
+      throw Exception('Failed to vote on poll: $e');
+    }
+  }
+  
+  /// Retract votes from a poll
+  Future<Poll> retractPollVote(String pollId, List<String> optionIds) async {
+    try {
+      final response = await _dio.post(
+        '${ApiConstants.apiUrl}/polls/retract',
+        data: {
+          'pollId': pollId,
+          'optionIds': optionIds,
+        },
+      );
+      return Poll.fromJson(response.data);
+    } catch (e) {
+      print('[API] Failed to retract poll vote: $e');
+      throw Exception('Failed to retract poll vote: $e');
+    }
+  }
+  
+  /// Close a poll (creator only)
+  Future<Poll> closePoll(String pollId) async {
+    try {
+      final response = await _dio.post(
+        '${ApiConstants.apiUrl}/polls/$pollId/close',
+      );
+      return Poll.fromJson(response.data);
+    } catch (e) {
+      print('[API] Failed to close poll: $e');
+      throw Exception('Failed to close poll: $e');
+    }
+  }
+  
+  /// Get voters for a poll (non-anonymous polls only)
+  Future<List<PollOption>> getPollVoters(String pollId) async {
+    try {
+      final response = await _dio.get(
+        '${ApiConstants.apiUrl}/polls/$pollId/voters',
+      );
+      return (response.data as List)
+          .map((o) => PollOption.fromJson(o))
+          .toList();
+    } catch (e) {
+      print('[API] Failed to get poll voters: $e');
+      throw Exception('Failed to get poll voters: $e');
     }
   }
 }

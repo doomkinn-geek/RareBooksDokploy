@@ -24,6 +24,9 @@ class ProximityAudioService {
   
   // Callback для уведомления об изменении маршрута
   Function(AudioOutputRoute route)? onRouteChanged;
+  
+  // Callback для паузы при убирании от уха
+  Function()? onRemovedFromEar;
 
   AudioOutputRoute get currentRoute => _currentRoute;
   bool get isNearEar => _isNearEar;
@@ -57,6 +60,8 @@ class ProximityAudioService {
           } else {
             print('[ProximityAudioService] Phone away from ear, switching to speaker...');
             _setAudioRouteSpeaker();
+            // Notify listener to pause audio when removed from ear
+            onRemovedFromEar?.call();
           }
         }
       });

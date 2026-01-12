@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../data/models/message_model.dart';
 import '../../data/models/chat_model.dart';
+import '../../data/models/poll_model.dart';
 import '../../data/services/message_sync_service.dart';
 import '../../data/repositories/message_cache_repository.dart';
 import '../../core/services/notification_service.dart';
@@ -1108,7 +1109,12 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
           chatId: chatId,
           audioPath: audioPath!,
           clientMessageId: clientMessageId,
+          onSendProgress: (progress) {
+            updateUploadProgress(localId, progress);
+          },
         );
+        // Clear progress after successful upload
+        updateUploadProgress(localId, 1.0);
       }
       // #region agent log - Hypothesis B
       final apiCallDuration = DateTime.now().difference(apiCallStart).inMilliseconds;
@@ -1235,13 +1241,18 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       // #endregion
       print('[MSG_SEND] Syncing image to backend: $localId (attempt ${attemptNumber + 1}/$maxAttempts)');
       
-      // Send via API with clientMessageId
+      // Send via API with clientMessageId and progress callback
       final serverMessage = await _messageRepository.sendImageMessage(
         chatId: chatId,
         imagePath: imagePath,
         clientMessageId: clientMessageId,
+        onSendProgress: (progress) {
+          updateUploadProgress(localId, progress);
+        },
       );
       
+      // Clear progress after successful upload
+      updateUploadProgress(localId, 1.0);
       print('[MSG_SEND] Image synced successfully. Server ID: ${serverMessage.id}, Status: ${serverMessage.status}');
       
       // IMPORTANT: Ensure status is at least 'sent' after successful sync
@@ -1682,8 +1693,13 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         filePath: filePath,
         fileName: fileName,
         clientMessageId: clientMessageId,
+        onSendProgress: (progress) {
+          updateUploadProgress(localId, progress);
+        },
       );
       
+      // Clear progress after successful upload
+      updateUploadProgress(localId, 1.0);
       print('[MSG_SEND] File synced successfully. Server ID: ${serverMessage.id}');
       
       final finalStatus = serverMessage.status == MessageStatus.sending 
@@ -2638,6 +2654,177 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     state = state.copyWith(messages: updatedMessages);
     _cache.update(updatedMessages[messageIndex]);
     print('[MSG_UPDATE] Updated local path for message: $messageId');
+  }
+  
+  /// Update upload progress for a message (0.0 - 1.0)
+  void updateUploadProgress(String localId, double progress) {
+    final messageIndex = _findMessageIndex(localId);
+    if (messageIndex == -1) return;
+    
+    final updatedMessages = [...state.messages];
+    updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
+      uploadProgress: progress,
+    );
+    
+    state = state.copyWith(messages: updatedMessages);
+  }
+  
+  /// Update download progress for a message (0.0 - 1.0)
+  void updateDownloadProgress(String messageId, double progress) {
+    final messageIndex = state.messages.indexWhere((m) => m.id == messageId);
+    if (messageIndex == -1) return;
+    
+    final updatedMessages = [...state.messages];
+    updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
+      downloadProgress: progress,
+    );
+    
+    state = state.copyWith(messages: updatedMessages);
+  }
+  
+  /// Clear download progress after download completes
+  void clearDownloadProgress(String messageId) {
+    final messageIndex = state.messages.indexWhere((m) => m.id == messageId);
+    if (messageIndex == -1) return;
+    
+    final updatedMessages = [...state.messages];
+    // Set to null by using a sentinel value approach
+    final message = updatedMessages[messageIndex];
+    updatedMessages[messageIndex] = Message(
+      id: message.id,
+      chatId: message.chatId,
+      senderId: message.senderId,
+      senderName: message.senderName,
+      type: message.type,
+      content: message.content,
+      filePath: message.filePath,
+      localAudioPath: message.localAudioPath,
+      localImagePath: message.localImagePath,
+      localFilePath: message.localFilePath,
+      originalFileName: message.originalFileName,
+      fileSize: message.fileSize,
+      status: message.status,
+      createdAt: message.createdAt,
+      localId: message.localId,
+      isLocalOnly: message.isLocalOnly,
+      clientMessageId: message.clientMessageId,
+      replyToMessageId: message.replyToMessageId,
+      replyToMessage: message.replyToMessage,
+      forwardedFromMessageId: message.forwardedFromMessageId,
+      forwardedFromUserId: message.forwardedFromUserId,
+      forwardedFromUserName: message.forwardedFromUserName,
+      isEdited: message.isEdited,
+      editedAt: message.editedAt,
+      isDeleted: message.isDeleted,
+      isEncrypted: message.isEncrypted,
+      uploadProgress: message.uploadProgress,
+      downloadProgress: null, // Clear download progress
+    );
+    
+    state = state.copyWith(messages: updatedMessages);
+  }
+  
+  // ====================== POLLS ======================
+  
+  /// Create a new poll in this chat
+  Future<void> createPoll({
+    required String question,
+    required List<String> options,
+    bool allowMultipleAnswers = false,
+    bool isAnonymous = false,
+  }) async {
+    try {
+      state = state.copyWith(isSending: true);
+      
+      final request = CreatePollRequest(
+        chatId: chatId,
+        question: question,
+        options: options,
+        allowMultipleAnswers: allowMultipleAnswers,
+        isAnonymous: isAnonymous,
+      );
+      
+      final message = await _messageRepository.apiDataSource.createPoll(request);
+      
+      // Add the message to the list
+      final updatedMessages = List<Message>.from([...state.messages, message]);
+      updatedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      
+      state = state.copyWith(messages: updatedMessages, isSending: false);
+      _cache.update(message);
+      
+      print('[POLL] Created poll: ${message.id}');
+    } catch (e) {
+      print('[POLL] Failed to create poll: $e');
+      state = state.copyWith(isSending: false, error: 'Ошибка создания голосования: $e');
+      rethrow;
+    }
+  }
+  
+  /// Vote on a poll
+  Future<void> votePoll(String pollId, List<String> optionIds) async {
+    try {
+      final updatedPoll = await _messageRepository.apiDataSource.votePoll(pollId, optionIds);
+      _updatePollInMessage(pollId, updatedPoll.toJson());
+      print('[POLL] Voted on poll: $pollId');
+    } catch (e) {
+      print('[POLL] Failed to vote on poll: $e');
+      rethrow;
+    }
+  }
+  
+  /// Retract votes from a poll
+  Future<void> retractPollVote(String pollId, List<String> optionIds) async {
+    try {
+      final updatedPoll = await _messageRepository.apiDataSource.retractPollVote(pollId, optionIds);
+      _updatePollInMessage(pollId, updatedPoll.toJson());
+      print('[POLL] Retracted vote from poll: $pollId');
+    } catch (e) {
+      print('[POLL] Failed to retract vote: $e');
+      rethrow;
+    }
+  }
+  
+  /// Close a poll
+  Future<void> closePoll(String pollId) async {
+    try {
+      final updatedPoll = await _messageRepository.apiDataSource.closePoll(pollId);
+      _updatePollInMessage(pollId, updatedPoll.toJson());
+      print('[POLL] Closed poll: $pollId');
+    } catch (e) {
+      print('[POLL] Failed to close poll: $e');
+      rethrow;
+    }
+  }
+  
+  /// Handle poll update from SignalR
+  void handlePollUpdated(String messageId, Map<String, dynamic> pollData) {
+    final messageIndex = state.messages.indexWhere((m) => m.id == messageId);
+    if (messageIndex != -1) {
+      final updatedMessages = [...state.messages];
+      updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
+        pollData: pollData,
+      );
+      state = state.copyWith(messages: updatedMessages);
+      _cache.update(updatedMessages[messageIndex]);
+      print('[POLL] Updated poll from SignalR for message: $messageId');
+    }
+  }
+  
+  void _updatePollInMessage(String pollId, Map<String, dynamic> pollData) {
+    // Find message with this poll
+    final messageIndex = state.messages.indexWhere(
+      (m) => m.pollData != null && m.pollData!['id'] == pollId
+    );
+    
+    if (messageIndex != -1) {
+      final updatedMessages = [...state.messages];
+      updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
+        pollData: pollData,
+      );
+      state = state.copyWith(messages: updatedMessages);
+      _cache.update(updatedMessages[messageIndex]);
+    }
   }
 }
 

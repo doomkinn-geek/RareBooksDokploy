@@ -19,6 +19,9 @@ public class AppDbContext : DbContext
     public DbSet<Contact> Contacts { get; set; } = null!;
     public DbSet<DeliveryReceipt> DeliveryReceipts { get; set; } = null!;
     public DbSet<PendingAck> PendingAcks { get; set; } = null!;
+    public DbSet<Poll> Polls { get; set; } = null!;
+    public DbSet<PollOption> PollOptions { get; set; } = null!;
+    public DbSet<PollVote> PollVotes { get; set; } = null!;
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -186,6 +189,49 @@ public class AppDbContext : DbContext
             entity.HasOne(e => e.RecipientUser)
                 .WithMany()
                 .HasForeignKey(e => e.RecipientUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Poll configuration
+        modelBuilder.Entity<Poll>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.MessageId).IsUnique();
+            entity.Property(e => e.Question).IsRequired().HasMaxLength(500);
+            
+            entity.HasOne(e => e.Message)
+                .WithOne(m => m.Poll)
+                .HasForeignKey<Poll>(e => e.MessageId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // PollOption configuration
+        modelBuilder.Entity<PollOption>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.PollId, e.Order });
+            entity.Property(e => e.Text).IsRequired().HasMaxLength(200);
+            
+            entity.HasOne(e => e.Poll)
+                .WithMany(p => p.Options)
+                .HasForeignKey(e => e.PollId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // PollVote configuration
+        modelBuilder.Entity<PollVote>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.PollOptionId, e.UserId }).IsUnique();
+            
+            entity.HasOne(e => e.PollOption)
+                .WithMany(o => o.Votes)
+                .HasForeignKey(e => e.PollOptionId)
+                .OnDelete(DeleteBehavior.Cascade);
+                
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

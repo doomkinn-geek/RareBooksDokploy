@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/datasources/signalr_service.dart';
 import '../../data/models/message_model.dart';
@@ -132,6 +133,10 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
   final SignalRService _signalRService;
   final dynamic _authRepository;
   final Ref _ref;
+  
+  // Stream controller for poll updates
+  final _pollUpdateController = StreamController<Map<String, dynamic>>.broadcast();
+  Stream<Map<String, dynamic>> get pollUpdates => _pollUpdateController.stream;
 
   SignalRConnectionNotifier(
     this._signalRService,
@@ -474,6 +479,21 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
             }
           } catch (e) {
             print('[SignalR] Failed to update user status: $e');
+          }
+        });
+        
+        // Setup poll updated listener
+        _signalRService.onPollUpdated((messageId, pollData) {
+          print('[SignalR] Poll updated: messageId=$messageId');
+          
+          try {
+            // Find the chat containing this message and update it
+            // We need to iterate through all active message providers
+            // This is handled by the MessagesNotifier when it receives the update
+            // For now, we'll broadcast it and let active providers handle it
+            _pollUpdateController.add({'messageId': messageId, 'poll': pollData});
+          } catch (e) {
+            print('[SignalR] Failed to process poll update: $e');
           }
         });
 

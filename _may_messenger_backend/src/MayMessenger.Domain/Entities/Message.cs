@@ -41,9 +41,13 @@ public class Message : BaseEntity
     // End-to-end encryption
     public bool IsEncrypted { get; set; } = false;
     
+    // Poll (for MessageType.Poll)
+    public Guid? PollId { get; set; }
+    
     // Navigation properties
     public Chat Chat { get; set; } = null!;
     public User Sender { get; set; } = null!;
+    public Poll? Poll { get; set; }
 }
 
 

@@ -565,6 +565,24 @@ class SignalRService {
       }
     });
   }
+  
+  /// Register callback for poll updates (voting, closing)
+  void onPollUpdated(Function(String messageId, Map<String, dynamic> pollData) callback) {
+    _hubConnection?.off('PollUpdated');
+    
+    _hubConnection?.on('PollUpdated', (arguments) {
+      if (arguments != null && arguments.isNotEmpty) {
+        final data = arguments[0] as Map<String, dynamic>;
+        final messageId = data['MessageId']?.toString() ?? data['messageId']?.toString();
+        final pollData = data['Poll'] ?? data['poll'];
+        
+        if (messageId != null && pollData != null) {
+          print('[SignalR] Poll updated: messageId=$messageId');
+          callback(messageId, Map<String, dynamic>.from(pollData));
+        }
+      }
+    });
+  }
 
   Future<void> markMessageAsDelivered(String messageId, String chatId) async {
     // #region agent log - Hypothesis E

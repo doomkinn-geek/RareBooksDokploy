@@ -37,6 +37,9 @@ public class MessageDto
     
     // End-to-end encryption
     public bool IsEncrypted { get; set; }
+    
+    // Poll data (for MessageType.Poll)
+    public PollDto? Poll { get; set; }
 }
 
 /// <summary>
