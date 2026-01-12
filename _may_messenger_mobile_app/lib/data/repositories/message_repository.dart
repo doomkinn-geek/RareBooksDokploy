@@ -1,6 +1,7 @@
 import '../datasources/api_datasource.dart';
 import '../datasources/local_datasource.dart';
 import '../models/message_model.dart';
+import '../models/poll_model.dart';
 
 class MessageRepository {
   final ApiDataSource _apiDataSource;
@@ -249,6 +250,28 @@ class MessageRepository {
       replyToMessageId: replyToMessageId,
       clientMessageId: clientMessageId,
     );
+  }
+  
+  // ====================== POLLS ======================
+  
+  /// Create a new poll in a group chat
+  Future<Message> createPoll(CreatePollRequest request) async {
+    return await _apiDataSource.createPoll(request);
+  }
+  
+  /// Vote on a poll
+  Future<Poll> votePoll(String pollId, List<String> optionIds) async {
+    return await _apiDataSource.votePoll(pollId, optionIds);
+  }
+  
+  /// Retract votes from a poll
+  Future<Poll> retractPollVote(String pollId, List<String> optionIds) async {
+    return await _apiDataSource.retractPollVote(pollId, optionIds);
+  }
+  
+  /// Close a poll (creator only)
+  Future<Poll> closePoll(String pollId) async {
+    return await _apiDataSource.closePoll(pollId);
   }
 }
 

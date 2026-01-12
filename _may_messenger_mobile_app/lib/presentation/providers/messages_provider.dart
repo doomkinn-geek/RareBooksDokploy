@@ -2744,7 +2744,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         isAnonymous: isAnonymous,
       );
       
-      final message = await _messageRepository.apiDataSource.createPoll(request);
+      final message = await _messageRepository.createPoll(request);
       
       // Add the message to the list
       final updatedMessages = List<Message>.from([...state.messages, message]);
@@ -2764,7 +2764,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   /// Vote on a poll
   Future<void> votePoll(String pollId, List<String> optionIds) async {
     try {
-      final updatedPoll = await _messageRepository.apiDataSource.votePoll(pollId, optionIds);
+      final updatedPoll = await _messageRepository.votePoll(pollId, optionIds);
       _updatePollInMessage(pollId, updatedPoll.toJson());
       print('[POLL] Voted on poll: $pollId');
     } catch (e) {
@@ -2776,7 +2776,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   /// Retract votes from a poll
   Future<void> retractPollVote(String pollId, List<String> optionIds) async {
     try {
-      final updatedPoll = await _messageRepository.apiDataSource.retractPollVote(pollId, optionIds);
+      final updatedPoll = await _messageRepository.retractPollVote(pollId, optionIds);
       _updatePollInMessage(pollId, updatedPoll.toJson());
       print('[POLL] Retracted vote from poll: $pollId');
     } catch (e) {
@@ -2788,7 +2788,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   /// Close a poll
   Future<void> closePoll(String pollId) async {
     try {
-      final updatedPoll = await _messageRepository.apiDataSource.closePoll(pollId);
+      final updatedPoll = await _messageRepository.closePoll(pollId);
       _updatePollInMessage(pollId, updatedPoll.toJson());
       print('[POLL] Closed poll: $pollId');
     } catch (e) {
