@@ -1255,6 +1255,8 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
         return '📷 Фото';
       case MessageType.file:
         return '📎 ${message.originalFileName ?? "Файл"}';
+      case MessageType.poll:
+        return '📊 Голосование';
     }
   }
   

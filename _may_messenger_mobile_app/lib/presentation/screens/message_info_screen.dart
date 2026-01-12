@@ -280,6 +280,17 @@ class _MessageInfoScreenState extends ConsumerState<MessageInfoScreen> {
             ),
           ],
         );
+      case MessageType.poll:
+        return Row(
+          children: [
+            Icon(Icons.poll, color: Colors.blue.shade600),
+            const SizedBox(width: 8),
+            Text(
+              widget.message.pollData?['question'] ?? 'Голосование',
+              style: const TextStyle(fontStyle: FontStyle.italic),
+            ),
+          ],
+        );
     }
   }
   

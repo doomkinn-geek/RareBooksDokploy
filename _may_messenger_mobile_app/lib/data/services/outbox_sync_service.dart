@@ -268,6 +268,10 @@ class OutboxSyncService {
             replyToMessageId: msg.replyToMessageId,
           );
           break;
+          
+        case MessageType.poll:
+          // Polls are created via a separate API, not through outbox
+          throw Exception('Poll messages should not be in outbox');
       }
       
       // Mark as synced (this also removes from outbox)
