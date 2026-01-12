@@ -144,14 +144,7 @@ class ApiDataSource {
         },
       );
       final List<Message> messages = (response.data as List)
-          .map((json) {
-            final message = Message.fromJson(json as Map<String, dynamic>);
-            // Log poll data for debugging
-            if (message.type == MessageType.poll) {
-              print('[API] Poll message: id=${message.id}, pollData=${json['poll'] != null ? 'present' : 'null'}, raw poll: ${json['poll']}');
-            }
-            return message;
-          })
+          .map((json) => Message.fromJson(json as Map<String, dynamic>))
           .toList()
           .cast<Message>();
       return messages;
