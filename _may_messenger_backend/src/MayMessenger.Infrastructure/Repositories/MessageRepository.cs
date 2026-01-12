@@ -29,6 +29,8 @@ public class MessageRepository : Repository<Message>, IMessageRepository
             .Include(m => m.Sender)
             .Include(m => m.ReplyToMessage)
                 .ThenInclude(r => r!.Sender)
+            .Include(m => m.Poll)
+                .ThenInclude(p => p!.Options)
             .Where(m => m.ChatId == chatId)
             .OrderByDescending(m => m.CreatedAt)
             .Skip(skip)
@@ -79,6 +81,8 @@ public class MessageRepository : Repository<Message>, IMessageRepository
             .Include(m => m.Sender)
             .Include(m => m.ReplyToMessage)
                 .ThenInclude(r => r!.Sender)
+            .Include(m => m.Poll)
+                .ThenInclude(p => p!.Options)
             .Where(m => m.ChatId == chatId && 
                        (m.CreatedAt > since || m.UpdatedAt > since))
             .OrderBy(m => m.CreatedAt) // Ascending для incremental sync (старые первыми)
@@ -92,6 +96,8 @@ public class MessageRepository : Repository<Message>, IMessageRepository
             .Include(m => m.Sender)
             .Include(m => m.ReplyToMessage)
                 .ThenInclude(r => r!.Sender)
+            .Include(m => m.Poll)
+                .ThenInclude(p => p!.Options)
             .Where(m => m.ChatId == chatId);
         
         // If cursor is provided, get messages older than the cursor message

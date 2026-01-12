@@ -2746,14 +2746,12 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
       final message = await _messageRepository.createPoll(request);
       
-      // Add the message to the list
-      final updatedMessages = List<Message>.from([...state.messages, message]);
-      updatedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      // Don't add the message locally - it will come via SignalR
+      // Backend sends the poll message to all chat participants including creator
+      // Adding it here would cause duplication
+      state = state.copyWith(isSending: false);
       
-      state = state.copyWith(messages: updatedMessages, isSending: false);
-      _cache.update(message);
-      
-      print('[POLL] Created poll: ${message.id}');
+      print('[POLL] Created poll: ${message.id} - waiting for SignalR delivery');
     } catch (e) {
       print('[POLL] Failed to create poll: $e');
       state = state.copyWith(isSending: false, error: 'Ошибка создания голосования: $e');

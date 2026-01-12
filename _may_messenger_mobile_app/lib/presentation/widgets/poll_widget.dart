@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/poll_model.dart';
+import '../../core/themes/app_theme.dart';
 
 /// Widget for displaying a poll in a message bubble
 class PollWidget extends ConsumerStatefulWidget {
@@ -49,6 +50,17 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
     final poll = widget.poll;
     final hasVoted = poll.hasVoted;
     final isClosed = poll.isClosed;
+    
+    // Use theme colors for proper visibility
+    final primaryTextColor = widget.isFromMe 
+        ? theme.outgoingTextColor 
+        : theme.incomingTextColor;
+    final secondaryTextColor = widget.isFromMe 
+        ? theme.outgoingTextColor.withOpacity(0.7) 
+        : theme.incomingTextColor.withOpacity(0.7);
+    final accentColor = widget.isFromMe 
+        ? theme.outgoingTextColor 
+        : theme.colorScheme.primary;
 
     return Container(
       constraints: const BoxConstraints(maxWidth: 280),
@@ -62,7 +74,7 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
               Icon(
                 Icons.poll,
                 size: 20,
-                color: widget.isFromMe ? Colors.white70 : theme.colorScheme.primary,
+                color: accentColor.withOpacity(0.8),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -71,7 +83,7 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
-                    color: widget.isFromMe ? Colors.white : theme.textTheme.bodyLarge?.color,
+                    color: primaryTextColor,
                   ),
                 ),
               ),
@@ -89,9 +101,7 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
                 style: TextStyle(
                   fontSize: 12,
                   fontStyle: FontStyle.italic,
-                  color: widget.isFromMe 
-                      ? Colors.white60 
-                      : theme.textTheme.bodySmall?.color?.withOpacity(0.7),
+                  color: secondaryTextColor,
                 ),
               ),
             ),
@@ -109,16 +119,14 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
                 _getVotersText(poll.totalVoters),
                 style: TextStyle(
                   fontSize: 12,
-                  color: widget.isFromMe 
-                      ? Colors.white60 
-                      : theme.textTheme.bodySmall?.color,
+                  color: secondaryTextColor,
                 ),
               ),
               if (isClosed)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: (widget.isFromMe ? Colors.white : theme.colorScheme.primary).withOpacity(0.2),
+                    color: accentColor.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -126,7 +134,7 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
-                      color: widget.isFromMe ? Colors.white70 : theme.colorScheme.primary,
+                      color: accentColor,
                     ),
                   ),
                 ),
@@ -136,9 +144,7 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
                   style: TextStyle(
                     fontSize: 11,
                     fontStyle: FontStyle.italic,
-                    color: widget.isFromMe 
-                        ? Colors.white60 
-                        : theme.textTheme.bodySmall?.color,
+                    color: secondaryTextColor,
                   ),
                 ),
             ],
@@ -212,6 +218,14 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
     final isSelected = _selectedOptions.contains(option.id);
     final showResults = hasVoted || isClosed;
     
+    // Use theme colors
+    final primaryTextColor = widget.isFromMe 
+        ? theme.outgoingTextColor 
+        : theme.incomingTextColor;
+    final accentColor = widget.isFromMe 
+        ? theme.outgoingTextColor 
+        : theme.colorScheme.primary;
+    
     return GestureDetector(
       onTap: isClosed ? null : () => _toggleOption(option.id),
       child: Container(
@@ -225,13 +239,9 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
                 child: LinearProgressIndicator(
                   value: option.percentage / 100,
                   minHeight: 40,
-                  backgroundColor: (widget.isFromMe 
-                      ? Colors.white 
-                      : theme.colorScheme.primary).withOpacity(0.1),
+                  backgroundColor: accentColor.withOpacity(0.1),
                   valueColor: AlwaysStoppedAnimation<Color>(
-                    (widget.isFromMe 
-                        ? Colors.white 
-                        : theme.colorScheme.primary).withOpacity(isSelected ? 0.4 : 0.2),
+                    accentColor.withOpacity(isSelected ? 0.4 : 0.2),
                   ),
                 ),
               ),
@@ -241,8 +251,7 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 border: !showResults ? Border.all(
-                  color: (widget.isFromMe ? Colors.white : theme.colorScheme.primary)
-                      .withOpacity(isSelected ? 0.8 : 0.3),
+                  color: accentColor.withOpacity(isSelected ? 0.8 : 0.3),
                   width: isSelected ? 2 : 1,
                 ) : null,
                 borderRadius: BorderRadius.circular(8),
@@ -263,11 +272,11 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
                             ? BorderRadius.circular(4) 
                             : null,
                         border: Border.all(
-                          color: widget.isFromMe ? Colors.white70 : theme.colorScheme.primary,
+                          color: accentColor.withOpacity(0.8),
                           width: 2,
                         ),
                         color: isSelected 
-                            ? (widget.isFromMe ? Colors.white : theme.colorScheme.primary)
+                            ? accentColor
                             : Colors.transparent,
                       ),
                       child: isSelected
@@ -275,7 +284,9 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
                               Icons.check,
                               size: 14,
                               color: widget.isFromMe 
-                                  ? theme.colorScheme.primary 
+                                  ? (theme.brightness == Brightness.dark 
+                                      ? theme.colorScheme.primary 
+                                      : theme.colorScheme.surface)
                                   : Colors.white,
                             )
                           : null,
@@ -287,7 +298,7 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
                       option.text,
                       style: TextStyle(
                         fontSize: 14,
-                        color: widget.isFromMe ? Colors.white : theme.textTheme.bodyLarge?.color,
+                        color: primaryTextColor,
                         fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                       ),
                     ),
@@ -300,7 +311,7 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: widget.isFromMe ? Colors.white : theme.colorScheme.primary,
+                        color: accentColor,
                       ),
                     ),
                 ],

@@ -1886,6 +1886,33 @@ public class MessagesController : ControllerBase
             };
         }
         
+        // Map poll if present
+        PollDto? pollDto = null;
+        if (message.Poll != null)
+        {
+            pollDto = new PollDto
+            {
+                Id = message.Poll.Id,
+                Question = message.Poll.Question,
+                AllowMultipleAnswers = message.Poll.AllowMultipleAnswers,
+                IsAnonymous = message.Poll.IsAnonymous,
+                IsClosed = message.Poll.IsClosed,
+                ClosesAt = message.Poll.ClosesAt,
+                TotalVoters = message.Poll.TotalVoters,
+                MyVotes = new List<Guid>(), // Will be populated if we have current user context
+                Options = message.Poll.Options?.OrderBy(o => o.Order).Select(o => new PollOptionDto
+                {
+                    Id = o.Id,
+                    Text = o.Text,
+                    Order = o.Order,
+                    VoteCount = o.VoteCount,
+                    Percentage = message.Poll.TotalVoters > 0 
+                        ? (int)Math.Round(o.VoteCount * 100.0 / message.Poll.TotalVoters) 
+                        : 0
+                }).ToList() ?? new List<PollOptionDto>()
+            };
+        }
+        
         return new MessageDto
         {
             Id = message.Id,
@@ -1908,7 +1935,8 @@ public class MessagesController : ControllerBase
             IsEdited = message.IsEdited,
             EditedAt = message.EditedAt,
             IsDeleted = message.IsDeleted,
-            IsEncrypted = message.IsEncrypted
+            IsEncrypted = message.IsEncrypted,
+            Poll = pollDto
         };
     }
     
