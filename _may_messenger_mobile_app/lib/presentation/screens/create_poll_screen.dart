@@ -41,16 +41,21 @@ class _CreatePollScreenState extends ConsumerState<CreatePollScreen> {
       appBar: AppBar(
         title: const Text('Создать голосование'),
         actions: [
-          TextButton(
-            onPressed: _isCreating ? null : _createPoll,
-            child: _isCreating
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Создать'),
-          ),
+          if (_isCreating)
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              ),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.check),
+              tooltip: 'Создать',
+              onPressed: _createPoll,
+            ),
         ],
       ),
       body: Form(
