@@ -13,13 +13,15 @@ public class MessageRepository : Repository<Message>, IMessageRepository
     {
     }
     
-    // Override to include ReplyToMessage and Sender navigation properties
+    // Override to include ReplyToMessage, Sender and Poll navigation properties
     public override async Task<Message?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _dbSet
             .Include(m => m.Sender)
             .Include(m => m.ReplyToMessage)
                 .ThenInclude(r => r!.Sender)
+            .Include(m => m.Poll)
+                .ThenInclude(p => p!.Options)
             .FirstOrDefaultAsync(m => m.Id == id, cancellationToken);
     }
     
@@ -132,6 +134,8 @@ public class MessageRepository : Repository<Message>, IMessageRepository
             .Include(m => m.Sender)
             .Include(m => m.ReplyToMessage)
                 .ThenInclude(r => r!.Sender)
+            .Include(m => m.Poll)
+                .ThenInclude(p => p!.Options)
             .FirstOrDefaultAsync(m => m.ClientMessageId == clientMessageId, cancellationToken);
     }
     
