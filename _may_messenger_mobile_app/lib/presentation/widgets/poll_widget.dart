@@ -150,8 +150,8 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
             ],
           ),
           
-          // Vote button (if multiple choice and not voted yet)
-          if (!isClosed && poll.allowMultipleAnswers && !hasVoted && _selectedOptions.isNotEmpty)
+          // Vote button for multiple choice (always show when poll is open and has selections or changes)
+          if (!isClosed && poll.allowMultipleAnswers && _selectedOptions.isNotEmpty && _hasChanges())
             Padding(
               padding: const EdgeInsets.only(top: 12),
               child: SizedBox(
@@ -172,25 +172,23 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Голосовать'),
+                      : Text(hasVoted ? 'Изменить голос' : 'Голосовать'),
                 ),
               ),
             ),
           
-          // Retract vote button
-          if (!isClosed && hasVoted)
+          // Hint for users who voted (multiple choice)
+          if (!isClosed && hasVoted && poll.allowMultipleAnswers)
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: TextButton(
-                onPressed: _retractVote,
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(0, 32),
-                  foregroundColor: widget.isFromMe 
-                      ? Colors.white70 
-                      : theme.colorScheme.primary,
+              child: Text(
+                'Можно изменить выбор до завершения голосования',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontStyle: FontStyle.italic,
+                  color: secondaryTextColor,
                 ),
-                child: const Text('Отменить голос', style: TextStyle(fontSize: 12)),
+                textAlign: TextAlign.center,
               ),
             ),
           
@@ -216,7 +214,8 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
   Widget _buildOption(BuildContext context, PollOption option, bool hasVoted, bool isClosed) {
     final theme = Theme.of(context);
     final isSelected = _selectedOptions.contains(option.id);
-    final showResults = hasVoted || isClosed;
+    // Show results only when poll is closed (not just when user voted)
+    final showResults = isClosed;
     
     // Use theme colors
     final primaryTextColor = widget.isFromMe 
@@ -232,7 +231,7 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
         margin: const EdgeInsets.only(bottom: 8),
         child: Stack(
           children: [
-            // Progress bar background
+            // Progress bar background (only when poll is closed)
             if (showResults)
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
@@ -258,7 +257,7 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
               ),
               child: Row(
                 children: [
-                  // Checkbox or radio
+                  // Checkbox or radio (always shown when poll is open)
                   if (!isClosed)
                     Container(
                       width: 20,
@@ -304,7 +303,7 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
                     ),
                   ),
                   
-                  // Percentage and count
+                  // Percentage and count (only when poll is closed)
                   if (showResults)
                     Text(
                       '${option.percentage}%',
@@ -312,6 +311,16 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
                         color: accentColor,
+                      ),
+                    ),
+                  
+                  // Vote count hint (when poll is open and user has voted)
+                  if (!isClosed && hasVoted)
+                    Text(
+                      '${option.voteCount}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: primaryTextColor.withOpacity(0.6),
                       ),
                     ),
                 ],
@@ -335,11 +344,18 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
           _selectedOptions.add(optionId);
         }
       } else {
-        // Single choice - submit immediately
+        // Single choice - submit immediately (allows changing vote)
         _selectedOptions = {optionId};
         _submitVote();
       }
     });
+  }
+
+  /// Check if current selection differs from existing votes
+  bool _hasChanges() {
+    final currentVotes = widget.poll.myVotes.toSet();
+    return _selectedOptions.length != currentVotes.length ||
+           !_selectedOptions.every((id) => currentVotes.contains(id));
   }
 
   Future<void> _submitVote() async {
@@ -353,12 +369,6 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
       if (mounted) {
         setState(() => _isVoting = false);
       }
-    }
-  }
-
-  void _retractVote() {
-    if (widget.onRetract != null && widget.poll.myVotes.isNotEmpty) {
-      widget.onRetract!(widget.poll.myVotes);
     }
   }
 
