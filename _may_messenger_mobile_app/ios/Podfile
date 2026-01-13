@@ -33,6 +33,11 @@ target 'Runner' do
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   
+  # Fix for Firebase modular headers issue
+  pod 'FirebaseCore', :modular_headers => true
+  pod 'FirebaseMessaging', :modular_headers => true
+  pod 'GoogleUtilities', :modular_headers => true
+  
   target 'RunnerTests' do
     inherit! :search_paths
   end
@@ -41,6 +46,14 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+    
+    # Fix for Firebase modular headers issue
+    if target.name == 'firebase_messaging'
+      target.build_configurations.each do |config|
+        config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+      end
+    end
+    
     target.build_configurations.each do |config|
       # Set minimum iOS deployment target
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
@@ -50,6 +63,9 @@ post_install do |installer|
       
       # Enable arm64 for simulator on M1 Macs
       config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'i386'
+      
+      # Fix for Firebase modular headers
+      config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
       
       # Fix for permission_handler plugin
       config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
