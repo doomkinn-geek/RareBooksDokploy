@@ -76,8 +76,11 @@
 		<string>audio</string>
 		<string>fetch</string>
 		<string>remote-notification</string>
-		<string>processing</string>
 	</array>
+	
+	<!-- Background Task Scheduler (required if using 'processing' mode) -->
+	<!-- Not needed for messenger app with audio/fetch/remote-notification -->
+	<!-- If you need background processing tasks, add BGTaskSchedulerPermittedIdentifiers -->
 	
 	<!-- Firebase Configuration -->
 	<key>FirebaseAppDelegateProxyEnabled</key>
