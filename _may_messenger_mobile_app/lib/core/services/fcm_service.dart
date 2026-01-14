@@ -235,6 +235,7 @@ class FcmService {
 
   void _handleForegroundMessage(RemoteMessage message) async {
     print('[FCM_FG] Foreground message data: ${message.data}');
+    print('[FCM_FG] Notification payload: ${message.notification?.title}, ${message.notification?.body}');
     
     // Parse content from data payload
     final title = message.data['title'] ?? message.notification?.title ?? 'New Message';
@@ -261,6 +262,17 @@ class FcmService {
     // Don't show notification if user is currently in this chat
     if (chatId != null && chatId == _currentChatId) {
       print('[FCM_FG] User in current chat, not showing notification');
+      return;
+    }
+    
+    // ANDROID FIX: Don't show local notification if FCM already has notification payload
+    // On Android, FCM with notification payload shows system notification automatically
+    // Only show our custom notification for data-only messages (iOS APNs case)
+    final hasNotificationPayload = message.notification != null && 
+        (message.notification!.title != null || message.notification!.body != null);
+    
+    if (hasNotificationPayload && Platform.isAndroid) {
+      print('[FCM_FG] Android: Skipping local notification (FCM notification payload will show)');
       return;
     }
     

@@ -120,6 +120,10 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     index = state.messages.indexWhere((m) => m.localId == messageId);
     if (index != -1) return index;
     
+    // Try by clientMessageId (often same as localId but check explicitly)
+    index = state.messages.indexWhere((m) => m.clientMessageId == messageId);
+    if (index != -1) return index;
+    
     // Try resolving through mapping
     final resolvedId = _localToServerIdMap[messageId];
     if (resolvedId != null) {
@@ -135,6 +139,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       }
     }
     
+    print('[ID_MAP] Message not found: $messageId, messages count: ${state.messages.length}');
     return -1;
   }
 

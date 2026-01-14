@@ -288,6 +288,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       
       _loadUserStatus();
       
+      // IMPORTANT: Periodically mark messages as read while chat is open
+      // This is a reliable "heartbeat" that ensures read status is synced
+      // even if scroll events were missed
+      if (_scrollController.hasClients) {
+        final scrollPos = _scrollController.position.pixels;
+        // Only mark as read if user is viewing recent messages (near bottom)
+        if (scrollPos <= 500) {
+          ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
+          print('[CHAT_SCREEN] Periodic mark as read (heartbeat)');
+        }
+      }
+      
       // Continue periodic updates
       if (mounted) {
         _isPeriodicStatusUpdateActive = false;
@@ -1147,6 +1159,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               _cancelEditing();
             },
             onSendMessage: (content) {
+              // IMPORTANT: Mark all messages as read when user sends a reply
+              // This is the most reliable indicator that user has read the chat
+              ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
+              
               if (_replyToMessage != null) {
                 // Send with reply
                 ref
@@ -1170,6 +1186,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               });
             },
             onSendAudio: (audioPath) {
+              // Mark messages as read when user sends content
+              ref.read(messagesProvider(widget.chatId).notifier).markMessagesAsRead();
+              
               ref
                   .read(messagesProvider(widget.chatId).notifier)
                   .sendAudioMessage(audioPath);
