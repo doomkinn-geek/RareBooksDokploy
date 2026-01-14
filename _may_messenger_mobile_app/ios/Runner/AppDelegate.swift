@@ -118,6 +118,26 @@ import UserNotifications
     // Let Flutter handle the navigation
     super.userNotificationCenter(center, didReceive: response, withCompletionHandler: completionHandler)
   }
+  
+  // Handle background/silent notifications
+  override func application(
+    _ application: UIApplication,
+    didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+    fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+  ) {
+    print("📥 Remote notification received (background/silent)")
+    print("   State: \(application.applicationState.rawValue)")
+    print("   UserInfo: \(userInfo)")
+    
+    // Pass to Firebase Messaging
+    Messaging.messaging().appDidReceiveMessage(userInfo)
+    
+    // Let Flutter plugins handle it
+    super.application(application, didReceiveRemoteNotification: userInfo, fetchCompletionHandler: { result in
+      print("✅ Background notification processed: \(result.rawValue)")
+      completionHandler(result)
+    })
+  }
 }
 
 // MARK: - Firebase Messaging Delegate
