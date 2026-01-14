@@ -12,6 +12,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'audio_recorder_widget.dart';
 import 'video_preview_dialog.dart';
+import 'camera_button.dart';
 import '../providers/signalr_provider.dart';
 import '../../data/models/message_model.dart';
 import '../../core/constants/api_constants.dart';
@@ -398,6 +399,162 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
           SnackBar(content: Text('Ошибка: $e')),
         );
       }
+    }
+  }
+
+  /// Record video directly from camera
+  Future<void> _recordVideoFromCamera() async {
+    if (widget.onSendVideo == null) return;
+
+    try {
+      final XFile? video = await _imagePicker.pickVideo(
+        source: ImageSource.camera,
+        maxDuration: const Duration(minutes: 5),
+      );
+
+      if (video == null) return;
+
+      if (!mounted) return;
+
+      // Show loading dialog during compression
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Сжатие видео...'),
+            ],
+          ),
+        ),
+      );
+
+      try {
+        // Compress video
+        final compressionService = VideoCompressionService();
+        final result = await compressionService.compressVideo(video.path);
+
+        // Close loading dialog
+        if (mounted) Navigator.of(context).pop();
+
+        if (result == null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Ошибка сжатия видео')),
+            );
+          }
+          return;
+        }
+
+        if (!mounted) return;
+
+        // Show preview dialog
+        final shouldSend = await showDialog<bool>(
+          context: context,
+          builder: (context) => VideoPreviewDialog(
+            videoPath: result.compressedPath,
+            durationMs: result.durationMs,
+            fileSizeBytes: result.fileSizeBytes,
+            onSend: () => Navigator.of(context).pop(true),
+            onCancel: () => Navigator.of(context).pop(false),
+          ),
+        );
+
+        if (shouldSend == true && mounted) {
+          widget.onSendVideo!(VideoMetadata(
+            path: result.compressedPath,
+            width: result.width,
+            height: result.height,
+            durationMs: result.durationMs,
+            fileSizeBytes: result.fileSizeBytes,
+          ));
+        }
+      } catch (e) {
+        // Close loading dialog if still open
+        if (mounted) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+        rethrow;
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка записи видео: $e')),
+        );
+      }
+    }
+  }
+
+  /// Pick media (photo or video) from gallery
+  Future<void> _pickMediaFromGallery() async {
+    // Show bottom sheet to choose between photo and video
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text(
+                'Выбрать из галереи',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.photo, color: Colors.blue),
+              ),
+              title: const Text('Фото'),
+              onTap: () => Navigator.pop(context, 'photo'),
+            ),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.videocam, color: Colors.red),
+              ),
+              title: const Text('Видео'),
+              onTap: () => Navigator.pop(context, 'video'),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+
+    if (result == null || !mounted) return;
+
+    if (result == 'photo') {
+      _pickImage(fromCamera: false);
+    } else if (result == 'video') {
+      _pickVideo();
     }
   }
 
@@ -845,67 +1002,23 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
             ),
           ),
           const SizedBox(width: 4),
-          // Attachment button (camera/gallery popup)
-          PopupMenuButton<String>(
-            icon: Icon(
-              Icons.attach_file,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-            onSelected: (value) {
-              if (value == 'camera') {
-                _pickImage(fromCamera: true);
-              } else if (value == 'gallery') {
-                _pickImage(fromCamera: false);
-              } else if (value == 'video') {
-                _pickVideo();
-              } else if (value == 'file') {
-                _pickFile();
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'camera',
-                child: Row(
-                  children: [
-                    Icon(Icons.camera_alt, color: Theme.of(context).colorScheme.primary),
-                    const SizedBox(width: 12),
-                    const Text('Камера'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'gallery',
-                child: Row(
-                  children: [
-                    Icon(Icons.photo_library, color: Theme.of(context).colorScheme.primary),
-                    const SizedBox(width: 12),
-                    const Text('Галерея'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'video',
-                child: Row(
-                  children: [
-                    Icon(Icons.videocam, color: Theme.of(context).colorScheme.primary),
-                    const SizedBox(width: 12),
-                    const Text('Видео'),
-                  ],
-                ),
-              ),
-              if (widget.onSendFile != null)
-                PopupMenuItem(
-                  value: 'file',
-                  child: Row(
-                    children: [
-                      Icon(Icons.insert_drive_file, color: Theme.of(context).colorScheme.primary),
-                      const SizedBox(width: 12),
-                      const Text('Файл'),
-                  ],
-                ),
-              ),
-            ],
+          // Universal camera button (tap: menu, long-press: record video)
+          CameraButton(
+            iconColor: Theme.of(context).colorScheme.primary,
+            onTakePhoto: () => _pickImage(fromCamera: true),
+            onRecordVideo: _recordVideoFromCamera,
+            onPickFromGallery: _pickMediaFromGallery,
           ),
+          // File attachment button (if supported)
+          if (widget.onSendFile != null)
+            IconButton(
+              icon: Icon(
+                Icons.attach_file,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              onPressed: _pickFile,
+              tooltip: 'Прикрепить файл',
+            ),
           // Show send button if text exists, otherwise show mic button
           // Telegram-style circular green button
           const SizedBox(width: 4),
