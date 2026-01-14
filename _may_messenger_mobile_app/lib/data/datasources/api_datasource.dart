@@ -77,6 +77,8 @@ class ApiDataSource {
           .toList()
           .cast<Chat>();
       return chats;
+    } on DioException {
+      rethrow; // Preserve DioException type for proper error formatting
     } catch (e) {
       throw Exception('Failed to get chats: $e');
     }

@@ -2399,10 +2399,10 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
             _syncVideoToBackend(
               localId,
               pendingMessage.localVideoPath!,
-              width: pendingMessage.videoWidth ?? 0,
-              height: pendingMessage.videoHeight ?? 0,
-              durationMs: pendingMessage.videoDuration ?? 0,
-              thumbnail: pendingMessage.videoThumbnail,
+              pendingMessage.videoWidth,
+              pendingMessage.videoHeight,
+              pendingMessage.videoDuration,
+              localId, // clientMessageId
             );
           } else {
             throw Exception('Video path is missing for video message');

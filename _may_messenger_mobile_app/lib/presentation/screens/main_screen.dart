@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/chats_provider.dart';
 import '../providers/contacts_names_provider.dart';
+import '../providers/connectivity_provider.dart';
 import '../providers/user_status_sync_service.dart';
 import '../widgets/chat_list_item.dart';
 import '../widgets/connection_status_indicator.dart';
@@ -23,6 +25,8 @@ class MainScreen extends ConsumerStatefulWidget {
 
 class _MainScreenState extends ConsumerState<MainScreen> {
   bool _isFirstBuild = true;
+  bool _wasOffline = false;
+  StreamSubscription<bool>? _connectivitySubscription;
 
   @override
   void initState() {
@@ -57,12 +61,35 @@ class _MainScreenState extends ConsumerState<MainScreen> {
             }
           }
         });
+        
+        // Listen for connectivity changes to auto-refresh when back online
+        _setupConnectivityListener();
       }
     });
   }
   
+  void _setupConnectivityListener() {
+    final connectivityService = ref.read(connectivityServiceProvider);
+    _connectivitySubscription = connectivityService.connectionStream.listen((isConnected) {
+      if (isConnected && _wasOffline && mounted) {
+        print('[MainScreen] Network restored, refreshing chats...');
+        // Auto-refresh when connection is restored after being offline
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+          }
+        });
+      }
+      _wasOffline = !isConnected;
+    });
+    
+    // Set initial offline state
+    _wasOffline = !connectivityService.isConnected;
+  }
+  
   @override
   void dispose() {
+    _connectivitySubscription?.cancel();
     ref.read(userStatusSyncServiceProvider).stopPeriodicSync();
     super.dispose();
   }
@@ -209,32 +236,58 @@ class _MainScreenState extends ConsumerState<MainScreen> {
 
     // If there's a blocking error and no chats at all
     if (error != null && chats.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
-              const SizedBox(height: 16),
-              const Text(
-                'Не удалось загрузить чаты',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      // Check if it's a server error (500) or network error
+      final isServerError = error.contains('500') || error.contains('сервер');
+      final isNetworkError = error.contains('подключения') || error.contains('интернет') || error.contains('timeout');
+      
+      return RefreshIndicator(
+        onRefresh: () => ref.read(chatsProvider.notifier).loadChats(forceRefresh: true),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: SizedBox(
+            height: MediaQuery.of(context).size.height - 200,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      isServerError ? Icons.cloud_off : (isNetworkError ? Icons.wifi_off : Icons.chat_bubble_outline),
+                      size: 80,
+                      color: Colors.grey[400],
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      isServerError 
+                          ? 'Сервер временно недоступен'
+                          : (isNetworkError ? 'Нет подключения к интернету' : 'Не удалось загрузить чаты'),
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      isServerError
+                          ? 'Попробуйте обновить через несколько минут'
+                          : (isNetworkError ? 'Проверьте подключение и попробуйте снова' : 'Потяните вниз для обновления'),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey[600], fontSize: 15),
+                    ),
+                    const SizedBox(height: 32),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+                      },
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Обновить'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                error,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () {
-                  ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
-                },
-                child: const Text('Повторить'),
-              ),
-            ],
+            ),
           ),
         ),
       );
