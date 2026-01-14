@@ -337,6 +337,34 @@ class LocalDataSource {
       // Silently fail - not critical
     }
   }
+  
+  // Update local video path for a message
+  Future<void> updateMessageLocalVideoPath(String chatId, String messageId, String localPath) async {
+    try {
+      final box = await _openBoxSafely(_messagesBox);
+      final data = box.get(chatId);
+      if (data == null) return;
+
+      final messages = (data['messages'] as List)
+          .map((json) => Map<String, dynamic>.from(json as Map))
+          .toList();
+      
+      // Find and update the message
+      for (var message in messages) {
+        if (message['id'] == messageId) {
+          message['localVideoPath'] = localPath;
+          break;
+        }
+      }
+      
+      await box.put(chatId, {
+        'messages': messages,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      // Silently fail - not critical
+    }
+  }
 
   // Update message status in cache
   Future<void> updateMessageStatus(String chatId, String messageId, MessageStatus status) async {

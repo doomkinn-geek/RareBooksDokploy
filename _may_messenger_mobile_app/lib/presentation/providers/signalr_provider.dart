@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/datasources/signalr_service.dart';
 import '../../data/models/message_model.dart';
-import '../../data/services/video_storage_service.dart';
 import '../../core/constants/api_constants.dart';
 import 'auth_provider.dart';
 import 'messages_provider.dart';
@@ -680,16 +679,14 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
         final videoStorageService = _ref.read(videoStorageServiceProvider);
         final videoUrl = '${ApiConstants.baseUrl}${message.filePath}';
         
-        // Get the messages notifier for progress updates
-        final messagesNotifier = _ref.read(messagesProvider(message.chatId).notifier);
-        
         final localPath = await videoStorageService.saveVideoLocally(
           message.id,
           videoUrl,
           onProgress: (progress) {
-            // Update download progress in the message
+            // Update download progress in the message (if provider is active)
             try {
-              messagesNotifier.updateDownloadProgress(message.id, progress);
+              _ref.read(messagesProvider(message.chatId).notifier)
+                  .updateDownloadProgress(message.id, progress);
             } catch (e) {
               // Ignore - provider might not be active
             }
@@ -699,11 +696,25 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
         if (localPath != null) {
           print('[VIDEO_DOWNLOAD] Video saved locally: $localPath');
           
-          // Update message with local path
+          // CRITICAL: Always persist to Hive first (works even if provider not active)
           try {
-            messagesNotifier.updateMessageLocalVideoPath(message.id, localPath);
+            final localDataSource = _ref.read(localDataSourceProvider);
+            await localDataSource.updateMessageLocalVideoPath(
+              message.chatId,
+              message.id,
+              localPath,
+            );
+            print('[VIDEO_DOWNLOAD] Video path persisted to Hive cache');
           } catch (e) {
-            print('[VIDEO_DOWNLOAD] Failed to update message with local path: $e');
+            print('[VIDEO_DOWNLOAD] Failed to persist to Hive: $e');
+          }
+          
+          // Also update provider state if active
+          try {
+            _ref.read(messagesProvider(message.chatId).notifier)
+                .updateMessageLocalPath(message.id, localVideoPath: localPath);
+          } catch (e) {
+            // Provider might not be active - that's OK, Hive has the path
           }
         } else {
           print('[VIDEO_DOWNLOAD] Failed to download video for message: ${message.id}');

@@ -345,9 +345,16 @@ class FcmService {
       return;
     }
     
+    // iOS FIX: Don't show local notification if APNs already showed system notification
+    // On iOS, when app is in foreground and message has notification payload,
+    // APNs automatically displays it - we don't need to show another one
+    if (Platform.isIOS && message.notification != null) {
+      print('[FCM_FG] iOS: Skipping local notification (APNs alert already shown)');
+      return;
+    }
+    
     // Show grouped notification
     // Android receives data-only messages (no notification payload from server)
-    // iOS receives APNs alert, but we also show local notification for consistency
     if (chatId != null) {
       await _showGroupedNotification(chatId, title, body);
     }

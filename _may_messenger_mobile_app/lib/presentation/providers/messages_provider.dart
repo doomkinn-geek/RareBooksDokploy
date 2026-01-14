@@ -2780,8 +2780,23 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   }
 
   /// Update local video path for a message (convenience method)
+  /// Also persists to Hive cache for offline access
   Future<void> updateMessageLocalVideoPath(String messageId, String localPath) async {
     updateMessageLocalPath(messageId, localVideoPath: localPath);
+    
+    // Also persist to Hive for offline access after app restart
+    try {
+      final messageIndex = state.messages.indexWhere((m) => m.id == messageId);
+      if (messageIndex != -1) {
+        final message = state.messages[messageIndex];
+        final localDataSource = _ref.read(localDataSourceProvider);
+        await localDataSource.updateMessageLocalVideoPath(message.chatId, messageId, localPath);
+        print('[MSG_UPDATE] Video path persisted to Hive: $messageId -> $localPath');
+      }
+    } catch (e) {
+      print('[MSG_UPDATE] Failed to persist video path to Hive: $e');
+      // Non-fatal - video is still saved on disk
+    }
   }
   
   /// Update upload progress for a message (0.0 - 1.0)

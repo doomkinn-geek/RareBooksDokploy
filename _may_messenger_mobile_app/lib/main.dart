@@ -513,6 +513,19 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
                 // Clear notifications for this chat
                 await fcmService.clearChatNotifications(chatId);
                 
+                // CRITICAL: Ensure token is restored before navigating
+                // This prevents 401 errors when ChatScreen tries to load messages
+                final authRepo = ref.read(authRepositoryProvider);
+                final apiDataSource = ref.read(apiDataSourceProvider);
+                final token = await authRepo.getStoredToken();
+                
+                if (token != null) {
+                  apiDataSource.setToken(token);
+                  print('[PUSH_NAV] Token restored: ${token.substring(0, 20)}...');
+                } else {
+                  print('[PUSH_NAV] WARNING: No token found, navigation may fail');
+                }
+                
                 // Wait for navigator to be ready (important when app was terminated)
                 await Future.delayed(const Duration(milliseconds: 100));
                 
@@ -658,9 +671,23 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       _pendingChatNavigation = null;
       
       // Schedule navigation after the frame is built
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (pendingChatId != null && navigatorKey.currentState != null) {
           print('[PUSH_NAV] Processing pending navigation to chat: $pendingChatId');
+          
+          // CRITICAL: Ensure token is set before navigating
+          try {
+            final authRepo = ref.read(authRepositoryProvider);
+            final apiDataSource = ref.read(apiDataSourceProvider);
+            final token = await authRepo.getStoredToken();
+            if (token != null) {
+              apiDataSource.setToken(token);
+              print('[PUSH_NAV] Token restored for pending navigation');
+            }
+          } catch (e) {
+            print('[PUSH_NAV] Error restoring token: $e');
+          }
+          
           navigatorKey.currentState?.push(
             MaterialPageRoute(
               builder: (context) => ChatScreen(chatId: pendingChatId),
