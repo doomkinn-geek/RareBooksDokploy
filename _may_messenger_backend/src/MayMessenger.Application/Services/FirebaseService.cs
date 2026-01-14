@@ -83,13 +83,37 @@ public class FirebaseService : IFirebaseService
             var message = new Message
             {
                 Token = fcmToken,
-                // We don't send Notification payload anymore to give full control to the app
-                // This makes it a "Data Message" which triggers background handler even when app is killed
+                // Include notification payload for iOS to show banners
+                Notification = new FirebaseAdmin.Messaging.Notification
+                {
+                    Title = title,
+                    Body = body
+                },
+                // Data payload for custom handling on client
                 Data = messageData,
                 Android = new AndroidConfig
                 {
                     Priority = Priority.High,
-                    // No Notification object here either
+                    // Android handles data messages well even without notification payload
+                },
+                Apns = new ApnsConfig
+                {
+                    Headers = new Dictionary<string, string>
+                    {
+                        { "apns-priority", "10" } // High priority
+                    },
+                    Aps = new Aps
+                    {
+                        Alert = new ApsAlert
+                        {
+                            Title = title,
+                            Body = body
+                        },
+                        Sound = "default",
+                        Badge = 1,
+                        ContentAvailable = true, // Allows background processing
+                        MutableContent = true    // Allows notification service extension
+                    }
                 }
             };
 
@@ -152,11 +176,36 @@ public class FirebaseService : IFirebaseService
             var message = new MulticastMessage
             {
                 Tokens = tokens,
-                // Data-only message
+                // Include notification payload for iOS to show banners
+                Notification = new FirebaseAdmin.Messaging.Notification
+                {
+                    Title = title,
+                    Body = body
+                },
+                // Data payload for custom handling on client
                 Data = messageData,
                 Android = new AndroidConfig
                 {
                     Priority = Priority.High
+                },
+                Apns = new ApnsConfig
+                {
+                    Headers = new Dictionary<string, string>
+                    {
+                        { "apns-priority", "10" } // High priority
+                    },
+                    Aps = new Aps
+                    {
+                        Alert = new ApsAlert
+                        {
+                            Title = title,
+                            Body = body
+                        },
+                        Sound = "default",
+                        Badge = 1,
+                        ContentAvailable = true, // Allows background processing
+                        MutableContent = true    // Allows notification service extension
+                    }
                 }
             };
 
