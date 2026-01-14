@@ -96,9 +96,27 @@ class NotificationService {
       _unreadCountByChat[message.chatId] = 0;
     }
     
-    final body = message.type == models.MessageType.text
-        ? message.content ?? ''
-        : '🎤 Голосовое сообщение';
+    String body;
+    switch (message.type) {
+      case models.MessageType.text:
+        body = message.content ?? '';
+        break;
+      case models.MessageType.audio:
+        body = '🎤 Голосовое сообщение';
+        break;
+      case models.MessageType.image:
+        body = '📷 Фото';
+        break;
+      case models.MessageType.video:
+        body = '🎬 Видео';
+        break;
+      case models.MessageType.file:
+        body = '📎 ${message.originalFileName ?? "Файл"}';
+        break;
+      case models.MessageType.poll:
+        body = '📊 Голосование';
+        break;
+    }
     
     _notificationsByChat[message.chatId]!.add(body);
     _unreadCountByChat[message.chatId] = (_unreadCountByChat[message.chatId] ?? 0) + 1;

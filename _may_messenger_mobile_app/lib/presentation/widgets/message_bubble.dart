@@ -53,6 +53,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   AudioPlayer? _preloadPlayer;
   final _logger = LoggerService();
   bool _isDownloadingAudio = false; // Track audio download state
+  bool _isDownloadingVideo = false; // Track video download state
   bool _hasMarkedAsPlayed = false; // Track if we've already marked as played
   Duration? _cachedDuration; // Cached duration from preload
   Timer? _markAsPlayedTimer; // Debounce timer for mark as played
@@ -1336,6 +1337,13 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
 
     final hasLocalVideo = widget.message.localVideoPath != null &&
         File(widget.message.localVideoPath!).existsSync();
+    
+    // Check if downloading video
+    final isDownloading = _isDownloadingVideo || 
+        (widget.message.downloadProgress != null && 
+         widget.message.downloadProgress! > 0 && 
+         widget.message.downloadProgress! < 1.0);
+    final downloadProgress = widget.message.downloadProgress ?? 0.0;
 
     return GestureDetector(
       onTap: () => _handleVideoTap(context),
@@ -1363,8 +1371,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                 size: 48,
               ),
 
-              // Play/download button
-              if (!isUploading)
+              // Play/download button - hide when uploading or downloading
+              if (!isUploading && !isDownloading)
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -1401,6 +1409,42 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                       ),
+                    ),
+                    const Text(
+                      'Отправка',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
+                ),
+              
+              // Download progress
+              if (isDownloading && !isUploading)
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: CircularProgressIndicator(
+                        value: downloadProgress > 0 ? downloadProgress : null,
+                        strokeWidth: 3,
+                        backgroundColor: Colors.white24,
+                        valueColor:
+                            const AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (downloadProgress > 0)
+                      Text(
+                        '${(downloadProgress * 100).toInt()}%',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    const Text(
+                      'Загрузка',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ],
                 ),
@@ -1486,6 +1530,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
 
   void _handleVideoTap(BuildContext context) async {
     if (widget.message.status == MessageStatus.sending) return;
+    if (_isDownloadingVideo) return; // Already downloading
 
     final hasLocalVideo = widget.message.localVideoPath != null &&
         File(widget.message.localVideoPath!).existsSync();
@@ -1501,22 +1546,35 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         ),
       );
     } else if (widget.message.filePath != null) {
-      // Download video first
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Скачивание видео...')),
-      );
+      // Download video first with progress tracking
+      if (mounted) {
+        setState(() {
+          _isDownloadingVideo = true;
+        });
+      }
 
       try {
         final videoStorageService = ref.read(videoStorageServiceProvider);
+        final messagesNotifier = ref.read(messagesProvider(widget.message.chatId).notifier);
         final videoUrl = '${ApiConstants.baseUrl}${widget.message.filePath}';
+        
         final localPath = await videoStorageService.saveVideoLocally(
           widget.message.id,
           videoUrl,
+          onProgress: (progress) {
+            // Update download progress in the message
+            messagesNotifier.updateDownloadProgress(widget.message.id, progress);
+          },
         );
+
+        if (mounted) {
+          setState(() {
+            _isDownloadingVideo = false;
+          });
+        }
 
         if (localPath != null && context.mounted) {
           // Update message with local path
-          final messagesNotifier = ref.read(messagesProvider(widget.message.chatId).notifier);
           await messagesNotifier.updateMessageLocalVideoPath(
             widget.message.id,
             localPath,
@@ -1539,6 +1597,11 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           );
         }
       } catch (e) {
+        if (mounted) {
+          setState(() {
+            _isDownloadingVideo = false;
+          });
+        }
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Ошибка загрузки: $e')),

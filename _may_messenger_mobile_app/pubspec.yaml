@@ -97,6 +97,7 @@ dependencies:
   # Share to/from other apps
   share_plus: ^10.0.0
   receive_sharing_intent: ^1.8.0
+  flutter_blurhash: ^0.9.1
 
 dev_dependencies:
   flutter_test:

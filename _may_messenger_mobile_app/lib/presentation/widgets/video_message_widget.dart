@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_blurhash/flutter_blurhash.dart';
 import '../../data/models/message_model.dart';
 import 'video_player_screen.dart';
 
@@ -150,8 +151,17 @@ class VideoMessageWidget extends StatelessWidget {
   }
 
   Widget _buildThumbnail() {
-    // For now, show a gradient placeholder
-    // In future, could decode blurhash or show actual thumbnail
+    // Try to display blurhash thumbnail if available
+    if (message.videoThumbnail != null && message.videoThumbnail!.isNotEmpty) {
+      return BlurHash(
+        hash: message.videoThumbnail!,
+        imageFit: BoxFit.cover,
+        decodingWidth: 32,
+        decodingHeight: 32,
+      );
+    }
+    
+    // Fallback: gradient placeholder
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -162,7 +172,7 @@ class VideoMessageWidget extends StatelessWidget {
               : [Colors.grey.shade700, Colors.grey.shade800],
         ),
       ),
-      child: Center(
+      child: const Center(
         child: Icon(
           Icons.movie,
           color: Colors.white24,

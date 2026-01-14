@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/datasources/signalr_service.dart';
 import '../../data/models/message_model.dart';
+import '../../data/services/video_storage_service.dart';
+import '../../core/constants/api_constants.dart';
 import 'auth_provider.dart';
 import 'messages_provider.dart';
 import 'chats_provider.dart';
@@ -281,6 +283,11 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
           } catch (e) {
             // Provider might not be initialized yet - that's OK, message will be loaded from API when chat opens
             print('[MSG_RECV] Message provider not initialized for chat ${message.chatId}: $e');
+          }
+          
+          // Auto-download video for incoming video messages (before server deletes it)
+          if (message.type == MessageType.video && message.filePath != null && !isFromMe) {
+            _autoDownloadVideo(message);
           }
           
           // Send delivery confirmation to backend (only for messages from others)
@@ -661,6 +668,50 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
     
     await _signalRService.disconnect();
     state = SignalRConnectionState();
+  }
+  
+  /// Auto-download video when a video message is received
+  /// This ensures the video is saved locally before the server deletes it
+  void _autoDownloadVideo(Message message) {
+    Future.microtask(() async {
+      try {
+        print('[VIDEO_DOWNLOAD] Auto-downloading video for message: ${message.id}');
+        
+        final videoStorageService = _ref.read(videoStorageServiceProvider);
+        final videoUrl = '${ApiConstants.baseUrl}${message.filePath}';
+        
+        // Get the messages notifier for progress updates
+        final messagesNotifier = _ref.read(messagesProvider(message.chatId).notifier);
+        
+        final localPath = await videoStorageService.saveVideoLocally(
+          message.id,
+          videoUrl,
+          onProgress: (progress) {
+            // Update download progress in the message
+            try {
+              messagesNotifier.updateDownloadProgress(message.id, progress);
+            } catch (e) {
+              // Ignore - provider might not be active
+            }
+          },
+        );
+        
+        if (localPath != null) {
+          print('[VIDEO_DOWNLOAD] Video saved locally: $localPath');
+          
+          // Update message with local path
+          try {
+            messagesNotifier.updateMessageLocalVideoPath(message.id, localPath);
+          } catch (e) {
+            print('[VIDEO_DOWNLOAD] Failed to update message with local path: $e');
+          }
+        } else {
+          print('[VIDEO_DOWNLOAD] Failed to download video for message: ${message.id}');
+        }
+      } catch (e) {
+        print('[VIDEO_DOWNLOAD] Error auto-downloading video: $e');
+      }
+    });
   }
 }
 
