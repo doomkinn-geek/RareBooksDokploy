@@ -673,17 +673,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     
     try {
       final shareSendService = ref.read(shareSendServiceProvider);
-      
-      // For iOS, provide share position origin (top center of screen where AppBar share button is)
-      final screenSize = MediaQuery.of(context).size;
-      final sharePosition = Rect.fromLTWH(
-        screenSize.width / 2 - 50,  // Center horizontally
-        50,                          // Top of screen (AppBar area)
-        100,                         // Width
-        100,                         // Height
-      );
-      
-      await shareSendService.shareMessages(selected, sharePositionOrigin: sharePosition);
+      await shareSendService.shareMessages(selected);
     } catch (e) {
       print('[ChatScreen] Error sharing messages: $e');
       if (mounted) {

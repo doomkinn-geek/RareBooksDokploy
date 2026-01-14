@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -17,14 +16,11 @@ final shareSendServiceProvider = Provider<ShareSendService>((ref) {
 class ShareSendService {
   
   /// Share text content to other apps
-  Future<ShareResult> shareText(String text, {String? subject, Rect? sharePositionOrigin}) async {
+  Future<ShareResult> shareText(String text, {String? subject}) async {
     try {
       final result = await Share.share(
         text,
         subject: subject,
-        sharePositionOrigin: Platform.isIOS 
-            ? (sharePositionOrigin ?? const Rect.fromLTWH(0, 0, 100, 100)) 
-            : null,
       );
       print('[ShareSendService] Text shared, result: ${result.status}');
       return result;
@@ -35,15 +31,12 @@ class ShareSendService {
   }
   
   /// Share a single file to other apps
-  Future<ShareResult> shareFile(String filePath, {String? mimeType, String? text, Rect? sharePositionOrigin}) async {
+  Future<ShareResult> shareFile(String filePath, {String? mimeType, String? text}) async {
     try {
       final file = XFile(filePath, mimeType: mimeType);
       final result = await Share.shareXFiles(
         [file],
         text: text,
-        sharePositionOrigin: Platform.isIOS 
-            ? (sharePositionOrigin ?? const Rect.fromLTWH(0, 0, 100, 100)) 
-            : null,
       );
       print('[ShareSendService] File shared, result: ${result.status}');
       return result;
@@ -54,25 +47,22 @@ class ShareSendService {
   }
   
   /// Share an image file to other apps
-  Future<ShareResult> shareImage(String imagePath, {String? text, Rect? sharePositionOrigin}) async {
-    return shareFile(imagePath, mimeType: 'image/*', text: text, sharePositionOrigin: sharePositionOrigin);
+  Future<ShareResult> shareImage(String imagePath, {String? text}) async {
+    return shareFile(imagePath, mimeType: 'image/*', text: text);
   }
   
   /// Share an audio file to other apps
-  Future<ShareResult> shareAudio(String audioPath, {String? text, Rect? sharePositionOrigin}) async {
-    return shareFile(audioPath, mimeType: 'audio/*', text: text, sharePositionOrigin: sharePositionOrigin);
+  Future<ShareResult> shareAudio(String audioPath, {String? text}) async {
+    return shareFile(audioPath, mimeType: 'audio/*', text: text);
   }
   
   /// Share multiple files to other apps
-  Future<ShareResult> shareMultiple(List<String> filePaths, {String? text, Rect? sharePositionOrigin}) async {
+  Future<ShareResult> shareMultiple(List<String> filePaths, {String? text}) async {
     try {
       final files = filePaths.map((path) => XFile(path)).toList();
       final result = await Share.shareXFiles(
         files,
         text: text,
-        sharePositionOrigin: Platform.isIOS 
-            ? (sharePositionOrigin ?? const Rect.fromLTWH(0, 0, 100, 100)) 
-            : null,
       );
       print('[ShareSendService] Multiple files shared, result: ${result.status}');
       return result;
@@ -114,7 +104,7 @@ class ShareSendService {
   
   /// Share messages to other apps
   /// Handles different message types appropriately
-  Future<ShareResult> shareMessages(List<Message> messages, {Rect? sharePositionOrigin}) async {
+  Future<ShareResult> shareMessages(List<Message> messages) async {
     if (messages.isEmpty) {
       return ShareResult('No messages to share', ShareResultStatus.dismissed);
     }
@@ -168,12 +158,12 @@ class ShareSendService {
     // If we have files, share them (with text if available)
     if (filePaths.isNotEmpty) {
       final text = textMessages.isNotEmpty ? textMessages.join('\n\n') : null;
-      return shareMultiple(filePaths, text: text, sharePositionOrigin: sharePositionOrigin);
+      return shareMultiple(filePaths, text: text);
     }
     
     // Otherwise, share text only
     if (textMessages.isNotEmpty) {
-      return shareText(textMessages.join('\n\n'), sharePositionOrigin: sharePositionOrigin);
+      return shareText(textMessages.join('\n\n'));
     }
     
     return ShareResult('Nothing to share', ShareResultStatus.dismissed);

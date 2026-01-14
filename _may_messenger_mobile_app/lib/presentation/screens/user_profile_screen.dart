@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/user_profile_model.dart';
 import '../../core/constants/api_constants.dart';
@@ -214,15 +213,6 @@ class UserProfileScreen extends ConsumerWidget {
               icon: Icons.phone,
               title: 'Телефон',
               value: phoneNumber,
-              onTap: () {
-                Clipboard.setData(ClipboardData(text: phoneNumber));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Телефон скопирован в буфер обмена'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              },
             ),
           ],
           
@@ -252,20 +242,14 @@ class UserProfileScreen extends ConsumerWidget {
     required IconData icon,
     required String title,
     required String value,
-    VoidCallback? onTap,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Card(
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: ListTile(
-            leading: Icon(icon),
-            title: Text(title),
-            subtitle: Text(value),
-            trailing: onTap != null ? const Icon(Icons.copy, size: 20) : null,
-          ),
+        child: ListTile(
+          leading: Icon(icon),
+          title: Text(title),
+          subtitle: Text(value),
         ),
       ),
     );

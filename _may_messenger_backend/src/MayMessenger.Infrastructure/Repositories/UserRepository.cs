@@ -59,13 +59,6 @@ public class UserRepository : Repository<User>, IUserRepository
             .Where(u => u.IsOnline)
             .ToListAsync(cancellationToken);
     }
-    
-    public async Task<List<User>> GetStaleOnlineUsersAsync(DateTime cutoffTime, CancellationToken cancellationToken = default)
-    {
-        return await _dbSet
-            .Where(u => u.IsOnline && u.LastHeartbeatAt != null && u.LastHeartbeatAt < cutoffTime)
-            .ToListAsync(cancellationToken);
-    }
 }
 
 
