@@ -393,10 +393,25 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     final deliveredColor = isDark ? Colors.grey[400]! : Colors.grey[500]!;
     final readColor = AppColors.readCheckmarks; // Голубые галочки как в Telegram
     
+    // Check if media is being uploaded - don't show duplicate indicator
+    final isMediaUploading = widget.message.uploadProgress != null &&
+                             widget.message.uploadProgress! < 1.0 &&
+                             (widget.message.type == MessageType.audio ||
+                              widget.message.type == MessageType.image ||
+                              widget.message.type == MessageType.file);
+    
     switch (widget.message.status) {
       case MessageStatus.sending:
-        // Simple spinner while sending - no timeout retry here
-        // Retries are handled by outbox system, failed status will show retry
+        // Don't show spinner if media has its own upload indicator
+        if (isMediaUploading) {
+          // Show clock icon instead of spinner (avoid duplicate indicators)
+          return Icon(
+            Icons.access_time,
+            size: 14,
+            color: pendingColor,
+          );
+        }
+        // Simple spinner for text messages
         return SizedBox(
           width: 14,
           height: 14,
@@ -896,20 +911,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                 ],
               ],
             ),
-            // Progress bar for upload/download
-            if (isTransferring) ...[
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  backgroundColor: Colors.white.withOpacity(0.2),
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    isFromMe ? Colors.white : Theme.of(context).colorScheme.primary,
-                  ),
-                ),
-              ),
-            ],
+            // Removed duplicate LinearProgressIndicator - circular indicator with percentage is sufficient
           ],
         ),
       ),
@@ -1167,6 +1169,13 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                         widget.message.uploadProgress != null &&
                         widget.message.uploadProgress! < 1.0;
     final progress = widget.message.uploadProgress ?? 0.0;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    // Adaptive constraints for horizontal/vertical images
+    const double maxWidth = 250.0;
+    const double maxHeight = 300.0;
+    const double minSize = 120.0;
     
     Widget imageWidget;
     
@@ -1175,9 +1184,16 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         File(widget.message.localImagePath!).existsSync()) {
       imageWidget = Image.file(
         File(widget.message.localImagePath!),
-        width: 200,
-        height: 200,
         fit: BoxFit.cover,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (wasSynchronouslyLoaded) return child;
+          return AnimatedOpacity(
+            opacity: frame == null ? 0 : 1,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+            child: child,
+          );
+        },
       );
     } else {
       // Otherwise use network image
@@ -1188,77 +1204,130 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       if (imageUrl != null) {
         imageWidget = CachedNetworkImage(
           imageUrl: imageUrl,
-          width: 200,
-          height: 200,
           fit: BoxFit.cover,
-          placeholder: (context, url) => Container(
-            width: 200,
-            height: 200,
-            color: Colors.grey[300],
-            child: const Center(
-              child: CircularProgressIndicator(),
-            ),
-          ),
+          // Shimmer placeholder - only show when NOT uploading (to avoid duplicate indicators)
+          placeholder: (context, url) => _buildShimmerPlaceholder(isDark),
+          fadeInDuration: const Duration(milliseconds: 300),
+          fadeOutDuration: const Duration(milliseconds: 100),
           errorWidget: (context, url, error) => Container(
-            width: 200,
-            height: 200,
-            color: Colors.grey[300],
-            child: const Center(
-              child: Icon(Icons.error_outline, size: 48),
+            color: isDark ? Colors.grey[800] : Colors.grey[300],
+            child: Center(
+              child: Icon(
+                Icons.error_outline, 
+                size: 48,
+                color: isDark ? Colors.grey[600] : Colors.grey[500],
+              ),
             ),
           ),
         );
       } else {
         imageWidget = Container(
-          width: 200,
-          height: 200,
-          color: Colors.grey[300],
-          child: const Center(
-            child: Text('Изображение недоступно'),
+          color: isDark ? Colors.grey[800] : Colors.grey[300],
+          child: Center(
+            child: Text(
+              'Изображение недоступно',
+              style: TextStyle(
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
+                fontSize: 12,
+              ),
+            ),
           ),
         );
       }
     }
     
+    // Hero animation wrapper for fullscreen transition
+    final heroTag = 'image_${widget.message.id}';
+    
     // Wrap with upload progress overlay if uploading
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: Stack(
-        children: [
-          imageWidget,
-          // Upload progress overlay
-          if (isUploading)
-            Positioned.fill(
-              child: Container(
-                color: Colors.black.withOpacity(0.4),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: 50,
-                      height: 50,
-                      child: CircularProgressIndicator(
-                        value: progress,
-                        strokeWidth: 4,
-                        backgroundColor: Colors.white.withOpacity(0.3),
-                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${(progress * 100).toInt()}%',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
+    return Hero(
+      tag: heroTag,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: maxWidth,
+          maxHeight: maxHeight,
+          minWidth: minSize,
+          minHeight: minSize,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Stack(
+            children: [
+              // Image with aspect ratio preservation
+              AspectRatio(
+                aspectRatio: 1.0, // Default to square, image will fill with cover
+                child: imageWidget,
               ),
-            ),
-        ],
+              // Upload progress overlay - single indicator, no shimmer underneath
+              if (isUploading)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black.withOpacity(0.5),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 56,
+                          height: 56,
+                          child: CircularProgressIndicator(
+                            value: progress,
+                            strokeWidth: 4,
+                            backgroundColor: Colors.white.withOpacity(0.2),
+                            valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          '${(progress * 100).toInt()}%',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
+    );
+  }
+  
+  /// Build shimmer placeholder for loading images
+  Widget _buildShimmerPlaceholder(bool isDark) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 1500),
+      builder: (context, value, child) {
+        return Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment(-1.0 + 2.0 * value, 0),
+              end: Alignment(-0.5 + 2.0 * value, 0),
+              colors: isDark
+                  ? [
+                      Colors.grey[800]!,
+                      Colors.grey[700]!,
+                      Colors.grey[800]!,
+                    ]
+                  : [
+                      Colors.grey[300]!,
+                      Colors.grey[100]!,
+                      Colors.grey[300]!,
+                    ],
+            ),
+          ),
+        );
+      },
+      onEnd: () {
+        // Restart animation
+        if (mounted) {
+          setState(() {});
+        }
+      },
     );
   }
 
@@ -1301,17 +1370,27 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     }
     
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => FullScreenImageViewer(
+      PageRouteBuilder(
+        opaque: false,
+        barrierColor: Colors.transparent,
+        pageBuilder: (context, animation, secondaryAnimation) => FullScreenImageViewer(
           imageUrl: widget.message.filePath != null
               ? '${ApiConstants.baseUrl}${widget.message.filePath}'
               : null,
           localPath: widget.message.localImagePath,
           senderName: displayName,
           createdAt: widget.message.createdAt,
+          messageId: widget.message.id,
           allImages: allImages,
           initialIndex: initialIndex,
         ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: animation,
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 300),
       ),
     );
   }

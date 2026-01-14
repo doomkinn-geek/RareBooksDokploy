@@ -28,6 +28,9 @@ import 'presentation/screens/share_target_screen.dart';
 // Global navigator key for navigation from FCM
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+// Pending chat navigation when app was launched from terminated state
+String? _pendingChatNavigation;
+
 // Global instance for background handler
 final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
 
@@ -475,53 +478,71 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
                   return;
                 }
                 
-                // Only ensure SignalR is connected before navigating
+                // Clear notifications for this chat
+                await fcmService.clearChatNotifications(chatId);
+                
+                // Wait for navigator to be ready (important when app was terminated)
+                await Future.delayed(const Duration(milliseconds: 100));
+                
+                final navigator = navigatorKey.currentState;
+                if (navigator == null) {
+                  print('[PUSH_NAV] Navigator not ready, waiting...');
+                  // Store chatId for later navigation when app is ready
+                  _pendingChatNavigation = chatId;
+                  return;
+                }
+                
+                // Background: Try to ensure SignalR is connected (don't block navigation)
                 final signalRState = ref.read(signalRConnectionProvider);
                 print('[PUSH_NAV] SignalR connected: ${signalRState.isConnected}');
                 
                 if (!signalRState.isConnected) {
-                  // Try silent reconnect if not connected
-                  print('[PUSH_NAV] SignalR not connected, attempting reconnect...');
-                  await ref.read(signalRConnectionProvider.notifier).silentReconnect();
+                  // Try silent reconnect in background
+                  print('[PUSH_NAV] SignalR not connected, attempting reconnect in background...');
+                  ref.read(signalRConnectionProvider.notifier).silentReconnect();
                 }
                 
-                // STEP 1: Force refresh chats list first to ensure chat exists
-                print('[PUSH_NAV] Refreshing chats list...');
-                await ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
-                
-                // STEP 2: Verify chat exists in our list before navigating
-                final chatsState = ref.read(chatsProvider);
-                final chatExists = chatsState.chats.any((chat) => chat.id == chatId);
-                
-                if (!chatExists) {
-                  print('[PUSH_NAV] Chat $chatId not found in chats list, trying to load anyway...');
-                  // Chat might be new - still try to navigate
-                }
-                
-                // STEP 3: Navigate to chat screen
+                // Don't wait for chats list - navigate immediately for better UX
+                // ChatScreen will load its own data
                 print('[PUSH_NAV] Navigating to chat screen: $chatId');
-                navigatorKey.currentState?.pushAndRemoveUntil(
+                
+                // Use pushNamedAndRemoveUntil pattern for reliable navigation
+                // First, ensure we're on the main screen, then push chat
+                navigator.pushAndRemoveUntil(
                   MaterialPageRoute(
                     builder: (context) => ChatScreen(chatId: chatId),
+                    settings: RouteSettings(name: '/chat/$chatId'),
                   ),
-                  (route) => route.isFirst,
+                  (route) => route.isFirst || route.settings.name == '/main',
                 );
                 
-                print('[PUSH_NAV] Navigation completed');
-              } catch (e) {
+                print('[PUSH_NAV] Navigation to chat $chatId completed');
+                
+                // Refresh chats list in background
+                ref.read(chatsProvider.notifier).loadChats(forceRefresh: true);
+                
+              } catch (e, stack) {
                 print('[PUSH_NAV] Error handling notification tap: $e');
+                print('[PUSH_NAV] Stack: $stack');
                 // Navigate anyway on error - ChatScreen will handle errors
                 if (chatId.isNotEmpty) {
-                  navigatorKey.currentState?.push(
-                    MaterialPageRoute(
-                      builder: (context) => ChatScreen(chatId: chatId),
-                    ),
-                  );
+                  try {
+                    navigatorKey.currentState?.push(
+                      MaterialPageRoute(
+                        builder: (context) => ChatScreen(chatId: chatId),
+                      ),
+                    );
+                  } catch (navError) {
+                    print('[PUSH_NAV] Fallback navigation also failed: $navError');
+                  }
                 }
               }
             };
 
             // Setup FCM message received callback for immediate message fetch
+            // NOTE: This is called when FCM push is received while app is in foreground
+            // The message will be displayed when user opens the chat
+            // Do NOT call markMessagesAsRead here - that should only happen when user views the chat
             fcmService.onMessageReceived = (messageId, chatId) async {
               print('[FCM] Message received notification for message $messageId in chat $chatId');
               
@@ -543,14 +564,21 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
                 
                 print('[FCM] Message fetched successfully: ${message.id}');
                 
-                // Force add this message to the messages provider
-                final messagesNotifier = ref.read(messagesProvider(chatId).notifier);
-                await messagesNotifier.addMessage(message);
+                // Only add message to provider if the chat is currently open
+                // This prevents unnecessary provider initialization
+                // If chat is not open, message will be loaded when user opens it
+                try {
+                  // Use read to check if provider exists without forcing creation
+                  final messagesNotifier = ref.read(messagesProvider(chatId).notifier);
+                  await messagesNotifier.addMessage(message);
+                  print('[FCM] Message added to active chat provider');
+                } catch (e) {
+                  // Provider not initialized - chat not open, that's fine
+                  // Message will be loaded when user opens the chat
+                  print('[FCM] Chat not open, message will load when chat is opened');
+                }
                 
-                // Also trigger a sync to ensure consistency
-                await messagesNotifier.loadMessages(forceRefresh: true);
-                
-                print('[FCM] Message fetch and sync completed');
+                print('[FCM] Message fetch completed');
               } catch (e) {
                 print('[FCM] Failed to fetch message on push notification: $e');
               }
@@ -590,6 +618,25 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
           ),
         ),
       );
+    }
+    
+    // Handle pending chat navigation from push notification
+    if (_pendingChatNavigation != null && authState.isAuthenticated) {
+      final pendingChatId = _pendingChatNavigation;
+      _pendingChatNavigation = null;
+      
+      // Schedule navigation after the frame is built
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (pendingChatId != null && navigatorKey.currentState != null) {
+          print('[PUSH_NAV] Processing pending navigation to chat: $pendingChatId');
+          navigatorKey.currentState?.push(
+            MaterialPageRoute(
+              builder: (context) => ChatScreen(chatId: pendingChatId),
+              settings: RouteSettings(name: '/chat/$pendingChatId'),
+            ),
+          );
+        }
+      });
     }
     
     return MaterialApp(

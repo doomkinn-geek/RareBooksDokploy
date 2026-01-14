@@ -48,10 +48,90 @@ class FcmService {
     print('[FCM] Current chat set to: $chatId');
     
     // Clear notifications for this chat when user enters it
-    if (chatId != null && _notificationsByChat.containsKey(chatId)) {
-      _localNotifications.cancel(chatId.hashCode);
+    if (chatId != null) {
+      clearChatNotifications(chatId);
+    }
+  }
+  
+  /// Clear notifications and badge for a specific chat
+  /// Call this when user opens a chat
+  Future<void> clearChatNotifications(String chatId) async {
+    try {
+      // Cancel local notification for this chat
+      await _localNotifications.cancel(chatId.hashCode);
+      
+      // Clear tracking data
       _notificationsByChat.remove(chatId);
       _unreadCountByChat.remove(chatId);
+      
+      // Update summary notification if needed
+      if (_unreadCountByChat.isNotEmpty) {
+        await _showSummaryNotification();
+      } else {
+        // Cancel summary notification if no more unread chats
+        await _localNotifications.cancel(0);
+      }
+      
+      // Clear badge on iOS
+      if (Platform.isIOS) {
+        await clearBadge();
+      }
+      
+      print('[FCM] Cleared notifications for chat: $chatId');
+    } catch (e) {
+      print('[FCM] Error clearing chat notifications: $e');
+    }
+  }
+  
+  /// Clear all notifications and badge
+  Future<void> clearAllNotifications() async {
+    try {
+      await _localNotifications.cancelAll();
+      _notificationsByChat.clear();
+      _unreadCountByChat.clear();
+      
+      // Clear badge on iOS
+      if (Platform.isIOS) {
+        await clearBadge();
+      }
+      
+      print('[FCM] Cleared all notifications');
+    } catch (e) {
+      print('[FCM] Error clearing all notifications: $e');
+    }
+  }
+  
+  /// Clear badge count on iOS
+  Future<void> clearBadge() async {
+    if (!Platform.isIOS) return;
+    
+    try {
+      // Use iOS-specific implementation to reset badge to 0
+      final iosPlugin = _localNotifications
+          .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
+      
+      if (iosPlugin != null) {
+        // Show empty notification to reset badge, then immediately cancel it
+        // This is a workaround for resetting the badge count
+        await _localNotifications.show(
+          -1, // Special ID for badge reset
+          null,
+          null,
+          const NotificationDetails(
+            iOS: DarwinNotificationDetails(
+              presentAlert: false,
+              presentSound: false,
+              presentBadge: true,
+              badgeNumber: 0,
+            ),
+          ),
+        );
+        await _localNotifications.cancel(-1);
+      }
+      
+      print('[FCM] Badge cleared on iOS');
+    } catch (e) {
+      print('[FCM] Error clearing badge: $e');
     }
   }
 
@@ -362,7 +442,10 @@ class FcmService {
       final messageCount = _unreadCountByChat[chatId] ?? 1;
       final messages = _notificationsByChat[chatId] ?? [];
       
-      // Create InboxStyle notification with all messages
+      // Calculate total unread count for badge
+      final totalUnread = _unreadCountByChat.values.fold(0, (sum, count) => sum + count);
+      
+      // Create InboxStyle notification with all messages for this chat
       final inboxLines = messages.take(5).map((msg) => msg).toList();
       
       final androidDetails = AndroidNotificationDetails(
@@ -372,51 +455,69 @@ class FcmService {
         importance: Importance.high,
         priority: Priority.high,
         showWhen: true,
-        groupKey: 'messages_group',
+        groupKey: 'chat_$chatId', // Group by chat, not globally
         styleInformation: InboxStyleInformation(
           inboxLines,
           contentTitle: messageCount > 1 
-              ? '$messageCount new messages' 
+              ? '$title ($messageCount сообщений)' 
               : title,
           summaryText: title,
         ),
-        // Reply action removed - not reliable enough
       );
       
-      final notificationDetails = NotificationDetails(android: androidDetails);
+      // iOS-specific settings with thread identifier for grouping
+      final iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentSound: true,
+        presentBadge: true,
+        badgeNumber: totalUnread, // Show total unread count as badge
+        threadIdentifier: 'chat_$chatId', // Group notifications by chat on iOS
+        subtitle: messageCount > 1 ? '$messageCount сообщений' : null,
+      );
       
+      final notificationDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+      
+      // Use chatId hash as notification ID - this REPLACES previous notification for same chat
       await _localNotifications.show(
-        chatId.hashCode, // Use chatId hash as notification ID (replaces previous)
-        messageCount > 1 ? '$messageCount new messages' : title,
-        messageCount > 1 ? messages.last : body,
+        chatId.hashCode,
+        messageCount > 1 ? '$title ($messageCount)' : title,
+        messageCount > 1 ? '${messages.last}' : body,
         notificationDetails,
-        payload: chatId,
+        payload: chatId, // IMPORTANT: payload is chatId for navigation
       );
       
-      // Show summary notification if multiple chats have unread messages
-      if (_unreadCountByChat.length > 1) {
-        await _showSummaryNotification();
-      }
-      
-      print('[FCM_FG] Grouped notification shown for chat $chatId ($messageCount messages)');
+      print('[FCM_FG] Grouped notification shown for chat $chatId ($messageCount messages, badge: $totalUnread)');
     } catch (e) {
       print('[FCM_FG] Error showing grouped notification: $e');
     }
   }
 
   Future<void> _showSummaryNotification() async {
+    // Summary notification is only needed for Android notification grouping
+    if (!Platform.isAndroid) return;
+    
     try {
       final totalUnread = _unreadCountByChat.values.fold(0, (sum, count) => sum + count);
       final chatCount = _unreadCountByChat.length;
+      
+      if (chatCount <= 1) {
+        // No need for summary if only one chat
+        await _localNotifications.cancel(0);
+        return;
+      }
       
       const androidDetails = AndroidNotificationDetails(
         'messages_channel',
         'Messages',
         channelDescription: 'Notifications for new messages',
-        importance: Importance.high,
-        priority: Priority.high,
-        groupKey: 'messages_group',
+        importance: Importance.low, // Low importance for summary
+        priority: Priority.low,
+        groupKey: 'messages_summary',
         setAsGroupSummary: true,
+        onlyAlertOnce: true,
       );
       
       final notificationDetails = NotificationDetails(android: androidDetails);
@@ -424,7 +525,7 @@ class FcmService {
       await _localNotifications.show(
         0, // Summary notification ID
         'Депеша',
-        '$totalUnread new messages from $chatCount chats',
+        '$totalUnread сообщений из $chatCount чатов',
         notificationDetails,
       );
       

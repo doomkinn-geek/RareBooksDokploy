@@ -28,6 +28,9 @@ class FullScreenImageViewer extends StatefulWidget {
   final String senderName;
   final DateTime createdAt;
   
+  /// Message ID for Hero animation
+  final String? messageId;
+  
   /// Optional list of all images in the chat for horizontal swiping
   final List<ImageData>? allImages;
   /// Initial index in the images list
@@ -39,6 +42,7 @@ class FullScreenImageViewer extends StatefulWidget {
     this.localPath,
     required this.senderName,
     required this.createdAt,
+    this.messageId,
     this.allImages,
     this.initialIndex = 0,
   });
@@ -550,18 +554,21 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
   }
   
   Widget _buildImageFromData(ImageData imageData) {
+    Widget imageWidget;
+    
     if (imageData.localPath != null && File(imageData.localPath!).existsSync()) {
-      return Image.file(
+      imageWidget = Image.file(
         File(imageData.localPath!),
         fit: BoxFit.contain,
       );
     } else if (imageData.imageUrl != null) {
-      return CachedNetworkImage(
+      imageWidget = CachedNetworkImage(
         imageUrl: imageData.imageUrl!,
         fit: BoxFit.contain,
         placeholder: (context, url) => const Center(
           child: CircularProgressIndicator(color: Colors.white),
         ),
+        fadeInDuration: const Duration(milliseconds: 200),
         errorWidget: (context, url, error) => const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -577,28 +584,37 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
         ),
       );
     } else {
-      return const Center(
+      imageWidget = const Center(
         child: Text(
           'Изображение недоступно',
           style: TextStyle(color: Colors.white),
         ),
       );
     }
+    
+    // Wrap in Hero for smooth transition animation
+    return Hero(
+      tag: 'image_${imageData.messageId}',
+      child: imageWidget,
+    );
   }
 
   Widget _buildImage() {
+    Widget imageWidget;
+    
     if (widget.localPath != null && File(widget.localPath!).existsSync()) {
-      return Image.file(
+      imageWidget = Image.file(
         File(widget.localPath!),
         fit: BoxFit.contain,
       );
     } else if (widget.imageUrl != null) {
-      return CachedNetworkImage(
+      imageWidget = CachedNetworkImage(
         imageUrl: widget.imageUrl!,
         fit: BoxFit.contain,
         placeholder: (context, url) => const Center(
           child: CircularProgressIndicator(color: Colors.white),
         ),
+        fadeInDuration: const Duration(milliseconds: 200),
         errorWidget: (context, url, error) => const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -614,13 +630,22 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
         ),
       );
     } else {
-      return const Center(
+      imageWidget = const Center(
         child: Text(
           'Изображение недоступно',
           style: TextStyle(color: Colors.white),
         ),
       );
     }
+    
+    // Wrap in Hero for smooth transition animation (if messageId is provided)
+    if (widget.messageId != null) {
+      return Hero(
+        tag: 'image_${widget.messageId}',
+        child: imageWidget,
+      );
+    }
+    return imageWidget;
   }
 
   String _formatDate(DateTime date) {
