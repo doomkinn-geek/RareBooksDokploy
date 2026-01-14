@@ -38,6 +38,7 @@ dependencies:
   # Images
   image_picker: ^1.0.7
   flutter_image_compress: ^2.1.0
+  photo_view: ^0.15.0  # For smooth pinch-to-zoom in fullscreen image viewer
   
   # File Picker
   file_picker: ^8.0.0
