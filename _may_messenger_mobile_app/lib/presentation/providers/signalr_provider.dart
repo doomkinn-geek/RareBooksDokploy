@@ -187,16 +187,15 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
           // CRITICAL: Re-join all chats after reconnection
           await _joinAllUserChats();
           
-          // Sync pending status updates
+          // Request incremental sync via SignalR to get missed messages/statuses
           try {
-            final statusSyncService = _ref.read(statusSyncServiceProvider);
-            await statusSyncService.forceSync();
-            print('[SignalR] Pending status updates synced after reconnect');
+            await _signalRService.requestIncrementalSync();
+            print('[SignalR] Incremental sync requested after reconnect');
           } catch (e) {
-            print('[SignalR] Error syncing status updates after reconnect: $e');
+            print('[SignalR] Error requesting incremental sync: $e');
           }
           
-          // Sync pending outbox messages
+          // Sync pending outbox messages (for messages we sent while offline)
           try {
             final outboxSyncService = _ref.read(outboxSyncServiceProvider);
             outboxSyncService.setConnected(true);

@@ -182,57 +182,32 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   /// Start a timer to show retry button if message stays in "sending" too long
   /// Only for messages that are actually stuck (not already sent/delivered)
   void _startSendingTimeoutCheck() {
-    // Cancel any existing timer first
+    // SIMPLIFIED: No longer use timeout for "sending" status
+    // The outbox system handles retries automatically
+    // UI should only show Retry for "failed" status
+    
     _sendingTimeoutTimer?.cancel();
     _sendingTimeoutTimer = null;
     
-    // Only start timer for messages in sending status
-    // Do NOT show retry for sent, delivered, read, or played messages
-    if (widget.message.status != MessageStatus.sending) {
-      if (_showRetryForStuck) {
-        setState(() {
-          _showRetryForStuck = false;
-        });
-      }
-      return;
-    }
-    
-    // Check how old the message is
-    final messageAge = DateTime.now().difference(widget.message.createdAt);
-    
-    // Increase timeout to 90 seconds to avoid false positives
-    // Server roundtrip + network latency + push delivery can take time
-    const timeoutSeconds = 90;
-    
-    if (messageAge.inSeconds >= timeoutSeconds) {
-      // Already past timeout, but double-check status is still sending
-      if (mounted && widget.message.status == MessageStatus.sending) {
-        setState(() {
-          _showRetryForStuck = true;
-        });
-      }
-    } else {
-      // Schedule timer for remaining time
-      final remainingTime = Duration(seconds: timeoutSeconds) - messageAge;
-      _sendingTimeoutTimer = Timer(remainingTime, () {
-        // CRITICAL: Re-check status when timer fires
-        // Widget might have been updated while timer was running
-        // Check both widget.message.status AND that we're still in sending state
-        if (mounted && widget.message.status == MessageStatus.sending) {
-          setState(() {
-            _showRetryForStuck = true;
-          });
-          print('[UI_FALLBACK] Message ${widget.message.id} stuck in sending after ${timeoutSeconds}s, showing retry button');
-        } else if (mounted) {
-          // Status changed, make sure retry is hidden
-          if (_showRetryForStuck) {
-            setState(() {
-              _showRetryForStuck = false;
-            });
-          }
-        }
+    // Clear retry button if status is not failed
+    if (_showRetryForStuck && widget.message.status != MessageStatus.failed) {
+      setState(() {
+        _showRetryForStuck = false;
       });
     }
+    
+    // No timeout needed - messages_provider handles status transitions:
+    // sending -> sent (after API success)
+    // sending -> failed (after outbox retries exhausted)
+    //
+    // The only valid case for showing Retry is when status == failed
+    return;
+    
+    // OLD CODE REMOVED:
+    // Previously showed Retry after 90s timeout, but this was incorrect
+    // because if API returned success, message is already "sent" on server
+    // If still "sending" in UI, it means state update was missed - 
+    // that's handled by _handleStuckLocalMessage in messages_provider
   }
   
   @override
@@ -420,31 +395,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     
     switch (widget.message.status) {
       case MessageStatus.sending:
-        // If stuck in sending for too long, show retry button instead of spinner
-        if (_showRetryForStuck) {
-          return GestureDetector(
-            onTap: _handleRetry,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.refresh,
-                  size: 14,
-                  color: Colors.orange[700],
-                ),
-                const SizedBox(width: 2),
-                Text(
-                  'Retry',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.orange[700],
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
+        // Simple spinner while sending - no timeout retry here
+        // Retries are handled by outbox system, failed status will show retry
         return SizedBox(
           width: 14,
           height: 14,

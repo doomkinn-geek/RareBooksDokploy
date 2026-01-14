@@ -637,6 +637,25 @@ class SignalRService {
     }
   }
 
+  /// Request incremental sync after reconnection to get missed messages and status updates
+  Future<void> requestIncrementalSync() async {
+    if (!isConnected) {
+      print('[SignalR] Cannot request incremental sync - not connected');
+      return;
+    }
+    
+    try {
+      // Use last known sync timestamp (stored in service)
+      final since = _lastSyncTimestamp ?? DateTime.now().subtract(const Duration(hours: 1));
+      
+      print('[SignalR] Requesting incremental sync since: $since');
+      await _hubConnection?.invoke('RequestIncrementalSync', args: [since.toIso8601String()]);
+      print('[SignalR] Incremental sync requested successfully');
+    } catch (e) {
+      print('[SignalR] Failed to request incremental sync: $e');
+    }
+  }
+  
   /// Send acknowledgment that message was received via SignalR
   Future<void> ackMessageReceived(String messageId) async {
     if (!isConnected) {

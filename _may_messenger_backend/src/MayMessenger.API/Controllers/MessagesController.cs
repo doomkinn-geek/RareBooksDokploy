@@ -2034,12 +2034,16 @@ public class MessagesController : ControllerBase
                 
                 _logger.LogInformation($"[PUSH_CONFIRM] Message {messageId} status changed: {oldStatus} -> {aggregateStatus}");
                 
-                // Notify sender via SignalR about status change
-                // Use user group (user_{senderId}) to send notification
-                await _hubContext.Clients.Group($"user_{message.SenderId}")
-                    .SendAsync("MessageStatusUpdated", messageId.ToString(), (int)aggregateStatus);
+                // Notify via SignalR about status change
+                // Send to BOTH chat group AND sender's user group for reliability
+                await _hubContext.Clients.Group(chatId.ToString())
+                    .SendAsync("MessageStatusUpdated", messageId.ToString(), (int)aggregateStatus, chatId.ToString());
                 
-                _logger.LogInformation($"[PUSH_CONFIRM] Notified sender {message.SenderId} about status change via SignalR");
+                // Also send directly to sender's user group as backup
+                await _hubContext.Clients.Group($"user_{message.SenderId}")
+                    .SendAsync("MessageStatusUpdated", messageId.ToString(), (int)aggregateStatus, chatId.ToString());
+                
+                _logger.LogInformation($"[PUSH_CONFIRM] Notified chat {chatId} and sender {message.SenderId} about status change via SignalR");
             }
             
             await _unitOfWork.SaveChangesAsync();
