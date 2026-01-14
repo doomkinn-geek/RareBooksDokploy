@@ -176,7 +176,7 @@ public class FirebaseService : IFirebaseService
             var message = new MulticastMessage
             {
                 Tokens = tokens,
-св юю                // Include notification payload for iOS to show banners
+                // Include notification payload for iOS to show banners
                 Notification = new FirebaseAdmin.Messaging.Notification
                 {
                     Title = title,
