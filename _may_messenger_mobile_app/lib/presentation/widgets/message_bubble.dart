@@ -1370,10 +1370,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     }
     
     Navigator.of(context).push(
-      PageRouteBuilder(
-        opaque: false,
-        barrierColor: Colors.transparent,
-        pageBuilder: (context, animation, secondaryAnimation) => FullScreenImageViewer(
+      MaterialPageRoute(
+        builder: (context) => FullScreenImageViewer(
           imageUrl: widget.message.filePath != null
               ? '${ApiConstants.baseUrl}${widget.message.filePath}'
               : null,
@@ -1384,13 +1382,6 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           allImages: allImages,
           initialIndex: initialIndex,
         ),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(
-            opacity: animation,
-            child: child,
-          );
-        },
-        transitionDuration: const Duration(milliseconds: 300),
       ),
     );
   }

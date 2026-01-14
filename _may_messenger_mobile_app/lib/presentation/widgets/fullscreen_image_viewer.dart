@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
+import 'package:dismissible_page/dismissible_page.dart';
 import '../../core/services/gallery_service.dart';
 
 /// Data class for image information in the gallery
@@ -113,111 +114,117 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
   Widget build(BuildContext context) {
     final bool hasMultipleImages = widget.allImages != null && widget.allImages!.length > 1;
     
-    return Scaffold(
+    return DismissiblePage(
+      onDismissed: () => Navigator.of(context).pop(),
+      direction: DismissiblePageDismissDirection.vertical,
       backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          // Image viewer - either PageView or single PinchZoomImage
-          if (hasMultipleImages)
-            _buildPageView()
-          else
-            _buildSingleImageView(),
-    
-          // Top app bar
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              bottom: false,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.7),
-                      Colors.transparent,
+      isFullScreen: true,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Stack(
+          children: [
+            // Image viewer - either PageView or single PhotoView
+            if (hasMultipleImages)
+              _buildPageView()
+            else
+              _buildSingleImageView(),
+      
+            // Top app bar
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.7),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(8.0),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back, color: Colors.white),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _currentSenderName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Text(
+                              _formatDate(_currentCreatedAt),
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Save to gallery button
+                      _isSaving
+                          ? const Padding(
+                              padding: EdgeInsets.all(12.0),
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            )
+                          : IconButton(
+                              icon: const Icon(Icons.download, color: Colors.white),
+                              onPressed: _saveImageToGallery,
+                              tooltip: 'Сохранить в галерею',
+                      ),
                     ],
                   ),
                 ),
-                padding: const EdgeInsets.all(8.0),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
-                      onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+            
+            // Page indicator for multiple images
+            if (hasMultipleImages)
+              Positioned(
+                bottom: 40,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _currentSenderName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          Text(
-                            _formatDate(_currentCreatedAt),
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
+                    child: Text(
+                      '${_currentIndex + 1} / ${widget.allImages!.length}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
                       ),
                     ),
-                    // Save to gallery button
-                    _isSaving
-                        ? const Padding(
-                            padding: EdgeInsets.all(12.0),
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            ),
-                          )
-                        : IconButton(
-                            icon: const Icon(Icons.download, color: Colors.white),
-                            onPressed: _saveImageToGallery,
-                            tooltip: 'Сохранить в галерею',
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          
-          // Page indicator for multiple images
-          if (hasMultipleImages)
-            Positioned(
-              bottom: 40,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '${_currentIndex + 1} / ${widget.allImages!.length}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                    ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

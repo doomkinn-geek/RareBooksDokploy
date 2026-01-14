@@ -39,6 +39,7 @@ dependencies:
   image_picker: ^1.0.7
   flutter_image_compress: ^2.1.0
   photo_view: ^0.15.0  # For smooth pinch-to-zoom in fullscreen image viewer
+  dismissible_page: ^1.0.2  # For swipe-to-dismiss gesture in image viewer
   
   # File Picker
   file_picker: ^8.0.0
