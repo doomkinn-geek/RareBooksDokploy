@@ -83,18 +83,17 @@ public class FirebaseService : IFirebaseService
             var message = new Message
             {
                 Token = fcmToken,
-                // Include notification payload for iOS to show banners
-                Notification = new FirebaseAdmin.Messaging.Notification
-                {
-                    Title = title,
-                    Body = body
-                },
-                // Data payload for custom handling on client
+                // NO global Notification payload - Android will use data-only messages
+                // This allows app to handle notification grouping on Android
+                // iOS gets notification through APNs config below
+                
+                // Data payload for custom handling on client (both platforms)
                 Data = messageData,
                 Android = new AndroidConfig
                 {
                     Priority = Priority.High,
-                    // Android handles data messages well even without notification payload
+                    // Data-only message: app handles notification display and grouping
+                    // This ensures only one notification per chat on Android
                 },
                 Apns = new ApnsConfig
                 {
@@ -176,17 +175,16 @@ public class FirebaseService : IFirebaseService
             var message = new MulticastMessage
             {
                 Tokens = tokens,
-                // Include notification payload for iOS to show banners
-                Notification = new FirebaseAdmin.Messaging.Notification
-                {
-                    Title = title,
-                    Body = body
-                },
-                // Data payload for custom handling on client
+                // NO global Notification payload - Android will use data-only messages
+                // This allows app to handle notification grouping on Android
+                // iOS gets notification through APNs config below
+                
+                // Data payload for custom handling on client (both platforms)
                 Data = messageData,
                 Android = new AndroidConfig
                 {
                     Priority = Priority.High
+                    // Data-only message: app handles notification display and grouping
                 },
                 Apns = new ApnsConfig
                 {

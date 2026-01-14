@@ -46,36 +46,59 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   final body = message.data['body'] ?? message.notification?.body ?? '';
   final chatId = message.data['chatId'] as String?;
   
+  print('[FCM_BG] Parsed: title=$title, body=$body, chatId=$chatId');
+  
+  if (chatId == null || chatId.isEmpty) {
+    print('[FCM_BG] No chatId in message, skipping notification');
+    return;
+  }
+  
   // Initialize local notifications for background handler
   const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-  const initSettings = InitializationSettings(android: androidSettings);
+  const iosSettings = DarwinInitializationSettings();
+  const initSettings = InitializationSettings(android: androidSettings, iOS: iosSettings);
   
   await _localNotifications.initialize(initSettings);
   
-  // Show local notification with grouping support (reply action disabled)
+  // Generate consistent notification ID from chatId
+  // Using absolute value to avoid negative IDs
+  final notificationId = chatId.hashCode.abs();
+  
+  // Show local notification with grouping support
+  // Using tag ensures only one notification per chat (replaces previous)
   try {
-    const androidDetails = AndroidNotificationDetails(
+    final androidDetails = AndroidNotificationDetails(
       'messages_channel',
       'Messages',
       channelDescription: 'Notifications for new messages',
       importance: Importance.high,
       priority: Priority.high,
       showWhen: true,
-      groupKey: 'messages_group', // Group all messages together
-      // Reply action removed - not reliable enough
+      groupKey: 'chat_$chatId', // Group by specific chat
+      tag: 'chat_$chatId', // Tag ensures replacement of same-chat notifications
+      onlyAlertOnce: false, // Alert on each new message
     );
     
-    const notificationDetails = NotificationDetails(android: androidDetails);
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentSound: true,
+      presentBadge: true,
+    );
+    
+    final notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
     
     await _localNotifications.show(
-      chatId.hashCode, // Use chatId hash as notification ID (one per chat)
+      notificationId, // Consistent ID per chat
       title,
       body,
       notificationDetails,
       payload: chatId,
     );
     
-    print('[FCM_BG] Local notification shown');
+    print('[FCM_BG] Local notification shown for chat $chatId with id $notificationId');
   } catch (e) {
     print('[FCM_BG] Error showing notification: $e');
   }

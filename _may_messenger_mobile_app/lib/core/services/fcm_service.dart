@@ -345,17 +345,9 @@ class FcmService {
       return;
     }
     
-    // ANDROID FIX: Don't show local notification if FCM already has notification payload
-    // On Android, FCM with notification payload shows system notification automatically
-    // Only show our custom notification for data-only messages (iOS APNs case)
-    final hasNotificationPayload = message.notification != null && 
-        (message.notification!.title != null || message.notification!.body != null);
-    
-    if (hasNotificationPayload && Platform.isAndroid) {
-      print('[FCM_FG] Android: Skipping local notification (FCM notification payload will show)');
-      return;
-    }
-    
+    // Show grouped notification
+    // Android receives data-only messages (no notification payload from server)
+    // iOS receives APNs alert, but we also show local notification for consistency
     if (chatId != null) {
       await _showGroupedNotification(chatId, title, body);
     }

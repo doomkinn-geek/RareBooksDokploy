@@ -79,10 +79,13 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
   DateTime? _gestureStartTime;
   int _pointerCount = 0;
   
+  // Track if InteractiveViewer is actively handling gestures
+  bool _isInteractiveViewerActive = false;
+  
   // Thresholds for gesture detection
-  static const double _swipeDetectionThreshold = 20.0; // px before determining intent
-  static const double _swipeAngleThreshold = 0.7; // cos of max angle from vertical (about 45 degrees)
-  static const Duration _swipeDetectionTimeout = Duration(milliseconds: 150);
+  static const double _swipeDetectionThreshold = 25.0; // px before determining intent
+  static const double _swipeAngleThreshold = 0.75; // Vertical angle threshold (about 40 degrees from vertical)
+  static const Duration _swipeDetectionTimeout = Duration(milliseconds: 200); // Timeout for pinch detection
   
   // Save state
   bool _isSaving = false;
@@ -225,14 +228,15 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
     _pointerCount++;
     
     if (_pointerCount == 1) {
-      // First finger - start detection phase
+      // First finger - start detection phase (but don't commit to swipe yet)
       _gestureState = _GestureState.detecting;
       _gestureStartPosition = event.localPosition;
       _gestureStartTime = DateTime.now();
     } else if (_pointerCount >= 2) {
-      // Second finger - it's a pinch, not a swipe
+      // Second finger detected - immediately switch to pinching mode
+      // This takes priority over any potential swipe detection
       _gestureState = _GestureState.pinching;
-      // Reset any swipe progress
+      // Reset any swipe progress immediately
       if (_dragOffset != 0) {
         setState(() {
           _dragOffset = 0;
@@ -244,15 +248,38 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
   
   /// Handle pointer move - determine gesture intent
   void _onPointerMove(PointerMoveEvent event) {
+    // Always prioritize pinch over swipe when multiple fingers
+    if (_pointerCount >= 2) {
+      // Multiple fingers - definitely a pinch, not a swipe
+      if (_gestureState != _GestureState.pinching) {
+        _gestureState = _GestureState.pinching;
+        // Reset any swipe progress
+        if (_dragOffset != 0) {
+          setState(() {
+            _dragOffset = 0;
+            _opacity = 1.0;
+          });
+        }
+      }
+      return;
+    }
+    
     if (_currentScale > 1.05) {
-      // Zoomed in - don't allow swipe
+      // Zoomed in - don't allow swipe, let InteractiveViewer handle panning
       _gestureState = _GestureState.pinching;
       return;
     }
     
-    if (_pointerCount >= 2) {
-      // Multiple fingers - it's a pinch
-      _gestureState = _GestureState.pinching;
+    // Once pinching/swiping is determined, stick with it
+    if (_gestureState == _GestureState.pinching || _gestureState == _GestureState.swiping) {
+      // If swiping, continue to update drag offset
+      if (_gestureState == _GestureState.swiping && _gestureStartPosition != null) {
+        final delta = event.localPosition - _gestureStartPosition!;
+        setState(() {
+          _dragOffset = delta.dy;
+          _opacity = (1.0 - (_dragOffset.abs() / 300)).clamp(0.0, 1.0);
+        });
+      }
       return;
     }
     
@@ -260,35 +287,32 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
       final delta = event.localPosition - _gestureStartPosition!;
       final distance = delta.distance;
       
-      // Wait for movement to exceed threshold before determining intent
+      // Wait for movement before determining intent
       if (distance > _swipeDetectionThreshold) {
-        // Calculate if movement is predominantly vertical
-        final verticalRatio = delta.dy.abs() / distance;
+        final horizontalDistance = delta.dx.abs();
+        final verticalDistance = delta.dy.abs();
         
-        if (verticalRatio > _swipeAngleThreshold) {
-          // Predominantly vertical movement - it's a swipe
+        // Calculate if movement is predominantly vertical or horizontal
+        final verticalRatio = verticalDistance / distance;
+        final horizontalRatio = horizontalDistance / distance;
+        
+        if (verticalRatio > _swipeAngleThreshold && verticalDistance > 30) {
+          // Predominantly vertical - it's a dismiss swipe
           _gestureState = _GestureState.swiping;
+        } else if (horizontalRatio > 0.6) {
+          // Predominantly horizontal - let PageView handle it
+          _gestureState = _GestureState.pinching;
         } else {
-          // Horizontal or diagonal - let PageView/InteractiveViewer handle it
+          // Diagonal or unclear - default to pinching to be safe
           _gestureState = _GestureState.pinching;
         }
       } else {
-        // Check timeout - if finger stayed still too long, it might be a pinch start
+        // Check timeout - if stayed still, might be starting a pinch
         final elapsed = DateTime.now().difference(_gestureStartTime!);
         if (elapsed > _swipeDetectionTimeout) {
-          // Timeout without clear vertical movement - default to pinching
           _gestureState = _GestureState.pinching;
         }
       }
-    }
-    
-    // Apply swipe movement
-    if (_gestureState == _GestureState.swiping) {
-      final delta = event.localPosition - _gestureStartPosition!;
-      setState(() {
-        _dragOffset = delta.dy;
-        _opacity = (1.0 - (_dragOffset.abs() / 300)).clamp(0.0, 1.0);
-      });
     }
   }
   
@@ -315,6 +339,15 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
       _gestureState = _GestureState.idle;
       _gestureStartPosition = null;
       _gestureStartTime = null;
+      
+      // Allow some delay before re-enabling PageView to prevent accidental swipe
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted && _pointerCount == 0) {
+          setState(() {
+            _isInteractiveViewerActive = false;
+          });
+        }
+      });
     }
   }
   
@@ -327,6 +360,7 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
       setState(() {
         _dragOffset = 0.0;
         _opacity = 1.0;
+        _isInteractiveViewerActive = false;
       });
       _gestureState = _GestureState.idle;
       _gestureStartPosition = null;
@@ -488,38 +522,65 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
   }
   
   Widget _buildPageView() {
+    final screenSize = MediaQuery.of(context).size;
+    
     return PageView.builder(
       controller: _pageController,
       onPageChanged: _onPageChanged,
-      // Disable page scrolling when zoomed
-      physics: _currentScale > 1.05 
+      // Disable page scrolling when:
+      // 1. Zoomed in
+      // 2. InteractiveViewer is handling gesture (pinch/pan)
+      // 3. Multiple pointers detected (pinch gesture)
+      physics: (_currentScale > 1.05 || _isInteractiveViewerActive || _pointerCount >= 2)
           ? const NeverScrollableScrollPhysics() 
           : const BouncingScrollPhysics(),
       itemCount: widget.allImages!.length,
       itemBuilder: (context, index) {
         final imageData = widget.allImages![index];
-        return Center(
-          child: InteractiveViewer(
-            transformationController: index == _currentIndex 
-                ? _transformationController 
-                : TransformationController(),
-            minScale: 0.5,
-            maxScale: 4.0,
-            onInteractionStart: (details) {
-              // When InteractiveViewer starts interaction, mark as pinching
-              if (details.pointerCount >= 2) {
-                _gestureState = _GestureState.pinching;
-              }
-            },
-            onInteractionEnd: (details) {
-              // Reset drag offset when zooming is done
-              if (_currentScale <= 1.0 && _dragOffset != 0) {
-                setState(() {
-                  _dragOffset = 0.0;
-                  _opacity = 1.0;
-                });
-              }
-            },
+        return InteractiveViewer(
+          transformationController: index == _currentIndex 
+              ? _transformationController 
+              : TransformationController(),
+          minScale: 1.0,  // Don't allow zoom out below 1x
+          maxScale: 5.0,  // Increased max zoom
+          // Allow panning beyond boundaries when zoomed
+          boundaryMargin: EdgeInsets.all(_currentScale > 1.0 ? 100 : 0),
+          panEnabled: _currentScale > 1.0, // Only pan when zoomed
+          scaleEnabled: true,
+          onInteractionStart: (details) {
+            // Mark InteractiveViewer as active
+            setState(() {
+              _isInteractiveViewerActive = true;
+            });
+            
+            // When InteractiveViewer starts interaction with 2+ fingers, mark as pinching
+            if (details.pointerCount >= 2) {
+              _gestureState = _GestureState.pinching;
+            }
+          },
+          onInteractionUpdate: (details) {
+            // If scale changes or multiple pointers, ensure we're in pinching mode
+            if (details.pointerCount >= 2 || details.scale != 1.0) {
+              _gestureState = _GestureState.pinching;
+            }
+          },
+          onInteractionEnd: (details) {
+            // Mark InteractiveViewer as inactive
+            setState(() {
+              _isInteractiveViewerActive = false;
+            });
+            
+            // Reset drag offset when zooming is done
+            if (_currentScale <= 1.0 && _dragOffset != 0) {
+              setState(() {
+                _dragOffset = 0.0;
+                _opacity = 1.0;
+              });
+            }
+          },
+          child: SizedBox(
+            width: screenSize.width,
+            height: screenSize.height,
             child: _buildImageFromData(imageData),
           ),
         );
@@ -528,26 +589,50 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
   }
   
   Widget _buildSingleImageView() {
-    return Center(
-      child: InteractiveViewer(
-        transformationController: _transformationController,
-        minScale: 0.5,
-        maxScale: 4.0,
-        onInteractionStart: (details) {
-          // When InteractiveViewer starts interaction, mark as pinching
-          if (details.pointerCount >= 2) {
-            _gestureState = _GestureState.pinching;
-          }
-        },
-        onInteractionEnd: (details) {
-          // Reset drag offset when zooming is done
-          if (_currentScale <= 1.0 && _dragOffset != 0) {
-            setState(() {
-              _dragOffset = 0.0;
-              _opacity = 1.0;
-            });
-          }
-        },
+    final screenSize = MediaQuery.of(context).size;
+    
+    return InteractiveViewer(
+      transformationController: _transformationController,
+      minScale: 1.0,  // Don't allow zoom out below 1x
+      maxScale: 5.0,  // Increased max zoom
+      // Allow panning beyond boundaries when zoomed
+      boundaryMargin: EdgeInsets.all(_currentScale > 1.0 ? 100 : 0),
+      panEnabled: _currentScale > 1.0, // Only pan when zoomed
+      scaleEnabled: true,
+      onInteractionStart: (details) {
+        // Mark InteractiveViewer as active
+        setState(() {
+          _isInteractiveViewerActive = true;
+        });
+        
+        // When InteractiveViewer starts interaction with 2+ fingers, mark as pinching
+        if (details.pointerCount >= 2) {
+          _gestureState = _GestureState.pinching;
+        }
+      },
+      onInteractionUpdate: (details) {
+        // If scale changes or multiple pointers, ensure we're in pinching mode
+        if (details.pointerCount >= 2 || details.scale != 1.0) {
+          _gestureState = _GestureState.pinching;
+        }
+      },
+      onInteractionEnd: (details) {
+        // Mark InteractiveViewer as inactive
+        setState(() {
+          _isInteractiveViewerActive = false;
+        });
+        
+        // Reset drag offset when zooming is done
+        if (_currentScale <= 1.0 && _dragOffset != 0) {
+          setState(() {
+            _dragOffset = 0.0;
+            _opacity = 1.0;
+          });
+        }
+      },
+      child: SizedBox(
+        width: screenSize.width,
+        height: screenSize.height,
         child: _buildImage(),
       ),
     );
@@ -560,11 +645,13 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
       imageWidget = Image.file(
         File(imageData.localPath!),
         fit: BoxFit.contain,
+        alignment: Alignment.center,
       );
     } else if (imageData.imageUrl != null) {
       imageWidget = CachedNetworkImage(
         imageUrl: imageData.imageUrl!,
         fit: BoxFit.contain,
+        alignment: Alignment.center,
         placeholder: (context, url) => const Center(
           child: CircularProgressIndicator(color: Colors.white),
         ),
@@ -592,10 +679,13 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
       );
     }
     
+    // Center the image in the available space
     // Wrap in Hero for smooth transition animation
-    return Hero(
-      tag: 'image_${imageData.messageId}',
-      child: imageWidget,
+    return Center(
+      child: Hero(
+        tag: 'image_${imageData.messageId}',
+        child: imageWidget,
+      ),
     );
   }
 
@@ -606,11 +696,13 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
       imageWidget = Image.file(
         File(widget.localPath!),
         fit: BoxFit.contain,
+        alignment: Alignment.center,
       );
     } else if (widget.imageUrl != null) {
       imageWidget = CachedNetworkImage(
         imageUrl: widget.imageUrl!,
         fit: BoxFit.contain,
+        alignment: Alignment.center,
         placeholder: (context, url) => const Center(
           child: CircularProgressIndicator(color: Colors.white),
         ),
@@ -638,14 +730,17 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
       );
     }
     
+    // Center the image in the available space
     // Wrap in Hero for smooth transition animation (if messageId is provided)
+    Widget result = Center(child: imageWidget);
+    
     if (widget.messageId != null) {
       return Hero(
         tag: 'image_${widget.messageId}',
-        child: imageWidget,
+        child: result,
       );
     }
-    return imageWidget;
+    return result;
   }
 
   String _formatDate(DateTime date) {
