@@ -2,7 +2,7 @@ name: mobile_app
 description: "Депеша - простое приложения для общения"
 publish_to: 'none'
 
-version: 0.8.1+2
+version: 0.9.1+3
 
 environment:
   sdk: ^3.9.2
