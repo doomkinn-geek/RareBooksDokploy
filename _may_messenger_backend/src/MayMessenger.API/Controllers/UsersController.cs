@@ -1,10 +1,12 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using MayMessenger.Application.DTOs;
 using MayMessenger.Application.Services;
 using MayMessenger.Domain.Entities;
 using MayMessenger.Domain.Interfaces;
+using MayMessenger.API.Hubs;
 
 namespace MayMessenger.API.Controllers;
 
@@ -16,15 +18,18 @@ public class UsersController : ControllerBase
     private readonly IUnitOfWork _unitOfWork;
     private readonly IImageCompressionService _imageCompressionService;
     private readonly IWebHostEnvironment _environment;
+    private readonly IHubContext<ChatHub> _hubContext;
     
     public UsersController(
         IUnitOfWork unitOfWork, 
         IImageCompressionService imageCompressionService,
-        IWebHostEnvironment environment)
+        IWebHostEnvironment environment,
+        IHubContext<ChatHub> hubContext)
     {
         _unitOfWork = unitOfWork;
         _imageCompressionService = imageCompressionService;
         _environment = environment;
+        _hubContext = hubContext;
     }
     
     private Guid GetCurrentUserId()
@@ -487,6 +492,7 @@ public class UsersController : ControllerBase
     /// <summary>
     /// Set current user as online (call when app is in foreground)
     /// This should be called when app resumes from background
+    /// Sends instant SignalR notification to all chat participants
     /// </summary>
     [HttpPost("go-online")]
     public async Task<IActionResult> GoOnline()
@@ -507,12 +513,23 @@ public class UsersController : ControllerBase
         
         Console.WriteLine($"[Presence] User {userId} marked as ONLINE via REST API");
         
+        // Notify all chat participants about user coming online (instant update)
+        try
+        {
+            await NotifyUserStatusChangedAsync(userId, true, user.LastSeenAt.Value);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Presence] Error notifying status change: {ex.Message}");
+        }
+        
         return Ok(new { isOnline = true, lastSeenAt = user.LastSeenAt });
     }
     
     /// <summary>
     /// Set current user as offline (call when app goes to background)
     /// This should be called when app is paused/minimized
+    /// Sends instant SignalR notification to all chat participants
     /// </summary>
     [HttpPost("go-offline")]
     public async Task<IActionResult> GoOffline()
@@ -532,7 +549,33 @@ public class UsersController : ControllerBase
         
         Console.WriteLine($"[Presence] User {userId} marked as OFFLINE via REST API");
         
+        // Notify all chat participants about user going offline (instant update)
+        try
+        {
+            await NotifyUserStatusChangedAsync(userId, false, user.LastSeenAt.Value);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Presence] Error notifying status change: {ex.Message}");
+        }
+        
         return Ok(new { isOnline = false, lastSeenAt = user.LastSeenAt });
+    }
+    
+    /// <summary>
+    /// Notify all participants in user's chats about their status change via SignalR
+    /// </summary>
+    private async Task NotifyUserStatusChangedAsync(Guid userId, bool isOnline, DateTime lastSeenAt)
+    {
+        var chats = await _unitOfWork.Chats.GetUserChatsAsync(userId);
+        
+        foreach (var chat in chats)
+        {
+            await _hubContext.Clients.Group(chat.Id.ToString())
+                .SendAsync("UserStatusChanged", userId.ToString(), isOnline, lastSeenAt);
+        }
+        
+        Console.WriteLine($"[Presence] Notified {chats.Count()} chats about user {userId} status: {(isOnline ? "online" : "offline")}");
     }
     
     #endregion

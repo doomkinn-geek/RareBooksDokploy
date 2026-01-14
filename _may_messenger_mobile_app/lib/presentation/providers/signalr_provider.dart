@@ -486,11 +486,19 @@ class SignalRConnectionNotifier extends StateNotifier<SignalRConnectionState> {
           print('[SignalR] Poll updated: messageId=$messageId');
           
           try {
-            // Find the chat containing this message and update it
-            // We need to iterate through all active message providers
-            // This is handled by the MessagesNotifier when it receives the update
-            // For now, we'll broadcast it and let active providers handle it
+            // Broadcast to stream for any listeners
             _pollUpdateController.add({'messageId': messageId, 'poll': pollData});
+            
+            // Update poll in all active message providers
+            final chatsState = _ref.read(chatsProvider);
+            for (final chat in chatsState.chats) {
+              try {
+                _ref.read(messagesProvider(chat.id).notifier)
+                    .handlePollUpdated(messageId, pollData);
+              } catch (e) {
+                // Provider might not be initialized, ignore
+              }
+            }
           } catch (e) {
             print('[SignalR] Failed to process poll update: $e');
           }

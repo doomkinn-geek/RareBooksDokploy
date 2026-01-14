@@ -9,8 +9,8 @@ namespace MayMessenger.API.Services;
 
 /// <summary>
 /// Background service that monitors user presence based on heartbeat timestamps
-/// Marks users as offline if no heartbeat received for 90 seconds
-/// Runs every 60 seconds
+/// Marks users as offline if no heartbeat received for 45 seconds
+/// Runs every 30 seconds for faster offline detection
 /// </summary>
 public class PresenceMonitorService : BackgroundService
 {
@@ -18,8 +18,11 @@ public class PresenceMonitorService : BackgroundService
     private readonly ILogger<PresenceMonitorService> _logger;
     private readonly IHubContext<ChatHub> _hubContext;
     
-    private const int CheckIntervalSeconds = 60;
-    private const int HeartbeatTimeoutSeconds = 90;
+    // Reduced intervals for faster offline detection:
+    // - Check every 30 seconds (was 60)
+    // - Timeout after 45 seconds of no heartbeat (was 90)
+    private const int CheckIntervalSeconds = 30;
+    private const int HeartbeatTimeoutSeconds = 45;
 
     public PresenceMonitorService(
         IServiceProvider serviceProvider,

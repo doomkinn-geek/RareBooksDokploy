@@ -673,7 +673,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     
     try {
       final shareSendService = ref.read(shareSendServiceProvider);
-      await shareSendService.shareMessages(selected);
+      
+      // Get share position origin for iPad compatibility
+      final box = context.findRenderObject() as RenderBox?;
+      final sharePositionOrigin = box != null
+          ? box.localToGlobal(Offset.zero) & box.size
+          : const Rect.fromLTWH(0, 0, 100, 100);
+      
+      await shareSendService.shareMessages(
+        selected,
+        sharePositionOrigin: sharePositionOrigin,
+      );
     } catch (e) {
       print('[ChatScreen] Error sharing messages: $e');
       if (mounted) {

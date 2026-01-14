@@ -1161,6 +1161,11 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         await ref.read(messagesProvider(widget.message.chatId).notifier)
             .closePoll(poll.id);
       } : null,
+      // Enable voters view for non-anonymous polls
+      onGetVoters: poll.isAnonymous ? null : () async {
+        final apiDataSource = ref.read(apiDataSourceProvider);
+        return await apiDataSource.getPollVoters(poll.id);
+      },
     );
   }
 
@@ -1369,6 +1374,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       initialIndex = widget.imageIndex;
     }
     
+    // Save image locally when viewing (async, don't wait)
+    _saveImageLocallyIfNeeded();
+    
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => FullScreenImageViewer(
@@ -1384,6 +1392,45 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         ),
       ),
     );
+  }
+  
+  /// Save image locally for offline access
+  /// Called when user views the image in fullscreen
+  Future<void> _saveImageLocallyIfNeeded() async {
+    // Skip if already has local path
+    if (widget.message.localImagePath != null && 
+        File(widget.message.localImagePath!).existsSync()) {
+      return;
+    }
+    
+    // Skip if no server path
+    if (widget.message.filePath == null || widget.message.filePath!.isEmpty) {
+      return;
+    }
+    
+    try {
+      final imageStorageService = ref.read(imageStorageServiceProvider);
+      final imageUrl = '${ApiConstants.baseUrl}${widget.message.filePath}';
+      
+      final localPath = await imageStorageService.saveImageLocally(
+        widget.message.id,
+        imageUrl,
+      );
+      
+      if (localPath != null) {
+        // Update cache with local path
+        final localDataSource = ref.read(localDataSourceProvider);
+        await localDataSource.updateMessageLocalImagePath(
+          widget.message.chatId,
+          widget.message.id,
+          localPath,
+        );
+        print('[IMAGE] Saved image locally: ${widget.message.id} -> $localPath');
+      }
+    } catch (e) {
+      print('[IMAGE] Failed to save image locally: $e');
+      // Non-fatal, image will still be available from cache/network
+    }
   }
 
   void _seekAudio(TapDownDetails details, bool isMe) {

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -15,12 +16,22 @@ final shareSendServiceProvider = Provider<ShareSendService>((ref) {
 /// Uses share_plus package
 class ShareSendService {
   
+  /// Default share position origin for iPad compatibility
+  /// iPad requires a non-zero rect for the share popover anchor
+  static Rect _defaultShareOrigin() => const Rect.fromLTWH(0, 0, 100, 100);
+  
   /// Share text content to other apps
-  Future<ShareResult> shareText(String text, {String? subject}) async {
+  /// [sharePositionOrigin] is required on iPad for the share popover anchor
+  Future<ShareResult> shareText(
+    String text, {
+    String? subject,
+    Rect? sharePositionOrigin,
+  }) async {
     try {
       final result = await Share.share(
         text,
         subject: subject,
+        sharePositionOrigin: sharePositionOrigin ?? _defaultShareOrigin(),
       );
       print('[ShareSendService] Text shared, result: ${result.status}');
       return result;
@@ -31,12 +42,19 @@ class ShareSendService {
   }
   
   /// Share a single file to other apps
-  Future<ShareResult> shareFile(String filePath, {String? mimeType, String? text}) async {
+  /// [sharePositionOrigin] is required on iPad for the share popover anchor
+  Future<ShareResult> shareFile(
+    String filePath, {
+    String? mimeType,
+    String? text,
+    Rect? sharePositionOrigin,
+  }) async {
     try {
       final file = XFile(filePath, mimeType: mimeType);
       final result = await Share.shareXFiles(
         [file],
         text: text,
+        sharePositionOrigin: sharePositionOrigin ?? _defaultShareOrigin(),
       );
       print('[ShareSendService] File shared, result: ${result.status}');
       return result;
@@ -47,22 +65,38 @@ class ShareSendService {
   }
   
   /// Share an image file to other apps
-  Future<ShareResult> shareImage(String imagePath, {String? text}) async {
-    return shareFile(imagePath, mimeType: 'image/*', text: text);
+  /// [sharePositionOrigin] is required on iPad for the share popover anchor
+  Future<ShareResult> shareImage(
+    String imagePath, {
+    String? text,
+    Rect? sharePositionOrigin,
+  }) async {
+    return shareFile(imagePath, mimeType: 'image/*', text: text, sharePositionOrigin: sharePositionOrigin);
   }
   
   /// Share an audio file to other apps
-  Future<ShareResult> shareAudio(String audioPath, {String? text}) async {
-    return shareFile(audioPath, mimeType: 'audio/*', text: text);
+  /// [sharePositionOrigin] is required on iPad for the share popover anchor
+  Future<ShareResult> shareAudio(
+    String audioPath, {
+    String? text,
+    Rect? sharePositionOrigin,
+  }) async {
+    return shareFile(audioPath, mimeType: 'audio/*', text: text, sharePositionOrigin: sharePositionOrigin);
   }
   
   /// Share multiple files to other apps
-  Future<ShareResult> shareMultiple(List<String> filePaths, {String? text}) async {
+  /// [sharePositionOrigin] is required on iPad for the share popover anchor
+  Future<ShareResult> shareMultiple(
+    List<String> filePaths, {
+    String? text,
+    Rect? sharePositionOrigin,
+  }) async {
     try {
       final files = filePaths.map((path) => XFile(path)).toList();
       final result = await Share.shareXFiles(
         files,
         text: text,
+        sharePositionOrigin: sharePositionOrigin ?? _defaultShareOrigin(),
       );
       print('[ShareSendService] Multiple files shared, result: ${result.status}');
       return result;
@@ -104,7 +138,11 @@ class ShareSendService {
   
   /// Share messages to other apps
   /// Handles different message types appropriately
-  Future<ShareResult> shareMessages(List<Message> messages) async {
+  /// [sharePositionOrigin] is required on iPad for the share popover anchor
+  Future<ShareResult> shareMessages(
+    List<Message> messages, {
+    Rect? sharePositionOrigin,
+  }) async {
     if (messages.isEmpty) {
       return ShareResult('No messages to share', ShareResultStatus.dismissed);
     }
@@ -158,12 +196,12 @@ class ShareSendService {
     // If we have files, share them (with text if available)
     if (filePaths.isNotEmpty) {
       final text = textMessages.isNotEmpty ? textMessages.join('\n\n') : null;
-      return shareMultiple(filePaths, text: text);
+      return shareMultiple(filePaths, text: text, sharePositionOrigin: sharePositionOrigin);
     }
     
     // Otherwise, share text only
     if (textMessages.isNotEmpty) {
-      return shareText(textMessages.join('\n\n'));
+      return shareText(textMessages.join('\n\n'), sharePositionOrigin: sharePositionOrigin);
     }
     
     return ShareResult('Nothing to share', ShareResultStatus.dismissed);

@@ -393,6 +393,15 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
           if (token != null) {
             apiDataSource.setToken(token);
             print('Token restored to ApiDataSource: ${token.substring(0, 20)}...');
+            
+            // CRITICAL: Mark user as online immediately after token restore
+            // This ensures user appears online instantly when app starts
+            try {
+              await apiDataSource.goOnline();
+              print('[LIFECYCLE] User marked as online on app start');
+            } catch (e) {
+              print('[LIFECYCLE] Failed to mark user online on start: $e');
+            }
           } else {
             print('Warning: No token found to restore');
           }
