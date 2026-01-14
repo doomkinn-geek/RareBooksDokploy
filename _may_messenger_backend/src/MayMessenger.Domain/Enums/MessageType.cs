@@ -6,7 +6,8 @@ public enum MessageType
     Audio = 1,
     Image = 2,
     File = 3,
-    Poll = 4
+    Poll = 4,
+    Video = 5
 }
 
 

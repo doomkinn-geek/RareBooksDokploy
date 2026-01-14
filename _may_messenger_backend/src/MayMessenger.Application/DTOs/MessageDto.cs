@@ -19,6 +19,12 @@ public class MessageDto
     public string? OriginalFileName { get; set; }
     public long? FileSize { get; set; }
     
+    // For video messages
+    public int? VideoWidth { get; set; }
+    public int? VideoHeight { get; set; }
+    public int? VideoDuration { get; set; }  // Duration in milliseconds
+    public string? VideoThumbnail { get; set; }  // Blurhash thumbnail
+    
     // Reply functionality
     public Guid? ReplyToMessageId { get; set; }
     public ReplyMessageDto? ReplyToMessage { get; set; }

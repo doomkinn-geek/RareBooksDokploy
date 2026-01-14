@@ -18,6 +18,12 @@ public class Message : BaseEntity
     public string? OriginalFileName { get; set; }
     public long? FileSize { get; set; }
     
+    // For video messages: metadata
+    public int? VideoWidth { get; set; }
+    public int? VideoHeight { get; set; }
+    public int? VideoDuration { get; set; }  // Duration in milliseconds
+    public string? VideoThumbnail { get; set; }  // Blurhash thumbnail
+    
     // Client-side generated ID for idempotency
     public string? ClientMessageId { get; set; }
     

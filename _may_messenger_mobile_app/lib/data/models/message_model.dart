@@ -4,6 +4,7 @@ enum MessageType {
   image,
   file,
   poll,
+  video,
 }
 
 enum MessageStatus {
@@ -71,8 +72,15 @@ class Message {
   final String? localAudioPath;
   final String? localImagePath;
   final String? localFilePath; // For downloaded files
+  final String? localVideoPath; // For downloaded/compressed videos
   final String? originalFileName; // Original file name for file messages
   final int? fileSize; // File size in bytes
+  
+  // Video metadata
+  final int? videoWidth;
+  final int? videoHeight;
+  final int? videoDuration; // Duration in milliseconds
+  final String? videoThumbnail; // Blurhash or base64 thumbnail
   final MessageStatus status;
   final DateTime createdAt;
   final String? localId; // Client-side UUID for tracking before server confirms
@@ -118,8 +126,13 @@ class Message {
     this.localAudioPath,
     this.localImagePath,
     this.localFilePath,
+    this.localVideoPath,
     this.originalFileName,
     this.fileSize,
+    this.videoWidth,
+    this.videoHeight,
+    this.videoDuration,
+    this.videoThumbnail,
     required this.status,
     required this.createdAt,
     this.localId,
@@ -151,8 +164,13 @@ class Message {
       localAudioPath: json['localAudioPath'],
       localImagePath: json['localImagePath'],
       localFilePath: json['localFilePath'],
+      localVideoPath: json['localVideoPath'],
       originalFileName: json['originalFileName'],
       fileSize: json['fileSize'] != null ? (json['fileSize'] is int ? json['fileSize'] : (json['fileSize'] as num).toInt()) : null,
+      videoWidth: json['videoWidth'] != null ? (json['videoWidth'] is int ? json['videoWidth'] : (json['videoWidth'] as num).toInt()) : null,
+      videoHeight: json['videoHeight'] != null ? (json['videoHeight'] is int ? json['videoHeight'] : (json['videoHeight'] as num).toInt()) : null,
+      videoDuration: json['videoDuration'] != null ? (json['videoDuration'] is int ? json['videoDuration'] : (json['videoDuration'] as num).toInt()) : null,
+      videoThumbnail: json['videoThumbnail'],
       status: MessageStatus.values[json['status']],
       createdAt: DateTime.parse(json['createdAt']),
       localId: json['localId'],
@@ -193,8 +211,13 @@ class Message {
       'localAudioPath': localAudioPath,
       'localImagePath': localImagePath,
       'localFilePath': localFilePath,
+      'localVideoPath': localVideoPath,
       'originalFileName': originalFileName,
       'fileSize': fileSize,
+      'videoWidth': videoWidth,
+      'videoHeight': videoHeight,
+      'videoDuration': videoDuration,
+      'videoThumbnail': videoThumbnail,
       'status': status.index,
       'createdAt': createdAt.toIso8601String(),
       'localId': localId,
@@ -226,8 +249,13 @@ class Message {
     String? localAudioPath,
     String? localImagePath,
     String? localFilePath,
+    String? localVideoPath,
     String? originalFileName,
     int? fileSize,
+    int? videoWidth,
+    int? videoHeight,
+    int? videoDuration,
+    String? videoThumbnail,
     MessageStatus? status,
     DateTime? createdAt,
     String? localId,
@@ -257,8 +285,13 @@ class Message {
       localAudioPath: localAudioPath ?? this.localAudioPath,
       localImagePath: localImagePath ?? this.localImagePath,
       localFilePath: localFilePath ?? this.localFilePath,
+      localVideoPath: localVideoPath ?? this.localVideoPath,
       originalFileName: originalFileName ?? this.originalFileName,
       fileSize: fileSize ?? this.fileSize,
+      videoWidth: videoWidth ?? this.videoWidth,
+      videoHeight: videoHeight ?? this.videoHeight,
+      videoDuration: videoDuration ?? this.videoDuration,
+      videoThumbnail: videoThumbnail ?? this.videoThumbnail,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       localId: localId ?? this.localId,
@@ -292,6 +325,8 @@ class Message {
         return '[Изображение]';
       case MessageType.file:
         return '[Файл: ${originalFileName ?? "файл"}]';
+      case MessageType.video:
+        return '[Видео]';
       case MessageType.poll:
         final question = pollData?['question'] ?? 'Голосование';
         return '📊 $question';

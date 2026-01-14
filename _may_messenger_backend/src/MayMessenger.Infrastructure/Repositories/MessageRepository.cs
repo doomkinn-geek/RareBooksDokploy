@@ -162,6 +162,15 @@ public class MessageRepository : Repository<Message>, IMessageRepository
             .Take(take)
             .ToListAsync(cancellationToken);
     }
+    
+    public async Task<IEnumerable<Message>> GetVideoMessagesWithFilesAsync(CancellationToken cancellationToken = default)
+    {
+        return await _dbSet
+            .Where(m => m.Type == MessageType.Video && 
+                       !string.IsNullOrEmpty(m.FilePath))
+            .OrderBy(m => m.CreatedAt) // Process oldest first
+            .ToListAsync(cancellationToken);
+    }
 }
 
 

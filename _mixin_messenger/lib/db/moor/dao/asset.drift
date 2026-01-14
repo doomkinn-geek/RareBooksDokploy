@@ -1,0 +1,15 @@
+import '../mixin.drift';
+
+assetItem as AssetItem:
+SELECT asset.*,
+       chain.symbol AS chainSymbol,
+       chain.icon_url AS chainIconUrl,
+       chain.name as chainName,
+       chain.threshold as chainThreshold
+FROM assets asset
+LEFT JOIN chains chain ON asset.chain_id = chain.chain_id
+WHERE asset.asset_id = :assetId
+LIMIT 1;
+
+countAssets:
+SELECT COUNT(1) FROM assets;

@@ -22,6 +22,7 @@ import '../providers/auth_provider.dart';
 import '../providers/messages_provider.dart';
 import 'fullscreen_image_viewer.dart';
 import 'audio_waveform.dart';
+import 'video_player_screen.dart';
 
 class MessageBubble extends ConsumerStatefulWidget {
   final Message message;
@@ -791,10 +792,13 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           onTap: () => _showFullScreenImage(context),
           child: _buildImageWidget(),
         );
-      
+
+      case MessageType.video:
+        return _buildVideoWidget(context);
+
       case MessageType.file:
         return _buildFileWidget(context);
-      
+
       case MessageType.poll:
         return _buildPollWidget(context, isMe);
     }
@@ -1126,6 +1130,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         return '🎤 Голосовое сообщение';
       case MessageType.image:
         return '📷 Фото';
+      case MessageType.video:
+        return '🎬 Видео';
       case MessageType.file:
         return '📎 ${reply.originalFileName ?? "Файл"}';
       case MessageType.poll:
@@ -1299,6 +1305,251 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         ),
       ),
     );
+  }
+
+  Widget _buildVideoWidget(BuildContext context) {
+    final theme = Theme.of(context);
+    final profile = ref.read(profileProvider).profile;
+    final isMe = profile?.id == widget.message.senderId;
+    final isUploading = widget.message.status == MessageStatus.sending &&
+        widget.message.uploadProgress != null &&
+        widget.message.uploadProgress! < 1.0;
+
+    // Calculate aspect ratio from metadata or use default
+    final aspectRatio = (widget.message.videoWidth != null &&
+            widget.message.videoHeight != null &&
+            widget.message.videoWidth! > 0 &&
+            widget.message.videoHeight! > 0)
+        ? widget.message.videoWidth! / widget.message.videoHeight!
+        : 16 / 9;
+
+    // Calculate dimensions
+    const double maxWidth = 250.0;
+    const double maxHeight = 280.0;
+
+    double width = maxWidth;
+    double height = width / aspectRatio;
+    if (height > maxHeight) {
+      height = maxHeight;
+      width = height * aspectRatio;
+    }
+
+    final hasLocalVideo = widget.message.localVideoPath != null &&
+        File(widget.message.localVideoPath!).existsSync();
+
+    return GestureDetector(
+      onTap: () => _handleVideoTap(context),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isMe
+                  ? [theme.colorScheme.primary.withValues(alpha: 0.3), theme.colorScheme.primary.withValues(alpha: 0.5)]
+                  : [Colors.grey.shade600, Colors.grey.shade700],
+            ),
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Video icon placeholder
+              Icon(
+                Icons.movie,
+                color: Colors.white24,
+                size: 48,
+              ),
+
+              // Play/download button
+              if (!isUploading)
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    hasLocalVideo ? Icons.play_arrow : Icons.download,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
+
+              // Upload progress
+              if (isUploading)
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: CircularProgressIndicator(
+                        value: widget.message.uploadProgress,
+                        strokeWidth: 3,
+                        backgroundColor: Colors.white24,
+                        valueColor:
+                            const AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${((widget.message.uploadProgress ?? 0) * 100).toInt()}%',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+
+              // Duration badge
+              if (widget.message.videoDuration != null)
+                Positioned(
+                  bottom: 8,
+                  left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.videocam,
+                          color: Colors.white,
+                          size: 12,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _formatVideoDuration(widget.message.videoDuration!),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              // File size badge
+              if (widget.message.fileSize != null)
+                Positioned(
+                  bottom: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      _formatVideoFileSize(widget.message.fileSize!),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatVideoDuration(int milliseconds) {
+    final duration = Duration(milliseconds: milliseconds);
+    final minutes = duration.inMinutes;
+    final seconds = duration.inSeconds % 60;
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  String _formatVideoFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+  }
+
+  void _handleVideoTap(BuildContext context) async {
+    if (widget.message.status == MessageStatus.sending) return;
+
+    final hasLocalVideo = widget.message.localVideoPath != null &&
+        File(widget.message.localVideoPath!).existsSync();
+
+    if (hasLocalVideo) {
+      // Play video
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => VideoPlayerScreen(
+            videoPath: widget.message.localVideoPath!,
+            title: 'Видео',
+          ),
+        ),
+      );
+    } else if (widget.message.filePath != null) {
+      // Download video first
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Скачивание видео...')),
+      );
+
+      try {
+        final videoStorageService = ref.read(videoStorageServiceProvider);
+        final videoUrl = '${ApiConstants.baseUrl}${widget.message.filePath}';
+        final localPath = await videoStorageService.saveVideoLocally(
+          widget.message.id,
+          videoUrl,
+        );
+
+        if (localPath != null && context.mounted) {
+          // Update message with local path
+          final messagesNotifier = ref.read(messagesProvider(widget.message.chatId).notifier);
+          await messagesNotifier.updateMessageLocalVideoPath(
+            widget.message.id,
+            localPath,
+          );
+
+          // Play video
+          if (context.mounted) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => VideoPlayerScreen(
+                  videoPath: localPath,
+                  title: 'Видео',
+                ),
+              ),
+            );
+          }
+        } else if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Видео недоступно')),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Ошибка загрузки: $e')),
+          );
+        }
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Видео недоступно')),
+      );
+    }
   }
   
   /// Build shimmer placeholder for loading images

@@ -1545,6 +1545,141 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     }
   }
 
+  /// Send a video message (max 100MB, compressed on client)
+  Future<void> sendVideoMessage(
+    String videoPath, {
+    int? width,
+    int? height,
+    int? durationMs,
+  }) async {
+    print('[MSG_SEND] Starting local-first send for video message');
+
+    final now = DateTime.now();
+    if (_lastSendTime != null && now.difference(_lastSendTime!).inMilliseconds < 100) {
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    _lastSendTime = now;
+
+    state = state.copyWith(isSending: true);
+    String? localId;
+
+    try {
+      final profileState = _ref.read(profileProvider);
+      final currentUser = profileState.profile;
+      final userId = currentUser?.id ?? profileState.cachedUserId;
+      final displayName = currentUser?.displayName ?? 'Вы';
+
+      if (userId == null) {
+        throw Exception('User not authenticated');
+      }
+
+      // STEP 1: Create message locally with temporary ID
+      localId = _uuid.v4();
+      final clientMessageId = localId;
+      _pendingSends.add(localId);
+
+      final file = File(videoPath);
+      final fileSize = await file.length();
+
+      final localMessage = Message(
+        id: localId,
+        chatId: chatId,
+        senderId: userId,
+        senderName: displayName,
+        type: MessageType.video,
+        filePath: null,
+        localVideoPath: videoPath,
+        fileSize: fileSize,
+        videoWidth: width,
+        videoHeight: height,
+        videoDuration: durationMs,
+        status: MessageStatus.sending,
+        createdAt: DateTime.now(),
+        localId: localId,
+        isLocalOnly: true,
+        clientMessageId: clientMessageId,
+        uploadProgress: 0.0,
+      );
+
+      // STEP 2: Add to state immediately
+      final updatedMessages = [...state.messages, localMessage];
+      updatedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      state = state.copyWith(messages: updatedMessages, isSending: false);
+      _cache.put(localMessage);
+
+      print('[MSG_SEND] Video message added locally: $localId');
+
+      // STEP 3: Send to backend with progress tracking
+      _syncVideoToBackend(localId, videoPath, width, height, durationMs, clientMessageId);
+
+    } catch (e) {
+      print('[MSG_SEND] Failed to create local video message: $e');
+      if (localId != null) {
+        _pendingSends.remove(localId);
+      }
+      state = state.copyWith(
+        isSending: false,
+        error: e.toString(),
+      );
+    }
+  }
+
+  /// Sync video to backend
+  void _syncVideoToBackend(
+    String localId,
+    String videoPath,
+    int? width,
+    int? height,
+    int? durationMs,
+    String clientMessageId,
+  ) {
+    Future.microtask(() async {
+      try {
+        final apiDataSource = _ref.read(apiDataSourceProvider);
+
+        final serverMessage = await apiDataSource.sendVideoMessage(
+          chatId: chatId,
+          videoPath: videoPath,
+          width: width,
+          height: height,
+          duration: durationMs,
+          clientMessageId: clientMessageId,
+          onSendProgress: (progress) {
+            updateUploadProgress(localId, progress);
+          },
+        );
+
+        // Update local message with server response
+        final messageIndex = state.messages.indexWhere((m) => m.id == localId);
+        if (messageIndex != -1) {
+          final updatedMessages = [...state.messages];
+          updatedMessages[messageIndex] = serverMessage.copyWith(
+            localId: localId,
+            localVideoPath: videoPath,
+            isLocalOnly: false,
+          );
+          state = state.copyWith(messages: updatedMessages);
+          _cache.update(updatedMessages[messageIndex]);
+        }
+
+        _pendingSends.remove(localId);
+        print('[MSG_SEND] Video synced to backend: ${serverMessage.id}');
+
+      } catch (e) {
+        print('[MSG_SEND] Failed to sync video: $e');
+        _pendingSends.remove(localId);
+        final messageIndex = _findMessageIndex(localId);
+        if (messageIndex != -1) {
+          final updatedMessages = [...state.messages];
+          updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
+            status: MessageStatus.failed,
+          );
+          state = state.copyWith(messages: updatedMessages);
+        }
+      }
+    });
+  }
+
   /// Send a file message (max 20MB)
   Future<void> sendFileMessage(String filePath, String fileName) async {
     print('[MSG_SEND] Starting local-first send for file message: $fileName');
@@ -2609,20 +2744,26 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   }
   
   /// Update local file path for a message (used after downloading files)
-  void updateMessageLocalPath(String messageId, {String? localFilePath, String? localAudioPath, String? localImagePath}) {
+  void updateMessageLocalPath(String messageId, {String? localFilePath, String? localAudioPath, String? localImagePath, String? localVideoPath}) {
     final messageIndex = state.messages.indexWhere((m) => m.id == messageId);
     if (messageIndex == -1) return;
-    
+
     final updatedMessages = [...state.messages];
     updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
       localFilePath: localFilePath,
       localAudioPath: localAudioPath,
       localImagePath: localImagePath,
+      localVideoPath: localVideoPath,
     );
     
     state = state.copyWith(messages: updatedMessages);
     _cache.update(updatedMessages[messageIndex]);
     print('[MSG_UPDATE] Updated local path for message: $messageId');
+  }
+
+  /// Update local video path for a message (convenience method)
+  Future<void> updateMessageLocalVideoPath(String messageId, String localPath) async {
+    updateMessageLocalPath(messageId, localVideoPath: localPath);
   }
   
   /// Update upload progress for a message (0.0 - 1.0)

@@ -667,6 +667,116 @@ public class MessagesController : ControllerBase
     }
 
     /// <summary>
+    /// Send a video message (max 100MB, compressed on client)
+    /// Video files are stored temporarily and deleted after all participants receive them
+    /// </summary>
+    [HttpPost("video")]
+    [RequestSizeLimit(100 * 1024 * 1024)] // 100MB limit
+    [RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)]
+    public async Task<ActionResult<MessageDto>> SendVideoMessage(
+        [FromForm] Guid chatId, 
+        IFormFile videoFile, 
+        [FromForm] string? clientMessageId = null,
+        [FromForm] int? width = null,
+        [FromForm] int? height = null,
+        [FromForm] int? duration = null,
+        [FromForm] string? thumbnail = null)
+    {
+        var userId = GetCurrentUserId();
+        
+        if (videoFile == null || videoFile.Length == 0)
+            return BadRequest("No video file provided");
+        
+        // Validate video type
+        var allowedExtensions = new[] { ".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v" };
+        var extension = Path.GetExtension(videoFile.FileName).ToLowerInvariant();
+        if (!allowedExtensions.Contains(extension))
+            return BadRequest("Invalid video format. Allowed: mp4, mov, avi, mkv, webm, m4v");
+        
+        // Validate video size (100MB max)
+        if (videoFile.Length > 100 * 1024 * 1024)
+            return BadRequest("Video size must be less than 100MB");
+        
+        try
+        {
+            // Create videos directory if it doesn't exist
+            var uploadsFolder = Path.Combine(_environment.WebRootPath, "videos");
+            if (!Directory.Exists(uploadsFolder))
+            {
+                Directory.CreateDirectory(uploadsFolder);
+            }
+            
+            // Generate unique filename
+            var uniqueFileName = $"{Guid.NewGuid()}{extension}";
+            var filePath = Path.Combine(uploadsFolder, uniqueFileName);
+            
+            // Save video file
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await videoFile.CopyToAsync(stream);
+            }
+            
+            var message = new Message
+            {
+                ChatId = chatId,
+                SenderId = userId,
+                Type = MessageType.Video,
+                FilePath = $"/videos/{uniqueFileName}",
+                OriginalFileName = videoFile.FileName,
+                FileSize = videoFile.Length,
+                VideoWidth = width,
+                VideoHeight = height,
+                VideoDuration = duration,
+                VideoThumbnail = thumbnail,
+                Status = MessageStatus.Sent,
+                ClientMessageId = clientMessageId
+            };
+            
+            await _unitOfWork.Messages.AddAsync(message);
+            await _unitOfWork.SaveChangesAsync();
+            
+            var sender = await _unitOfWork.Users.GetByIdAsync(userId);
+            if (sender == null)
+            {
+                _logger.LogError($"User {userId} not found after sending video message");
+                return StatusCode(500, "Internal server error: User not found");
+            }
+            
+            var messageDto = MapToMessageDto(message, sender);
+            
+            // Send SignalR notification
+            // IMPORTANT: Exclude sender to prevent duplicate messages
+            var chat = await _unitOfWork.Chats.GetByIdAsync(chatId);
+            if (chat != null)
+            {
+                await CreatePendingAcksForMessage(chat, message, userId, AckType.Message);
+                await SendToGroupExceptSenderAsync(chatId, userId, "ReceiveMessage", messageDto);
+                
+                // Fetch FCM tokens for push notifications
+                var userTokensForPush = new Dictionary<Guid, List<Domain.Entities.FcmToken>>();
+                foreach (var participant in chat.Participants)
+                {
+                    if (participant.UserId != sender.Id)
+                    {
+                        var tokens = await _unitOfWork.FcmTokens.GetActiveTokensForUserAsync(participant.UserId);
+                        userTokensForPush[participant.UserId] = tokens.ToList();
+                    }
+                }
+                
+                await SendPushNotificationsAsync(sender, messageDto, userTokensForPush);
+            }
+            
+            _logger.LogInformation($"[VIDEO] Video message sent: {videoFile.FileName} ({videoFile.Length} bytes, {width}x{height}, {duration}ms) in chat {chatId}");
+            return Ok(messageDto);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing video message");
+            return StatusCode(500, "Error processing video");
+        }
+    }
+
+    /// <summary>
     /// Автоматически устанавливает статус Delivered после успешной отправки FCM push
     /// Создает новый scope для доступа к БД (безопасно для Task.Run)
     /// </summary>
@@ -775,6 +885,7 @@ public class MessagesController : ControllerBase
                 MessageType.Audio => "🎤 Аудио сообщение",
                 MessageType.Image => "📷 Изображение",
                 MessageType.File => $"📎 Файл: {message.OriginalFileName ?? "Файл"}",
+                MessageType.Video => "🎬 Видео",
                 _ => "Новое сообщение"
             };
 
@@ -1936,7 +2047,12 @@ public class MessagesController : ControllerBase
             EditedAt = message.EditedAt,
             IsDeleted = message.IsDeleted,
             IsEncrypted = message.IsEncrypted,
-            Poll = pollDto
+            Poll = pollDto,
+            // Video metadata
+            VideoWidth = message.VideoWidth,
+            VideoHeight = message.VideoHeight,
+            VideoDuration = message.VideoDuration,
+            VideoThumbnail = message.VideoThumbnail
         };
     }
     

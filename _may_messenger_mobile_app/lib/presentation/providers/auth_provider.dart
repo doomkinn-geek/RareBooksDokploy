@@ -10,6 +10,7 @@ import '../../data/repositories/status_update_queue_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/services/audio_storage_service.dart';
 import '../../data/services/image_storage_service.dart';
+import '../../data/services/video_storage_service.dart';
 import '../../data/services/status_sync_service.dart';
 import '../../data/services/outbox_sync_service.dart';
 import '../../core/services/fcm_service.dart';
@@ -122,6 +123,10 @@ final localDataSourceProvider = Provider<LocalDataSource>((ref) => LocalDataSour
 // Services
 final audioStorageServiceProvider = Provider<AudioStorageService>((ref) {
   return AudioStorageService(Dio());
+});
+
+final videoStorageServiceProvider = Provider<VideoStorageService>((ref) {
+  return VideoStorageService(Dio());
 });
 
 final imageStorageServiceProvider = Provider<ImageStorageService>((ref) {

@@ -17,6 +17,11 @@ public interface IMessageRepository : IRepository<Message>
     /// Full-text search messages in specified chats using PostgreSQL tsvector
     /// </summary>
     Task<IEnumerable<Message>> SearchMessagesAsync(IEnumerable<Guid> chatIds, string query, int take, CancellationToken cancellationToken = default);
+    
+    /// <summary>
+    /// Get video messages that still have files on server (for cleanup)
+    /// </summary>
+    Task<IEnumerable<Message>> GetVideoMessagesWithFilesAsync(CancellationToken cancellationToken = default);
 }
 
 

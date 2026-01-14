@@ -1225,6 +1225,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 if (mounted) _scrollToBottom();
               });
             },
+            onSendVideo: (metadata) {
+              ref
+                  .read(messagesProvider(widget.chatId).notifier)
+                  .sendVideoMessage(
+                    metadata.path,
+                    width: metadata.width,
+                    height: metadata.height,
+                    durationMs: metadata.durationMs,
+                  );
+              // Scroll to bottom after sending video
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (mounted) _scrollToBottom();
+              });
+            },
           ),
           ],
         ),

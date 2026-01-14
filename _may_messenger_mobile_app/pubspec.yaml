@@ -41,6 +41,12 @@ dependencies:
   photo_view: ^0.15.0  # For smooth pinch-to-zoom in fullscreen image viewer
   dismissible_page: ^1.0.2  # For swipe-to-dismiss gesture in image viewer
   
+  # Video
+  video_compress: ^3.1.4       # Video compression before upload
+  video_player: ^2.10.1        # Video playback
+  video_thumbnail: ^0.5.3      # Generate video thumbnails
+  chewie: ^1.8.4               # Video player UI controls
+  
   # File Picker
   file_picker: ^8.0.0
   

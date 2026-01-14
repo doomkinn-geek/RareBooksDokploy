@@ -11,12 +11,31 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'audio_recorder_widget.dart';
+import 'video_preview_dialog.dart';
 import '../providers/signalr_provider.dart';
 import '../../data/models/message_model.dart';
 import '../../core/constants/api_constants.dart';
+import '../../core/services/video_compression_service.dart';
 
 enum RecordingState { idle, recording, locked }
 enum HapticType { light, medium, heavy, selection }
+
+/// Video metadata for sending
+class VideoMetadata {
+  final String path;
+  final int width;
+  final int height;
+  final int durationMs;
+  final int fileSizeBytes;
+
+  VideoMetadata({
+    required this.path,
+    required this.width,
+    required this.height,
+    required this.durationMs,
+    required this.fileSizeBytes,
+  });
+}
 
 class MessageInput extends ConsumerStatefulWidget {
   final String chatId;
@@ -25,6 +44,7 @@ class MessageInput extends ConsumerStatefulWidget {
   final Function(String) onSendAudio;
   final Function(String) onSendImage;
   final Function(String filePath, String fileName)? onSendFile;
+  final Function(VideoMetadata metadata)? onSendVideo;
   
   // Reply mode
   final Message? replyToMessage;
@@ -43,6 +63,7 @@ class MessageInput extends ConsumerStatefulWidget {
     required this.onSendAudio,
     required this.onSendImage,
     this.onSendFile,
+    this.onSendVideo,
     this.replyToMessage,
     this.onCancelReply,
     this.editingMessage,
@@ -285,6 +306,91 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
       
       if (image != null) {
         widget.onSendImage(image.path);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickVideo() async {
+    if (widget.onSendVideo == null) return;
+
+    try {
+      final XFile? video = await _imagePicker.pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: const Duration(minutes: 5),
+      );
+
+      if (video == null) return;
+
+      if (!mounted) return;
+
+      // Show loading dialog during compression
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Сжатие видео...'),
+            ],
+          ),
+        ),
+      );
+
+      try {
+        // Compress video
+        final compressionService = VideoCompressionService();
+        final result = await compressionService.compressVideo(video.path);
+
+        // Close loading dialog
+        if (mounted) Navigator.of(context).pop();
+
+        if (result == null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Ошибка сжатия видео')),
+            );
+          }
+          return;
+        }
+
+        if (!mounted) return;
+
+        // Show preview dialog
+        final shouldSend = await showDialog<bool>(
+          context: context,
+          builder: (context) => VideoPreviewDialog(
+            videoPath: result.compressedPath,
+            durationMs: result.durationMs,
+            fileSizeBytes: result.fileSizeBytes,
+            onSend: () => Navigator.of(context).pop(true),
+            onCancel: () => Navigator.of(context).pop(false),
+          ),
+        );
+
+        if (shouldSend == true && mounted) {
+          widget.onSendVideo!(VideoMetadata(
+            path: result.compressedPath,
+            width: result.width,
+            height: result.height,
+            durationMs: result.durationMs,
+            fileSizeBytes: result.fileSizeBytes,
+          ));
+        }
+      } catch (e) {
+        // Close loading dialog if still open
+        if (mounted) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+        rethrow;
       }
     } catch (e) {
       if (mounted) {
@@ -750,6 +856,8 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
                 _pickImage(fromCamera: true);
               } else if (value == 'gallery') {
                 _pickImage(fromCamera: false);
+              } else if (value == 'video') {
+                _pickVideo();
               } else if (value == 'file') {
                 _pickFile();
               }
@@ -772,6 +880,16 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
                     Icon(Icons.photo_library, color: Theme.of(context).colorScheme.primary),
                     const SizedBox(width: 12),
                     const Text('Галерея'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'video',
+                child: Row(
+                  children: [
+                    Icon(Icons.videocam, color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 12),
+                    const Text('Видео'),
                   ],
                 ),
               ),
@@ -1253,6 +1371,8 @@ class _MessageInputState extends ConsumerState<MessageInput> with TickerProvider
         return '🎤 Голосовое сообщение';
       case MessageType.image:
         return '📷 Фото';
+      case MessageType.video:
+        return '🎬 Видео';
       case MessageType.file:
         return '📎 ${message.originalFileName ?? "Файл"}';
       case MessageType.poll:

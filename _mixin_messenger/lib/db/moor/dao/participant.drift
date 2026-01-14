@@ -1,0 +1,46 @@
+import '../mixin.drift';
+
+participantsAvatar:
+SELECT user.*
+FROM participants AS participant
+         INNER JOIN users user on participant.user_id = user.user_id
+WHERE participant.conversation_id = :conversationId
+ORDER BY participant.created_at ASC
+LIMIT 4;
+
+groupParticipantsByConversationId AS ParticipantUser:
+SELECT p.conversation_id AS conversationId,
+    p.role AS role,
+    p.created_at AS createdAt,
+    u.user_id AS userId,
+    u.identity_number AS identityNumber,
+    u.relationship AS relationship,
+    u.biography AS biography,
+    u.full_name AS fullName,
+    u.avatar_url AS avatarUrl,
+    u.phone AS phone,
+    COALESCE(u.is_verified, FALSE) AS isVerified,
+    u.created_at AS userCreatedAt,
+    u.mute_until AS muteUntil,
+    u.has_pin AS hasPin,
+    u.app_id AS appId,
+    u.is_scam AS isScam,
+    u.membership AS membership
+FROM participants p,
+    users u
+WHERE p.conversation_id = :conversationId
+    AND p.user_id = u.user_id
+ORDER BY p.created_at DESC;
+
+userIdByIdentityNumber:
+SELECT u.user_id FROM users u INNER JOIN participants p ON p.user_id = u.user_id
+        WHERE p.conversation_id = :conversationId AND u.identity_number = :identityNumber;
+
+countParticipants:
+SELECT COUNT(1) FROM participants;
+
+conversationParticipantsCount:
+SELECT COUNT(1) FROM participants WHERE conversation_id = :conversationId;
+
+_joinedConversationId:
+SELECT p.conversation_id FROM participants p, conversations c WHERE p.user_id = :userId AND p.conversation_id = c.conversation_id AND c.status = 2 LIMIT 1;

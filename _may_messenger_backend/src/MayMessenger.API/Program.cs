@@ -88,6 +88,7 @@ builder.Services.AddHostedService<MayMessenger.Application.Services.MediaCleanup
 builder.Services.AddHostedService<MayMessenger.Application.Services.CleanupInvalidTokensService>();
 builder.Services.AddHostedService<MayMessenger.API.Services.AckRetryService>(); // ACK retry for reliable delivery
 builder.Services.AddHostedService<MayMessenger.API.Services.PresenceMonitorService>(); // User presence monitoring
+builder.Services.AddHostedService<MayMessenger.API.Services.VideoCleanupService>(); // Video cleanup after delivery
 
 // JWT Authentication
 var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "YourSuperSecretKeyForJWTTokenGeneration123456789";

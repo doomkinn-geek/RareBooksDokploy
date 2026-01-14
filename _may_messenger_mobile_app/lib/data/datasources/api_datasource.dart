@@ -235,6 +235,42 @@ class ApiDataSource {
     }
   }
 
+  Future<Message> sendVideoMessage({
+    required String chatId,
+    required String videoPath,
+    int? width,
+    int? height,
+    int? duration,
+    String? thumbnail,
+    String? clientMessageId,
+    String? replyToMessageId,
+    void Function(double progress)? onSendProgress,
+  }) async {
+    try {
+      final formData = FormData.fromMap({
+        'chatId': chatId,
+        'videoFile': await MultipartFile.fromFile(videoPath),
+        if (width != null) 'width': width,
+        if (height != null) 'height': height,
+        if (duration != null) 'duration': duration,
+        if (thumbnail != null) 'thumbnail': thumbnail,
+        if (clientMessageId != null) 'clientMessageId': clientMessageId,
+        if (replyToMessageId != null) 'replyToMessageId': replyToMessageId,
+      });
+
+      final response = await _dio.post(
+        ApiConstants.videoMessages,
+        data: formData,
+        onSendProgress: onSendProgress != null
+            ? (count, total) => onSendProgress(total > 0 ? count / total : 0)
+            : null,
+      );
+      return Message.fromJson(response.data);
+    } catch (e) {
+      throw Exception('Failed to send video message: $e');
+    }
+  }
+
   Future<Message> sendFileMessage({
     required String chatId,
     required String filePath,

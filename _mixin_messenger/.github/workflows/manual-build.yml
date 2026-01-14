@@ -1,0 +1,362 @@
+name: Manual Build App
+
+# Controls when the action will run. Workflow runs when manually triggered using the UI
+# or API.
+on:
+  workflow_dispatch:
+    inputs:
+      flutter_channel:
+        description: "run with flutter channel, eg: master, beta, stable"
+        required: true
+        type: choice
+        options:
+          - 'master'
+          - 'beta'
+          - 'stable'
+        default: "stable"
+      flutter_version:
+        description: "flutter version. eg 3.19.6"
+        required: false
+        default: ""
+      platforms:
+        description: "platforms to build, eg: linux, windows"
+        required: false
+        type: choice
+        options:
+          - 'linux,windows'
+          - 'linux'
+          - 'windows'
+        default: "linux,windows"
+  push:
+    tags:
+      - 'v*'
+
+env:
+  FLUTTER_VERSION: ${{ github.event.inputs.flutter_version || '3.38.4' }}
+  FLUTTER_CHANNEL: ${{ github.event.inputs.flutter_channel || 'stable' }}
+
+jobs:
+  build-linux:
+    runs-on: ${{ matrix.runner }}
+    if: contains(github.event.inputs.platforms, 'linux') || github.event.inputs.platforms == ''
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+            flutter_arch: x64
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+            flutter_arch: arm64
+    steps:
+      - run: g++ --version
+      - run: gcc --version
+      - run: sudo apt-get install libstdc++6
+
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          # https://github.com/subosito/flutter-action/issues/345#issuecomment-2657332687
+          channel: 'master'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 'stable' # 'stable' or 'nightly'
+          override: true
+          components: rustfmt, clippy
+
+      # flutter build need ninja.
+      # https://github.com/subosito/flutter-action/issues/49
+      - name: Patch for linux build
+        run: |
+          flutter doctor
+          sudo apt-get update -y
+          sudo apt-get install -y ninja-build libgtk-3-dev
+          sudo apt-get install -y libsdl2-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev
+          sudo apt-get install -y libopus-dev libogg-dev
+          sudo apt-get install -y libcurl4-openssl-dev
+          flutter doctor
+
+      - run: flutter --version
+
+      - run: flutter config --enable-linux-desktop
+
+      - name: Generator ENV
+        run: |
+          tee .env &>/dev/null << EOF
+          SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+          EOF
+
+      - name: Run Build Runner
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      # setup webcrypto for unit test
+      - run: dart run webcrypto:setup
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Build APP
+        run: flutter build linux --dart-define SENTRY_DSN=$SENTRY_DSN
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+
+      - name: Compress Flutter build
+        run: tar -C build/linux/${{ matrix.flutter_arch }}/release/bundle -cvf mixin_desktop_linux_${{ matrix.arch }}_portable.tar.gz .
+
+      - name: Upload app archive for next steps
+        uses: actions/upload-artifact@v4
+        with:
+          name: mixin_desktop_linux_${{ matrix.arch }}_portable
+          path: mixin_desktop_linux_${{ matrix.arch }}_portable.tar.gz
+
+      - name: Package APP
+        run: ./dist/linux_deb.sh ${{ matrix.arch }}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mixin_desktop_${{ matrix.arch }}.deb.zip
+          path: build/mixin_desktop_${{ matrix.arch }}.deb
+
+      - name: upload linux binary
+        uses: svenstaro/upload-release-action@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: mixin_desktop_linux_${{ matrix.arch }}_portable.tar.gz
+          asset_name: mixin_desktop_linux_${{ matrix.arch }}_portable.tar.gz
+          tag: ${{ github.ref }}
+          overwrite: true
+
+      - name: upload linux deb
+        uses: svenstaro/upload-release-action@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: build/mixin_desktop_${{ matrix.arch }}.deb
+          asset_name: mixin_desktop_linux_${{ matrix.arch }}.deb
+          tag: ${{ github.ref }}
+          overwrite: true
+
+  build-linux-snap:
+    needs: build-linux
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+            flutter_arch: x64
+            artifact_suffix: ""
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+            flutter_arch: arm64
+            artifact_suffix: "-arm64"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download app archive
+        uses: actions/download-artifact@v4.1.7
+        with:
+          name: mixin_desktop_linux_${{ matrix.arch }}_portable
+
+      - name: uncompress app archive
+        run: |
+          mkdir -p build/linux/${{ matrix.flutter_arch }}/release/bundle
+          tar -C build/linux/${{ matrix.flutter_arch }}/release/bundle -xvf mixin_desktop_linux_${{ matrix.arch }}_portable.tar.gz
+
+      - name: Prepare snap build
+        run: ./dist/linux_snap_prepare.sh ${{ matrix.arch == 'amd64' && '' || matrix.arch }}
+
+      - name: Build .snap
+        uses: snapcore/action-build@v1
+        id: build-snap
+        with:
+          path: dist/snap
+
+      - name: copy snap
+        run: |
+          cp ${{ steps.build-snap.outputs.snap }} mixin_desktop_linux_${{ matrix.arch }}.snap
+      - name: Upload snap
+        uses: actions/upload-artifact@v4
+        with:
+          name: mixin-desktop-snap${{ matrix.artifact_suffix }}
+          path: mixin_desktop_linux_${{ matrix.arch }}.snap
+
+      - name: Upload linux snap
+        uses: svenstaro/upload-release-action@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ${{ steps.build-snap.outputs.snap }}
+          asset_name: mixin_desktop_linux_${{ matrix.arch }}.snap
+          tag: ${{ github.ref }}
+          overwrite: true
+
+  build-linux-appimage:
+    needs: build-linux
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+            flutter_arch: x64
+            appimage_arch: x86_64
+            recipe: ./AppImageBuilder.yml
+            artifact_suffix: ""
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+            flutter_arch: arm64
+            appimage_arch: aarch64
+            recipe: ./AppImageBuilder-arm64.yml
+            artifact_suffix: "-arm64"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download app archive
+        uses: actions/download-artifact@v4.1.7
+        with:
+          name: mixin_desktop_linux_${{ matrix.arch }}_portable
+
+      - name: uncompress app archive
+        run: |
+          mkdir -p build/linux/${{ matrix.flutter_arch }}/release/bundle
+          tar -C build/linux/${{ matrix.flutter_arch }}/release/bundle -xvf mixin_desktop_linux_${{ matrix.arch }}_portable.tar.gz
+
+      - name: Install appimage-builder dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip python3-setuptools patchelf desktop-file-utils libgdk-pixbuf2.0-dev fakeroot strace binutils coreutils
+          
+      - name: Download appimagetool
+        run: |
+          if [ "${{ matrix.arch }}" = "amd64" ]; then
+            sudo wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O /usr/local/bin/appimagetool
+          else
+            sudo wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-aarch64.AppImage -O /usr/local/bin/appimagetool
+          fi
+          sudo chmod +x /usr/local/bin/appimagetool
+          
+      - name: Install appimage-builder
+        run: sudo pip3 install appimage-builder==1.1.0
+
+      - name: Build AppImage
+        run: appimage-builder --recipe ${{ matrix.recipe }} --skip-test
+
+      - run: mv "Mixin Messenger-latest-${{ matrix.appimage_arch }}.AppImage" mixin_desktop_linux_${{ matrix.arch }}.AppImage
+      - name: Upload AppImage Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppImage${{ matrix.artifact_suffix }}
+          path: mixin_desktop_linux_${{ matrix.arch }}.AppImage
+
+      - name: Upload linux AppImage
+        uses: svenstaro/upload-release-action@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: mixin_desktop_linux_${{ matrix.arch }}.AppImage
+          asset_name: mixin_desktop_linux_${{ matrix.arch }}.AppImage
+          tag: ${{ github.ref }}
+          overwrite: true
+
+  build-windows:
+    runs-on: windows-latest
+    if: contains(github.event.inputs.platforms, 'windows') || github.event.inputs.platforms == ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 'stable' # 'stable' or 'nightly'
+          override: true
+          components: rustfmt, clippy
+
+      - run: flutter --version
+
+      - name: Generator ENV
+        run: |
+          echo SENTRY_DSN=${{ secrets.SENTRY_DSN }} >> .env
+
+      - name: Run Build Runner
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      # https://stackoverflow.com/questions/22575662/filename-too-long-in-git-for-windows/22575737#22575737
+      - run: git config --system core.longpaths true
+
+      - run: flutter config --enable-windows-desktop
+      # fix error when dump debug info: (msdia*.dll unregistered?)
+      - run: regsvr32 "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\Remote Debugger\x64\msdia140.dll"
+
+      - uses: ilammy/setup-nasm@v1
+
+      - name: Build APP
+        id: build-app
+        run: |
+          $version_str=$(gc .\pubspec.yaml | select-string '(?<=^version: ).*' -AllMatches | Select-Object -Expand Matches | %{$_.Value})
+          $version=$version_str.Split("+")[0]
+          $build_number=$version_str.Split("+")[1]
+          flutter build windows --dart-define="APP_VERSION=$version" --dart-define="APP_BUILD_NUMBER=$build_number"
+          echo "MSIX_PACKAGE_VERSION=$version.0" >> $Env:GITHUB_OUTPUT
+
+      - name: Build Installer
+        run: |
+          if (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\iscc.exe") {
+            & "${env:ProgramFiles(x86)}\Inno Setup 6\iscc.exe" "windows_inno_setup.iss"
+          } else {
+            Write-Error "Inno Setup compiler (iscc.exe) not found at expected location"
+            exit 1
+          }
+
+      - name: Upload Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: mixin_desktop_windows_setup_amd64.exe.zip
+          path: build\mixin_desktop_windows_setup_amd64.exe
+
+      - name: Build msix
+        run: |
+          echo "create msix. version: ${{ steps.build-app.outputs.MSIX_PACKAGE_VERSION }}"
+          flutter pub run msix:create --build-windows false --version ${{ steps.build-app.outputs.MSIX_PACKAGE_VERSION }} -v
+
+      - name: Upload msix
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter_app.msix.zip
+          path: build\windows\x64\runner\Release\flutter_app.msix
+
+      - name: collect debug info
+        run: flutter pub run debug_info_collector
+
+      - name: Upload debug info
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows_debug_info
+          path: build\syms
+
+      - name: Upload windows setup exe
+        uses: svenstaro/upload-release-action@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: build/mixin_desktop_windows_setup_amd64.exe
+          asset_name: mixin_desktop_windows_setup_amd64.exe
+          tag: ${{ github.ref }}
+          overwrite: true

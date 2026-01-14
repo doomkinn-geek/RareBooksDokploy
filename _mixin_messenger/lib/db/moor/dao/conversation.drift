@@ -1,0 +1,320 @@
+import '../mixin.drift';
+
+_baseConversationItemCount:
+SELECT COUNT(DISTINCT conversation.conversation_id)
+FROM conversations conversation
+         INNER JOIN users owner ON owner.user_id = conversation.owner_id
+         LEFT JOIN circle_conversations circleConversation ON conversation.conversation_id = circleConversation.conversation_id
+WHERE $where;
+
+_baseConversationItems AS ConversationItem:
+SELECT conversation.conversation_id AS conversationId,
+    conversation.icon_url AS groupIconUrl,
+    conversation.category AS category,
+    conversation.draft AS draft,
+    conversation.name AS groupName,
+    conversation.status AS status,
+    conversation.last_read_message_id AS lastReadMessageId,
+    conversation.unseen_message_count AS unseenMessageCount,
+    conversation.owner_id AS ownerId,
+    conversation.pin_time AS pinTime,
+    conversation.mute_until AS muteUntil,
+    conversation.expire_in as expireIn,
+    owner.avatar_url AS avatarUrl,
+    owner.full_name AS name,
+    COALESCE(owner.is_verified, FALSE) AS ownerVerified,
+    owner.identity_number AS ownerIdentityNumber,
+    owner.mute_until AS ownerMuteUntil,
+    owner.app_id AS appId,
+    CASE
+        WHEN conversation.category = 'CONTACT' THEN owner.membership
+        ELSE NULL
+    END AS membership,
+    lastMessage.content AS content,
+    lastMessage.category AS contentType,
+    conversation.created_at AS createdAt,
+    lastMessage.created_at AS lastMessageCreatedAt,
+    lastMessage.media_url AS mediaUrl,
+    lastMessage.user_id AS senderId,
+    lastMessage.action AS actionName,
+    lastMessage.status AS messageStatus,
+    lastMessageSender.full_name AS senderFullName,
+    snapshot.type AS SnapshotType,
+    participant.full_name AS participantFullName,
+    participant.user_id AS participantUserId,
+    em.expire_in AS messageExpireIn,
+    (
+        SELECT COUNT(1)
+        FROM message_mentions messageMention
+        WHERE messageMention.conversation_id = conversation.conversation_id
+            AND messageMention.has_read = 0
+    ) AS mentionCount,
+    owner.relationship AS relationship
+FROM conversations conversation
+    INNER JOIN users owner ON owner.user_id = conversation.owner_id
+    LEFT JOIN messages lastMessage ON conversation.last_message_id = lastMessage.message_id
+    LEFT JOIN users lastMessageSender ON lastMessageSender.user_id = lastMessage.user_id
+    LEFT JOIN snapshots snapshot ON snapshot.snapshot_id = lastMessage.snapshot_id
+    LEFT JOIN users participant ON participant.user_id = lastMessage.participant_id
+    LEFT JOIN expired_messages em ON lastMessage.message_id = em.message_id
+WHERE $where
+ORDER BY $order
+LIMIT $limit;
+
+_baseConversationItemsByCircleId AS ConversationItem:
+SELECT conversation.conversation_id AS conversationId,
+    conversation.icon_url AS groupIconUrl,
+    conversation.category AS category,
+    conversation.draft AS draft,
+    conversation.name AS groupName,
+    conversation.status AS status,
+    conversation.last_read_message_id AS lastReadMessageId,
+    conversation.unseen_message_count AS unseenMessageCount,
+    conversation.owner_id AS ownerId,
+    conversation.pin_time AS pinTime,
+    conversation.mute_until AS muteUntil,
+    conversation.expire_in as expireIn,
+    owner.avatar_url AS avatarUrl,
+    owner.full_name AS name,
+    COALESCE(owner.is_verified, FALSE) AS ownerVerified,
+    owner.identity_number AS ownerIdentityNumber,
+    owner.mute_until AS ownerMuteUntil,
+    owner.app_id AS appId,
+    CASE
+        WHEN conversation.category = 'CONTACT' THEN owner.membership
+        ELSE NULL
+    END AS membership,
+    lastMessage.content AS content,
+    lastMessage.category AS contentType,
+    conversation.created_at AS createdAt,
+    lastMessage.created_at AS lastMessageCreatedAt,
+    lastMessage.media_url AS mediaUrl,
+    lastMessage.user_id AS senderId,
+    lastMessage.action AS actionName,
+    lastMessage.status AS messageStatus,
+    lastMessageSender.full_name AS senderFullName,
+    snapshot.type AS SnapshotType,
+    participant.full_name AS participantFullName,
+    participant.user_id AS participantUserId,
+    em.expire_in AS messageExpireIn,
+    (
+        SELECT COUNT(1)
+        FROM message_mentions messageMention
+        WHERE messageMention.conversation_id = conversation.conversation_id
+            AND messageMention.has_read = 0
+    ) AS mentionCount,
+    owner.relationship AS relationship
+FROM conversations conversation
+    INNER JOIN users owner ON owner.user_id = conversation.owner_id
+    LEFT JOIN circle_conversations circleConversation ON conversation.conversation_id = circleConversation.conversation_id
+    LEFT JOIN messages lastMessage ON conversation.last_message_id = lastMessage.message_id
+    LEFT JOIN users lastMessageSender ON lastMessageSender.user_id = lastMessage.user_id
+    LEFT JOIN snapshots snapshot ON snapshot.snapshot_id = lastMessage.snapshot_id
+    LEFT JOIN users participant ON participant.user_id = lastMessage.participant_id
+    LEFT JOIN expired_messages em ON lastMessage.message_id = em.message_id
+WHERE $where
+ORDER BY $order
+LIMIT $limit;
+
+
+_baseUnseenMessageCount:
+SELECT IFNULL(SUM(unseen_message_count), 0)
+FROM conversations conversation
+    INNER JOIN users owner ON owner.user_id = conversation.owner_id
+    LEFT JOIN circle_conversations circleConversation ON conversation.conversation_id = circleConversation.conversation_id
+WHERE $where
+LIMIT 1;
+
+_baseUnseenConversationCount:
+SELECT COUNT(1) AS unseen_conversation_count,
+    IFNULL(
+        SUM(
+            CASE
+                WHEN(
+                    CASE
+                        WHEN conversation.category = 'GROUP' THEN conversation.mute_until
+                        ELSE owner.mute_until
+                    END
+                ) >=(strftime('%s', 'now') * 1000)
+                AND IFNULL(conversation.unseen_message_count, 0) > 0 THEN 1
+                ELSE 0
+            END
+        ),
+        0
+    ) AS unseen_muted_conversation_count
+FROM conversations AS conversation
+    INNER JOIN users AS owner ON owner.user_id = conversation.owner_id
+WHERE $where
+LIMIT 1;
+
+_fuzzySearchConversation AS SearchConversationItem:
+SELECT conversation.conversation_id AS conversationId,
+    conversation.icon_url AS groupIconUrl,
+    conversation.category AS category,
+    conversation.name AS groupName,
+    conversation.pin_time AS pinTime,
+    conversation.mute_until AS muteUntil,
+    conversation.owner_id AS ownerId,
+    owner.mute_until AS ownerMuteUntil,
+    owner.identity_number AS ownerIdentityNumber,
+    owner.full_name AS fullName,
+    owner.avatar_url AS avatarUrl,
+    COALESCE(owner.is_verified, FALSE) AS isVerified,
+    owner.app_id AS appId,
+    CASE
+        WHEN conversation.category = 'CONTACT' THEN owner.membership
+        ELSE NULL
+    END AS membership,
+    message.status AS messageStatus,
+    message.content AS content,
+    message.category AS contentType,
+    message.user_id AS senderId,
+    message.action AS actionName,
+    lastMessageSender.full_name AS senderFullName,
+    participant.user_id AS participantUserId,
+    participant.full_name AS participantFullName
+FROM conversations conversation
+    INNER JOIN users owner ON owner.user_id = conversation.owner_id
+    LEFT JOIN messages message ON conversation.last_message_id = message.message_id
+    LEFT JOIN users lastMessageSender ON lastMessageSender.user_id = message.user_id
+    LEFT JOIN users participant ON participant.user_id = message.participant_id
+WHERE (
+        (
+            conversation.category = 'GROUP'
+            AND conversation.name LIKE '%' || :query || '%' ESCAPE '\') OR
+         (conversation.category = 'CONTACT' AND
+           (owner.full_name LIKE '%' || :query || '%' ESCAPE '\' OR
+            owner.identity_number LIKE '%' || :query || '%' ESCAPE '\'))
+      ) AND $where
+ORDER BY (conversation.category = 'GROUP' AND conversation.name = :query COLLATE NOCASE)
+    OR (conversation.category = 'CONTACT'
+        AND (owner.full_name = :query COLLATE NOCASE
+            OR owner.identity_number = :query COLLATE NOCASE)) DESC,
+    conversation.pin_time DESC,
+    message.created_at DESC
+    limit $limit;
+
+_searchConversationItemByIn AS SearchConversationItem:
+SELECT conversation.conversation_id AS conversationId,
+    conversation.icon_url AS groupIconUrl,
+    conversation.category AS category,
+    conversation.name AS groupName,
+    conversation.pin_time AS pinTime,
+    conversation.mute_until AS muteUntil,
+    conversation.owner_id AS ownerId,
+    owner.mute_until AS ownerMuteUntil,
+    owner.identity_number AS ownerIdentityNumber,
+    owner.full_name AS fullName,
+    owner.avatar_url AS avatarUrl,
+    COALESCE(owner.is_verified, FALSE) AS isVerified,
+    owner.app_id AS appId,
+    CASE
+        WHEN conversation.category = 'CONTACT' THEN owner.membership
+        ELSE NULL
+    END AS membership,
+    message.status AS messageStatus,
+    message.content AS content,
+    message.category AS contentType,
+    message.user_id AS senderId,
+    message.action AS actionName,
+    lastMessageSender.full_name AS senderFullName,
+    participant.user_id AS participantUserId,
+    participant.full_name AS participantFullName
+FROM conversations conversation
+    INNER JOIN users owner ON owner.user_id = conversation.owner_id
+    LEFT JOIN messages message ON conversation.last_message_id = message.message_id
+    LEFT JOIN users lastMessageSender ON lastMessageSender.user_id = message.user_id
+    LEFT JOIN users participant ON participant.user_id = message.participant_id
+WHERE conversation.conversation_id IN :ids
+ORDER BY $order;
+
+_fuzzySearchConversationInCircle AS SearchConversationItem:
+SELECT conversation.conversation_id AS conversationId,
+    conversation.icon_url AS groupIconUrl,
+    conversation.category AS category,
+    conversation.name AS groupName,
+    conversation.pin_time AS pinTime,
+    conversation.mute_until AS muteUntil,
+    conversation.owner_id AS ownerId,
+    owner.mute_until AS ownerMuteUntil,
+    owner.identity_number AS ownerIdentityNumber,
+    owner.full_name AS fullName,
+    owner.avatar_url AS avatarUrl,
+    COALESCE(owner.is_verified, FALSE) AS isVerified,
+    owner.app_id AS appId,
+    CASE
+        WHEN conversation.category = 'CONTACT' THEN owner.membership
+        ELSE NULL
+    END AS membership,
+    message.status AS messageStatus,
+    message.content AS content,
+    message.category AS contentType,
+    message.user_id AS senderId,
+    message.action AS actionName,
+    lastMessageSender.full_name AS senderFullName,
+    participant.user_id AS participantUserId,
+    participant.full_name AS participantFullName
+FROM conversations conversation
+         INNER JOIN users owner ON owner.user_id = conversation.owner_id
+         LEFT JOIN messages message ON conversation.last_message_id = message.message_id
+         LEFT JOIN users lastMessageSender ON lastMessageSender.user_id = message.user_id
+         LEFT JOIN circle_conversations circleConversation ON conversation.conversation_id = circleConversation.conversation_id
+         LEFT JOIN users participant ON participant.user_id = message.participant_id
+WHERE ((conversation.category = 'GROUP' AND conversation.name LIKE '%' || :query || '%' ESCAPE '\') OR
+            (conversation.category = 'CONTACT' AND
+            (owner.full_name LIKE '%' || :query || '%' ESCAPE '\' OR
+                owner.identity_number LIKE '%' || :query || '%' ESCAPE '\'))
+        ) AND circleConversation.circle_id = :circleId AND $where
+ORDER BY (conversation.category = 'GROUP' AND conversation.name = :query COLLATE NOCASE)
+    OR (conversation.category = 'CONTACT'
+        AND (owner.full_name = :query COLLATE NOCASE
+            OR owner.identity_number = :query COLLATE NOCASE)) DESC,
+    conversation.pin_time DESC,
+    message.created_at DESC
+    limit $limit;
+
+conversationStorageUsage AS ConversationStorageUsage:
+SELECT c.conversation_id, c.owner_id, c.category, c.icon_url, c.name, u.identity_number,
+    u.full_name, u.avatar_url, COALESCE(u.is_verified, FALSE) AS isVerified
+FROM conversations c
+         INNER JOIN users u ON u.user_id = c.owner_id
+WHERE c.category IS NOT NULL;
+
+
+findSameConversations AS GroupMinimal:
+SELECT c.conversation_id AS conversationId, c.icon_url AS groupIconUrl, c.name AS groupName, (SELECT count(user_id) from participants where conversation_id = c.conversation_id) AS memberCount
+FROM participants p
+INNER JOIN conversations c ON c.conversation_id = p.conversation_id
+WHERE p.user_id IN (:selfId, :userId)
+AND c.status = 2
+AND c.category = 'GROUP'
+group by c.conversation_id
+HAVING count(p.user_id) = 2
+ORDER BY c.last_message_created_at DESC;
+
+
+countConversations:
+SELECT COUNT(1) FROM conversations;
+
+_updateUnseenMessageCountAndLastMessageId:
+UPDATE conversations SET unseen_message_count
+    = (SELECT count(1) FROM messages WHERE conversation_id = :conversationId AND status IN ('SENT', 'DELIVERED')  AND user_id != :userId),
+    last_message_id = :lastMessageId,
+    last_message_created_at = :lastMessageCreatedAt
+    WHERE conversation_id = :conversationId;
+
+isBotGroup:
+SELECT (SELECT 1
+        FROM   conversations
+               INNER JOIN messages
+                       ON conversations.conversation_id =
+                          messages.conversation_id
+               INNER JOIN users
+                       ON users.user_id = conversations.owner_id
+        WHERE  conversations.conversation_id = :conversationId
+               AND conversations.category = 'CONTACT'
+               AND users.app_id IS NOT NULL
+               AND Length(users.app_id) > 0
+               AND messages.user_id != conversations.owner_id
+        GROUP  BY conversations.conversation_id
+        HAVING Count(DISTINCT messages.user_id) >= 2) IS NOT NULL;
