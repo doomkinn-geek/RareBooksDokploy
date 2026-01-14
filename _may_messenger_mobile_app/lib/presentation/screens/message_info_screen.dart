@@ -291,6 +291,14 @@ class _MessageInfoScreenState extends ConsumerState<MessageInfoScreen> {
             ),
           ],
         );
+      case MessageType.video:
+        return Row(
+          children: [
+            Icon(Icons.videocam, color: Colors.purple.shade400),
+            const SizedBox(width: 8),
+            const Text('Видео', style: TextStyle(fontStyle: FontStyle.italic)),
+          ],
+        );
     }
   }
   

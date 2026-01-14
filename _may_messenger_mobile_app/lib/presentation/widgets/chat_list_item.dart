@@ -82,6 +82,8 @@ class ChatListItem extends ConsumerWidget {
       case MessageType.poll:
         final question = chat.lastMessage!.pollData?['question'] ?? 'Голосование';
         content = '📊 $question';
+      case MessageType.video:
+        content = '🎬 Видео';
     }
     
     // For group chats, prepend sender name

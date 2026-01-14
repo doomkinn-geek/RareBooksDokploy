@@ -2390,6 +2390,24 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
             throw Exception('File path or filename is missing for file message');
           }
           break;
+          
+        case MessageType.poll:
+          throw Exception('Poll messages cannot be retried');
+          
+        case MessageType.video:
+          if (pendingMessage.localVideoPath != null) {
+            _syncVideoToBackend(
+              localId,
+              pendingMessage.localVideoPath!,
+              width: pendingMessage.videoWidth ?? 0,
+              height: pendingMessage.videoHeight ?? 0,
+              durationMs: pendingMessage.videoDuration ?? 0,
+              thumbnail: pendingMessage.videoThumbnail,
+            );
+          } else {
+            throw Exception('Video path is missing for video message');
+          }
+          break;
       }
       
       print('[MSG_RETRY] Retry initiated for ${pendingMessage.type} message: $localId');

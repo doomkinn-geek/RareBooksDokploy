@@ -150,6 +150,12 @@ class OfflineSyncService {
             replyToMessageId: pending.replyToMessageId,
           );
           break;
+          
+        case MessageType.poll:
+          throw Exception('Poll messages should not be in offline sync');
+          
+        case MessageType.video:
+          throw Exception('Video messages should not be in offline sync');
       }
       
       print('[SYNC] Message synced successfully: ${pending.localId} -> ${serverMessage.id}');

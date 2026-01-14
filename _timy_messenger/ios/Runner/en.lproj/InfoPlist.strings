@@ -1,3 +1,0 @@
-NSCameraUsageDescription = "The user can upload pictures or video as message attachments";
-NSMicrophoneUsageDescription = "The user can upload videos as message attachments";
-NSPhotoLibraryUsageDescription = "The user can upload pictures as message attachments";
