@@ -279,13 +279,14 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       print('[LIFECYCLE] App $state at $_lastPausedAt - marking user as offline');
       
       // CRITICAL: Mark user as offline when app is paused/minimized/closed
+      // Fire and forget - OS may kill app before completion, but we try our best
       if (authState.isAuthenticated) {
-        try {
-          final apiDataSource = ref.read(apiDataSourceProvider);
-          apiDataSource.goOffline();
-        } catch (e) {
+        final apiDataSource = ref.read(apiDataSourceProvider);
+        apiDataSource.goOffline().then((_) {
+          print('[LIFECYCLE] User successfully marked as offline');
+        }).catchError((e) {
           print('[LIFECYCLE] Failed to mark user offline: $e');
-        }
+        });
       }
     } else if (state == AppLifecycleState.resumed) {
       if (authState.isAuthenticated) {
@@ -295,14 +296,16 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         
         print('[LIFECYCLE] App resumed after ${pauseDuration.inSeconds}s pause');
         
-        // CRITICAL: Mark user as online when app is resumed
-        try {
-          final apiDataSource = ref.read(apiDataSourceProvider);
-          apiDataSource.goOnline();
-        } catch (e) {
+        // CRITICAL: IMMEDIATELY mark user as online when app is resumed
+        // This happens BEFORE SignalR reconnect for instant presence update
+        final apiDataSource = ref.read(apiDataSourceProvider);
+        apiDataSource.goOnline().then((_) {
+          print('[LIFECYCLE] User successfully marked as online');
+        }).catchError((e) {
           print('[LIFECYCLE] Failed to mark user online: $e');
-        }
+        });
         
+        // Then handle SignalR reconnection
         // Show reconnecting banner only for long pauses (> 10 seconds)
         if (pauseDuration.inSeconds > 10) {
           print('[LIFECYCLE] Long pause detected (> 10s), showing reconnecting banner');
@@ -393,6 +396,14 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
           if (token != null) {
             apiDataSource.setToken(token);
             print('Token restored to ApiDataSource: ${token.substring(0, 20)}...');
+            
+            // CRITICAL: Mark user as online immediately after successful token restore
+            try {
+              await apiDataSource.goOnline();
+              print('[LIFECYCLE] User marked as online on app start');
+            } catch (e) {
+              print('[LIFECYCLE] Failed to mark user online on start: $e');
+            }
           } else {
             print('Warning: No token found to restore');
           }

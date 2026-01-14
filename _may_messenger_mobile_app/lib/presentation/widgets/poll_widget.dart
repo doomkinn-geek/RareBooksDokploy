@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/poll_model.dart';
 import '../../core/themes/app_theme.dart';
+import '../providers/auth_provider.dart';
 
 /// Widget for displaying a poll in a message bubble
 class PollWidget extends ConsumerStatefulWidget {
@@ -206,6 +207,21 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
                 child: const Text('Завершить голосование', style: TextStyle(fontSize: 12)),
               ),
             ),
+          
+          // View voters button (for non-anonymous polls with votes)
+          if (!poll.isAnonymous && poll.totalVoters > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: TextButton(
+                onPressed: () => _showVotersDialog(context),
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 32),
+                  foregroundColor: secondaryTextColor,
+                ),
+                child: const Text('Посмотреть голоса', style: TextStyle(fontSize: 12)),
+              ),
+            ),
         ],
       ),
     );
@@ -377,6 +393,126 @@ class _PollWidgetState extends ConsumerState<PollWidget> {
     if (count == 1) return '1 голос';
     if (count >= 2 && count <= 4) return '$count голоса';
     return '$count голосов';
+  }
+  
+  Future<void> _showVotersDialog(BuildContext context) async {
+    try {
+      // Load voters from API
+      final apiDataSource = ref.read(apiDataSourceProvider);
+      final optionsWithVoters = await apiDataSource.getPollVoters(widget.poll.id);
+      
+      if (!mounted) return;
+      
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.3,
+          maxChildSize: 0.9,
+          builder: (context, scrollController) => Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                // Handle bar
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[400],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                
+                // Title
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Text(
+                    'Результаты голосования',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                
+                const Divider(),
+                
+                // Voters list
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollController,
+                    itemCount: optionsWithVoters.length,
+                    itemBuilder: (context, index) {
+                      final option = optionsWithVoters[index];
+                      final voters = option.voters ?? [];
+                      
+                      if (voters.isEmpty) {
+                        return const SizedBox.shrink();
+                      }
+                      
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Option header
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    option.text,
+                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  '${voters.length}',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Theme.of(context).colorScheme.primary,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          
+                          // Voters for this option
+                          ...voters.map((voter) => ListTile(
+                            leading: CircleAvatar(
+                              backgroundImage: voter.avatarUrl != null
+                                  ? NetworkImage(voter.avatarUrl!)
+                                  : null,
+                              child: voter.avatarUrl == null
+                                  ? Text(voter.displayName[0].toUpperCase())
+                                  : null,
+                            ),
+                            title: Text(voter.displayName),
+                            dense: true,
+                          )),
+                          
+                          if (index < optionsWithVoters.length - 1)
+                            const Divider(height: 1),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось загрузить голоса: $e')),
+        );
+      }
+    }
   }
 }
 

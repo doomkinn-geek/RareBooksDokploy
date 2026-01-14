@@ -1902,6 +1902,13 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
           messageToAdd.filePath!.isNotEmpty) {
         _downloadAudioInBackground(messageToAdd);
       }
+      
+      // Background download for image messages (to cache locally before server deletes after 1 week)
+      if (messageToAdd.type == MessageType.image && 
+          messageToAdd.filePath != null && 
+          messageToAdd.filePath!.isNotEmpty) {
+        _downloadImageInBackground(messageToAdd);
+      }
     } else {
       print('[MSG_RECV] Message already exists, ignoring: ${message.id} (localId: ${message.localId ?? 'none'}, clientMessageId: ${message.clientMessageId ?? 'none'})');
     }
@@ -1945,6 +1952,48 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     } catch (e) {
       // Silently fail - user can download on play
       print('[MessagesProvider] Background audio download failed: $e');
+    }
+  }
+  
+  Future<void> _downloadImageInBackground(Message message) async {
+    try {
+      final imageStorageService = _ref.read(imageStorageServiceProvider);
+      final localDataSource = _ref.read(localDataSourceProvider);
+      
+      // Check if already downloaded
+      final hasLocal = await imageStorageService.hasLocalImage(message.id);
+      if (hasLocal) return;
+      
+      // Download image
+      final imageUrl = '${message.filePath}';
+      final localPath = await imageStorageService.saveImageLocally(
+        message.id,
+        imageUrl.startsWith('http') ? imageUrl : 'https://messenger.rare-books.ru$imageUrl'
+      );
+      
+      if (localPath != null) {
+        // Update cache
+        await localDataSource.updateMessageLocalImagePath(
+          message.chatId,
+          message.id,
+          localPath
+        );
+        
+        // Update message in state
+        final messageIndex = state.messages.indexWhere((m) => m.id == message.id);
+        if (messageIndex != -1) {
+          final updatedMessages = [...state.messages];
+          updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
+            localImagePath: localPath
+          );
+          state = state.copyWith(messages: updatedMessages);
+        }
+        
+        print('[MessagesProvider] Background image download completed: $localPath');
+      }
+    } catch (e) {
+      // Silently fail - user can view from network
+      print('[MessagesProvider] Background image download failed: $e');
     }
   }
 

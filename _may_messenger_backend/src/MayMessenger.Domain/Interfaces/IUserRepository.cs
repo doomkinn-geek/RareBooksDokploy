@@ -8,6 +8,7 @@ public interface IUserRepository : IRepository<User>
     Task<bool> PhoneNumberExistsAsync(string phoneNumber, CancellationToken cancellationToken = default);
     Task<int> UpdatePhoneNumberHashesAsync(CancellationToken cancellationToken = default);
     Task<IEnumerable<User>> GetOnlineUsersAsync(CancellationToken cancellationToken = default);
+    Task<List<User>> GetStaleOnlineUsersAsync(DateTime cutoffTime, CancellationToken cancellationToken = default);
 }
 
 

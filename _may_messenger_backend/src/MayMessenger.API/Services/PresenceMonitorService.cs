@@ -1,136 +1,105 @@
-using Microsoft.AspNetCore.SignalR;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using MayMessenger.API.Hubs;
 using MayMessenger.Domain.Interfaces;
+using Microsoft.AspNetCore.SignalR;
+using MayMessenger.API.Hubs;
 
 namespace MayMessenger.API.Services;
 
 /// <summary>
-/// Background service that monitors user presence based on heartbeat timestamps
-/// Marks users as offline if no heartbeat received for 90 seconds
-/// Runs every 60 seconds
+/// Background service that monitors user presence based on heartbeat
+/// Automatically marks users as offline if they haven't sent heartbeat in 2 minutes
 /// </summary>
 public class PresenceMonitorService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<PresenceMonitorService> _logger;
-    private readonly IHubContext<ChatHub> _hubContext;
-    
-    private const int CheckIntervalSeconds = 60;
-    private const int HeartbeatTimeoutSeconds = 90;
+    private readonly TimeSpan _checkInterval = TimeSpan.FromSeconds(60); // Check every 60 seconds
+    private readonly TimeSpan _heartbeatTimeout = TimeSpan.FromMinutes(2); // 2 minutes without heartbeat = offline
 
     public PresenceMonitorService(
         IServiceProvider serviceProvider,
-        ILogger<PresenceMonitorService> logger,
-        IHubContext<ChatHub> hubContext)
+        ILogger<PresenceMonitorService> logger)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
-        _hubContext = hubContext;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("PresenceMonitorService started");
-
-        // Wait 30 seconds before first check to let users connect
-        await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+        _logger.LogInformation("[PresenceMonitor] Service started");
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await CheckUserPresenceAsync(stoppingToken);
+                await CheckAndUpdatePresence();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error checking user presence");
+                _logger.LogError(ex, "[PresenceMonitor] Error during presence check");
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(CheckIntervalSeconds), stoppingToken);
+            await Task.Delay(_checkInterval, stoppingToken);
         }
 
-        _logger.LogInformation("PresenceMonitorService stopped");
+        _logger.LogInformation("[PresenceMonitor] Service stopped");
     }
 
-    private async Task CheckUserPresenceAsync(CancellationToken cancellationToken)
+    private async Task CheckAndUpdatePresence()
     {
         using var scope = _serviceProvider.CreateScope();
         var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var hubContext = scope.ServiceProvider.GetRequiredService<IHubContext<ChatHub>>();
 
-        // Get all users who are currently marked as online
-        var onlineUsers = await unitOfWork.Users.GetOnlineUsersAsync();
+        var cutoffTime = DateTime.UtcNow - _heartbeatTimeout;
 
-        if (!onlineUsers.Any())
+        // Find users who are marked online but haven't sent heartbeat recently
+        var staleOnlineUsers = await unitOfWork.Users.GetStaleOnlineUsersAsync(cutoffTime);
+
+        if (staleOnlineUsers.Any())
         {
-            return;
-        }
+            _logger.LogInformation($"[PresenceMonitor] Found {staleOnlineUsers.Count} users with stale heartbeat");
 
-        var now = DateTime.UtcNow;
-        var timeoutThreshold = now.AddSeconds(-HeartbeatTimeoutSeconds);
-        var usersToMarkOffline = new List<Domain.Entities.User>();
-
-        foreach (var user in onlineUsers)
-        {
-            // Check if user's last heartbeat is older than timeout threshold
-            if (user.LastHeartbeatAt.HasValue && user.LastHeartbeatAt.Value < timeoutThreshold)
+            foreach (var user in staleOnlineUsers)
             {
-                usersToMarkOffline.Add(user);
-            }
-            // Fallback: if LastHeartbeatAt is null but user is marked online, check LastSeenAt
-            else if (!user.LastHeartbeatAt.HasValue && user.LastSeenAt.HasValue && user.LastSeenAt.Value < timeoutThreshold)
-            {
-                usersToMarkOffline.Add(user);
-            }
-        }
-
-        if (usersToMarkOffline.Any())
-        {
-            _logger.LogInformation($"Marking {usersToMarkOffline.Count} users as offline due to heartbeat timeout");
-
-            foreach (var user in usersToMarkOffline)
-            {
-                user.IsOnline = false;
-                user.LastSeenAt = user.LastHeartbeatAt ?? user.LastSeenAt ?? DateTime.UtcNow;
-                await unitOfWork.Users.UpdateAsync(user);
-
-                // Notify all participants in user's chats about status change
                 try
                 {
-                    await NotifyUserStatusChangedAsync(user.Id, false, user.LastSeenAt.Value, unitOfWork);
+                    // Mark user as offline
+                    user.IsOnline = false;
+                    user.LastSeenAt = DateTime.UtcNow;
+                    await unitOfWork.Users.UpdateAsync(user);
+
+                    _logger.LogInformation($"[PresenceMonitor] User {user.Id} ({user.DisplayName}) marked offline due to heartbeat timeout");
+
+                    // Notify all participants in user's chats about status change
+                    var userChats = await unitOfWork.Chats.GetUserChatsAsync(user.Id);
+                    
+                    foreach (var chat in userChats)
+                    {
+                        try
+                        {
+                            // Send status update to chat group
+                            await hubContext.Clients.Group(chat.Id.ToString())
+                                .SendAsync("UserStatusChanged", new
+                                {
+                                    UserId = user.Id,
+                                    IsOnline = false,
+                                    LastSeenAt = user.LastSeenAt
+                                });
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, $"[PresenceMonitor] Failed to notify chat {chat.Id} about user {user.Id} status change");
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, $"Error notifying status change for user {user.Id}");
+                    _logger.LogError(ex, $"[PresenceMonitor] Failed to update user {user.Id} presence");
                 }
             }
 
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-            
-            _logger.LogInformation($"Successfully marked {usersToMarkOffline.Count} users as offline");
-        }
-    }
-
-    private async Task NotifyUserStatusChangedAsync(Guid userId, bool isOnline, DateTime lastSeenAt, IUnitOfWork unitOfWork)
-    {
-        try
-        {
-            var chats = await unitOfWork.Chats.GetUserChatsAsync(userId);
-            
-            foreach (var chat in chats)
-            {
-                await _hubContext.Clients.Group(chat.Id.ToString())
-                    .SendAsync("UserStatusChanged", userId.ToString(), isOnline, lastSeenAt);
-            }
-            
-            _logger.LogInformation($"User {userId} status changed: {(isOnline ? "online" : "offline")} at {lastSeenAt:O}");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, $"Error notifying user status change for user {userId}");
+            await unitOfWork.SaveChangesAsync();
+            _logger.LogInformation($"[PresenceMonitor] Successfully updated {staleOnlineUsers.Count} users to offline");
         }
     }
 }
-
