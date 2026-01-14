@@ -84,6 +84,16 @@ class ShareSendService {
     return shareFile(audioPath, mimeType: 'audio/*', text: text, sharePositionOrigin: sharePositionOrigin);
   }
   
+  /// Share a video file to other apps
+  /// [sharePositionOrigin] is required on iPad for the share popover anchor
+  Future<ShareResult> shareVideo(
+    String videoPath, {
+    String? text,
+    Rect? sharePositionOrigin,
+  }) async {
+    return shareFile(videoPath, mimeType: 'video/*', text: text, sharePositionOrigin: sharePositionOrigin);
+  }
+  
   /// Share multiple files to other apps
   /// [sharePositionOrigin] is required on iPad for the share popover anchor
   Future<ShareResult> shareMultiple(
@@ -169,6 +179,10 @@ class ShareSendService {
         localPath = message.localAudioPath;
         serverPath = message.filePath;
         fileName = 'audio_${message.id}.m4a';
+      } else if (message.type == MessageType.video) {
+        localPath = message.localVideoPath;
+        serverPath = message.filePath;
+        fileName = 'video_${message.id}.mp4';
       } else if (message.type == MessageType.file) {
         localPath = message.localFilePath;
         serverPath = message.filePath;

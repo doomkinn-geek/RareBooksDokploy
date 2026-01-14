@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/services/video_compression_service.dart';
 import 'package:uuid/uuid.dart';
 import '../../data/models/message_model.dart';
 import '../../data/models/chat_model.dart';
@@ -845,6 +847,29 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       List<Message> messages = List<Message>.from(allMessages.values);
       messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       
+      // STEP 4.3: Restore localVideoPath for video messages from VideoStorageService
+      // This ensures videos cached on disk are accessible after app restart
+      try {
+        final videoStorageService = _ref.read(videoStorageServiceProvider);
+        final restoredMessages = <Message>[];
+        for (final msg in messages) {
+          if (msg.type == MessageType.video && msg.localVideoPath == null) {
+            final localPath = await videoStorageService.getLocalVideoPath(msg.id);
+            if (localPath != null) {
+              print('[MSG_LOAD] Restored local video path for message ${msg.id}');
+              restoredMessages.add(msg.copyWith(localVideoPath: localPath));
+            } else {
+              restoredMessages.add(msg);
+            }
+          } else {
+            restoredMessages.add(msg);
+          }
+        }
+        messages = restoredMessages;
+      } catch (e) {
+        print('[MSG_LOAD] Failed to restore video paths: $e');
+      }
+      
       // STEP 4.5: Decrypt any encrypted messages from other users
       final currentUserId = _ref.read(profileProvider).profile?.id;
       
@@ -1573,6 +1598,19 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         throw Exception('User not authenticated');
       }
 
+      // STEP 0.5: Generate thumbnail for preview
+      String? thumbnailBase64;
+      try {
+        final compressionService = VideoCompressionService();
+        final thumbnailBytes = await compressionService.generateThumbnail(videoPath);
+        if (thumbnailBytes != null) {
+          thumbnailBase64 = base64Encode(thumbnailBytes);
+          print('[MSG_SEND] Generated video thumbnail (${thumbnailBytes.length} bytes)');
+        }
+      } catch (e) {
+        print('[MSG_SEND] Failed to generate thumbnail (non-critical): $e');
+      }
+
       // STEP 1: Create message locally with temporary ID
       localId = _uuid.v4();
       final clientMessageId = localId;
@@ -1593,6 +1631,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         videoWidth: width,
         videoHeight: height,
         videoDuration: durationMs,
+        videoThumbnail: thumbnailBase64,
         status: MessageStatus.sending,
         createdAt: DateTime.now(),
         localId: localId,
@@ -1610,7 +1649,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       print('[MSG_SEND] Video message added locally: $localId');
 
       // STEP 3: Send to backend with progress tracking
-      _syncVideoToBackend(localId, videoPath, width, height, durationMs, clientMessageId);
+      _syncVideoToBackend(localId, videoPath, width, height, durationMs, clientMessageId, thumbnailBase64);
 
     } catch (e) {
       print('[MSG_SEND] Failed to create local video message: $e');
@@ -1632,6 +1671,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     int? height,
     int? durationMs,
     String clientMessageId,
+    String? thumbnailBase64,
   ) {
     Future.microtask(() async {
       try {
@@ -1643,27 +1683,56 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
           width: width,
           height: height,
           duration: durationMs,
+          thumbnail: thumbnailBase64,
           clientMessageId: clientMessageId,
           onSendProgress: (progress) {
             updateUploadProgress(localId, progress);
           },
         );
 
+        // Cache video to permanent storage after successful upload
+        String? cachedVideoPath = videoPath;
+        try {
+          final videoStorageService = _ref.read(videoStorageServiceProvider);
+          final cachedPath = await videoStorageService.saveLocalVideo(serverMessage.id, videoPath);
+          if (cachedPath != null) {
+            cachedVideoPath = cachedPath;
+            print('[MSG_SEND] Video cached to permanent storage: ${serverMessage.id}');
+            // Persist to Hive for offline access after app restart
+            final localDataSource = _ref.read(localDataSourceProvider);
+            await localDataSource.updateMessageLocalVideoPath(chatId, serverMessage.id, cachedPath);
+          }
+        } catch (e) {
+          print('[MSG_SEND] Failed to cache video (non-critical): $e');
+          // Continue with original path if caching fails
+        }
+
         // Update local message with server response
+        // IMPORTANT: Ensure status is at least 'sent' after successful sync
+        // Server might return 'sending', but we know it's sent successfully
+        final finalStatus = serverMessage.status == MessageStatus.sending 
+            ? MessageStatus.sent 
+            : serverMessage.status;
+            
         final messageIndex = state.messages.indexWhere((m) => m.id == localId);
         if (messageIndex != -1) {
           final updatedMessages = [...state.messages];
           updatedMessages[messageIndex] = serverMessage.copyWith(
             localId: localId,
-            localVideoPath: videoPath,
+            localVideoPath: cachedVideoPath,
             isLocalOnly: false,
+            status: finalStatus,
+            uploadProgress: null, // Clear upload progress
           );
           state = state.copyWith(messages: updatedMessages);
           _cache.update(updatedMessages[messageIndex]);
+          
+          // Register ID mapping for future status lookups
+          _registerIdMapping(localId, serverMessage.id);
         }
 
         _pendingSends.remove(localId);
-        print('[MSG_SEND] Video synced to backend: ${serverMessage.id}');
+        print('[MSG_SEND] Video synced to backend: ${serverMessage.id}, status: $finalStatus');
 
       } catch (e) {
         print('[MSG_SEND] Failed to sync video: $e');
@@ -2403,6 +2472,7 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
               pendingMessage.videoHeight,
               pendingMessage.videoDuration,
               localId, // clientMessageId
+              pendingMessage.videoThumbnail, // Use existing thumbnail if available
             );
           } else {
             throw Exception('Video path is missing for video message');
@@ -2521,6 +2591,29 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     try {
       print('[MSG_DELETE] Deleting message: $messageId');
       
+      // Find message to get local file paths before removal
+      final message = state.messages.firstWhere(
+        (m) => m.id == messageId,
+        orElse: () => Message(
+          id: '',
+          chatId: chatId,
+          senderId: '',
+          senderName: '',
+          type: MessageType.text,
+          status: MessageStatus.sent,
+          createdAt: DateTime.now(),
+        ),
+      );
+      
+      // Collect local file paths for cleanup
+      final filesToDelete = <String>[];
+      if (message.id.isNotEmpty) {
+        if (message.localVideoPath != null) filesToDelete.add(message.localVideoPath!);
+        if (message.localAudioPath != null) filesToDelete.add(message.localAudioPath!);
+        if (message.localImagePath != null) filesToDelete.add(message.localImagePath!);
+        if (message.localFilePath != null) filesToDelete.add(message.localFilePath!);
+      }
+      
       // Optimistic removal from UI
       final updatedMessages = state.messages.where((m) => m.id != messageId).toList();
       state = state.copyWith(messages: updatedMessages);
@@ -2530,6 +2623,12 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       
       // Remove from LRU cache
       _cache.remove(messageId);
+      
+      // Delete from Hive cache
+      await _ref.read(localDataSourceProvider).deleteMessageFromCache(chatId, messageId);
+      
+      // Delete local files (non-blocking)
+      _deleteLocalFiles(filesToDelete);
       
       print('[MSG_DELETE] Message deleted successfully');
     } catch (e) {
@@ -2948,6 +3047,13 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       );
       state = state.copyWith(messages: updatedMessages);
       _cache.update(updatedMessages[messageIndex]);
+      
+      // Persist poll data to Hive for offline access
+      _ref.read(localDataSourceProvider).updateMessagePollData(
+        chatId, 
+        messageId, 
+        pollData,
+      );
       print('[POLL] Updated poll from SignalR for message: $messageId');
     }
   }
@@ -2960,11 +3066,96 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     
     if (messageIndex != -1) {
       final updatedMessages = [...state.messages];
-      updatedMessages[messageIndex] = updatedMessages[messageIndex].copyWith(
+      final message = updatedMessages[messageIndex];
+      updatedMessages[messageIndex] = message.copyWith(
         pollData: pollData,
       );
       state = state.copyWith(messages: updatedMessages);
       _cache.update(updatedMessages[messageIndex]);
+      
+      // Persist poll data to Hive for offline access
+      _ref.read(localDataSourceProvider).updateMessagePollData(
+        chatId, 
+        message.id, 
+        pollData,
+      );
+      print('[POLL] Updated poll in message: ${message.id}');
+    }
+  }
+
+  /// Delete multiple messages at once
+  Future<void> deleteMessages(List<String> messageIds) async {
+    if (messageIds.isEmpty) return;
+    
+    try {
+      print('[MSG_DELETE] Deleting ${messageIds.length} messages');
+      
+      // Collect local file paths before removal
+      final filesToDelete = <String>[];
+      for (final id in messageIds) {
+        final message = state.messages.firstWhere(
+          (m) => m.id == id,
+          orElse: () => Message(
+            id: '',
+            chatId: chatId,
+            senderId: '',
+            senderName: '',
+            type: MessageType.text,
+            status: MessageStatus.sent,
+            createdAt: DateTime.now(),
+          ),
+        );
+        
+        if (message.id.isNotEmpty) {
+          // Collect all local paths for cleanup
+          if (message.localVideoPath != null) filesToDelete.add(message.localVideoPath!);
+          if (message.localAudioPath != null) filesToDelete.add(message.localAudioPath!);
+          if (message.localImagePath != null) filesToDelete.add(message.localImagePath!);
+          if (message.localFilePath != null) filesToDelete.add(message.localFilePath!);
+        }
+      }
+      
+      // Optimistic removal from UI
+      final idsToDelete = messageIds.toSet();
+      final updatedMessages = state.messages.where((m) => !idsToDelete.contains(m.id)).toList();
+      state = state.copyWith(messages: updatedMessages);
+      
+      // Delete on server (one by one for now, could be batch API)
+      for (final id in messageIds) {
+        try {
+          await _messageRepository.deleteMessage(id);
+          _cache.remove(id);
+        } catch (e) {
+          print('[MSG_DELETE] Failed to delete message $id: $e');
+        }
+      }
+      
+      // Delete from local Hive cache
+      await _ref.read(localDataSourceProvider).deleteMessagesFromCache(chatId, messageIds);
+      
+      // Delete local files (non-blocking)
+      _deleteLocalFiles(filesToDelete);
+      
+      print('[MSG_DELETE] ${messageIds.length} messages deleted successfully');
+    } catch (e) {
+      print('[MSG_DELETE] Failed to delete messages: $e');
+      // Reload messages to restore if server delete failed
+      loadMessages();
+    }
+  }
+  
+  /// Delete local files (cleanup after message deletion)
+  Future<void> _deleteLocalFiles(List<String> filePaths) async {
+    for (final path in filePaths) {
+      try {
+        final file = File(path);
+        if (await file.exists()) {
+          await file.delete();
+          print('[MSG_DELETE] Deleted local file: $path');
+        }
+      } catch (e) {
+        print('[MSG_DELETE] Failed to delete local file $path: $e');
+      }
     }
   }
 }

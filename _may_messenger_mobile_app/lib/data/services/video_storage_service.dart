@@ -99,12 +99,12 @@ class VideoStorageService {
     }
   }
 
-  /// Delete old video files (older than 14 days - shorter than images due to size)
+  /// Delete old video files (older than 30 days - keep videos longer since they're cached after server deletion)
   Future<void> deleteOldVideoFiles() async {
     try {
       final videoDir = await _getVideoDirectory();
       final now = DateTime.now();
-      final cutoffDate = now.subtract(const Duration(days: 14));
+      final cutoffDate = now.subtract(const Duration(days: 30));
       
       final files = videoDir.listSync();
       int deletedCount = 0;

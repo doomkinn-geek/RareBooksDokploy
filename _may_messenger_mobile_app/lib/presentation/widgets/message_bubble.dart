@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,6 +21,7 @@ import '../providers/profile_provider.dart';
 import '../providers/contacts_names_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/messages_provider.dart';
+import '../providers/signalr_provider.dart';
 import 'fullscreen_image_viewer.dart';
 import 'audio_waveform.dart';
 import 'video_player_screen.dart';
@@ -1364,12 +1366,27 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              // Video icon placeholder
-              Icon(
-                Icons.movie,
-                color: Colors.white24,
-                size: 48,
-              ),
+              // Video thumbnail or icon placeholder
+              if (widget.message.videoThumbnail != null && widget.message.videoThumbnail!.isNotEmpty)
+                Positioned.fill(
+                  child: Image.memory(
+                    base64Decode(widget.message.videoThumbnail!),
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Icon(
+                        Icons.movie,
+                        color: Colors.white24,
+                        size: 48,
+                      );
+                    },
+                  ),
+                )
+              else
+                Icon(
+                  Icons.movie,
+                  color: Colors.white24,
+                  size: 48,
+                ),
 
               // Play/download button - hide when uploading or downloading
               if (!isUploading && !isDownloading)
@@ -1529,12 +1546,12 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   }
 
   void _handleVideoTap(BuildContext context) async {
-    if (widget.message.status == MessageStatus.sending) return;
     if (_isDownloadingVideo) return; // Already downloading
 
     final hasLocalVideo = widget.message.localVideoPath != null &&
         File(widget.message.localVideoPath!).existsSync();
 
+    // Allow playing local video even if status is 'sending' (for sent videos)
     if (hasLocalVideo) {
       // Play video
       Navigator.of(context).push(
@@ -1545,7 +1562,13 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           ),
         ),
       );
-    } else if (widget.message.filePath != null) {
+      return;
+    }
+    
+    // Don't try to download if still uploading
+    if (widget.message.status == MessageStatus.sending) return;
+    
+    if (widget.message.filePath != null) {
       // Download video first with progress tracking
       if (mounted) {
         setState(() {
@@ -1579,6 +1602,20 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             widget.message.id,
             localPath,
           );
+
+          // Send delivery ACK via SignalR after successful download
+          // This allows server to delete video file after all recipients have it
+          try {
+            final signalRService = ref.read(signalRServiceProvider);
+            await signalRService.markMessageAsDelivered(
+              widget.message.id,
+              widget.message.chatId,
+            );
+            print('[VIDEO] Delivery ACK sent for video ${widget.message.id}');
+          } catch (e) {
+            print('[VIDEO] Failed to send delivery ACK: $e');
+            // Non-critical - video is still saved locally
+          }
 
           // Play video
           if (context.mounted) {

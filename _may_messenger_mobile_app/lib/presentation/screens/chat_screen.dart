@@ -658,8 +658,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
     
     if (confirmed == true) {
-      for (final message in selected) {
-        await ref.read(messagesProvider(widget.chatId).notifier).deleteMessage(message.id);
+      final messageIds = selected.map((m) => m.id).toList();
+      await ref.read(messagesProvider(widget.chatId).notifier).deleteMessages(messageIds);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Удалено ${selected.length} сообщение(й)'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
       }
     }
     

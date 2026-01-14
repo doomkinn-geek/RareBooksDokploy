@@ -398,6 +398,84 @@ class LocalDataSource {
     }
   }
 
+  // Update poll data for a message in cache
+  Future<void> updateMessagePollData(String chatId, String messageId, Map<String, dynamic> pollData) async {
+    try {
+      final box = await _openBoxSafely(_messagesBox);
+      final data = box.get(chatId);
+      if (data == null) return;
+
+      final messages = (data['messages'] as List)
+          .map((json) => Map<String, dynamic>.from(json as Map))
+          .toList();
+      
+      // Find and update the message poll data
+      bool updated = false;
+      for (var message in messages) {
+        if (message['id'] == messageId) {
+          message['poll'] = pollData;
+          updated = true;
+          break;
+        }
+      }
+      
+      if (updated) {
+        await box.put(chatId, {
+          'messages': messages,
+          'timestamp': DateTime.now().toIso8601String(),
+        });
+        print('[LocalDataSource] Updated poll data for message $messageId');
+      }
+    } catch (e) {
+      print('[LocalDataSource] Failed to update message poll data: $e');
+    }
+  }
+
+  // Delete a message from cache
+  Future<void> deleteMessageFromCache(String chatId, String messageId) async {
+    try {
+      final box = await _openBoxSafely(_messagesBox);
+      final data = box.get(chatId);
+      if (data == null) return;
+
+      final messages = (data['messages'] as List)
+          .map((json) => Map<String, dynamic>.from(json as Map))
+          .where((json) => json['id'] != messageId)
+          .toList();
+      
+      await box.put(chatId, {
+        'messages': messages,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+      print('[LocalDataSource] Deleted message $messageId from cache');
+    } catch (e) {
+      print('[LocalDataSource] Failed to delete message from cache: $e');
+    }
+  }
+
+  // Delete multiple messages from cache
+  Future<void> deleteMessagesFromCache(String chatId, List<String> messageIds) async {
+    try {
+      final box = await _openBoxSafely(_messagesBox);
+      final data = box.get(chatId);
+      if (data == null) return;
+
+      final idsToDelete = messageIds.toSet();
+      final messages = (data['messages'] as List)
+          .map((json) => Map<String, dynamic>.from(json as Map))
+          .where((json) => !idsToDelete.contains(json['id']))
+          .toList();
+      
+      await box.put(chatId, {
+        'messages': messages,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+      print('[LocalDataSource] Deleted ${messageIds.length} messages from cache');
+    } catch (e) {
+      print('[LocalDataSource] Failed to delete messages from cache: $e');
+    }
+  }
+
   // Get cached message statuses for a chat (used to preserve played status)
   Future<Map<String, MessageStatus>> getCachedMessageStatuses(String chatId) async {
     try {
